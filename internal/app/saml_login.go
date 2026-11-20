@@ -18,8 +18,8 @@ import (
 
 const samlFlowCookieName = "ag_saml_state"
 
-// samlAuditor records the precise reason of a sign-in decision; the browser only ever sees a generic code.
-type samlAuditor interface {
+// loginAuditor records the precise reason of a sign-in decision (SAML and OIDC); the browser only ever sees a generic code.
+type loginAuditor interface {
 	RecordAudit(context.Context, repository.AuditRecord) error
 }
 
@@ -30,8 +30,10 @@ type samlLoginHandler struct {
 	authenticator Authenticator
 	identities    repository.UserIdentityStore
 	sessions      repository.UserSessionStore
-	audit         samlAuditor
-	limiter       *samlRateLimiter
+	// groups receives the claims-sourced group memberships of a sign-in (ADR 0018 Decision 5); nil disables them.
+	groups  repository.UserGroupStore
+	audit   loginAuditor
+	limiter *samlRateLimiter
 }
 
 // limited reports whether the client has used up its anonymous SAML budget.
@@ -313,6 +315,18 @@ func (h samlLoginHandler) signIn(w http.ResponseWriter, r *http.Request, provide
 		h.fail(w, r, provider.provider.Slug, "account_disabled", "account_disabled")
 		return
 	}
+	// The assertion's groups replace the claims-sourced memberships of this provider; a list longer than the bound
+	// is treated as no groups, never a partial one (the same rule as an OIDC groups overage).
+	if h.groups != nil {
+		groups, overage := repository.BoundClaimsGroups(claims.Groups)
+		if overage {
+			h.recordGroupsOverage(r, provider.provider.Slug)
+		}
+		if _, err := h.groups.SyncClaimsUserGroups(r.Context(), repository.ClaimsGroupSync{ProviderID: provider.provider.ID, UserID: user.ID, ExternalIDs: groups}); err != nil {
+			h.fail(w, r, provider.provider.Slug, "identity_unavailable", "group_store_error")
+			return
+		}
+	}
 	// A federated browser session is authenticated like an OIDC one; user_sessions.kind records saml.
 	principal := h.authenticator.PrincipalForActor("user:" + user.Name)
 	principal.Admin = user.Role == string(authorization.RoleAdmin)
@@ -334,6 +348,15 @@ func (h samlLoginHandler) signIn(w http.ResponseWriter, r *http.Request, provide
 	h.record(r, provider.provider.Slug, "user:"+user.Name, repository.AuditResolved, http.StatusFound, "login")
 	values := url.Values{"oidc": {"success"}, "redirect": {safeConsoleRedirect(target)}}
 	http.Redirect(w, r, "/login?"+values.Encode(), http.StatusFound)
+}
+
+// recordGroupsOverage audits an assertion that carried more groups than the bound: it asserts no groups, never a
+// partial list, so an administrator can tell why the account lost its claims-sourced memberships.
+func (h samlLoginHandler) recordGroupsOverage(r *http.Request, slug string) {
+	if h.audit == nil {
+		return
+	}
+	_ = h.audit.RecordAudit(r.Context(), repository.GroupsOverageAudit("saml", slug, h.runtimeNow(), http.StatusFound, ""))
 }
 
 func (h samlLoginHandler) runtimeNow() time.Time {

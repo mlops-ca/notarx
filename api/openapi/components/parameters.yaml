@@ -32,6 +32,13 @@ AuthorizationRoleId:
   schema:
     type: string
     format: uuid
+UserGroupId:
+  name: groupId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
 GroupId:
   name: groupId
   in: path

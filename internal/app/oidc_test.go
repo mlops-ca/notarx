@@ -259,6 +259,12 @@ func signedOIDCTokenWithRoles(t *testing.T, key *rsa.PrivateKey, keyID, issuer, 
 
 func signedOIDCTokenWithClaims(t *testing.T, key *rsa.PrivateKey, keyID, issuer, audience, subject string, expires time.Time, roles []string, nonce string) string {
 	t.Helper()
+	return signedOIDCTokenWithExtraClaims(t, key, keyID, issuer, audience, subject, expires, roles, nonce, nil)
+}
+
+// signedOIDCTokenWithExtraClaims adds claims such as groups or the Entra ID overage markers to the token.
+func signedOIDCTokenWithExtraClaims(t *testing.T, key *rsa.PrivateKey, keyID, issuer, audience, subject string, expires time.Time, roles []string, nonce string, extra map[string]any) string {
+	t.Helper()
 	header, err := json.Marshal(map[string]string{"alg": "RS256", "kid": keyID})
 	if err != nil {
 		t.Fatal(err)
@@ -269,6 +275,9 @@ func signedOIDCTokenWithClaims(t *testing.T, key *rsa.PrivateKey, keyID, issuer,
 	}
 	if nonce != "" {
 		claims["nonce"] = nonce
+	}
+	for name, value := range extra {
+		claims[name] = value
 	}
 	claimBytes, err := json.Marshal(claims)
 	if err != nil {

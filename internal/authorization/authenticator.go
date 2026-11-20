@@ -29,6 +29,10 @@ type Principal struct {
 	MustChangePassword bool
 	UserID             string
 	SessionID          string
+	// GroupIDs are the user groups of the account, resolved on every authenticated request (ADR 0018 Decision 5),
+	// at most repository.MaxUserGroupMemberships. They are never part of a principal token or a session, so a
+	// removed membership withdraws authority on the next request.
+	GroupIDs []string
 	// CredentialID is a non-secret revocable service credential identity.
 	CredentialID string
 	// WorkloadClaims is the bounded audit summary of a workload_federation principal; nil otherwise.
@@ -66,6 +70,12 @@ type OIDCValidatorSource interface {
 	// providers whose issuer matches the token's unverified iss claim, so a slow or
 	// unreachable provider never delays the tokens of another.
 	OIDCValidators(ctx context.Context, token string) ([]*OIDCValidator, error)
+}
+
+// UserGroupSource resolves the user groups of an account (ADR 0018 Decision 5). The production source is the
+// read cache of internal/access, so a lookup costs no statement while the entry is fresh.
+type UserGroupSource interface {
+	ListUserGroupMemberships(ctx context.Context, userID string) ([]repository.UserGroupMembership, error)
 }
 
 type Authenticator struct {
@@ -108,6 +118,12 @@ type Authenticator struct {
 	Users           repository.UserStore
 	UserIdentities  repository.UserIdentityStore
 	UserSessions    repository.UserSessionStore
+	// UserGroups supplies the groups of a named account. A nil source means no groups, so every principal
+	// keeps exactly the authority of its own account.
+	UserGroups UserGroupSource
+	// ClaimsGroups applies the groups an OIDC bearer token asserts to a linked account (throttled); nil leaves the
+	// claims-sourced memberships to browser sign-ins.
+	ClaimsGroups *ClaimsGroupRefresher
 }
 
 // Authenticate reads credentials from the database, never from the read caches
@@ -121,6 +137,49 @@ func (a Authenticator) Authenticate(header string) (Principal, bool) {
 // AuthenticateContext includes credential, account and OIDC lookups in the
 // caller's cancellation budget. Existing protocol callers keep Authenticate.
 func (a Authenticator) AuthenticateContext(ctx context.Context, header string) (Principal, bool) {
+	principal, ok := a.authenticateCredential(ctx, header)
+	if !ok {
+		return Principal{}, false
+	}
+	return a.WithUserGroups(ctx, principal), true
+}
+
+// WithUserGroups adds the groups of a named account to its principal and lifts its level to the highest global
+// role of those groups (ADR 0018 Decision 5). The level is evaluated here on every request and never copied into
+// a credential, so removing a membership or changing a group's role takes effect on the next request. The
+// account was already checked active, a principal that must change its password stays blocked, and a failed
+// lookup leaves the account with its own authority only: a group can only ever add access, so failing to read
+// one never widens it.
+func (a Authenticator) WithUserGroups(ctx context.Context, principal Principal) Principal {
+	return a.applyUserGroups(ctx, principal, principal.UserID)
+}
+
+// applyUserGroups is WithUserGroups for the account userID, which a protocol-token principal does not carry.
+func (a Authenticator) applyUserGroups(ctx context.Context, principal Principal, userID string) Principal {
+	if a.UserGroups == nil || userID == "" || principal.MustChangePassword {
+		return principal
+	}
+	memberships, err := a.UserGroups.ListUserGroupMemberships(ctx, userID)
+	if err != nil || len(memberships) == 0 {
+		return principal
+	}
+	if len(memberships) > repository.MaxUserGroupMemberships {
+		memberships = memberships[:repository.MaxUserGroupMemberships]
+	}
+	level := principal.Role
+	principal.GroupIDs = make([]string, 0, len(memberships))
+	for _, membership := range memberships {
+		principal.GroupIDs = append(principal.GroupIDs, membership.GroupID)
+		if candidate := Role(membership.EffectiveGroupRole()); roleRank(candidate) > roleRank(level) {
+			level = candidate
+		}
+	}
+	principal.Role = level
+	principal.Admin = level == RoleAdmin
+	return principal
+}
+
+func (a Authenticator) authenticateCredential(ctx context.Context, header string) (Principal, bool) {
 	const bearer = "Bearer "
 	if !strings.HasPrefix(header, bearer) {
 		return Principal{}, false
@@ -201,6 +260,7 @@ func (a Authenticator) oidcPrincipal(ctx context.Context, identity OIDCIdentity)
 					AuthenticationKind: AuthenticationOIDC, MustChangePassword: true, UserID: user.ID,
 				}, true
 			}
+			a.ClaimsGroups.Refresh(ctx, identity, user.ID)
 			return Principal{
 				Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role,
 				RepositoryPatterns: a.RepositoryReaders["user:"+user.Name], AuthenticationKind: AuthenticationOIDC,
@@ -233,7 +293,9 @@ func (a Authenticator) principalForTokenActor(ctx context.Context, actor string)
 	if user.MustChangePassword {
 		return Principal{Actor: actor, RepositoryPatterns: a.RepositoryReaders[actor], AuthenticationKind: AuthenticationLocalSession, MustChangePassword: true}, true
 	}
-	return Principal{Actor: actor, Admin: role == RoleAdmin, Role: role, RepositoryPatterns: a.RepositoryReaders[actor], AuthenticationKind: AuthenticationLocalSession}, true
+	// A protocol token names the account, not its session, so the principal carries no UserID (code that tells a
+	// static credential from a user session relies on that); its groups are resolved here, from the account.
+	return a.applyUserGroups(ctx, Principal{Actor: actor, Admin: role == RoleAdmin, Role: role, RepositoryPatterns: a.RepositoryReaders[actor], AuthenticationKind: AuthenticationLocalSession}, user.ID), true
 }
 
 // AuthenticateBasic validates the resolver credential used by Maven, Conan,

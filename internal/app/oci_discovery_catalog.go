@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,7 +22,12 @@ import (
 )
 
 func discoveryOwner(p Principal, authenticated bool) string {
-	body, _ := json.Marshal([]any{authenticated, p.Actor, p.Role, p.Admin, p.RepositoryPatterns})
+	// The groups are part of who is asking: a catalog computed for one membership must not be served to another.
+	owner := []any{authenticated, p.Actor, p.Role, p.Admin, p.RepositoryPatterns}
+	if len(p.GroupIDs) > 0 {
+		owner = append(owner, slices.Sorted(slices.Values(p.GroupIDs)))
+	}
+	body, _ := json.Marshal(owner)
 	sum := sha256.Sum256(body)
 	return hex.EncodeToString(sum[:])
 }
@@ -216,7 +222,7 @@ func (h nativeOCIHandler) catalogEligible(ctx context.Context, p Principal, repo
 	}
 	guards = append(guards, discovery.Guard{Kind: "grants", ID: repo.ID, Version: set.Version})
 	for _, grant := range set.Grants {
-		if grant.Principal != p.Actor {
+		if !p.NamesGrantPrincipal(grant.Principal) {
 			continue
 		}
 		for _, scope := range grant.Scopes {

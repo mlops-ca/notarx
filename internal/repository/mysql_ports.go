@@ -61,6 +61,7 @@ var gatewayStorePorts = map[string]reflect.Type{
 	"ServiceAccountStore":                 reflect.TypeFor[ServiceAccountStore](),
 	"SiteSettingsStore":                   reflect.TypeFor[SiteSettingsStore](),
 	"Store":                               reflect.TypeFor[Store](),
+	"UserGroupStore":                      reflect.TypeFor[UserGroupStore](),
 	"UserIdentityStore":                   reflect.TypeFor[UserIdentityStore](),
 	"UserSessionStore":                    reflect.TypeFor[UserSessionStore](),
 	"UserStore":                           reflect.TypeFor[UserStore](),

@@ -84,6 +84,10 @@ func (s *cachedStore) GetRepositoryGrants(ctx context.Context, repositoryID stri
 	return s.access.GetRepositoryGrants(ctx, repositoryID)
 }
 
+func (s *cachedStore) ListUserGroupMemberships(ctx context.Context, userID string) ([]repository.UserGroupMembership, error) {
+	return s.access.ListUserGroupMemberships(ctx, userID)
+}
+
 func (s *cachedStore) GetWorkloadIssuer(ctx context.Context, id string) (repository.WorkloadIssuer, error) {
 	return s.access.GetWorkloadIssuer(ctx, id)
 }

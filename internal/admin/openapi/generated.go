@@ -950,6 +950,24 @@ func (e CreateUserRole) Valid() bool {
 	}
 }
 
+// Defines values for CreateUserGroupSource.
+const (
+	CreateUserGroupSourceClaims CreateUserGroupSource = "claims"
+	CreateUserGroupSourceLocal  CreateUserGroupSource = "local"
+)
+
+// Valid indicates whether the value is a known member of the CreateUserGroupSource enum.
+func (e CreateUserGroupSource) Valid() bool {
+	switch e {
+	case CreateUserGroupSourceClaims:
+		return true
+	case CreateUserGroupSourceLocal:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreatedAPIKeyRoles.
 const (
 	CreatedAPIKeyRolesAdmin  CreatedAPIKeyRoles = "admin"
@@ -4534,13 +4552,13 @@ func (e RuntimeLogPageOrder) Valid() bool {
 
 // Defines values for RuntimeLogPageScope.
 const (
-	Local RuntimeLogPageScope = "local"
+	RuntimeLogPageScopeLocal RuntimeLogPageScope = "local"
 )
 
 // Valid indicates whether the value is a known member of the RuntimeLogPageScope enum.
 func (e RuntimeLogPageScope) Valid() bool {
 	switch e {
-	case Local:
+	case RuntimeLogPageScopeLocal:
 		return true
 	default:
 		return false
@@ -4838,6 +4856,27 @@ func (e ServiceAccountState) Valid() bool {
 	}
 }
 
+// Defines values for SetUserGroupGlobalRoleGlobalRole.
+const (
+	SetUserGroupGlobalRoleGlobalRoleAdmin  SetUserGroupGlobalRoleGlobalRole = "admin"
+	SetUserGroupGlobalRoleGlobalRoleMember SetUserGroupGlobalRoleGlobalRole = "member"
+	SetUserGroupGlobalRoleGlobalRoleNone   SetUserGroupGlobalRoleGlobalRole = "none"
+)
+
+// Valid indicates whether the value is a known member of the SetUserGroupGlobalRoleGlobalRole enum.
+func (e SetUserGroupGlobalRoleGlobalRole) Valid() bool {
+	switch e {
+	case SetUserGroupGlobalRoleGlobalRoleAdmin:
+		return true
+	case SetUserGroupGlobalRoleGlobalRoleMember:
+		return true
+	case SetUserGroupGlobalRoleGlobalRoleNone:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UpdateServiceAccountState.
 const (
 	UpdateServiceAccountStateActive   UpdateServiceAccountState = "active"
@@ -4967,6 +5006,69 @@ func (e UserState) Valid() bool {
 	case UserStateActive:
 		return true
 	case UserStateDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserGroupGlobalRole.
+const (
+	UserGroupGlobalRoleAdmin  UserGroupGlobalRole = "admin"
+	UserGroupGlobalRoleMember UserGroupGlobalRole = "member"
+	UserGroupGlobalRoleNone   UserGroupGlobalRole = "none"
+)
+
+// Valid indicates whether the value is a known member of the UserGroupGlobalRole enum.
+func (e UserGroupGlobalRole) Valid() bool {
+	switch e {
+	case UserGroupGlobalRoleAdmin:
+		return true
+	case UserGroupGlobalRoleMember:
+		return true
+	case UserGroupGlobalRoleNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserGroupSource.
+const (
+	UserGroupSourceClaims UserGroupSource = "claims"
+	UserGroupSourceLocal  UserGroupSource = "local"
+	UserGroupSourceScim   UserGroupSource = "scim"
+)
+
+// Valid indicates whether the value is a known member of the UserGroupSource enum.
+func (e UserGroupSource) Valid() bool {
+	switch e {
+	case UserGroupSourceClaims:
+		return true
+	case UserGroupSourceLocal:
+		return true
+	case UserGroupSourceScim:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UserGroupMemberSource.
+const (
+	UserGroupMemberSourceClaims UserGroupMemberSource = "claims"
+	UserGroupMemberSourceLocal  UserGroupMemberSource = "local"
+	UserGroupMemberSourceScim   UserGroupMemberSource = "scim"
+)
+
+// Valid indicates whether the value is a known member of the UserGroupMemberSource enum.
+func (e UserGroupMemberSource) Valid() bool {
+	switch e {
+	case UserGroupMemberSourceClaims:
+		return true
+	case UserGroupMemberSourceLocal:
+		return true
+	case UserGroupMemberSourceScim:
 		return true
 	default:
 		return false
@@ -5526,6 +5628,11 @@ type APTRepositorySnapshotState string
 type APTSnapshotHistory struct {
 	PrunableAfter *time.Time            `json:"prunableAfter,omitempty"`
 	Snapshot      APTRepositorySnapshot `json:"snapshot"`
+}
+
+// AddUserGroupMember defines model for AddUserGroupMember.
+type AddUserGroupMember struct {
+	UserId openapi_types.UUID `json:"userId"`
 }
 
 // ApplyAuthorizationTemplate defines model for ApplyAuthorizationTemplate.
@@ -6372,6 +6479,21 @@ type CreateUser struct {
 // CreateUserRole defines model for CreateUser.Role.
 type CreateUserRole string
 
+// CreateUserGroup defines model for CreateUserGroup.
+type CreateUserGroup struct {
+	DisplayName string `json:"displayName"`
+
+	// ExternalId Required for a claims-sourced group; the value a login's groups claim carries.
+	ExternalId *string `json:"externalId,omitempty"`
+
+	// ProviderId Required for a claims-sourced group, not allowed for a local one.
+	ProviderId *openapi_types.UUID    `json:"providerId,omitempty"`
+	Source     *CreateUserGroupSource `json:"source,omitempty"`
+}
+
+// CreateUserGroupSource defines model for CreateUserGroup.Source.
+type CreateUserGroupSource string
+
 // CreateUserIdentity defines model for CreateUserIdentity.
 type CreateUserIdentity struct {
 	Issuer string `json:"issuer"`
@@ -6458,11 +6580,14 @@ type CreatedServiceAccountCredential struct {
 
 // CurrentIdentity defines model for CurrentIdentity.
 type CurrentIdentity struct {
-	Actor         string               `json:"actor"`
-	Administrator bool                 `json:"administrator"`
-	Kind          AuthenticationKind   `json:"kind"`
-	Oidc          *OIDCIdentityDetails `json:"oidc,omitempty"`
-	Role          *CurrentIdentityRole `json:"role,omitempty"`
+	Actor         string `json:"actor"`
+	Administrator bool   `json:"administrator"`
+
+	// GroupIds The user groups of the account, resolved for this request (ADR 0018). Their global roles are already part of role.
+	GroupIds *[]openapi_types.UUID `json:"groupIds,omitempty"`
+	Kind     AuthenticationKind    `json:"kind"`
+	Oidc     *OIDCIdentityDetails  `json:"oidc,omitempty"`
+	Role     *CurrentIdentityRole  `json:"role,omitempty"`
 }
 
 // CurrentIdentityRole defines model for CurrentIdentity.Role.
@@ -8803,6 +8928,11 @@ type RawVersionSealFile struct {
 // RawVersionState An open version accepts files and properties; a sealed one is immutable and has a manifest digest. A tombstoned version is not visible through this API.
 type RawVersionState string
 
+// RenameUserGroup defines model for RenameUserGroup.
+type RenameUserGroup struct {
+	DisplayName string `json:"displayName"`
+}
+
 // ReplaceIdentityProvider The settings object that matches the provider's kind is required; the other is rejected.
 type ReplaceIdentityProvider struct {
 	// AttributeMapping Where each user attribute comes from: a claim of the ID token (OIDC) or an attribute of the assertion (SAML). An empty value selects the protocol default. subject may join two claims with a colon, which is how Entra ID keeps its stable key (tid:oid).
@@ -9724,6 +9854,14 @@ type ServiceAccountList struct {
 	NextPageToken *string          `json:"nextPageToken,omitempty"`
 }
 
+// SetUserGroupGlobalRole defines model for SetUserGroupGlobalRole.
+type SetUserGroupGlobalRole struct {
+	GlobalRole SetUserGroupGlobalRoleGlobalRole `json:"globalRole"`
+}
+
+// SetUserGroupGlobalRoleGlobalRole defines model for SetUserGroupGlobalRole.GlobalRole.
+type SetUserGroupGlobalRoleGlobalRole string
+
 // SiteSettings defines model for SiteSettings.
 type SiteSettings struct {
 	AvailableThemes []ConsoleTheme `json:"availableThemes"`
@@ -9929,6 +10067,56 @@ type UserRole string
 
 // UserState defines model for User.State.
 type UserState string
+
+// UserGroup defines model for UserGroup.
+type UserGroup struct {
+	CreatedAt   time.Time `json:"createdAt"`
+	DisplayName string    `json:"displayName"`
+
+	// ExternalId The provider's identifier of the group, the only key a login claim or a SCIM request matches on.
+	ExternalId *string             `json:"externalId,omitempty"`
+	GlobalRole UserGroupGlobalRole `json:"globalRole"`
+	Id         openapi_types.UUID  `json:"id"`
+
+	// ProviderId The identity provider of a provisioned or claims-sourced group; absent for a local group.
+	ProviderId *openapi_types.UUID `json:"providerId,omitempty"`
+	Source     UserGroupSource     `json:"source"`
+	UpdatedAt  time.Time           `json:"updatedAt"`
+	Version    string              `json:"version"`
+}
+
+// UserGroupGlobalRole defines model for UserGroup.GlobalRole.
+type UserGroupGlobalRole string
+
+// UserGroupSource defines model for UserGroup.Source.
+type UserGroupSource string
+
+// UserGroupList defines model for UserGroupList.
+type UserGroupList struct {
+	Items []UserGroup `json:"items"`
+	Limit int         `json:"limit"`
+
+	// NextPageToken Present while more groups follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// UserGroupMember defines model for UserGroupMember.
+type UserGroupMember struct {
+	CreatedAt time.Time             `json:"createdAt"`
+	Source    UserGroupMemberSource `json:"source"`
+	UserId    openapi_types.UUID    `json:"userId"`
+	UserName  string                `json:"userName"`
+}
+
+// UserGroupMemberSource defines model for UserGroupMember.Source.
+type UserGroupMemberSource string
+
+// UserGroupMemberList defines model for UserGroupMemberList.
+type UserGroupMemberList struct {
+	Items         []UserGroupMember `json:"items"`
+	Limit         int               `json:"limit"`
+	NextPageToken *string           `json:"nextPageToken,omitempty"`
+}
 
 // UserIdentity defines model for UserIdentity.
 type UserIdentity struct {
@@ -10253,6 +10441,9 @@ type SessionId = openapi_types.UUID
 
 // SnapshotId defines model for SnapshotId.
 type SnapshotId = openapi_types.UUID
+
+// UserGroupId defines model for UserGroupId.
+type UserGroupId = openapi_types.UUID
 
 // HelmPreviewIdempotencyKey defines model for helmPreviewIdempotencyKey.
 type HelmPreviewIdempotencyKey = string
@@ -10845,7 +11036,10 @@ type ListConanReferencesParams struct {
 
 // GetRepositoryEffectiveAccessParams defines parameters for GetRepositoryEffectiveAccess.
 type GetRepositoryEffectiveAccessParams struct {
-	Actor    *string                                 `form:"actor,omitempty" json:"actor,omitempty"`
+	// Actor The principal to simulate. A user:<name> actor includes the user groups of that account, and a group:<id> actor previews what the members of that user group are allowed.
+	Actor *string `form:"actor,omitempty" json:"actor,omitempty"`
+
+	// Role The account level to simulate. The global roles of the account's user groups still apply, so the level is the highest of this role and those roles, as it is for the real account.
 	Role     *GetRepositoryEffectiveAccessParamsRole `form:"role,omitempty" json:"role,omitempty"`
 	Resource *string                                 `form:"resource,omitempty" json:"resource,omitempty"`
 }
@@ -11033,6 +11227,28 @@ type ListServiceAccountCredentialsParams struct {
 // ReplaceSiteSettingsParams defines parameters for ReplaceSiteSettings.
 type ReplaceSiteSettingsParams struct {
 	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ListUserGroupsParams defines parameters for ListUserGroups.
+type ListUserGroupsParams struct {
+	Limit     *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// RenameUserGroupParams defines parameters for RenameUserGroup.
+type RenameUserGroupParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// SetUserGroupGlobalRoleParams defines parameters for SetUserGroupGlobalRole.
+type SetUserGroupGlobalRoleParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ListUserGroupMembersParams defines parameters for ListUserGroupMembers.
+type ListUserGroupMembersParams struct {
+	Limit     *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
 }
 
 // ListUsersParams defines parameters for ListUsers.
@@ -11408,6 +11624,18 @@ type CreateServiceAccountCredentialJSONRequestBody = CreateServiceAccountCredent
 
 // ReplaceSiteSettingsJSONRequestBody defines body for ReplaceSiteSettings for application/json ContentType.
 type ReplaceSiteSettingsJSONRequestBody = SiteSettingsUpdate
+
+// CreateUserGroupJSONRequestBody defines body for CreateUserGroup for application/json ContentType.
+type CreateUserGroupJSONRequestBody = CreateUserGroup
+
+// RenameUserGroupJSONRequestBody defines body for RenameUserGroup for application/json ContentType.
+type RenameUserGroupJSONRequestBody = RenameUserGroup
+
+// SetUserGroupGlobalRoleJSONRequestBody defines body for SetUserGroupGlobalRole for application/json ContentType.
+type SetUserGroupGlobalRoleJSONRequestBody = SetUserGroupGlobalRole
+
+// AddUserGroupMemberJSONRequestBody defines body for AddUserGroupMember for application/json ContentType.
+type AddUserGroupMemberJSONRequestBody = AddUserGroupMember
 
 // CreateUserJSONRequestBody defines body for CreateUser for application/json ContentType.
 type CreateUserJSONRequestBody = CreateUser
@@ -12983,6 +13211,33 @@ type ServerInterface interface {
 
 	// (PUT /site-settings)
 	ReplaceSiteSettings(w http.ResponseWriter, r *http.Request, params ReplaceSiteSettingsParams)
+
+	// (GET /user-groups)
+	ListUserGroups(w http.ResponseWriter, r *http.Request, params ListUserGroupsParams)
+
+	// (POST /user-groups)
+	CreateUserGroup(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /user-groups/{groupId})
+	DeleteUserGroup(w http.ResponseWriter, r *http.Request, groupId UserGroupId)
+
+	// (GET /user-groups/{groupId})
+	GetUserGroup(w http.ResponseWriter, r *http.Request, groupId UserGroupId)
+
+	// (PUT /user-groups/{groupId})
+	RenameUserGroup(w http.ResponseWriter, r *http.Request, groupId UserGroupId, params RenameUserGroupParams)
+
+	// (PUT /user-groups/{groupId}/global-role)
+	SetUserGroupGlobalRole(w http.ResponseWriter, r *http.Request, groupId UserGroupId, params SetUserGroupGlobalRoleParams)
+
+	// (GET /user-groups/{groupId}/members)
+	ListUserGroupMembers(w http.ResponseWriter, r *http.Request, groupId UserGroupId, params ListUserGroupMembersParams)
+
+	// (POST /user-groups/{groupId}/members)
+	AddUserGroupMember(w http.ResponseWriter, r *http.Request, groupId UserGroupId)
+
+	// (DELETE /user-groups/{groupId}/members/{userId})
+	RemoveUserGroupMember(w http.ResponseWriter, r *http.Request, groupId UserGroupId, userId openapi_types.UUID)
 
 	// (GET /users)
 	ListUsers(w http.ResponseWriter, r *http.Request, params ListUsersParams)
@@ -23489,6 +23744,342 @@ func (siw *ServerInterfaceWrapper) ReplaceSiteSettings(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ListUserGroups operation middleware
+func (siw *ServerInterfaceWrapper) ListUserGroups(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListUserGroupsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUserGroups(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateUserGroup operation middleware
+func (siw *ServerInterfaceWrapper) CreateUserGroup(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUserGroup(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteUserGroup operation middleware
+func (siw *ServerInterfaceWrapper) DeleteUserGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId UserGroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", r.PathValue("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteUserGroup(w, r, groupId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetUserGroup operation middleware
+func (siw *ServerInterfaceWrapper) GetUserGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId UserGroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", r.PathValue("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetUserGroup(w, r, groupId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RenameUserGroup operation middleware
+func (siw *ServerInterfaceWrapper) RenameUserGroup(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId UserGroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", r.PathValue("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params RenameUserGroupParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RenameUserGroup(w, r, groupId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetUserGroupGlobalRole operation middleware
+func (siw *ServerInterfaceWrapper) SetUserGroupGlobalRole(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId UserGroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", r.PathValue("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params SetUserGroupGlobalRoleParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetUserGroupGlobalRole(w, r, groupId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListUserGroupMembers operation middleware
+func (siw *ServerInterfaceWrapper) ListUserGroupMembers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId UserGroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", r.PathValue("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListUserGroupMembersParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUserGroupMembers(w, r, groupId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddUserGroupMember operation middleware
+func (siw *ServerInterfaceWrapper) AddUserGroupMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId UserGroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", r.PathValue("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddUserGroupMember(w, r, groupId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveUserGroupMember operation middleware
+func (siw *ServerInterfaceWrapper) RemoveUserGroupMember(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "groupId" -------------
+	var groupId UserGroupId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "groupId", r.PathValue("groupId"), &groupId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "groupId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "userId" -------------
+	var userId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "userId", r.PathValue("userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "userId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveUserGroupMember(w, r, groupId, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListUsers operation middleware
 func (siw *ServerInterfaceWrapper) ListUsers(w http.ResponseWriter, r *http.Request) {
 
@@ -24924,6 +25515,15 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/users/{userId}/identities", wrapper.ListUserIdentities)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/users/{userId}/identities", wrapper.CreateUserIdentity)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/users/{userId}/identities/{identityId}", wrapper.DeleteUserIdentity)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/user-groups", wrapper.ListUserGroups)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/user-groups", wrapper.CreateUserGroup)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/user-groups/{groupId}", wrapper.DeleteUserGroup)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/user-groups/{groupId}", wrapper.GetUserGroup)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/user-groups/{groupId}", wrapper.RenameUserGroup)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/user-groups/{groupId}/global-role", wrapper.SetUserGroupGlobalRole)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/user-groups/{groupId}/members", wrapper.ListUserGroupMembers)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/user-groups/{groupId}/members", wrapper.AddUserGroupMember)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/user-groups/{groupId}/members/{userId}", wrapper.RemoveUserGroupMember)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audits", wrapper.ListAudits)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/audits/page", wrapper.ListAuditPage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/overview-statistics", wrapper.GetOverviewStatistics)
@@ -25259,6 +25859,19 @@ type SiteSettingsJSONResponse struct {
 }
 
 type UserJSONResponse User
+
+type UserGroupResponseHeaders struct {
+	ETag string
+}
+type UserGroupJSONResponse struct {
+	Body UserGroup
+
+	Headers UserGroupResponseHeaders
+}
+
+type UserGroupListJSONResponse UserGroupList
+
+type UserGroupMemberListJSONResponse UserGroupMemberList
 
 type UserIdentityJSONResponse UserIdentity
 
@@ -45814,6 +46427,721 @@ func (response ReplaceSiteSettings412ApplicationProblemPlusJSONResponse) VisitRe
 	return err
 }
 
+type ListUserGroupsRequestObject struct {
+	Params ListUserGroupsParams
+}
+
+type ListUserGroupsResponseObject interface {
+	VisitListUserGroupsResponse(w http.ResponseWriter) error
+}
+
+type ListUserGroups200JSONResponse struct{ UserGroupListJSONResponse }
+
+func (response ListUserGroups200JSONResponse) VisitListUserGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserGroups400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListUserGroups400ApplicationProblemPlusJSONResponse) VisitListUserGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserGroups401ApplicationProblemPlusJSONResponse Problem
+
+func (response ListUserGroups401ApplicationProblemPlusJSONResponse) VisitListUserGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserGroups403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListUserGroups403ApplicationProblemPlusJSONResponse) VisitListUserGroupsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserGroupRequestObject struct {
+	Body *CreateUserGroupJSONRequestBody
+}
+
+type CreateUserGroupResponseObject interface {
+	VisitCreateUserGroupResponse(w http.ResponseWriter) error
+}
+
+type CreateUserGroup201JSONResponse struct{ UserGroupJSONResponse }
+
+func (response CreateUserGroup201JSONResponse) VisitCreateUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserGroup400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreateUserGroup400ApplicationProblemPlusJSONResponse) VisitCreateUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserGroup401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateUserGroup401ApplicationProblemPlusJSONResponse) VisitCreateUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserGroup403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateUserGroup403ApplicationProblemPlusJSONResponse) VisitCreateUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateUserGroup409ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateUserGroup409ApplicationProblemPlusJSONResponse) VisitCreateUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUserGroupRequestObject struct {
+	GroupId UserGroupId `json:"groupId"`
+}
+
+type DeleteUserGroupResponseObject interface {
+	VisitDeleteUserGroupResponse(w http.ResponseWriter) error
+}
+
+type DeleteUserGroup204Response struct {
+}
+
+func (response DeleteUserGroup204Response) VisitDeleteUserGroupResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteUserGroup401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteUserGroup401ApplicationProblemPlusJSONResponse) VisitDeleteUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUserGroup403ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteUserGroup403ApplicationProblemPlusJSONResponse) VisitDeleteUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteUserGroup404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteUserGroup404ApplicationProblemPlusJSONResponse) VisitDeleteUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserGroupRequestObject struct {
+	GroupId UserGroupId `json:"groupId"`
+}
+
+type GetUserGroupResponseObject interface {
+	VisitGetUserGroupResponse(w http.ResponseWriter) error
+}
+
+type GetUserGroup200JSONResponse struct{ UserGroupJSONResponse }
+
+func (response GetUserGroup200JSONResponse) VisitGetUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserGroup401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetUserGroup401ApplicationProblemPlusJSONResponse) VisitGetUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserGroup403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetUserGroup403ApplicationProblemPlusJSONResponse) VisitGetUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetUserGroup404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetUserGroup404ApplicationProblemPlusJSONResponse) VisitGetUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameUserGroupRequestObject struct {
+	GroupId UserGroupId `json:"groupId"`
+	Params  RenameUserGroupParams
+	Body    *RenameUserGroupJSONRequestBody
+}
+
+type RenameUserGroupResponseObject interface {
+	VisitRenameUserGroupResponse(w http.ResponseWriter) error
+}
+
+type RenameUserGroup200JSONResponse struct{ UserGroupJSONResponse }
+
+func (response RenameUserGroup200JSONResponse) VisitRenameUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameUserGroup400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RenameUserGroup400ApplicationProblemPlusJSONResponse) VisitRenameUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameUserGroup401ApplicationProblemPlusJSONResponse Problem
+
+func (response RenameUserGroup401ApplicationProblemPlusJSONResponse) VisitRenameUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameUserGroup403ApplicationProblemPlusJSONResponse Problem
+
+func (response RenameUserGroup403ApplicationProblemPlusJSONResponse) VisitRenameUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameUserGroup404ApplicationProblemPlusJSONResponse Problem
+
+func (response RenameUserGroup404ApplicationProblemPlusJSONResponse) VisitRenameUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameUserGroup409ApplicationProblemPlusJSONResponse Problem
+
+func (response RenameUserGroup409ApplicationProblemPlusJSONResponse) VisitRenameUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RenameUserGroup412ApplicationProblemPlusJSONResponse Problem
+
+func (response RenameUserGroup412ApplicationProblemPlusJSONResponse) VisitRenameUserGroupResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetUserGroupGlobalRoleRequestObject struct {
+	GroupId UserGroupId `json:"groupId"`
+	Params  SetUserGroupGlobalRoleParams
+	Body    *SetUserGroupGlobalRoleJSONRequestBody
+}
+
+type SetUserGroupGlobalRoleResponseObject interface {
+	VisitSetUserGroupGlobalRoleResponse(w http.ResponseWriter) error
+}
+
+type SetUserGroupGlobalRole200JSONResponse struct{ UserGroupJSONResponse }
+
+func (response SetUserGroupGlobalRole200JSONResponse) VisitSetUserGroupGlobalRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetUserGroupGlobalRole400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response SetUserGroupGlobalRole400ApplicationProblemPlusJSONResponse) VisitSetUserGroupGlobalRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetUserGroupGlobalRole401ApplicationProblemPlusJSONResponse Problem
+
+func (response SetUserGroupGlobalRole401ApplicationProblemPlusJSONResponse) VisitSetUserGroupGlobalRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetUserGroupGlobalRole403ApplicationProblemPlusJSONResponse Problem
+
+func (response SetUserGroupGlobalRole403ApplicationProblemPlusJSONResponse) VisitSetUserGroupGlobalRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetUserGroupGlobalRole404ApplicationProblemPlusJSONResponse Problem
+
+func (response SetUserGroupGlobalRole404ApplicationProblemPlusJSONResponse) VisitSetUserGroupGlobalRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type SetUserGroupGlobalRole412ApplicationProblemPlusJSONResponse Problem
+
+func (response SetUserGroupGlobalRole412ApplicationProblemPlusJSONResponse) VisitSetUserGroupGlobalRoleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserGroupMembersRequestObject struct {
+	GroupId UserGroupId `json:"groupId"`
+	Params  ListUserGroupMembersParams
+}
+
+type ListUserGroupMembersResponseObject interface {
+	VisitListUserGroupMembersResponse(w http.ResponseWriter) error
+}
+
+type ListUserGroupMembers200JSONResponse struct {
+	UserGroupMemberListJSONResponse
+}
+
+func (response ListUserGroupMembers200JSONResponse) VisitListUserGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserGroupMembers400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListUserGroupMembers400ApplicationProblemPlusJSONResponse) VisitListUserGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserGroupMembers401ApplicationProblemPlusJSONResponse Problem
+
+func (response ListUserGroupMembers401ApplicationProblemPlusJSONResponse) VisitListUserGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserGroupMembers403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListUserGroupMembers403ApplicationProblemPlusJSONResponse) VisitListUserGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListUserGroupMembers404ApplicationProblemPlusJSONResponse Problem
+
+func (response ListUserGroupMembers404ApplicationProblemPlusJSONResponse) VisitListUserGroupMembersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddUserGroupMemberRequestObject struct {
+	GroupId UserGroupId `json:"groupId"`
+	Body    *AddUserGroupMemberJSONRequestBody
+}
+
+type AddUserGroupMemberResponseObject interface {
+	VisitAddUserGroupMemberResponse(w http.ResponseWriter) error
+}
+
+type AddUserGroupMember204Response struct {
+}
+
+func (response AddUserGroupMember204Response) VisitAddUserGroupMemberResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type AddUserGroupMember400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response AddUserGroupMember400ApplicationProblemPlusJSONResponse) VisitAddUserGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddUserGroupMember401ApplicationProblemPlusJSONResponse Problem
+
+func (response AddUserGroupMember401ApplicationProblemPlusJSONResponse) VisitAddUserGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddUserGroupMember403ApplicationProblemPlusJSONResponse Problem
+
+func (response AddUserGroupMember403ApplicationProblemPlusJSONResponse) VisitAddUserGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddUserGroupMember404ApplicationProblemPlusJSONResponse Problem
+
+func (response AddUserGroupMember404ApplicationProblemPlusJSONResponse) VisitAddUserGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type AddUserGroupMember409ApplicationProblemPlusJSONResponse Problem
+
+func (response AddUserGroupMember409ApplicationProblemPlusJSONResponse) VisitAddUserGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveUserGroupMemberRequestObject struct {
+	GroupId UserGroupId        `json:"groupId"`
+	UserId  openapi_types.UUID `json:"userId"`
+}
+
+type RemoveUserGroupMemberResponseObject interface {
+	VisitRemoveUserGroupMemberResponse(w http.ResponseWriter) error
+}
+
+type RemoveUserGroupMember204Response struct {
+}
+
+func (response RemoveUserGroupMember204Response) VisitRemoveUserGroupMemberResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveUserGroupMember401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RemoveUserGroupMember401ApplicationProblemPlusJSONResponse) VisitRemoveUserGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveUserGroupMember403ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveUserGroupMember403ApplicationProblemPlusJSONResponse) VisitRemoveUserGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RemoveUserGroupMember404ApplicationProblemPlusJSONResponse Problem
+
+func (response RemoveUserGroupMember404ApplicationProblemPlusJSONResponse) VisitRemoveUserGroupMemberResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListUsersRequestObject struct {
 	Params ListUsersParams
 }
@@ -48863,6 +50191,33 @@ type StrictServerInterface interface {
 
 	// (PUT /site-settings)
 	ReplaceSiteSettings(ctx context.Context, request ReplaceSiteSettingsRequestObject) (ReplaceSiteSettingsResponseObject, error)
+
+	// (GET /user-groups)
+	ListUserGroups(ctx context.Context, request ListUserGroupsRequestObject) (ListUserGroupsResponseObject, error)
+
+	// (POST /user-groups)
+	CreateUserGroup(ctx context.Context, request CreateUserGroupRequestObject) (CreateUserGroupResponseObject, error)
+
+	// (DELETE /user-groups/{groupId})
+	DeleteUserGroup(ctx context.Context, request DeleteUserGroupRequestObject) (DeleteUserGroupResponseObject, error)
+
+	// (GET /user-groups/{groupId})
+	GetUserGroup(ctx context.Context, request GetUserGroupRequestObject) (GetUserGroupResponseObject, error)
+
+	// (PUT /user-groups/{groupId})
+	RenameUserGroup(ctx context.Context, request RenameUserGroupRequestObject) (RenameUserGroupResponseObject, error)
+
+	// (PUT /user-groups/{groupId}/global-role)
+	SetUserGroupGlobalRole(ctx context.Context, request SetUserGroupGlobalRoleRequestObject) (SetUserGroupGlobalRoleResponseObject, error)
+
+	// (GET /user-groups/{groupId}/members)
+	ListUserGroupMembers(ctx context.Context, request ListUserGroupMembersRequestObject) (ListUserGroupMembersResponseObject, error)
+
+	// (POST /user-groups/{groupId}/members)
+	AddUserGroupMember(ctx context.Context, request AddUserGroupMemberRequestObject) (AddUserGroupMemberResponseObject, error)
+
+	// (DELETE /user-groups/{groupId}/members/{userId})
+	RemoveUserGroupMember(ctx context.Context, request RemoveUserGroupMemberRequestObject) (RemoveUserGroupMemberResponseObject, error)
 
 	// (GET /users)
 	ListUsers(ctx context.Context, request ListUsersRequestObject) (ListUsersResponseObject, error)
@@ -56431,6 +57786,270 @@ func (sh *strictHandler) ReplaceSiteSettings(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReplaceSiteSettingsResponseObject); ok {
 		if err := validResponse.VisitReplaceSiteSettingsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListUserGroups operation middleware
+func (sh *strictHandler) ListUserGroups(w http.ResponseWriter, r *http.Request, params ListUserGroupsParams) {
+	var request ListUserGroupsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListUserGroups(ctx, request.(ListUserGroupsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListUserGroups")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListUserGroupsResponseObject); ok {
+		if err := validResponse.VisitListUserGroupsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateUserGroup operation middleware
+func (sh *strictHandler) CreateUserGroup(w http.ResponseWriter, r *http.Request) {
+	var request CreateUserGroupRequestObject
+
+	var body CreateUserGroupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateUserGroup(ctx, request.(CreateUserGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateUserGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateUserGroupResponseObject); ok {
+		if err := validResponse.VisitCreateUserGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteUserGroup operation middleware
+func (sh *strictHandler) DeleteUserGroup(w http.ResponseWriter, r *http.Request, groupId UserGroupId) {
+	var request DeleteUserGroupRequestObject
+
+	request.GroupId = groupId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteUserGroup(ctx, request.(DeleteUserGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteUserGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteUserGroupResponseObject); ok {
+		if err := validResponse.VisitDeleteUserGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetUserGroup operation middleware
+func (sh *strictHandler) GetUserGroup(w http.ResponseWriter, r *http.Request, groupId UserGroupId) {
+	var request GetUserGroupRequestObject
+
+	request.GroupId = groupId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetUserGroup(ctx, request.(GetUserGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetUserGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetUserGroupResponseObject); ok {
+		if err := validResponse.VisitGetUserGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RenameUserGroup operation middleware
+func (sh *strictHandler) RenameUserGroup(w http.ResponseWriter, r *http.Request, groupId UserGroupId, params RenameUserGroupParams) {
+	var request RenameUserGroupRequestObject
+
+	request.GroupId = groupId
+	request.Params = params
+
+	var body RenameUserGroupJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RenameUserGroup(ctx, request.(RenameUserGroupRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RenameUserGroup")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RenameUserGroupResponseObject); ok {
+		if err := validResponse.VisitRenameUserGroupResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SetUserGroupGlobalRole operation middleware
+func (sh *strictHandler) SetUserGroupGlobalRole(w http.ResponseWriter, r *http.Request, groupId UserGroupId, params SetUserGroupGlobalRoleParams) {
+	var request SetUserGroupGlobalRoleRequestObject
+
+	request.GroupId = groupId
+	request.Params = params
+
+	var body SetUserGroupGlobalRoleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SetUserGroupGlobalRole(ctx, request.(SetUserGroupGlobalRoleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SetUserGroupGlobalRole")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SetUserGroupGlobalRoleResponseObject); ok {
+		if err := validResponse.VisitSetUserGroupGlobalRoleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListUserGroupMembers operation middleware
+func (sh *strictHandler) ListUserGroupMembers(w http.ResponseWriter, r *http.Request, groupId UserGroupId, params ListUserGroupMembersParams) {
+	var request ListUserGroupMembersRequestObject
+
+	request.GroupId = groupId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListUserGroupMembers(ctx, request.(ListUserGroupMembersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListUserGroupMembers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListUserGroupMembersResponseObject); ok {
+		if err := validResponse.VisitListUserGroupMembersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddUserGroupMember operation middleware
+func (sh *strictHandler) AddUserGroupMember(w http.ResponseWriter, r *http.Request, groupId UserGroupId) {
+	var request AddUserGroupMemberRequestObject
+
+	request.GroupId = groupId
+
+	var body AddUserGroupMemberJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddUserGroupMember(ctx, request.(AddUserGroupMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddUserGroupMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddUserGroupMemberResponseObject); ok {
+		if err := validResponse.VisitAddUserGroupMemberResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveUserGroupMember operation middleware
+func (sh *strictHandler) RemoveUserGroupMember(w http.ResponseWriter, r *http.Request, groupId UserGroupId, userId openapi_types.UUID) {
+	var request RemoveUserGroupMemberRequestObject
+
+	request.GroupId = groupId
+	request.UserId = userId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveUserGroupMember(ctx, request.(RemoveUserGroupMemberRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveUserGroupMember")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveUserGroupMemberResponseObject); ok {
+		if err := validResponse.VisitRemoveUserGroupMemberResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

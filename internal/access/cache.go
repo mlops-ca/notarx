@@ -35,6 +35,7 @@ type Source interface {
 	GetUserByName(context.Context, string) (repository.User, error)
 	GetRepositoryQuarantineReadPolicy(context.Context, string) (repository.RepositoryQuarantineReadPolicy, error)
 	GetRepositoryGrants(context.Context, string) (repository.RepositoryGrantSet, error)
+	ListUserGroupMemberships(context.Context, string) ([]repository.UserGroupMembership, error)
 	GetWorkloadIssuer(context.Context, string) (repository.WorkloadIssuer, error)
 	GetWorkloadIssuerByIssuer(context.Context, string) (repository.WorkloadIssuer, error)
 	GetWorkloadTrustPolicy(context.Context, string) (repository.WorkloadTrustPolicy, error)
@@ -45,6 +46,12 @@ type Source interface {
 type grantEntry struct {
 	RepositoryID string
 	Set          repository.RepositoryGrantSet
+}
+
+// userGroupEntry carries the user id the invalidation of the user_group scope names.
+type userGroupEntry struct {
+	UserID      string
+	Memberships []repository.UserGroupMembership
 }
 
 type quarantineEntry struct {
@@ -66,6 +73,7 @@ type ReadCaches struct {
 	usersByName    *readcache.Cache[string, repository.User]
 	quarantine     *readcache.Cache[string, quarantineEntry]
 	grants         *readcache.Cache[string, grantEntry]
+	userGroups     *readcache.Cache[string, userGroupEntry]
 	issuersByID    *readcache.Cache[string, repository.WorkloadIssuer]
 	issuersByIss   *readcache.Cache[string, repository.WorkloadIssuer]
 	issuerPolicies *readcache.Cache[string, []repository.WorkloadTrustPolicy]
@@ -100,6 +108,12 @@ func NewReadCaches(source Source, registry *readcache.Registry) *ReadCaches {
 		grants: readcache.New[string, grantEntry](registry, readcache.Options[grantEntry]{
 			Name: "repository_grants", Scope: repository.CacheScopeGrants,
 			Match: func(e grantEntry, id string) bool { return e.RepositoryID == id }, IsNegative: notFound, InvalidateNegatives: true}),
+		// The group ids of an account. A membership change announces the user id, a change to a group row (its global
+		// role, its deletion) announces the whole scope, and the registry TTL (NOTARX_AUTHZ_CACHE_TTL) bounds a lost
+		// notification, so a removed membership is effective on every node within that window (ADR 0018 Decision 5).
+		userGroups: readcache.New[string, userGroupEntry](registry, readcache.Options[userGroupEntry]{
+			Name: "user_group_memberships", Scope: repository.CacheScopeUserGroup,
+			Match: func(e userGroupEntry, id string) bool { return e.UserID == id }}),
 		issuersByID: readcache.New[string, repository.WorkloadIssuer](registry, readcache.Options[repository.WorkloadIssuer]{
 			Name: "workload_issuers_by_id", Scope: repository.CacheScopeWorkloadIssuer, Match: issuerMatch, IsNegative: notFound, InvalidateNegatives: true}),
 		issuersByIss: readcache.New[string, repository.WorkloadIssuer](registry, readcache.Options[repository.WorkloadIssuer]{
@@ -228,6 +242,19 @@ func (c *ReadCaches) GetRepositoryGrants(ctx context.Context, repositoryID strin
 		return grantEntry{RepositoryID: repositoryID, Set: set}, err
 	})
 	return cloneGrantSet(entry.Set), err
+}
+
+// ListUserGroupMemberships returns the groups of an account, at most repository.MaxUserGroupMemberships, from
+// the cache when it is fresh. An error is never cached.
+func (c *ReadCaches) ListUserGroupMemberships(ctx context.Context, userID string) ([]repository.UserGroupMembership, error) {
+	entry, err := c.userGroups.Get(ctx, userID, func(ctx context.Context) (userGroupEntry, error) {
+		memberships, err := c.source.ListUserGroupMemberships(ctx, userID)
+		return userGroupEntry{UserID: userID, Memberships: memberships}, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return slices.Clone(entry.Memberships), nil
 }
 
 // GetWorkloadIssuer returns the workload issuer by id, active or not.

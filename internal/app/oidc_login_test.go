@@ -346,6 +346,8 @@ type stubOIDCProvider struct {
 	nonce   string
 	subject string
 	roles   []string
+	// extra claims are added to the ID token the next token request returns.
+	extra map[string]any
 }
 
 func newStubOIDCProvider(t *testing.T, keyID, subject string, roles []string) *stubOIDCProvider {
@@ -370,11 +372,11 @@ func newStubOIDCProvider(t *testing.T, keyID, subject string, roles []string) *s
 				return
 			}
 			idp.mu.Lock()
-			nonce := idp.nonce
+			nonce, extra := idp.nonce, idp.extra
 			idp.mu.Unlock()
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token": "provider-access-token", "token_type": "Bearer", "expires_in": 300,
-				"id_token": signedOIDCTokenWithClaims(t, key, keyID, idp.URL, "notarx-console", idp.subject, time.Now().Add(time.Minute), idp.roles, nonce),
+				"id_token": signedOIDCTokenWithExtraClaims(t, key, keyID, idp.URL, "notarx-console", idp.subject, time.Now().Add(time.Minute), idp.roles, nonce, extra),
 			})
 		default:
 			w.WriteHeader(http.StatusNotFound)
@@ -382,6 +384,12 @@ func newStubOIDCProvider(t *testing.T, keyID, subject string, roles []string) *s
 	}))
 	t.Cleanup(idp.Close)
 	return idp
+}
+
+func (p *stubOIDCProvider) setExtraClaims(extra map[string]any) {
+	p.mu.Lock()
+	p.extra = extra
+	p.mu.Unlock()
 }
 
 func (p *stubOIDCProvider) setNonce(nonce string) {

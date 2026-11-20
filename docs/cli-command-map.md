@@ -245,6 +245,15 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `GET /authorization-roles/{roleId}`<br>`getAuthorizationRole` | `role show <id>` | #134 | M1 implemented | A | Q |
 | `PUT /authorization-roles/{roleId}`<br>`updateAuthorizationRole` | `role update <id>` | #134 | M2 implemented | A | C |
 | `DELETE /authorization-roles/{roleId}`<br>`deleteAuthorizationRole` | `role delete <id>` | #134 | M2 implemented | A | W |
+| `GET /user-groups`<br>`listUserGroups` | `group list` | #557 | M2 | A | Q |
+| `POST /user-groups`<br>`createUserGroup` | `group create` | #557 | M2 | A | W |
+| `GET /user-groups/{groupId}`<br>`getUserGroup` | `group show <id>` | #557 | M2 | A | Q |
+| `PUT /user-groups/{groupId}`<br>`renameUserGroup` | `group rename <id>` | #557 | M2 | A | C |
+| `DELETE /user-groups/{groupId}`<br>`deleteUserGroup` | `group delete <id>` | #557 | M2 | A | W |
+| `PUT /user-groups/{groupId}/global-role`<br>`setUserGroupGlobalRole` | `group set-role <id>` | #557 | M2 | A | C |
+| `GET /user-groups/{groupId}/members`<br>`listUserGroupMembers` | `group member list <id>` | #557 | M2 | A | Q |
+| `POST /user-groups/{groupId}/members`<br>`addUserGroupMember` | `group member add <id>` | #557 | M2 | A | W |
+| `DELETE /user-groups/{groupId}/members/{userId}`<br>`removeUserGroupMember` | `group member remove <id> <user>` | #557 | M2 | A | W |
 | `GET /repository-capacities`<br>`listRepositoryCapacities` | `capacity list` | #138 | M2 | FA | Q |
 | `GET /lifecycle-jobs`<br>`listLifecycleJobs` | `lifecycle-job list --all-repositories` | #135 | M1 implemented | FA | Q |
 | `GET /scheduled-tasks`<br>`listScheduledTasks` | `scheduled-task list` | #137 | M2 | ST | Q |

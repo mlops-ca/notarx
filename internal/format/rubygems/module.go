@@ -114,7 +114,7 @@ func (m *Module) authorize(w http.ResponseWriter, r *http.Request, repo reposito
 	if !d.Allowed && collection && p.AccountStateReason() == "" {
 		if set, e := m.access.Grants.GetRepositoryGrants(r.Context(), repo.ID); e == nil {
 			for _, g := range set.Grants {
-				if g.Principal == p.Actor && g.ResourcePrefix != "" {
+				if p.NamesGrantPrincipal(g.Principal) && g.ResourcePrefix != "" {
 					candidate := m.access.AuthorizeResource(r.Context(), p, repo, op, g.ResourcePrefix)
 					if candidate.Allowed {
 						d = candidate

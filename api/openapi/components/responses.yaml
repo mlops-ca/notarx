@@ -77,6 +77,28 @@ CreatedServiceAccountCredential:
     application/json:
       schema:
         "$ref": "../components/schemas.yaml#/CreatedServiceAccountCredential"
+UserGroup:
+  description: A user group
+  headers:
+    ETag:
+      required: true
+      schema: {type: string}
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/UserGroup"
+UserGroupList:
+  description: A page of user groups
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/UserGroupList"
+UserGroupMemberList:
+  description: A page of the members of a user group
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/UserGroupMemberList"
 User:
   description: User account metadata. The password hash is never returned.
   content:

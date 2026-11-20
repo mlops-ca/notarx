@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/jose"
+	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const oidcJWKSCacheTTL = 5 * time.Minute
@@ -28,7 +29,9 @@ type OIDCRoleMapping struct {
 // Verification itself is delegated to internal/jose (ADR 0019).
 type OIDCConfig struct {
 	// ProviderID identifies the identity provider (ADR 0018) the validator was built for.
-	ProviderID    string
+	ProviderID string
+	// ProviderSlug is the slug of the provider, for audit events.
+	ProviderSlug  string
 	Issuer        string
 	Audience      string
 	JWKSURL       string
@@ -38,13 +41,17 @@ type OIDCConfig struct {
 	// SubjectClaims are the claims whose values, joined with a colon, form the
 	// login subject (Entra ID: tid and oid). Empty means the sub claim.
 	SubjectClaims []string
+	// GroupsClaim names the claim that carries the user's groups; empty means "groups" (ADR 0018 Decision 2).
+	GroupsClaim string
 	// Realm-role mappings are opt-in. When a token contains several mapped
 	// roles, the validator grants the most privileged one.
 	Roles OIDCRoleMapping
 }
 
 type OIDCIdentity struct {
-	ProviderID    string
+	ProviderID string
+	// ProviderSlug is the slug of the provider, for audit events.
+	ProviderSlug  string
 	Issuer        string
 	Subject       string
 	Email         string
@@ -55,6 +62,16 @@ type OIDCIdentity struct {
 	Role          Role
 	AdminSubject  bool
 	RoleMappings  []OIDCRoleMappingMatch
+	// Groups are the group values the token asserts, at most repository.MaxClaimsGroups. They only ever
+	// match claims-sourced groups of this provider by external id (ADR 0018 Decision 5).
+	Groups []string
+	// GroupsPresent reports that the token carries the groups claim (or its overage markers). A sign-in ID token is
+	// authoritative for the groups of its provider, absent claim included; an API bearer token that does not carry
+	// the claim says nothing about groups and leaves the memberships as they are.
+	GroupsPresent bool
+	// GroupsOverage reports that the token could not carry the full group list (Entra ID's _claim_names and
+	// hasgroups, or more values than the bound). Groups is then empty: never a partial list.
+	GroupsOverage bool
 }
 
 type OIDCValidator struct {
@@ -123,7 +140,6 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		EmailVerified bool     `json:"email_verified"`
 		Nonce         string   `json:"nonce"`
 		Roles         []string `json:"roles"`
-		Groups        []string `json:"groups"`
 		RealmAccess   struct {
 			Roles []string `json:"roles"`
 		} `json:"realm_access"`
@@ -142,8 +158,8 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		return OIDCIdentity{}, false
 	}
 	identity := OIDCIdentity{
-		ProviderID: v.config.ProviderID,
-		Issuer:     claims.Issuer, Subject: subject, Email: strings.TrimSpace(claims.Email),
+		ProviderID: v.config.ProviderID, ProviderSlug: v.config.ProviderSlug,
+		Issuer: claims.Issuer, Subject: subject, Email: strings.TrimSpace(claims.Email),
 		DisplayName: strings.TrimSpace(claims.Name), Username: strings.TrimSpace(claims.Username),
 		EmailVerified: claims.EmailVerified,
 	}
@@ -157,10 +173,11 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 	}
 	roles := append([]string(nil), claims.RealmAccess.Roles...)
 	roles = append(roles, claims.Roles...)
-	roles = append(roles, claims.Groups...)
+	roles = append(roles, tolerantStrings(verified.Claims["groups"])...)
 	for _, resource := range claims.ResourceAccess {
 		roles = append(roles, resource.Roles...)
 	}
+	identity.Groups, identity.GroupsOverage, identity.GroupsPresent = claimGroupsPresent(verified.Claims, v.config.GroupsClaim)
 	identity.RoleMappings = matchedOIDCRoleMappings(roles, v.config.Roles)
 	if containsMappedGatewayRole(identity.RoleMappings, RoleAdmin) {
 		identity.Admin = true
@@ -169,6 +186,63 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		identity.Role = RoleMember
 	}
 	return identity, true
+}
+
+// claimGroups reads the group values of a verified token. Microsoft Entra ID replaces the groups claim with
+// _claim_names (and hasgroups) when a user is in too many groups; resolving them through Microsoft Graph is out of
+// scope, so an overage yields no groups at all and the caller audits it. A claim longer than
+// repository.MaxClaimsGroups is an overage too: never a partial list. A claim of an unexpected shape (not a list
+// or a string, a non-string member) asserts no groups and is not reported as an overage.
+func claimGroups(claims map[string]any, name string) (groups []string, overage bool) {
+	groups, overage, _ = claimGroupsPresent(claims, name)
+	return groups, overage
+}
+
+// claimGroupsPresent is claimGroups that also reports whether the token carries the claim at all.
+func claimGroupsPresent(claims map[string]any, name string) (groups []string, overage, present bool) {
+	if name = strings.TrimSpace(name); name == "" {
+		name = "groups"
+	}
+	if names, ok := claims["_claim_names"].(map[string]any); ok {
+		if _, marked := names[name]; marked {
+			return nil, true, true
+		}
+	}
+	if has, _ := claims["hasgroups"].(bool); has {
+		return nil, true, true
+	}
+	raw, present := claims[name]
+	if !present {
+		return nil, false, false
+	}
+	var values []any
+	switch typed := raw.(type) {
+	case []any:
+		values = typed
+	case string:
+		// An IdP that sends one group as a plain string.
+		values = []any{typed}
+	default:
+		return nil, false, true
+	}
+	if len(values) > repository.MaxClaimsGroups {
+		return nil, true, true
+	}
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		text, isString := value.(string)
+		if !isString {
+			// A claim of an unexpected shape asserts no groups; it is not an overflow, so it is not audited as one.
+			return nil, false, true
+		}
+		if text = strings.TrimSpace(text); text != "" {
+			if _, duplicate := seen[text]; !duplicate {
+				seen[text] = struct{}{}
+				groups = append(groups, text)
+			}
+		}
+	}
+	return groups, false, true
 }
 
 // UnverifiedIssuer reads the iss claim of a JWT without verifying anything. It is only
@@ -255,4 +329,22 @@ func containsMappedGatewayRole(mappings []OIDCRoleMappingMatch, expected Role) b
 		}
 	}
 	return false
+}
+
+// tolerantStrings reads a claim that should be a list of strings. A string is one value and anything else, or a
+// non-string member, is ignored: an unexpected shape must not make the whole token unreadable.
+func tolerantStrings(raw any) []string {
+	switch typed := raw.(type) {
+	case string:
+		return []string{typed}
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok {
+				values = append(values, text)
+			}
+		}
+		return values
+	}
+	return nil
 }

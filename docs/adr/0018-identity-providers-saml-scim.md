@@ -348,7 +348,7 @@ CREATE TABLE user_groups (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX ON user_groups (lower(display_name)) WHERE provider_id IS NULL;
+CREATE UNIQUE INDEX ON user_groups (lower(display_name)) WHERE source = 'local';
 CREATE UNIQUE INDEX ON user_groups (provider_id, external_id) WHERE external_id <> '';
 CREATE TABLE user_group_members (
   group_id UUID NOT NULL REFERENCES user_groups(id) ON DELETE CASCADE,
@@ -359,6 +359,8 @@ CREATE TABLE user_group_members (
 -- every authenticated request resolves "groups of this user" (ADR 0023 section 5)
 CREATE INDEX ON user_group_members (user_id, group_id);
 ```
+
+The name index keys on `source = 'local'` and not on `provider_id IS NULL`: `ON DELETE SET NULL` makes the groups of a deleted provider provider-less, and they must not fall into the namespace of local groups.
 
 Login claims (`groups` attribute) match only rows with `source='claims'` and
 `provider_id` equal to the login provider, by `external_id` only, never by

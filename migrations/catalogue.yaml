@@ -3879,6 +3879,52 @@ tables:
       token_signing_keys_alg_check: (alg = ANY (ARRAY['RS256'::text, 'ES256'::text]))
       token_signing_keys_public_jwk_check: (jsonb_typeof(public_jwk) = 'object'::text)
       token_signing_keys_state_check: (state = ANY (ARRAY['next'::text, 'active'::text, 'retired'::text]))
+  user_group_members:
+    columns:
+      created_at: timestamp
+      group_id: uuid
+      source: text
+      user_id: uuid
+    primaryKey: [group_id, user_id]
+    foreignKeys:
+      - group_id -> user_groups(id) on delete cascade
+      - user_id -> users(id) on delete cascade
+    defaults:
+      created_at: now()
+    indexes:
+      - user_id,group_id
+    checks:
+      user_group_members_source_check: (source = ANY (ARRAY['local'::text, 'scim'::text, 'claims'::text]))
+  user_groups:
+    columns:
+      created_at: timestamp
+      display_name: text
+      external_id: text
+      global_role: text
+      id: uuid
+      provider_id: uuid?
+      source: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    foreignKeys:
+      - provider_id -> identity_providers(id) on delete set null
+    defaults:
+      created_at: now()
+      external_id: ''''''
+      global_role: '''none'''
+      updated_at: now()
+      version: "1"
+    indexes:
+      - provider_id,id
+    special:
+      user_groups_name_local_idx: unique USING btree (lower(display_name)) WHERE (source = 'local'::text)
+      user_groups_provider_external_id_idx: unique USING btree (provider_id, external_id) WHERE (external_id <> ''::text)
+    checks:
+      user_groups_display_name_check: ((length(btrim(display_name)) >= 1) AND (length(btrim(display_name)) <= 255))
+      user_groups_global_role_check: (global_role = ANY (ARRAY['none'::text, 'member'::text, 'admin'::text]))
+      user_groups_source_check: (source = ANY (ARRAY['local'::text, 'scim'::text, 'claims'::text]))
+      user_groups_version_check: (version > 0)
   user_identities:
     columns:
       created_at: timestamp
@@ -4177,6 +4223,12 @@ triggers:
   token_signing_keys_notify_cache_delete: 'token_signing_keys: AFTER DELETE ON token_signing_keys REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''signing_keys'')'
   token_signing_keys_notify_cache_insert: 'token_signing_keys: AFTER INSERT ON token_signing_keys REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''signing_keys'')'
   token_signing_keys_notify_cache_update: 'token_signing_keys: AFTER UPDATE ON token_signing_keys REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''signing_keys'')'
+  user_group_members_notify_cache_delete: 'user_group_members: AFTER DELETE ON user_group_members REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_user_id(''user_group'')'
+  user_group_members_notify_cache_insert: 'user_group_members: AFTER INSERT ON user_group_members REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_user_id(''user_group'')'
+  user_group_members_notify_cache_update: 'user_group_members: AFTER UPDATE ON user_group_members REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_user_id(''user_group'')'
+  user_groups_notify_cache_delete: 'user_groups: AFTER DELETE ON user_groups REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''user_group'')'
+  user_groups_notify_cache_insert: 'user_groups: AFTER INSERT ON user_groups REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''user_group'')'
+  user_groups_notify_cache_update: 'user_groups: AFTER UPDATE ON user_groups REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''user_group'')'
   users_notify_cache_delete: 'users: AFTER DELETE ON users REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''user'')'
   users_notify_cache_insert: 'users: AFTER INSERT ON users REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''user'')'
   users_notify_cache_update: 'users: AFTER UPDATE ON users REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_id(''user'')'

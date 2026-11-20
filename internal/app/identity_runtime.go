@@ -250,9 +250,10 @@ func (s *oidcProviderState) validatorConfig(audience, discoveredJWKS string) aut
 		jwksURL = discoveredJWKS
 	}
 	return authorization.OIDCConfig{
-		ProviderID: s.provider.ID, Issuer: s.settings.Issuer, Audience: audience, JWKSURL: jwksURL,
+		ProviderID: s.provider.ID, ProviderSlug: s.provider.Slug, Issuer: s.settings.Issuer, Audience: audience, JWKSURL: jwksURL,
 		AdminSubjects: s.settings.AdminSubjects, Algorithms: s.settings.Algorithms,
 		SubjectClaims: s.provider.AttributeMapping.SubjectClaims(),
+		GroupsClaim:   s.provider.AttributeMapping.Groups,
 		Roles:         authorization.OIDCRoleMapping{Member: s.settings.MemberRoles, Admin: s.settings.AdminRoles},
 	}
 }

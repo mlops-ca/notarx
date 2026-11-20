@@ -1266,6 +1266,10 @@ export type CurrentIdentity = {
   kind: AuthenticationKind;
   role?: "none" | "member" | "admin";
   administrator: boolean;
+  /**
+   * The user groups of the account, resolved for this request (ADR 0018). Their global roles are already part of role.
+   */
+  groupIds?: Array<string>;
   oidc?: OidcIdentityDetails;
 };
 
@@ -3396,6 +3400,71 @@ export type CreateUserIdentity = {
   subject: string;
 };
 
+export type UserGroup = {
+  id: string;
+  displayName: string;
+  source: "local" | "scim" | "claims";
+  /**
+   * The identity provider of a provisioned or claims-sourced group; absent for a local group.
+   */
+  providerId?: string;
+  /**
+   * The provider's identifier of the group, the only key a login claim or a SCIM request matches on.
+   */
+  externalId?: string;
+  globalRole: "none" | "member" | "admin";
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type UserGroupList = {
+  items: Array<UserGroup>;
+  limit: number;
+  /**
+   * Present while more groups follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
+
+export type CreateUserGroup = {
+  displayName: string;
+  source?: "local" | "claims";
+  /**
+   * Required for a claims-sourced group, not allowed for a local one.
+   */
+  providerId?: string;
+  /**
+   * Required for a claims-sourced group; the value a login's groups claim carries.
+   */
+  externalId?: string;
+};
+
+export type RenameUserGroup = {
+  displayName: string;
+};
+
+export type SetUserGroupGlobalRole = {
+  globalRole: "none" | "member" | "admin";
+};
+
+export type UserGroupMember = {
+  userId: string;
+  userName: string;
+  source: "local" | "scim" | "claims";
+  createdAt: string;
+};
+
+export type UserGroupMemberList = {
+  items: Array<UserGroupMember>;
+  limit: number;
+  nextPageToken?: string;
+};
+
+export type AddUserGroupMember = {
+  userId: string;
+};
+
 export type AuditPage = {
   items: Array<AuditRecord>;
   nextPageToken?: string;
@@ -4675,6 +4744,8 @@ export type HelmPreviewIdempotencyKey = string;
  * Explicit coordinate matching. contains is a case-insensitive literal substring; prefix is a case-sensitive literal prefix. Omitting match preserves the legacy behavior of each format (Cargo name substring; other formats prefix). Complete SHA-256 queries in global search remain exact digest matches. Contains requests have a five-second server budget; narrow the query if it expires.
  */
 export type ArtifactSearchMatch = "prefix" | "contains";
+
+export type UserGroupId = string;
 
 export type AuthorizationTemplateId = string;
 
@@ -11907,6 +11978,383 @@ export type DeleteUserIdentityResponses = {
 export type DeleteUserIdentityResponse =
   DeleteUserIdentityResponses[keyof DeleteUserIdentityResponses];
 
+export type ListUserGroupsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    limit?: number;
+    pageToken?: string;
+  };
+  url: "/user-groups";
+};
+
+export type ListUserGroupsErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type ListUserGroupsError =
+  ListUserGroupsErrors[keyof ListUserGroupsErrors];
+
+export type ListUserGroupsResponses = {
+  /**
+   * A page of user groups
+   */
+  200: UserGroupList;
+};
+
+export type ListUserGroupsResponse =
+  ListUserGroupsResponses[keyof ListUserGroupsResponses];
+
+export type CreateUserGroupData = {
+  body: CreateUserGroup;
+  path?: never;
+  query?: never;
+  url: "/user-groups";
+};
+
+export type CreateUserGroupErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type CreateUserGroupError =
+  CreateUserGroupErrors[keyof CreateUserGroupErrors];
+
+export type CreateUserGroupResponses = {
+  /**
+   * A user group
+   */
+  201: UserGroup;
+};
+
+export type CreateUserGroupResponse =
+  CreateUserGroupResponses[keyof CreateUserGroupResponses];
+
+export type DeleteUserGroupData = {
+  body?: never;
+  path: {
+    groupId: string;
+  };
+  query?: never;
+  url: "/user-groups/{groupId}";
+};
+
+export type DeleteUserGroupErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type DeleteUserGroupError =
+  DeleteUserGroupErrors[keyof DeleteUserGroupErrors];
+
+export type DeleteUserGroupResponses = {
+  /**
+   * User group deleted
+   */
+  204: void;
+};
+
+export type DeleteUserGroupResponse =
+  DeleteUserGroupResponses[keyof DeleteUserGroupResponses];
+
+export type GetUserGroupData = {
+  body?: never;
+  path: {
+    groupId: string;
+  };
+  query?: never;
+  url: "/user-groups/{groupId}";
+};
+
+export type GetUserGroupErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetUserGroupError = GetUserGroupErrors[keyof GetUserGroupErrors];
+
+export type GetUserGroupResponses = {
+  /**
+   * A user group
+   */
+  200: UserGroup;
+};
+
+export type GetUserGroupResponse =
+  GetUserGroupResponses[keyof GetUserGroupResponses];
+
+export type RenameUserGroupData = {
+  body: RenameUserGroup;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    groupId: string;
+  };
+  query?: never;
+  url: "/user-groups/{groupId}";
+};
+
+export type RenameUserGroupErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+};
+
+export type RenameUserGroupError =
+  RenameUserGroupErrors[keyof RenameUserGroupErrors];
+
+export type RenameUserGroupResponses = {
+  /**
+   * A user group
+   */
+  200: UserGroup;
+};
+
+export type RenameUserGroupResponse =
+  RenameUserGroupResponses[keyof RenameUserGroupResponses];
+
+export type SetUserGroupGlobalRoleData = {
+  body: SetUserGroupGlobalRole;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    groupId: string;
+  };
+  query?: never;
+  url: "/user-groups/{groupId}/global-role";
+};
+
+export type SetUserGroupGlobalRoleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+};
+
+export type SetUserGroupGlobalRoleError =
+  SetUserGroupGlobalRoleErrors[keyof SetUserGroupGlobalRoleErrors];
+
+export type SetUserGroupGlobalRoleResponses = {
+  /**
+   * A user group
+   */
+  200: UserGroup;
+};
+
+export type SetUserGroupGlobalRoleResponse =
+  SetUserGroupGlobalRoleResponses[keyof SetUserGroupGlobalRoleResponses];
+
+export type ListUserGroupMembersData = {
+  body?: never;
+  path: {
+    groupId: string;
+  };
+  query?: {
+    limit?: number;
+    pageToken?: string;
+  };
+  url: "/user-groups/{groupId}/members";
+};
+
+export type ListUserGroupMembersErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type ListUserGroupMembersError =
+  ListUserGroupMembersErrors[keyof ListUserGroupMembersErrors];
+
+export type ListUserGroupMembersResponses = {
+  /**
+   * A page of the members of a user group
+   */
+  200: UserGroupMemberList;
+};
+
+export type ListUserGroupMembersResponse =
+  ListUserGroupMembersResponses[keyof ListUserGroupMembersResponses];
+
+export type AddUserGroupMemberData = {
+  body: AddUserGroupMember;
+  path: {
+    groupId: string;
+  };
+  query?: never;
+  url: "/user-groups/{groupId}/members";
+};
+
+export type AddUserGroupMemberErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type AddUserGroupMemberError =
+  AddUserGroupMemberErrors[keyof AddUserGroupMemberErrors];
+
+export type AddUserGroupMemberResponses = {
+  /**
+   * Member added
+   */
+  204: void;
+};
+
+export type AddUserGroupMemberResponse =
+  AddUserGroupMemberResponses[keyof AddUserGroupMemberResponses];
+
+export type RemoveUserGroupMemberData = {
+  body?: never;
+  path: {
+    groupId: string;
+    userId: string;
+  };
+  query?: never;
+  url: "/user-groups/{groupId}/members/{userId}";
+};
+
+export type RemoveUserGroupMemberErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type RemoveUserGroupMemberError =
+  RemoveUserGroupMemberErrors[keyof RemoveUserGroupMemberErrors];
+
+export type RemoveUserGroupMemberResponses = {
+  /**
+   * Member removed
+   */
+  204: void;
+};
+
+export type RemoveUserGroupMemberResponse =
+  RemoveUserGroupMemberResponses[keyof RemoveUserGroupMemberResponses];
+
 export type ListAuditsData = {
   body?: never;
   path?: never;
@@ -14649,7 +15097,13 @@ export type GetRepositoryEffectiveAccessData = {
     repositoryId: string;
   };
   query?: {
+    /**
+     * The principal to simulate. A user:<name> actor includes the user groups of that account, and a group:<id> actor previews what the members of that user group are allowed.
+     */
     actor?: string;
+    /**
+     * The account level to simulate. The global roles of the account's user groups still apply, so the level is the highest of this role and those roles, as it is for the real account.
+     */
     role?: "member" | "admin";
     resource?: string;
   };

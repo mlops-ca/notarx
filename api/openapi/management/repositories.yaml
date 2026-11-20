@@ -304,9 +304,15 @@ repositories_repositoryId_effective_access:
     parameters:
     - name: actor
       in: query
+      description: >-
+        The principal to simulate. A user:<name> actor includes the user groups of that account, and a group:<id>
+        actor previews what the members of that user group are allowed.
       schema: {type: string, minLength: 1, maxLength: 512}
     - name: role
       in: query
+      description: >-
+        The account level to simulate. The global roles of the account's user groups still apply, so the level is the
+        highest of this role and those roles, as it is for the real account.
       schema: {type: string, enum: [member, admin]}
     - name: resource
       in: query

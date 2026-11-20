@@ -3,6 +3,7 @@ package authorization
 import (
 	"context"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -15,6 +16,32 @@ import (
 // asks the grant index for this scope and then lets the authorizer decide on each candidate, so a scope that
 // ever implies admin must be added here and to grantAllows together (TestOnlyTheAdminScopeAllowsRepositoryAdmin).
 const GrantScopeAdmin = "repositories:admin"
+
+// GroupPrincipalPrefix starts the grant principal of a user group: group:<id> (ADR 0018 Decision 5).
+const GroupPrincipalPrefix = "group:"
+
+// GroupPrincipal returns the grant principal of a user group id.
+func GroupPrincipal(groupID string) string { return GroupPrincipalPrefix + groupID }
+
+// NamesGrantPrincipal reports whether a grant principal names this principal: the actor string, or group:<id>
+// for any group the account belongs to. A group:<id> principal is matched only through GroupIDs, never against
+// the actor, so an external subject that spells "group:<id>" cannot take over the grants of a group.
+func (p Principal) NamesGrantPrincipal(name string) bool {
+	if id, isGroup := strings.CutPrefix(name, GroupPrincipalPrefix); isGroup {
+		return slices.Contains(p.GroupIDs, id)
+	}
+	return name == p.Actor
+}
+
+// GrantPrincipals returns the grant principals that name this principal: the actor, then one per group.
+func (p Principal) GrantPrincipals() []string {
+	names := make([]string, 0, 1+len(p.GroupIDs))
+	names = append(names, p.Actor)
+	for _, id := range p.GroupIDs {
+		names = append(names, GroupPrincipal(id))
+	}
+	return names
+}
 
 // RepositoryOperation is the protocol-independent action being authorized.
 type RepositoryOperation string
@@ -178,7 +205,7 @@ func (a RepositoryAuthorizer) visibilityTier(ctx context.Context, principal Prin
 				return decision, false
 			}
 			for _, grant := range set.Grants {
-				if grant.Principal == principal.Actor {
+				if principal.NamesGrantPrincipal(grant.Principal) {
 					return decision, false
 				}
 			}
@@ -211,7 +238,7 @@ func (a RepositoryAuthorizer) managedResourceDecision(ctx context.Context, princ
 	managed := isManagedRepositoryGrantSet(set.Version)
 	attributed := false
 	for _, grant := range set.Grants {
-		if grant.Principal != principal.Actor {
+		if !principal.NamesGrantPrincipal(grant.Principal) {
 			continue
 		}
 		attributed = true

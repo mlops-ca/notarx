@@ -52,10 +52,7 @@ func (h accessManagementHandler) GetRepositoryEffectiveAccess(w http.ResponseWri
 		if params.Role != nil {
 			role = Role(*params.Role)
 		}
-		principal = Principal{
-			Actor: actor, Role: role, Admin: role == RoleAdmin,
-			AuthenticationKind: simulatedAuthenticationKind(actor),
-		}
+		principal = h.simulatedPrincipal(r.Context(), actor, role)
 		simulated = true
 	}
 	repo, err := h.repositories.GetHostedRepository(r.Context(), repositoryID.String())
@@ -79,6 +76,35 @@ func (h accessManagementHandler) GetRepositoryEffectiveAccess(w http.ResponseWri
 		return
 	}
 	writeNativeMavenJSON(w, http.StatusOK, h.repositoryEffectiveAccess(r.Context(), principal, repo, resource, simulated))
+}
+
+// simulatedPrincipal builds the principal an administrator asks to evaluate. A named account is looked up so its
+// user groups count: the simulation then answers what the account would really be allowed, groups included
+// (ADR 0018 Decision 5), which means the level is the highest of the simulated role and the global roles of the
+// account's groups, as it is for the real account. An actor that is no account has no groups.
+func (h accessManagementHandler) simulatedPrincipal(ctx context.Context, actor string, role Role) Principal {
+	principal := Principal{
+		Actor: actor, Role: role, Admin: role == RoleAdmin,
+		AuthenticationKind: simulatedAuthenticationKind(actor),
+	}
+	// "group:<id>" previews what the members of a group are allowed: the simulated principal is a member of that
+	// group and of nothing else. Only an administrator can ask, so this is not a way to impersonate a group.
+	if id, isGroup := strings.CutPrefix(actor, authorization.GroupPrincipalPrefix); isGroup {
+		if _, err := uuid.Parse(id); err == nil {
+			principal.GroupIDs = []string{id}
+		}
+		return principal
+	}
+	name, isUser := strings.CutPrefix(actor, "user:")
+	if !isUser || h.authenticator.Users == nil {
+		return principal
+	}
+	user, err := h.authenticator.Users.GetUserByName(ctx, name)
+	if err != nil {
+		return principal
+	}
+	principal.UserID = user.ID
+	return h.authenticator.WithUserGroups(ctx, principal)
 }
 
 // canRevealRepository reports whether the principal holds any authority over the
@@ -110,6 +136,15 @@ func currentIdentityResponse(principal Principal) adminopenapi.CurrentIdentity {
 		Actor:         principal.Actor,
 		Administrator: principal.Admin,
 		Kind:          adminopenapi.AuthenticationKind(principal.AuthenticationKind),
+	}
+	if len(principal.GroupIDs) > 0 {
+		groupIDs := make([]uuid.UUID, 0, len(principal.GroupIDs))
+		for _, id := range principal.GroupIDs {
+			if parsed, err := uuid.Parse(id); err == nil {
+				groupIDs = append(groupIDs, parsed)
+			}
+		}
+		response.GroupIds = &groupIDs
 	}
 	if principal.Role != "" {
 		role := adminopenapi.CurrentIdentityRole(principal.Role)
@@ -744,6 +779,12 @@ func validRepositoryGrants(grants []repository.RepositoryGrant, format repositor
 // template editor all accept exactly this shape, so a grant one of them
 // creates can always be addressed and removed by another.
 func validGrantPrincipal(principal string) bool {
+	if id, isGroup := strings.CutPrefix(principal, authorization.GroupPrincipalPrefix); isGroup {
+		// A group principal names a user group by its canonical id (lower-case, hyphenated, no surrounding space):
+		// any other spelling (urn:uuid:, braces, no hyphens, upper case) could never match a membership.
+		parsed, err := uuid.Parse(id)
+		return err == nil && parsed.String() == id
+	}
 	trimmed := strings.TrimSpace(principal)
 	return trimmed != "" && len(trimmed) <= 512 && !strings.ContainsAny(trimmed, "\x00\r\n")
 }
