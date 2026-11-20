@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -157,7 +158,7 @@ func (r Runtime) Start(ctx context.Context, interval time.Duration, limit int, h
 	if interval <= 0 || r.Store == nil || handler == nil {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		wake := notificationWake(ctx, r.Store, repository.LifecycleJobChannel(r.Kind))
 		_ = r.RunJobs(ctx, limit, handler)
 		ticker := time.NewTicker(interval)
@@ -176,7 +177,7 @@ func (r Runtime) Start(ctx context.Context, interval time.Duration, limit int, h
 				_ = r.RunJobs(ctx, limit, handler)
 			}
 		}
-	}()
+	})
 }
 
 type notificationSource interface {

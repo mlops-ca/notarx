@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"log/slog"
+	"sync/atomic"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/app"
 	"github.com/mlops-ca/notarx/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/emailnotification"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
@@ -46,27 +48,31 @@ type backgroundRuntime struct {
 	rubyGemsReplication *rubydist.Worker
 }
 
-// Start starts the background work of the node's roles and returns a function that waits for the work that
-// must finish before the stores close: the claim broker's release of what it still holds once ctx ends.
+// terminationGrace is the Kubernetes termination grace period of deploy/kubernetes/base/notarx.yaml less a
+// margin. The whole shutdown, the wait for the background loops included, stays inside it.
+const terminationGrace = 28 * time.Second
+
+// Start starts the background work of the node's roles and returns a function that waits for it to stop
+// before the stores close: every background loop started here and the claim broker's release of what it
+// still holds, once ctx ends. The wait is bounded and logs how it ended.
 func (r backgroundRuntime) Start(ctx context.Context, cfg config.Config) (wait func()) {
-	wait = func() {}
+	group := &background.Group{}
+	ctx = background.WithGroup(ctx, group)
+	var stopped atomic.Pointer[time.Time]
+	context.AfterFunc(ctx, func() {
+		now := time.Now()
+		stopped.Store(&now)
+	})
+	var brokerDone chan struct{}
 	if cfg.HasRole(config.NodeRoleScheduler) {
 		r.startSchedulers(ctx, cfg, app.NativeRepositoryRetention{Store: r.store, Metrics: r.metrics})
 	}
 	if cfg.HasRole(config.NodeRoleWorker) {
-		brokerDone := make(chan struct{})
+		brokerDone = make(chan struct{})
 		go func() {
 			defer close(brokerDone)
 			r.store.broker.Run(ctx)
 		}()
-		// A claim stuck on the database must not hold the exit: the wait ends at lifecycle.ShutdownWait.
-		wait = func() {
-			select {
-			case <-brokerDone:
-			case <-time.After(lifecycle.ShutdownWait):
-				slog.Warn("claim broker did not stop before shutdown; lease recovery returns what it held", "component", "lifecycle_claim_broker")
-			}
-		}
 		r.startWorkers(ctx, cfg, app.NativeRepositoryRetention{Store: r.store, Metrics: r.metrics, WorkerFormats: cfg.WorkerFormats})
 		if r.helmMaintenance != nil && cfg.WorkerEnabled("helm", "retention") {
 			r.helmMaintenance.Start(ctx, time.Minute)
@@ -90,7 +96,43 @@ func (r backgroundRuntime) Start(ctx context.Context, cfg config.Config) (wait f
 		}
 	}
 	app.BackgroundOperationQueueObserver{Store: r.store, Metrics: r.metrics}.Start(ctx, time.Minute)
-	return wait
+	return func() {
+		sinceStop := time.Duration(0)
+		if at := stopped.Load(); at != nil {
+			sinceStop = time.Since(*at)
+		}
+		awaitBackground(brokerDone, group, shutdownWaitBound(sinceStop, cfg.ShutdownFlushTimeout))
+	}
+}
+
+// shutdownWaitBound is how long the stopping process waits for its background loops: at most
+// lifecycle.ShutdownWait, and less when the work before it, sinceStop since the context ended, and the audit
+// flush after it, flush, would take the shutdown past terminationGrace. It is never below one second.
+func shutdownWaitBound(sinceStop, flush time.Duration) time.Duration {
+	return min(lifecycle.ShutdownWait, max(time.Second, terminationGrace-sinceStop-flush))
+}
+
+// awaitBackground waits until the claim broker, when there is one, and every tracked loop returned, or until
+// bound passed, and logs which it was. A loop that ignores its context must not hold the exit: past the bound
+// the stores close, and lease recovery returns what such a loop still held.
+func awaitBackground(brokerDone <-chan struct{}, group *background.Group, bound time.Duration) bool {
+	started := time.Now()
+	if brokerDone != nil {
+		timer := time.NewTimer(bound)
+		defer timer.Stop()
+		select {
+		case <-brokerDone:
+		case <-timer.C:
+			slog.Warn("claim broker did not stop before shutdown; lease recovery returns what it held", "component", "lifecycle_claim_broker", "waited", bound.String())
+			return false
+		}
+	}
+	if !group.Wait(max(0, bound-time.Since(started))) {
+		slog.Warn("background loops did not stop before shutdown; lease recovery returns what they held", "component", "background", "waited", bound.String())
+		return false
+	}
+	slog.Info("background loops stopped", "component", "background", "waited", time.Since(started).String())
+	return true
 }
 
 func (r backgroundRuntime) startSchedulers(ctx context.Context, cfg config.Config, retention app.NativeRepositoryRetention) {

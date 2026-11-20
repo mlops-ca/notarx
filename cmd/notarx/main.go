@@ -501,8 +501,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		rubyGemsReplication: rubyGemsReplication,
 	}).Start(runtimeContext, cfg)
 	// Deferred after the stores' closes, so it runs before them on every return: end the runtime context and
-	// wait for the claim broker to release what it holds while the database is still open. The other
-	// background loops are not awaited; they stop with the context.
+	// wait, bounded, for every background loop to return and for the claim broker to release what it holds
+	// while the database is still open.
 	defer func() {
 		stopRuntime()
 		waitBackground()

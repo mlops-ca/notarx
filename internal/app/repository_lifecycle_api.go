@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/authorization"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -76,16 +77,18 @@ func (h generatedRepositoryAPIAdapter) ListLifecycleJobs(w http.ResponseWriter, 
 	// A caller that administers only some repositories sees only their rows: the store filters by the set of
 	// repositories the caller administers, so every page is full until the listing ends.
 	if !principal.Admin {
-		ids, err := h.administeredRepositoryIDs(r, principal)
+		ids, all, err := h.administeredRepositoryIDs(r, principal)
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list lifecycle jobs failed")
 			return
 		}
-		if len(ids) == 0 {
+		if !all && len(ids) == 0 {
 			writeNativeMavenJSON(w, http.StatusOK, adminopenapi.RepositoryLifecycleJobPage{Items: []adminopenapi.RepositoryLifecycleJob{}})
 			return
 		}
-		query.RepositoryIDs = ids
+		if !all {
+			query.RepositoryIDs = ids
+		}
 	}
 	page, err := store.PageAllLifecycleJobs(r.Context(), query)
 	if errors.Is(err, repository.ErrInvalidPageToken) {
@@ -107,32 +110,44 @@ func (h generatedRepositoryAPIAdapter) ListLifecycleJobs(w http.ResponseWriter, 
 	writeNativeMavenJSON(w, http.StatusOK, response)
 }
 
-// administeredRepositoryIDs lists the repositories the principal may administer: one authorization per
-// repository, the cost of the other cross-repository views (capacities, grants, overview), instead of one per
-// job row read. Repositories are soft-deleted, so the walk's cursor row stays; should it vanish anyway (a test
-// purge), the walk starts over rather than failing the listing.
-func (h generatedRepositoryAPIAdapter) administeredRepositoryIDs(r *http.Request, principal Principal) ([]string, error) {
-	ids := []string{}
-	for after, restarts := "", 0; ; {
-		batch, next, err := h.store.ListHostedRepositories(r.Context(), 200, after)
-		if errors.Is(err, repository.ErrNotFound) && after != "" && restarts < 3 {
-			ids, after, restarts = ids[:0], "", restarts+1
+// administeredRepositoryIDs lists the repositories the principal may administer, and reports whether that is
+// every repository (a role that administers them all). The candidates come from the principal's own
+// whole-repository grants through one indexed query, so the cost of a request scales with the caller's grants
+// and not with the whole registry. The authorizer stays the source of truth: each candidate is loaded and
+// authorized, so a grant that no longer decides, a repository that is gone and an account that is blocked
+// drop out exactly as they do everywhere else.
+func (h generatedRepositoryAPIAdapter) administeredRepositoryIDs(r *http.Request, principal Principal) (ids []string, all bool, err error) {
+	if principal.AccountStateReason() != "" {
+		return nil, false, nil
+	}
+	if authorization.RoleAllows(principal.Role, RepositoryAdmin) {
+		return nil, true, nil
+	}
+	index, ok := h.store.(repository.RepositoryGrantIndex)
+	if !ok {
+		return nil, false, errGrantIndexUnavailable
+	}
+	candidates, err := index.ListRepositoryIDsGrantedToPrincipal(r.Context(), principal.Actor, "repositories:admin")
+	if err != nil {
+		return nil, false, err
+	}
+	ids = make([]string, 0, len(candidates))
+	for _, id := range candidates {
+		repo, err := h.store.GetHostedRepository(r.Context(), id)
+		if errors.Is(err, repository.ErrNotFound) {
 			continue
 		}
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		for _, repo := range batch {
-			if h.authorizer.Authorize(r.Context(), principal, repo, RepositoryAdmin).Allowed {
-				ids = append(ids, repo.ID)
-			}
+		if h.authorizer.Authorize(r.Context(), principal, repo, RepositoryAdmin).Allowed {
+			ids = append(ids, repo.ID)
 		}
-		if next == "" || len(batch) == 0 {
-			return ids, nil
-		}
-		after = next
 	}
+	return ids, false, nil
 }
+
+var errGrantIndexUnavailable = errors.New("repository grant index is unavailable")
 
 func lifecycleJobResponse(job repository.LifecycleJob) adminopenapi.LifecycleJob {
 	item := adminopenapi.LifecycleJob{

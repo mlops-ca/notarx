@@ -1,9 +1,13 @@
 package main
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/lifecycle"
 )
 
 func TestAPTReclaimWorkerRequiresBothFormatAndKindAdmission(t *testing.T) {
@@ -43,5 +47,68 @@ func TestGoReclaimWorkerRequiresBothFormatAndKindAdmission(t *testing.T) {
 				t.Fatalf("goReclaimWorkerEnabled()=%t want=%t", got, test.want)
 			}
 		})
+	}
+}
+
+func TestShutdownWaitBoundStaysInsideTheTerminationGrace(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		sinceStop, flush time.Duration
+		want             time.Duration
+	}{
+		{name: "prompt shutdown gets the full wait", sinceStop: time.Second, flush: 10 * time.Second, want: lifecycle.ShutdownWait},
+		{name: "a slow server shrinks the wait", sinceStop: 13 * time.Second, flush: 10 * time.Second, want: 5 * time.Second},
+		{name: "never below a second", sinceStop: 30 * time.Second, flush: 10 * time.Second, want: time.Second},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got := shutdownWaitBound(test.sinceStop, test.flush)
+			if got != test.want {
+				t.Fatalf("shutdownWaitBound(%s, %s) = %s, want %s", test.sinceStop, test.flush, got, test.want)
+			}
+			if got > lifecycle.ShutdownWait || (got > time.Second && test.sinceStop+got+test.flush > terminationGrace) {
+				t.Fatalf("bound %s leaves no room inside the %s grace", got, terminationGrace)
+			}
+		})
+	}
+}
+
+func TestAwaitBackgroundWaitsForEveryLoopAndTheBroker(t *testing.T) {
+	group := &background.Group{}
+	ctx, cancel := context.WithCancel(background.WithGroup(context.Background(), group))
+	loopStopped := make(chan struct{})
+	background.Go(ctx, func() {
+		<-ctx.Done()
+		time.Sleep(50 * time.Millisecond) // a loop finishing its last write
+		close(loopStopped)
+	})
+	brokerDone := make(chan struct{})
+	go func() {
+		<-ctx.Done()
+		close(brokerDone)
+	}()
+	cancel()
+	if !awaitBackground(brokerDone, group, 5*time.Second) {
+		t.Fatal("the loops stopped within the bound")
+	}
+	select {
+	case <-loopStopped:
+	default:
+		t.Fatal("awaitBackground returned before the loop finished its last write")
+	}
+	if !awaitBackground(nil, group, time.Second) {
+		t.Fatal("a node without a claim broker waits for its loops only")
+	}
+}
+
+func TestAwaitBackgroundGivesUpAtTheBound(t *testing.T) {
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	group := &background.Group{}
+	background.Go(background.WithGroup(context.Background(), group), func() { <-release })
+	if awaitBackground(nil, group, 20*time.Millisecond) {
+		t.Fatal("a loop that ignores its context must hit the bound")
+	}
+	if awaitBackground(make(chan struct{}), &background.Group{}, 20*time.Millisecond) {
+		t.Fatal("a broker that never stops must hit the bound")
 	}
 }

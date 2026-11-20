@@ -340,7 +340,10 @@ NOTARX_OVERVIEW_CACHE_TTL=30s
   change evicts synchronously; the other nodes learn of it through a PostgreSQL
   `NOTIFY` on the `notarx_cache` channel sent in the same transaction, normally
   within 100 ms. The TTL is the hard upper bound when a notification is lost. A
-  listener that reconnects flushes every cache before it serves again. The window
+  listener that reconnects flushes every cache before it serves again. A statement
+  that changes many repositories or groups at once (a bulk import or a secrets
+  reseal) sends at most 64 notifications: above that it announces the scope once
+  and every node flushes the scope, negative results included. The window
   is shown read-only in the Console on the Authentication page.
 - **Regulated profile.** Set `NOTARX_AUTHZ_CACHE_TTL=1s` to shorten the window,
   or `0` where no staleness is acceptable: `0` disables every read cache, so a

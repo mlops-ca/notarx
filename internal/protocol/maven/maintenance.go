@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -167,7 +168,7 @@ func (m NativeMaintenance) StartScheduler(ctx context.Context, interval time.Dur
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -182,7 +183,7 @@ func (m NativeMaintenance) StartScheduler(ctx context.Context, interval time.Dur
 				_ = m.EnqueueReclaimJobs(ctx, now().UTC().Add(-24*time.Hour), 100)
 			}
 		}
-	}()
+	})
 }
 
 // StartWorker only claims and executes durable reclaim jobs.
@@ -190,7 +191,7 @@ func (m NativeMaintenance) StartWorker(ctx context.Context, interval time.Durati
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		wake := notificationWake(ctx, m.Store, repository.LifecycleJobChannel(repository.LifecycleJobReclaim))
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -204,7 +205,7 @@ func (m NativeMaintenance) StartWorker(ctx context.Context, interval time.Durati
 				_ = m.RunReclaimJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 
 type notificationSource interface {
@@ -327,7 +328,7 @@ func (m NativePromotion) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -338,7 +339,7 @@ func (m NativePromotion) Start(ctx context.Context, interval time.Duration) {
 				_ = m.RunJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
 
 type retentionPayload struct {
@@ -588,7 +589,7 @@ func (m NativeRetention) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -599,7 +600,7 @@ func (m NativeRetention) Start(ctx context.Context, interval time.Duration) {
 				_ = m.Collect(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func retentionModule(coordinate string) string {

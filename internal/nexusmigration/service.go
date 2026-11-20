@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/capacityplan"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/nexussource"
@@ -286,7 +287,7 @@ func (s *Service) RunOnce(ctx context.Context, formats []string) error {
 }
 func (s *Service) StartWorker(ctx context.Context, interval time.Duration, formats []string) <-chan struct{} {
 	done := make(chan struct{})
-	go func() {
+	background.Go(ctx, func() {
 		defer close(done)
 		if interval <= 0 {
 			return
@@ -301,7 +302,7 @@ func (s *Service) StartWorker(ctx context.Context, interval time.Duration, forma
 			case <-tick.C:
 			}
 		}
-	}()
+	})
 	return done
 }
 func (s *Service) sourceUnchanged(ctx context.Context, b Batch) error {

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 	"time"
@@ -51,7 +52,7 @@ func (e QuotaAlertEvaluator) start(ctx context.Context, interval, spacing time.D
 	if interval <= 0 {
 		interval = 15 * time.Second
 	}
-	go func() {
+	background.Go(ctx, func() {
 		// A rule that becomes due now (created, enabled, reconfigured) wakes the evaluator; the timer is the
 		// fallback for rules that fall due by time and for stores without notifications.
 		wake := notificationWake(ctx, e.Store, repository.QuotaEvaluationChannel)
@@ -90,5 +91,5 @@ func (e QuotaAlertEvaluator) start(ctx context.Context, interval, spacing time.D
 			// the next wait here avoids buffered/early ticks skipping a sample.
 			timer.Reset(interval)
 		}
-	}()
+	})
 }

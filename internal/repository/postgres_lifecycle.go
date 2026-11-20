@@ -595,7 +595,21 @@ func (s *PostgresStore) LockLifecycleJobLease(ctx context.Context, id, leaseToke
 	return release, nil
 }
 
+// LifecycleTerminalWriteTimeout bounds the write that ends a claimed job: complete or fail.
+const LifecycleTerminalWriteTimeout = 5 * time.Second
+
+// terminalWriteContext detaches a job's final write from the cancellation of the context its worker ran
+// under. A worker that finishes a job as the process stops must still record the outcome: the stores close
+// after the background loops return (ADR 0023 section 7), and a write that failed on the ended context would
+// leave the job leased until its lease expired. The lease token fences the write, so a job another worker
+// owns by then is never touched; the timeout bounds the wait on a database that does not answer.
+func terminalWriteContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), LifecycleTerminalWriteTimeout)
+}
+
 func (s *PostgresStore) CompleteLifecycleJob(ctx context.Context, id, leaseToken string) error {
+	ctx, cancel := terminalWriteContext(ctx)
+	defer cancel()
 	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET state='completed',completed_at=now(),lease_expires_at=NULL,lease_token='',next_attempt_at=NULL,last_error='',progress_current=CASE WHEN progress_total>0 THEN progress_total ELSE progress_current END WHERE id=$1::uuid AND lease_token=$2 AND state='running' AND lease_expires_at>clock_timestamp()`, id, leaseToken)
 	if err != nil {
 		return err
@@ -612,6 +626,8 @@ func (s *PostgresStore) CompleteLifecycleJob(ctx context.Context, id, leaseToken
 }
 
 func (s *PostgresStore) FailLifecycleJob(ctx context.Context, id, leaseToken, message string) error {
+	ctx, cancel := terminalWriteContext(ctx)
+	defer cancel()
 	result, err := s.db.ExecContext(ctx, `UPDATE lifecycle_jobs SET
         state=CASE WHEN attempts>=max_attempts THEN 'failed' ELSE 'retrying' END,
         completed_at=CASE WHEN attempts>=max_attempts THEN now() ELSE NULL END,

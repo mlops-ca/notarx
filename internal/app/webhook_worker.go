@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/egress"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/requestcontext"
@@ -171,7 +172,7 @@ func (w WebhookDeliveryWorker) Start(ctx context.Context, interval time.Duration
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
-	go func() {
+	background.Go(ctx, func() {
 		wake := notificationWake(ctx, w.Store, repository.WebhookDeliveryChannel)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -193,5 +194,5 @@ func (w WebhookDeliveryWorker) Start(ctx context.Context, interval time.Duration
 				}
 			}
 		}
-	}()
+	})
 }

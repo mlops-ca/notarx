@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -61,7 +62,7 @@ func (m *Maintenance) collect(ctx context.Context, candidate repository.HelmSess
 	return m.store.MarkHelmSessionCollected(ctx, current.ID, current.ObjectKey)
 }
 func (m *Maintenance) Start(ctx context.Context, interval time.Duration) {
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -74,5 +75,5 @@ func (m *Maintenance) Start(ctx context.Context, interval time.Duration) {
 				}
 			}
 		}
-	}()
+	})
 }

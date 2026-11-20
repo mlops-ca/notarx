@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/database"
 )
 
@@ -167,7 +168,7 @@ func (q *PostgresCacheTaskQueue) StartCacheScheduler(ctx context.Context, interv
 	if interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_ = q.EnqueueCollection(ctx)
 		enqueue := time.NewTicker(interval)
 		defer enqueue.Stop()
@@ -179,7 +180,7 @@ func (q *PostgresCacheTaskQueue) StartCacheScheduler(ctx context.Context, interv
 				_ = q.EnqueueCollection(ctx)
 			}
 		}
-	}()
+	})
 }
 
 // StartCacheWorker claims and executes durable collection tasks. A low
@@ -189,7 +190,7 @@ func (q *PostgresCacheTaskQueue) StartCacheWorker(ctx context.Context, formats [
 	if collect == nil || len(formats) == 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		wake := q.listenForTasks(ctx)
 		poll := time.NewTicker(5 * time.Second)
 		defer poll.Stop()
@@ -217,7 +218,7 @@ func (q *PostgresCacheTaskQueue) StartCacheWorker(ctx context.Context, formats [
 			case <-poll.C:
 			}
 		}
-	}()
+	})
 }
 
 func supportsCacheCollectionFormat(format string) bool {
@@ -244,7 +245,7 @@ func supportedCacheCollectionFormats(formats []string) []string {
 
 func (q *PostgresCacheTaskQueue) listenForTasks(ctx context.Context) <-chan struct{} {
 	wake := make(chan struct{}, 1)
-	go func() {
+	background.Go(ctx, func() {
 		for ctx.Err() == nil {
 			conn, err := q.listenerDB.Conn(ctx)
 			if err == nil {
@@ -272,6 +273,6 @@ func (q *PostgresCacheTaskQueue) listenForTasks(ctx context.Context) <-chan stru
 			}
 			_ = conn.Close()
 		}
-	}()
+	})
 	return wake
 }

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/emailnotification"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
@@ -76,7 +77,7 @@ func (w EmailNotificationWorker) Start(ctx context.Context, interval time.Durati
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
-	go func() {
+	background.Go(ctx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -90,5 +91,5 @@ func (w EmailNotificationWorker) Start(ctx context.Context, interval time.Durati
 			case <-ticker.C:
 			}
 		}
-	}()
+	})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -42,7 +43,7 @@ func (j UserSessionJanitor) Start(ctx context.Context, interval time.Duration) {
 	if j.Store == nil || interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_, _ = j.Run(ctx)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -54,5 +55,5 @@ func (j UserSessionJanitor) Start(ctx context.Context, interval time.Duration) {
 				_, _ = j.Run(ctx)
 			}
 		}
-	}()
+	})
 }

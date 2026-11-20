@@ -196,39 +196,47 @@ func TestLifecycleJobListingPagesFullForARepositoryAdministrator(t *testing.T) {
 	}
 }
 
-// vanishingCursorStore loses the cursor row of the first continued repository walk, as a purge would.
-type vanishingCursorStore struct {
+// walkCountingStore counts the repository reads a request makes.
+type walkCountingStore struct {
 	*repository.MemoryStore
-	vanished bool
+	listed, loaded int
 }
 
-func (s *vanishingCursorStore) ListHostedRepositories(ctx context.Context, size int, after string) ([]repository.HostedRepository, string, error) {
-	if after != "" && !s.vanished {
-		s.vanished = true
-		return nil, "", repository.ErrNotFound
-	}
+func (s *walkCountingStore) ListHostedRepositories(ctx context.Context, size int, after string) ([]repository.HostedRepository, string, error) {
+	s.listed++
 	return s.MemoryStore.ListHostedRepositories(ctx, size, after)
 }
 
-// A repository walk whose cursor row vanished starts over instead of failing the listing.
-func TestAdministeredRepositoriesWalkSurvivesAVanishedCursor(t *testing.T) {
+func (s *walkCountingStore) GetHostedRepository(ctx context.Context, id string) (repository.HostedRepository, error) {
+	s.loaded++
+	return s.MemoryStore.GetHostedRepository(ctx, id)
+}
+
+// The repositories a caller administers come from the caller's own grants: the listing does not read every
+// hosted repository, loads only the candidates the grants name, and still lets the authorizer decide on each.
+func TestAdministeredRepositoriesComeFromTheGrantsNotAWalk(t *testing.T) {
 	ctx := context.Background()
 	memory := repository.NewMemoryStore()
-	var managed repository.HostedRepository
-	for i := range 201 {
+	var managed, readOnly repository.HostedRepository
+	for i := range 250 {
 		repo, err := memory.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: fmt.Sprint("walk-", i), Format: repository.FormatRaw})
 		if err != nil {
 			t.Fatal(err)
 		}
-		managed = repo
+		managed, readOnly = repo, managed
 	}
-	if _, err := memory.ReplaceRepositoryGrants(ctx, managed.ID, []repository.RepositoryGrant{{Principal: "repo-admin", Scopes: []string{"repositories:admin"}}}, "1"); err != nil {
-		t.Fatal(err)
+	if readOnly.ID == "" {
+		t.Fatal("the fixture needs two repositories")
 	}
-	if _, _, err := memory.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: managed.ID, Kind: repository.LifecycleJobRetention, IdempotencyKey: "walk"}); err != nil {
-		t.Fatal(err)
+	for repo, scope := range map[string]string{managed.ID: "repositories:admin", readOnly.ID: "repositories:read"} {
+		if _, err := memory.ReplaceRepositoryGrants(ctx, repo, []repository.RepositoryGrant{{Principal: "repo-admin", Scopes: []string{scope}}}, "1"); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := memory.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: repo, Kind: repository.LifecycleJobRetention, IdempotencyKey: "walk-" + repo}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	store := &vanishingCursorStore{MemoryStore: memory}
+	store := &walkCountingStore{MemoryStore: memory}
 	authenticator := testAuthenticator()
 	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: authenticator})
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/lifecycle-jobs", nil)
@@ -236,7 +244,13 @@ func TestAdministeredRepositoriesWalkSurvivesAVanishedCursor(t *testing.T) {
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, req)
 	var page adminopenapi.RepositoryLifecycleJobPage
-	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Items) != 1 || !store.vanished {
-		t.Fatalf("jobs=%d body=%s vanished=%t", response.Code, response.Body.String(), store.vanished)
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Items) != 1 || page.Items[0].RepositoryId.String() != managed.ID {
+		t.Fatalf("jobs=%d body=%s: want only the job of the repository the caller administers", response.Code, response.Body.String())
+	}
+	if store.listed != 0 {
+		t.Fatalf("the listing walked %d pages of the registry", store.listed)
+	}
+	if store.loaded > 2 {
+		t.Fatalf("the listing loaded %d repositories for a caller with one admin grant", store.loaded)
 	}
 }

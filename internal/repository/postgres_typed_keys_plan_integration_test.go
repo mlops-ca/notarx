@@ -50,6 +50,7 @@ func TestPostgresTypedKeyQueriesUseIndexes(t *testing.T) {
 		{"hosted_groups first page", "hosted_groups", listHostedGroupsQuery, []any{"", 50}, true},
 		{"hosted_groups after a cursor", "hosted_groups", listHostedGroupsQuery, []any{id, 50}, true},
 		{"hosted_group_members of a page", "hosted_group_members", listHostedGroupMembersQuery, []any{[]string{id, uuid.NewString()}}, true},
+		{"repository_grants of a principal", "repository_grants", listRepositoryIDsGrantedToPrincipalQuery, []any{"alice", "repositories:admin"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -119,6 +120,7 @@ func TestPostgresIDKeysetListingsReadTheKeyInOrder(t *testing.T) {
 		{"workload issuers", "workload_issuers", listWorkloadIssuersQuery, []any{id, 50}},
 		{"workload trust policies", "workload_trust_policies", listWorkloadPoliciesQuery, []any{id, 50}},
 		{"service accounts", "service_accounts", listServiceAccountsQuery, []any{id, 50}},
+		{"service account API keys", "api_keys", listServiceAccountKeysQuery, []any{id, id, 50}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			testsupport.RequireOrderedByIndex(t, store.db, tc.relation, tc.query, tc.args...)

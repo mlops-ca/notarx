@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -62,7 +63,7 @@ func (m *Maintenance) collectSession(ctx context.Context, candidate repository.N
 }
 
 func (m *Maintenance) Start(ctx context.Context, interval time.Duration) {
-	go func() {
+	background.Go(ctx, func() {
 		timer := time.NewTicker(interval)
 		defer timer.Stop()
 		for {
@@ -75,5 +76,5 @@ func (m *Maintenance) Start(ctx context.Context, interval time.Duration) {
 				}
 			}
 		}
-	}()
+	})
 }

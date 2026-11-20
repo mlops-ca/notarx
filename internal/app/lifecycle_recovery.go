@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -40,7 +41,7 @@ func (r LifecycleJobRecovery) Start(ctx context.Context, interval time.Duration)
 	if r.Store == nil || interval <= 0 {
 		return
 	}
-	go func() {
+	background.Go(ctx, func() {
 		_, _ = r.Run(ctx)
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -52,5 +53,5 @@ func (r LifecycleJobRecovery) Start(ctx context.Context, interval time.Duration)
 				_, _ = r.Run(ctx)
 			}
 		}
-	}()
+	})
 }

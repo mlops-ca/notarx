@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/background"
 )
 
 // Transfer returns only after bytes are verified and the fenced publication
@@ -79,7 +81,7 @@ func (w Worker) Start(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
-	go func() {
+	background.Go(ctx, func() {
 		timer := time.NewTicker(interval)
 		defer timer.Stop()
 		for {
@@ -90,7 +92,7 @@ func (w Worker) Start(ctx context.Context, interval time.Duration) {
 				_, _ = w.RunOnce(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func ValidFailureCode(code string) bool {

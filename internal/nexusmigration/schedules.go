@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -267,7 +268,7 @@ func (s *ScheduleService) StartScheduler(ctx context.Context, interval time.Dura
 		close(done)
 		return done
 	}
-	go func() {
+	background.Go(ctx, func() {
 		defer close(done)
 		_ = s.RunDue(ctx, 100)
 		ticker := time.NewTicker(interval)
@@ -280,6 +281,6 @@ func (s *ScheduleService) StartScheduler(ctx context.Context, interval time.Dura
 				_ = s.RunDue(ctx, 100)
 			}
 		}
-	}()
+	})
 	return done
 }

@@ -32,8 +32,13 @@ func RequireOrderedByIndex(t *testing.T, db *sql.DB, relation, query string, arg
 		t.Fatal(err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err = tx.Exec("SET LOCAL enable_seqscan = off"); err != nil {
-		t.Fatal(err)
+	// On a small table a bitmap scan plus a sort can cost less than the ordered index scan. With both
+	// discouraged, the planner reads an index in order whenever one serves the ORDER BY, so a Sort left
+	// in the plan means no index does, whatever the table statistics are.
+	for _, setting := range []string{"enable_seqscan", "enable_bitmapscan", "enable_sort"} {
+		if _, err = tx.Exec("SET LOCAL " + setting + " = off"); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var raw []byte
 	if err = tx.QueryRow("EXPLAIN (FORMAT JSON) "+query, args...).Scan(&raw); err != nil {

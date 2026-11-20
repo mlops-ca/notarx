@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/ids"
 )
 
 func TestMemoryReplicationPlanIsIdempotentAndResumable(t *testing.T) {
@@ -581,5 +583,67 @@ func TestMemoryHostedGroupsPageByKeyset(t *testing.T) {
 		if _, _, err := store.ListHostedGroups(ctx, 1, cursor); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("cursor %q: %v, want ErrNotFound", cursor, err)
 		}
+	}
+}
+
+// ListHostedRepositories shares the keyset contract of ListHostedGroups: a canonical uuid cursor whose
+// repository is gone continues at the next id, and a cursor that names no repository and is no canonical uuid
+// is ErrNotFound.
+func TestMemoryHostedRepositoriesPageByKeyset(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	ids := []string{"bbbbbbbb-0000-4000-8000-000000000001", "bbbbbbbb-0000-4000-8000-000000000003"}
+	for i, id := range ids {
+		if _, err := store.CreateHostedRepository(ctx, HostedRepository{ID: id, Name: "keyset-" + strings.Repeat("r", i+1), Format: FormatRaw}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, next, err := store.ListHostedRepositories(ctx, 1, "bbbbbbbb-0000-4000-8000-000000000002")
+	if err != nil || len(page) != 1 || page[0].ID != ids[1] || next != "" {
+		t.Fatalf("page after a vanished cursor = %v, next=%q, %v; want the next repository and no further page", page, next, err)
+	}
+	page, next, err = store.ListHostedRepositories(ctx, 1, "")
+	if err != nil || len(page) != 1 || page[0].ID != ids[0] || next != ids[0] {
+		t.Fatalf("first page = %v, next=%q, %v", page, next, err)
+	}
+	page, _, err = store.ListHostedRepositories(ctx, 1, ids[1])
+	if err != nil || len(page) != 0 {
+		t.Fatalf("page after the last id = %v, %v", page, err)
+	}
+	for _, cursor := range []string{"garbage", strings.ToUpper(ids[0])} {
+		if _, _, err := store.ListHostedRepositories(ctx, 1, cursor); !errors.Is(err, ErrNotFound) {
+			t.Fatalf("cursor %q: %v, want ErrNotFound", cursor, err)
+		}
+	}
+}
+
+func TestMemoryRepositoryGrantIndexListsWholeRepositoryGrantsOfOnePrincipal(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	var repos []HostedRepository
+	for _, name := range []string{"grants-a", "grants-b", "grants-c", "grants-d"} {
+		repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: ids.New(), Name: name, Format: FormatRaw})
+		if err != nil {
+			t.Fatal(err)
+		}
+		repos = append(repos, repo)
+	}
+	grant := func(repo HostedRepository, principal string, prefix string, scopes ...string) {
+		t.Helper()
+		if _, err := store.UpsertRepositoryGrant(ctx, repo.ID, RepositoryGrant{Principal: principal, Scopes: scopes, ResourcePrefix: prefix}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	grant(repos[0], "alice", "", "repositories:admin")
+	grant(repos[1], "alice", "", "repositories:read")
+	grant(repos[2], "alice", "packages/", "repositories:admin")
+	grant(repos[3], "bob", "", "repositories:admin")
+	want := []string{repos[0].ID}
+	got, err := store.ListRepositoryIDsGrantedToPrincipal(ctx, "alice", "repositories:admin")
+	if err != nil || len(got) != 1 || got[0] != want[0] {
+		t.Fatalf("alice administers %v (%v), want only the whole-repository admin grant %v", got, err, want)
+	}
+	if got, err = store.ListRepositoryIDsGrantedToPrincipal(ctx, "nobody", "repositories:admin"); err != nil || len(got) != 0 {
+		t.Fatalf("a principal without grants has %v, %v", got, err)
 	}
 }

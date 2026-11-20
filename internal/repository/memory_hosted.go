@@ -64,17 +64,13 @@ func (s *MemoryStore) ListHostedRepositories(_ context.Context, limit int, after
 		items = append(items, cloneHostedRepositoryOCIBearer(repo))
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	// A keyset, as in PostgreSQL: the page after a cursor starts at the next id, whether or not its repository still
+	// exists. A cursor that names no repository and is no canonical uuid is ErrNotFound (the contract of
+	// ListHostedGroups).
 	start := 0
 	if after != "" {
-		found := false
-		for i, repo := range items {
-			if repo.ID == after {
-				start = i + 1
-				found = true
-				break
-			}
-		}
-		if !found {
+		start = sort.Search(len(items), func(i int) bool { return items[i].ID > after })
+		if (start == 0 || items[start-1].ID != after) && !isCanonicalUUID(after) {
 			return nil, "", ErrNotFound
 		}
 	}
@@ -82,9 +78,6 @@ func (s *MemoryStore) ListHostedRepositories(_ context.Context, limit int, after
 	next := ""
 	if end < len(items) {
 		next = items[end-1].ID
-	} else if start > len(items) {
-		start = len(items)
-		end = start
 	} else {
 		end = len(items)
 	}

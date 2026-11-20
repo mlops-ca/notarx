@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/retention"
@@ -73,7 +74,7 @@ func (w AuditRetentionWorker) RunJobs(ctx context.Context, limit int) error {
 	return nil
 }
 func (w AuditRetentionWorker) Start(ctx context.Context, interval time.Duration) {
-	go func() {
+	background.Go(ctx, func() {
 		_ = w.RunJobs(ctx, 100)
 		wake := notificationWake(ctx, w.Store, "notarx_audit_cleanup")
 		ticker := time.NewTicker(interval)
@@ -88,5 +89,5 @@ func (w AuditRetentionWorker) Start(ctx context.Context, interval time.Duration)
 				_ = w.RunJobs(ctx, 100)
 			}
 		}
-	}()
+	})
 }
