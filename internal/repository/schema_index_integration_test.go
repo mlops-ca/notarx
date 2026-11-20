@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -88,6 +89,13 @@ func TestEveryForeignKeyHasALeadingIndexOrAReviewedAllowance(t *testing.T) {
 
 // TestAddedIndexesServeTheirQueries plans the production shape of each lookup the
 // ADR 0023 section 5 indexes were added for and asserts the planner scans the index.
+// The packages of an integration shard share one database, so the tables hold rows
+// that earlier tests left, and whether autovacuum has analyzed them yet decides which
+// index the planner prefers. Each case therefore analyzes its table inside the
+// transaction first (the new statistics roll back with it), so the plan follows the
+// data in the table, not the timing of autovacuum.
+var queryTable = regexp.MustCompile(`\bFROM ([a-z_]+)\b`)
+
 func TestAddedIndexesServeTheirQueries(t *testing.T) {
 	db := integrationDB(t)
 	const id = "00000000-0000-7000-8000-000000000001"
@@ -125,6 +133,13 @@ func TestAddedIndexesServeTheirQueries(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = tx.Rollback() }()
+			table := queryTable.FindStringSubmatch(tc.query)
+			if table == nil {
+				t.Fatalf("no FROM table in %q", tc.query)
+			}
+			if _, err := tx.ExecContext(t.Context(), "ANALYZE "+table[1]); err != nil {
+				t.Fatal(err)
+			}
 			plan, err := explaincheck.Plan(context.Background(), tx, tc.query, tc.args...)
 			if err != nil {
 				t.Fatal(err)
