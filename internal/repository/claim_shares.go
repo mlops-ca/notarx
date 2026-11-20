@@ -34,9 +34,9 @@ const (
 	formatClaimRemainder
 )
 
-// formatClaimBatch claims up to want more items of formats for phase; a batch may also bound its own scan by
-// phase, as the lifecycle claim does with claimPhaseBudget. It returns the format of each item it
-// claimed, and empty when the queue held fewer candidates than it asked for.
+// formatClaimBatch claims up to want more items of formats for phase. The batch returns the format of each item
+// it claimed, and empty when the queue held fewer candidates than it asked for. A batch may bound its own scan
+// by phase; the replication claim does not.
 type formatClaimBatch func(ctx context.Context, phase formatClaimPhase, formats []Format, want int) (claimed []Format, empty bool, err error)
 
 // claimFormatShares is the claim of the per-process claimer for several formats of one queue (ADR 0023

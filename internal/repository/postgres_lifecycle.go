@@ -322,13 +322,15 @@ func (c *lifecycleClaimScan) claimFormatsRoundRobin(ctx context.Context, kind Li
 
 // claimPhaseBudget is how many rows a phase of a claim for formats formats may examine once scanned rows were:
 // a share is QueueClaimScanCap/(formats+1), the opening scan the cap less a share for every other format but
-// never less than one share, and every phase at most what is left of the cap.
+// never less than one share, and a later phase at most what is left of the cap. The opening scan always runs
+// first, with nothing scanned yet. Formats are the few the server knows, far below the cap; past it every phase
+// is one row.
 func claimPhaseBudget(phase formatClaimPhase, formats, scanned int) int {
 	perFormat := max(QueueClaimScanCap/(formats+1), 1)
 	left := QueueClaimScanCap - scanned
 	switch phase {
 	case formatClaimOpening:
-		return min(max(QueueClaimScanCap-perFormat*(formats-1), perFormat), left)
+		return max(QueueClaimScanCap-perFormat*(formats-1), perFormat)
 	case formatClaimShare:
 		return min(perFormat, left)
 	default:

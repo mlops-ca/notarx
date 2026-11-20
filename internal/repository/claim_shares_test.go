@@ -38,7 +38,7 @@ func TestClaimPhaseBudgetsStayWithinTheCap(t *testing.T) {
 			t.Fatalf("%d formats: opening %d leaves no share for every other format", formats, opening)
 		}
 		scanned := opening
-		for i := 1; i < formats && i < 50; i++ {
+		for i := 1; i < formats; i++ {
 			share := claimPhaseBudget(formatClaimShare, formats, scanned)
 			if share > perFormat {
 				t.Fatalf("%d formats: share %d above %d", formats, share, perFormat)
