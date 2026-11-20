@@ -53,6 +53,15 @@ func TestPostgresRustFSPrivateProxyGradleOfficialClient(t *testing.T) {
 	}
 }
 
+// newIsolatedProxyRedirectFixture leaves the package-level egress hooks alone and
+// hands its hooks only to its own UpstreamClient, so parallel tests can each own
+// one. A path that read the package-level hooks instead would resolve the
+// synthetic hosts through real DNS and fail.
+func newIsolatedProxyRedirectFixture(t *testing.T, handler http.HandlerFunc) *proxyRedirectFixture {
+	t.Helper()
+	return newProxyRedirectFixtureHooks(t, handler, false)
+}
+
 func privateGradleCredentialsContract(t *testing.T, gradle string, scheme repository.UpstreamAuthScheme, route string) {
 	t.Helper()
 	const firstSecret = "synthetic-gradle-source-v1"

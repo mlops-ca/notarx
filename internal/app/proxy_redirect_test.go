@@ -56,15 +56,6 @@ func newProxyRedirectFixture(t *testing.T, handler http.HandlerFunc) *proxyRedir
 	return newProxyRedirectFixtureHooks(t, handler, true)
 }
 
-// newIsolatedProxyRedirectFixture leaves the package-level egress hooks alone and
-// hands its hooks only to its own UpstreamClient, so parallel tests can each own
-// one. A path that read the package-level hooks instead would resolve the
-// synthetic hosts through real DNS and fail.
-func newIsolatedProxyRedirectFixture(t *testing.T, handler http.HandlerFunc) *proxyRedirectFixture {
-	t.Helper()
-	return newProxyRedirectFixtureHooks(t, handler, false)
-}
-
 func newProxyRedirectFixtureHooks(t *testing.T, handler http.HandlerFunc, global bool) *proxyRedirectFixture {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
