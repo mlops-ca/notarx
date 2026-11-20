@@ -32,11 +32,9 @@ fi
 "${compose[@]}" up -d --wait "${services[@]}"
 "${compose[@]}" run --rm --no-deps migrate
 
-"${compose[@]}" run --rm --no-deps test sh -c 'go run ./tools/schemaparity generate -out /tmp/catalogue.yaml >&2 && echo CATALOGUE-BEGIN && cat /tmp/catalogue.yaml && echo CATALOGUE-END' || true
 args=(go run ./tools/schemaparity check -catalogue migrations/catalogue.yaml)
 if [[ "$mysql" == 1 ]]; then
   mysql_url='mysql://root:integration-password@mysql:3306/notarx_test?tls=required'
-  "${compose[@]}" run --rm --no-deps test go run ./tools/tmpapply "$mysql_url" || true
   "${compose[@]}" run --rm --no-deps --env NOTARX_DATABASE_DRIVER=mysql --env "NOTARX_DATABASE_URL=$mysql_url" test \
     go run ./cmd/notarx migrate --dir migrations/mysql
   args+=(-mysql-url "$mysql_url")

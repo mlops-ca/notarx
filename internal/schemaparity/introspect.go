@@ -339,8 +339,9 @@ func introspectMySQL(ctx context.Context, db *sql.DB) (Catalogue, error) {
 			fk = &foreignParts{table: referencedTable, onDelete: mysqlAction(deleteRule), onUpdate: mysqlAction(updateRule)}
 			foreign[table][constraint] = fk
 		}
-		fk.local = append(fk.local, column)
-		fk.remote = append(fk.remote, referencedColumn)
+		// A key on a hashed column is declared on its SHA-256 column; the catalogue names the original.
+		fk.local = append(fk.local, baseColumn(catalogue.Tables[table], column))
+		fk.remote = append(fk.remote, baseColumn(catalogue.Tables[referencedTable], referencedColumn))
 		return nil
 	}); err != nil {
 		return Catalogue{}, fmt.Errorf("list foreign keys: %w", err)

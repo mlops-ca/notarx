@@ -168,6 +168,42 @@ func TestBaseColumnMapsHashColumns(t *testing.T) {
 	}
 }
 
+func TestIntrospectMySQLMapsHashColumnsInKeys(t *testing.T) {
+	server := mysqlServer(nil)
+	inner := server.Handler
+	server.Handler = func(query string, args []driver.NamedValue) (fakesql.Result, error) {
+		switch query {
+		case mysqlColumnsSQL:
+			return result("t,c,d,ct,l,co,n,e",
+				row{"owners", "id", "char", "char(36)", int64(36), "ascii_bin", "NO", ""},
+				row{"owners", "path", "text", "text", nil, nil, "NO", ""},
+				row{"owners", "path_sha256", "binary", "binary(32)", int64(32), nil, "NO", "STORED GENERATED"},
+				row{"widgets", "owner_path", "text", "text", nil, nil, "NO", ""},
+				row{"widgets", "owner_path_sha256", "binary", "binary(32)", int64(32), nil, "NO", "STORED GENERATED"}), nil
+		case mysqlTablesSQL:
+			return result("t", row{"owners"}, row{"widgets"}), nil
+		case mysqlIndexesSQL:
+			return result("t,i,s,c", row{"owners", "PRIMARY", int64(1), "path_sha256"}), nil
+		case mysqlForeignKeysSQL:
+			return result("t,n,c,rt,rc,d,u", row{"widgets", "fk", "owner_path_sha256", "owners", "path_sha256", "CASCADE", "NO ACTION"}), nil
+		}
+		return inner(query, args)
+	}
+	got, err := Introspect(context.Background(), server.Open(t), DialectMySQL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"path"}; !reflect.DeepEqual(got.Tables["owners"].PrimaryKey, want) {
+		t.Errorf("primary key = %v", got.Tables["owners"].PrimaryKey)
+	}
+	if want := []string{"owner_path_sha256 -> owners(path_sha256) on delete cascade"}; reflect.DeepEqual(got.Tables["widgets"].ForeignKeys, want) {
+		t.Errorf("the foreign key kept the hash column names: %v", got.Tables["widgets"].ForeignKeys)
+	}
+	if want := []string{"owner_path -> owners(path) on delete cascade"}; !reflect.DeepEqual(got.Tables["widgets"].ForeignKeys, want) {
+		t.Errorf("foreign keys = %v", got.Tables["widgets"].ForeignKeys)
+	}
+}
+
 func TestCompareDDL(t *testing.T) {
 	want := Catalogue{Tables: map[string]Table{"t": {
 		Columns: map[string]Column{"a": {Type: "text"}}, PrimaryKey: []string{"a"},
