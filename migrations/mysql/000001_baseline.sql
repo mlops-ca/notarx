@@ -509,6 +509,14 @@ CREATE TABLE `hf_repos` (
   CONSTRAINT `hf_repos_repo_type_check` CHECK ((`repo_type` IN ('model', 'dataset')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `hf_repository_settings` (
+  `max_object_bytes` BIGINT NULL,
+  `repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`repository_id`),
+  CONSTRAINT `hf_repository_settings_max_object_bytes_check` CHECK (((`max_object_bytes` IS NULL) OR (`max_object_bytes` > 0)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `hosted_group_idempotency` (
   `actor` VARCHAR(255) NOT NULL,
   `expires_at` DATETIME(6) NOT NULL,
@@ -3116,6 +3124,7 @@ ALTER TABLE `hf_commits` ADD CONSTRAINT `fk_hf_commits_hf_repo_id` FOREIGN KEY (
 ALTER TABLE `hf_files` ADD CONSTRAINT `fk_hf_files_commit_id` FOREIGN KEY (`commit_id`) REFERENCES `hf_commits` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `hf_refs` ADD CONSTRAINT `fk_hf_refs_hf_repo_id` FOREIGN KEY (`hf_repo_id`) REFERENCES `hf_repos` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `hf_repos` ADD CONSTRAINT `fk_hf_repos_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `hf_repository_settings` ADD CONSTRAINT `fk_hf_repository_settings_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `hosted_group_idempotency` ADD CONSTRAINT `fk_hosted_group_idempotency_group_id` FOREIGN KEY (`group_id`) REFERENCES `hosted_groups` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `hosted_group_members` ADD CONSTRAINT `fk_hosted_group_members_group_id` FOREIGN KEY (`group_id`) REFERENCES `hosted_groups` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `hosted_group_members` ADD CONSTRAINT `fk_hosted_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;

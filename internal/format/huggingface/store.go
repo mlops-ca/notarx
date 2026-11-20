@@ -480,6 +480,65 @@ func (s *Store) DeleteBlob(ctx context.Context, repositoryID, hfRepoID, sha256 s
 	return true, otherRepos, tx.Commit()
 }
 
+// ListRepos returns up to limit repos whose id sorts after the cursor, for the sweeps that walk every
+// repo (blob garbage collection).
+func (s *Store) ListRepos(ctx context.Context, after string, limit int) ([]Repo, error) {
+	if after == "" {
+		after = "00000000-0000-0000-0000-000000000000"
+	}
+	rows, err := s.DB.QueryContext(ctx, s.rebind("SELECT "+repoColumns+" FROM hf_repos WHERE id > ? ORDER BY id LIMIT ?"), after, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var repos []Repo
+	for rows.Next() {
+		repo, err := scanRepo(rows)
+		if err != nil {
+			return nil, err
+		}
+		repos = append(repos, repo)
+	}
+	return repos, rows.Err()
+}
+
+// MaxObjectBytes returns the per-repository object size limit of a notarx repository, or 0
+// when only the deployment limit applies.
+func (s *Store) MaxObjectBytes(ctx context.Context, repositoryID string) (int64, error) {
+	var limit sql.NullInt64
+	err := s.row(ctx, s.DB, "SELECT max_object_bytes FROM hf_repository_settings WHERE repository_id = ?", repositoryID).Scan(&limit)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return limit.Int64, err
+}
+
+// SetMaxObjectBytes sets, or with 0 clears, the per-repository object size limit.
+func (s *Store) SetMaxObjectBytes(ctx context.Context, repositoryID string, limit int64) error {
+	if limit < 0 || !ids.Valid(repositoryID) {
+		return ErrInvalid
+	}
+	query := "INSERT INTO hf_repository_settings (repository_id, max_object_bytes, updated_at) VALUES (?, ?, ?) "
+	if s.Dialect == MySQL {
+		query += "ON DUPLICATE KEY UPDATE max_object_bytes = VALUES(max_object_bytes), updated_at = VALUES(updated_at)"
+	} else {
+		query += "ON CONFLICT (repository_id) DO UPDATE SET max_object_bytes = EXCLUDED.max_object_bytes, updated_at = EXCLUDED.updated_at"
+	}
+	var value any
+	if limit > 0 {
+		value = limit
+	}
+	_, err := s.exec(ctx, s.DB, query, repositoryID, value, s.now())
+	return err
+}
+
+// Headroom reports capacity.ErrQuotaExceeded when extraBytes more would exceed the quota of the
+// repository, without reserving anything: the early check at the start of a fetch. The
+// authoritative reservation is CommitBlob. PostgreSQL only until the counters are ported.
+func (s *Store) Headroom(ctx context.Context, repositoryID string, extraBytes int64) error {
+	return capacity.Headroom(ctx, s.DB, repositoryID, extraBytes)
+}
+
 // SearchCommits lists commits of a notarx repository for browsing, ordered by repo type,
 // repo name and commit sha, after the cursor (a coordinate). prefix filters by
 // "<repo_type>/<org>/<name>" prefix.

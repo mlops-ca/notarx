@@ -5,36 +5,51 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/mlops-ca/notarx/internal/artifactquery"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 // Options configures the module. Store is required.
 type Options struct {
 	Store *Store
+	// Objects holds the blobs; without it the garbage collection is a no-op.
+	Objects objectstore.Store
+	// GCPause is the pause between full garbage collection batches; zero selects 200 ms.
+	GCPause time.Duration
 }
 
 // Module is the huggingface format module. It registers the format and its
 // capabilities: Profile, Governance, Browse and Usage. The protocol routes are added
 // by the read-path slices (ADR 0027).
-type Module struct{ store *Store }
+type Module struct {
+	store   *Store
+	objects objectstore.Store
+	gcPause time.Duration
+}
 
 // New returns the module.
 func New(options Options) (*Module, error) {
 	if options.Store == nil || reflect.ValueOf(options.Store).IsNil() || options.Store.DB == nil {
 		return nil, errors.New("huggingface module requires a store")
 	}
-	return &Module{store: options.Store}, nil
+	pause := options.GCPause
+	if pause <= 0 {
+		pause = 200 * time.Millisecond
+	}
+	return &Module{store: options.Store, objects: options.Objects, gcPause: pause}, nil
 }
 
 var (
-	_ formatmodule.Module     = (*Module)(nil)
-	_ formatmodule.Profile    = (*Module)(nil)
-	_ formatmodule.Governance = (*Module)(nil)
-	_ formatmodule.Browse     = (*Module)(nil)
-	_ formatmodule.Usage      = (*Module)(nil)
+	_ formatmodule.Module           = (*Module)(nil)
+	_ formatmodule.Profile          = (*Module)(nil)
+	_ formatmodule.Governance       = (*Module)(nil)
+	_ formatmodule.Browse           = (*Module)(nil)
+	_ formatmodule.Usage            = (*Module)(nil)
+	_ formatmodule.CacheMaintenance = (*Module)(nil)
 )
 
 // Format identifies the module.

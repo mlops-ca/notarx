@@ -690,6 +690,18 @@ tables:
       created_at: now()
     checks:
       hf_repos_repo_type_check: ((repo_type)::text = ANY (ARRAY['model'::text, 'dataset'::text]))
+  hf_repository_settings:
+    columns:
+      max_object_bytes: int64?
+      repository_id: uuid
+      updated_at: timestamp
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      updated_at: now()
+    checks:
+      hf_repository_settings_max_object_bytes_check: ((max_object_bytes IS NULL) OR (max_object_bytes > 0))
   hosted_group_idempotency:
     columns:
       actor: text

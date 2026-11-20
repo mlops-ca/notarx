@@ -350,6 +350,9 @@ type fixture struct {
 	terminal, live map[string]string
 	// setup inserts the nexus migration batches the entries point at.
 	setup bool
+	// pad is the number of fresh terminal rows inserted after the expired one, for an entry whose
+	// predicate keeps the newest rows of a group (hf_commits keeps the newest three per repository).
+	pad int
 }
 
 const (
@@ -381,6 +384,8 @@ func fixtures() map[string]fixture {
 		"workload_jti_seen":                  {},
 		"saml_assertion_ids":                 {},
 		"saml_request_state":                 {},
+		"hf_refs":                            {terminal: map[string]string{"ref_kind": "'branch'", "commit_sha": "repeat('a',40)"}},
+		"hf_commits":                         {terminal: map[string]string{"hf_repo_id": "'00000000-0000-7000-8000-00000000f003'", "commit_sha": "md5(random()::text)||substr(md5(random()::text),1,8)", "source": "'upstream'"}, live: map[string]string{"source": "'hosted'"}, pad: 3},
 	}
 }
 
@@ -495,8 +500,11 @@ func TestEveryRegistryEntryDeletesOnlyTerminalExpiredRows(t *testing.T) {
 			}
 			before := count(t, single, "SELECT count(*) FROM "+entry.Table)
 			insert(fix.terminal, expired)
+			for range fix.pad {
+				insert(fix.terminal, "now()")
+			}
 			insert(fix.terminal, "now()")
-			want := before + 1
+			want := before + 1 + fix.pad
 			if fix.live != nil {
 				live := map[string]string{}
 				for k, v := range fix.terminal {

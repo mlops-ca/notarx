@@ -52,7 +52,7 @@ CREATE TABLE public.hf_commits (
     CONSTRAINT hf_commits_counts_check CHECK ((((file_count IS NULL) OR (file_count >= 0)) AND ((total_bytes IS NULL) OR (total_bytes >= 0))))
 );
 CREATE INDEX hf_commits_repo_committed_idx ON public.hf_commits USING btree (hf_repo_id, committed_at DESC, id DESC);
-CREATE INDEX hf_commits_last_read_idx ON public.hf_commits USING btree (last_read_at);
+CREATE INDEX hf_commits_retention_idx ON public.hf_commits USING btree (last_read_at);
 
 -- One row per file per commit. sha256 is NULL for a regular (non-LFS) file until its bytes have been read: the Hub
 -- tree names such a file by its git blob id only.
@@ -98,4 +98,15 @@ CREATE TABLE public.hf_refs (
     CONSTRAINT hf_refs_kind_check CHECK (((ref_kind)::text = ANY (ARRAY['branch'::text, 'tag'::text]))),
     CONSTRAINT hf_refs_sha_check CHECK ((commit_sha ~ '^[0-9a-f]{40}$'::text))
 );
-CREATE INDEX hf_refs_expires_idx ON public.hf_refs USING btree (expires_at);
+CREATE INDEX hf_refs_retention_idx ON public.hf_refs USING btree (expires_at);
+
+-- Per-repository limits of a Hugging Face repository (ADR 0027, large objects). max_object_bytes lowers the deployment
+-- limit NOTARX_HF_MAX_OBJECT_BYTES for one repository; NULL keeps the deployment limit.
+CREATE TABLE public.hf_repository_settings (
+    repository_id uuid NOT NULL,
+    max_object_bytes bigint,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT hf_repository_settings_pkey PRIMARY KEY (repository_id),
+    CONSTRAINT hf_repository_settings_repository_id_fkey FOREIGN KEY (repository_id) REFERENCES public.hosted_repositories(id) ON DELETE CASCADE,
+    CONSTRAINT hf_repository_settings_max_object_bytes_check CHECK (((max_object_bytes IS NULL) OR (max_object_bytes > 0)))
+);
