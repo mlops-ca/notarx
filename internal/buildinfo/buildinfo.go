@@ -74,3 +74,5 @@ func Read() Info {
 	}
 	return result
 }
+
+// CI measurement for #482 (draft pull request, never merged).
