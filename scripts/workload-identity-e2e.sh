@@ -9,9 +9,9 @@ cd "$repo_root"
 
 for binary in curl go python3; do command -v "$binary" >/dev/null || { printf 'Workload identity E2E requires %s\n' "$binary" >&2; exit 1; }; done
 free_port() { python3 -c 'import socket; s=socket.socket(); s.bind(("127.0.0.1",0)); print(s.getsockname()[1]); s.close()'; }
-gateway_port=$(free_port)
+server_port=$(free_port)
 issuer_port=$(free_port)
-notarx_url="http://127.0.0.1:${gateway_port}"
+notarx_url="http://127.0.0.1:${server_port}"
 workdir=$(mktemp -d)
 fixture_pid=""
 cleanup() { local status=$?; [[ -z "$fixture_pid" ]] || { kill "$fixture_pid" 2>/dev/null || true; wait "$fixture_pid" 2>/dev/null || true; }; rm -rf "$workdir"; trap - EXIT; exit "$status"; }
@@ -19,7 +19,7 @@ trap cleanup EXIT
 
 go build -o "$workdir/fixture" ./cmd/workload-identity-fixture
 go build -o "$workdir/notarxctl" ./cmd/notarxctl
-FIXTURE_DIR="$workdir" LISTEN_ADDR="127.0.0.1:${gateway_port}" ISSUER_ADDR="127.0.0.1:${issuer_port}" NOTARX_AUDIENCE="$notarx_url" "$workdir/fixture" >"$workdir/fixture.log" 2>&1 &
+FIXTURE_DIR="$workdir" LISTEN_ADDR="127.0.0.1:${server_port}" ISSUER_ADDR="127.0.0.1:${issuer_port}" NOTARX_AUDIENCE="$notarx_url" "$workdir/fixture" >"$workdir/fixture.log" 2>&1 &
 fixture_pid=$!
 until curl --silent --show-error --fail "$notarx_url/livez" >/dev/null 2>&1; do kill -0 "$fixture_pid" 2>/dev/null || { cat "$workdir/fixture.log" >&2; exit 1; }; sleep 0.1; done
 issuer_url=$(cat "$workdir/issuer.url")
