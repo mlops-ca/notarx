@@ -219,6 +219,7 @@
     "account.kind.service_account_credential": "draft",
     "account.kind.static_admin": "draft",
     "account.kind.static_resolver": "draft",
+    "account.kind.workload_federation": "draft",
     "account.menu": "draft",
     "account.role.admin": "draft",
     "account.role.member": "draft",
@@ -3801,7 +3802,19 @@
     "ui.deleted",
     "ui.deleting",
     "ui.disabled",
-    "ui.revoked"
+    "ui.revoked",
+    "workload.delete",
+    "workload.deleteIssuerMessage",
+    "workload.deleteIssuerTitle",
+    "workload.deletePolicyMessage",
+    "workload.deletePolicyTitle",
+    "workload.disable",
+    "workload.disableIssuerMessage",
+    "workload.disableIssuerTitle",
+    "workload.disablePolicyMessage",
+    "workload.disablePolicyTitle",
+    "workload.disabledNotice",
+    "workload.disabledNoticeTitle"
   ],
   "reviewed": {}
 }

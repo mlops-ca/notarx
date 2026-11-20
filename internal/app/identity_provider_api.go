@@ -70,6 +70,9 @@ func (h identityManagementHandler) CreateIdentityProvider(w http.ResponseWriter,
 	if !applyProviderSettings(w, &input, request.Oidc, request.Saml) {
 		return
 	}
+	if !h.refuseWorkloadIssuerOverlap(w, r, input) {
+		return
+	}
 	if request.ProvisioningMode != nil {
 		input.ProvisioningMode = identity.ProvisioningMode(*request.ProvisioningMode)
 	}
@@ -116,12 +119,37 @@ func (h identityManagementHandler) ReplaceIdentityProvider(w http.ResponseWriter
 	if !applyProviderSettings(w, &input, request.Oidc, request.Saml) {
 		return
 	}
+	if !h.refuseWorkloadIssuerOverlap(w, r, input) {
+		return
+	}
 	provider, err := h.identityProviders.Replace(r.Context(), id, input, version, h.auditRecords(r, providerResourcePrefix+id, "authentication.provider.update", http.StatusOK)...)
 	if err != nil {
 		writeIdentityProviderError(w, err, "replace identity provider failed")
 		return
 	}
 	h.writeIdentityProvider(w, http.StatusOK, provider)
+}
+
+// refuseWorkloadIssuerOverlap answers 409 when an OIDC provider would use the issuer URL of a workload issuer: both
+// authentication paths would then try the same token (ADR 0019, "Authentication flow"). The workload side is checked
+// when an issuer is created and at startup; this is the other side.
+func (h identityManagementHandler) refuseWorkloadIssuerOverlap(w http.ResponseWriter, r *http.Request, input IdentityProviderInput) bool {
+	if input.Kind != identity.KindOIDC || h.workloadIssuers == nil {
+		return true
+	}
+	trimmed := strings.TrimRight(input.OIDC.Issuer, "/")
+	for _, candidate := range []string{input.OIDC.Issuer, trimmed, trimmed + "/"} {
+		issuer, err := h.workloadIssuers.GetWorkloadIssuerByIssuer(r.Context(), candidate)
+		if err == nil {
+			writeHostedProblem(w, http.StatusConflict, "issuer_conflict", "the issuer URL is already a workload issuer ("+issuer.Name+"); the human and workload registries must not overlap")
+			return false
+		}
+		if !errors.Is(err, repository.ErrNotFound) {
+			writeHostedProblem(w, http.StatusServiceUnavailable, "workload_issuers_unavailable", "load workload issuers failed")
+			return false
+		}
+	}
+	return true
 }
 
 // applyProviderSettings copies the settings object that matches the kind into the input and rejects a

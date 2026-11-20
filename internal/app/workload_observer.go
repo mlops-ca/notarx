@@ -17,12 +17,13 @@ var workloadReasons = [...]string{
 	authorization.WorkloadAuthenticated, authorization.WorkloadIssuerDisabled, authorization.WorkloadVerifyFailed,
 	authorization.WorkloadPolicyNotFound, authorization.WorkloadNoPolicyMatch, authorization.WorkloadAmbiguousPolicy,
 	authorization.WorkloadAccountInactive, authorization.WorkloadReplay, authorization.WorkloadMissingJTI,
-	authorization.WorkloadStoreUnavailable, "other",
+	authorization.WorkloadStoreUnavailable, authorization.WorkloadKeysUnavailable, "other",
 }
 
 // workloadCounters counts workload authentication decisions by reason.
 type workloadCounters struct {
-	counts [len(workloadReasons)]atomic.Uint64
+	counts     [len(workloadReasons)]atomic.Uint64
+	suppressed atomic.Uint64
 }
 
 func (c *workloadCounters) record(reason string) {
@@ -40,6 +41,7 @@ func (m *Metrics) writeWorkloadMetrics(w http.ResponseWriter) {
 	for index, reason := range workloadReasons {
 		_, _ = w.Write([]byte("notarx_workload_auth_total{outcome=\"" + reason + "\"} " + utoa(m.workload.counts[index].Load()) + "\n"))
 	}
+	_, _ = w.Write([]byte("# TYPE notarx_workload_audit_suppressed_total counter\nnotarx_workload_audit_suppressed_total " + utoa(m.workload.suppressed.Load()) + "\n"))
 }
 
 // AuditRecorder writes one audit record; the PostgreSQL store implements it.
@@ -55,6 +57,22 @@ type WorkloadObserver struct {
 	Metrics *Metrics
 	Audit   AuditRecorder
 	Now     func() time.Time
+	// failures bounds the failure audit records per issuer (see NewWorkloadObserver).
+	failures *clientLimiter
+}
+
+// Failure audit records per issuer: a burst of 50, then 10 per second. A caller without any valid token can make
+// the gateway verify as many forged tokens as it likes, so an unthrottled synchronous audit write per failure would
+// let it fill the audit table and put a database write on every hostile request. Metrics still count every failure,
+// and notarx_workload_audit_suppressed_total counts the records not written.
+const (
+	workloadFailureAuditBurst    = 50
+	workloadFailureAuditInterval = 100 * time.Millisecond
+)
+
+// NewWorkloadObserver returns the observer with its failure throttle.
+func NewWorkloadObserver(metrics *Metrics, audit AuditRecorder) WorkloadObserver {
+	return WorkloadObserver{Metrics: metrics, Audit: audit, failures: newClientLimiter(workloadFailureAuditBurst, workloadFailureAuditInterval, workloadExchangeMaxHosts)}
 }
 
 // ObserveWorkload implements authorization.WorkloadObserver.
@@ -68,6 +86,12 @@ func (o WorkloadObserver) ObserveWorkload(ctx context.Context, event authorizati
 	now := time.Now
 	if o.Now != nil {
 		now = o.Now
+	}
+	if !event.Success && o.failures != nil && !o.failures.allow(event.Issuer, now()) {
+		if o.Metrics != nil {
+			o.Metrics.workload.suppressed.Add(1)
+		}
+		return
 	}
 	if err := o.Audit.RecordAudit(context.WithoutCancel(ctx), WorkloadAuditRecord(event, now().UTC())); err != nil {
 		slog.Error("record workload authentication audit event", "error", err)

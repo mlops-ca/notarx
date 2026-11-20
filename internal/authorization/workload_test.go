@@ -493,6 +493,78 @@ func TestWorkloadDoesNotChangeOtherCredentialPaths(t *testing.T) {
 	}
 }
 
+// flakyVerifier fails with an unavailable key source until it is told to recover.
+type flakyVerifier struct {
+	jose.TokenVerifier
+	down  bool
+	calls int
+}
+
+func (v *flakyVerifier) Verify(ctx context.Context, token string, issuer jose.Issuer) (*jose.Verified, error) {
+	v.calls++
+	if v.down {
+		return nil, &jose.Error{Kind: jose.ErrKeySourceUnavailable, Reason: "issuer keys could not be fetched"}
+	}
+	return v.TokenVerifier.Verify(ctx, token, issuer)
+}
+
+func TestWorkloadKeySourceOutageIsNotCachedAsAVerdict(t *testing.T) {
+	f := newWorkloadFixture(t, 5*time.Second, false)
+	flaky := &flakyVerifier{TokenVerifier: f.workload.opts.Verifier, down: true}
+	f.workload.opts.Verifier = flaky
+	auth := f.authenticator()
+	token := f.token(t, nil)
+	ctx := context.Background()
+	if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); ok {
+		t.Fatal("a token authenticated while the key source was down")
+	}
+	if event := f.observer.last(t); event.Reason != WorkloadKeysUnavailable {
+		t.Fatalf("event = %+v", event)
+	}
+	flaky.down = false
+	if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); !ok {
+		t.Fatal("the outage was remembered as a verdict on the token")
+	}
+	if flaky.calls != 2 {
+		t.Fatalf("verifier calls = %d, want 2 (the outage must not be cached)", flaky.calls)
+	}
+}
+
+func TestWorkloadAuthenticateDeferredConsumesSingleUseOnlyOnCommit(t *testing.T) {
+	f := newWorkloadFixture(t, 0, true)
+	token := f.token(t, nil)
+	ctx := context.Background()
+	for range 2 {
+		if _, commit, ok := f.workload.AuthenticateDeferred(ctx, token, ""); !ok || commit == nil {
+			t.Fatal("a verified single-use token was refused before commit")
+		}
+	}
+	_, commit, ok := f.workload.AuthenticateDeferred(ctx, token, "")
+	if !ok || !commit() {
+		t.Fatal("the first commit must succeed")
+	}
+	if _, again, ok := f.workload.AuthenticateDeferred(ctx, token, ""); !ok || again() {
+		t.Fatal("a second commit of the same token must be a replay")
+	}
+	if _, _, ok := f.workload.AuthenticateDeferred(ctx, "not-a-jwt", ""); ok {
+		t.Fatal("garbage was accepted")
+	}
+	if issuer, ok := f.workload.LookupIssuer(ctx, token); !ok || issuer.ID != f.issuer.ID {
+		t.Fatalf("lookup = %+v %v", issuer, ok)
+	}
+}
+
+func TestWorkloadAuditSubjectIsBounded(t *testing.T) {
+	f := newWorkloadFixture(t, 0, false)
+	long := strings.Repeat("s", 4000)
+	if _, ok := f.authenticator().Authenticate("Bearer " + f.token(t, func(c map[string]any) { c["sub"] = long })); ok {
+		t.Fatal("a non-matching subject authenticated")
+	}
+	if event := f.observer.last(t); len(event.Subject) > 256 {
+		t.Fatalf("subject of %d bytes reached the audit event", len(event.Subject))
+	}
+}
+
 func TestNewWorkloadAuthenticatorRequiresDependencies(t *testing.T) {
 	if _, err := NewWorkloadAuthenticator(WorkloadOptions{}); err == nil {
 		t.Fatal("expected an error without a store")

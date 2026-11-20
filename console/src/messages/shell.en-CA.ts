@@ -25,6 +25,7 @@ export const shellEnCA = {
   "account.kind.local_session": "Password sign-in",
   "account.kind.api_key": "API key",
   "account.kind.oidc": "Single sign-on",
+  "account.kind.workload_federation": "Workload token",
   "account.kind.service_account_credential": "Service account credential",
   "account.role.admin": "Administrator",
   "account.role.member": "Member",

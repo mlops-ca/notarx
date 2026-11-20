@@ -27,7 +27,7 @@ func setupWorkload(cfg config.WorkloadConfig, store authorization.WorkloadStore,
 	return authorization.NewWorkloadAuthenticator(authorization.WorkloadOptions{
 		Store: store, Accounts: accounts, Verifier: verifier, ClockSkew: cfg.ClockSkew, Cache: registry,
 		AllowPrivateNetwork: cfg.AllowPrivateNetwork, Logger: slog.Default(),
-		Observer: app.WorkloadObserver{Metrics: metrics, Audit: audit},
+		Observer: app.NewWorkloadObserver(metrics, audit),
 	})
 }
 

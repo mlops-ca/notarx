@@ -82,6 +82,7 @@
     "cmd/native-maven-fixture": "maven",
     "cmd/native-npm-fixture": "npm",
     "cmd/native-oci-fixture": "oci",
+    "cmd/workload-identity-fixture": "auth",
     "cmd/native-raw-fixture": "raw",
     "cmd/reference-apt-signer": "signer",
     "cmd/reference-apt-signer-healthcheck": "signer",

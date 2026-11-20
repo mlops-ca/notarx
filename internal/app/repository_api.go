@@ -450,8 +450,12 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	if dependencies.IdentityRuntime != nil {
 		identityProviders = dependencies.IdentityRuntime
 	}
-	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, IdentityProviders: identityProviders})
 	workloadStore, _ := any(store).(workloadIdentityStore)
+	var workloadIssuers workloadIssuerLookup
+	if workloadStore != nil {
+		workloadIssuers = workloadStore
+	}
+	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, IdentityProviders: identityProviders, WorkloadIssuers: workloadIssuers})
 	var humanProviders workloadHumanProviders
 	if dependencies.IdentityRuntime != nil {
 		humanProviders = dependencies.IdentityRuntime

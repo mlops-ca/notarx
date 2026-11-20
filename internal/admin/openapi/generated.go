@@ -448,6 +448,7 @@ const (
 	AuthenticationKindServiceAccountCredential AuthenticationKind = "service_account_credential"
 	AuthenticationKindStaticAdmin              AuthenticationKind = "static_admin"
 	AuthenticationKindStaticResolver           AuthenticationKind = "static_resolver"
+	AuthenticationKindWorkloadFederation       AuthenticationKind = "workload_federation"
 )
 
 // Valid indicates whether the value is a known member of the AuthenticationKind enum.
@@ -464,6 +465,8 @@ func (e AuthenticationKind) Valid() bool {
 	case AuthenticationKindStaticAdmin:
 		return true
 	case AuthenticationKindStaticResolver:
+		return true
+	case AuthenticationKindWorkloadFederation:
 		return true
 	default:
 		return false

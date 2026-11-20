@@ -35,6 +35,7 @@ const (
 	WorkloadReplay           = "replay"
 	WorkloadMissingJTI       = "missing_jti"
 	WorkloadStoreUnavailable = "store_error"
+	WorkloadKeysUnavailable  = "keys_unavailable"
 )
 
 const (
@@ -216,25 +217,38 @@ func exactUnverifiedIssuer(token string) string {
 // policy allowed to match (the Basic username of ADR 0019). It reports false for anything that is
 // not a workload token of a registered issuer, so other credential paths proceed unchanged.
 func (w *WorkloadAuthenticator) Authenticate(ctx context.Context, token, pin string) (Principal, bool) {
-	if w == nil || !LooksLikeJWT(token) {
+	principal, commit, ok := w.AuthenticateDeferred(ctx, token, pin)
+	if !ok || !commit() {
 		return Principal{}, false
+	}
+	return principal, true
+}
+
+// AuthenticateDeferred is Authenticate with the single-use marker left unconsumed: the returned commit
+// records the jti of a single-use policy and reports false on a replay (or when the marker cannot be
+// written), and is a no-op for other policies. A caller that can still refuse the request after the token
+// verified (the token exchange checks the audience first) calls commit last, so a refusal never burns the token.
+func (w *WorkloadAuthenticator) AuthenticateDeferred(ctx context.Context, token, pin string) (Principal, func() bool, bool) {
+	none := func() bool { return false }
+	if w == nil || !LooksLikeJWT(token) {
+		return Principal{}, none, false
 	}
 	issuerURL := exactUnverifiedIssuer(token)
 	if issuerURL == "" {
-		return Principal{}, false
+		return Principal{}, none, false
 	}
 	issuer, err := w.opts.Store.GetWorkloadIssuerByIssuer(ctx, issuerURL)
 	if err != nil {
 		if !errors.Is(err, repository.ErrNotFound) {
-			w.observe(ctx, WorkloadEvent{Reason: WorkloadStoreUnavailable, Issuer: issuerURL, Pinned: pin != "", Detail: err.Error()})
+			w.observe(ctx, WorkloadEvent{Reason: WorkloadStoreUnavailable, Issuer: truncate(issuerURL, 512), Pinned: pin != "", Detail: err.Error()})
 		}
-		return Principal{}, false
+		return Principal{}, none, false
 	}
 	event := WorkloadEvent{Issuer: issuer.Issuer, IssuerID: issuer.ID, Pinned: pin != ""}
 	if issuer.State != repository.WorkloadActive {
 		event.Reason = WorkloadIssuerDisabled
 		w.observe(ctx, event)
-		return Principal{}, false
+		return Principal{}, none, false
 	}
 	digest := sha256.Sum256([]byte(token + "\x00" + pin))
 	// Any bump of an issuer, policy or service-account scope turns a hit into a miss, even when an
@@ -244,9 +258,12 @@ func (w *WorkloadAuthenticator) Authenticate(ctx context.Context, token, pin str
 		return w.decide(ctx, token, pin, issuer)
 	})
 	if err != nil {
-		return Principal{}, false
+		return Principal{}, none, false
 	}
-	if decision.singleUse {
+	commit := func() bool {
+		if !decision.singleUse {
+			return true
+		}
 		// Replay protection is a write and never uses the cache.
 		hash := sha256.Sum256([]byte(decision.jti))
 		fresh, recordErr := w.opts.Store.RecordWorkloadJTI(ctx, decision.issuerID, hash[:], decision.tokenExp.Add(w.opts.ClockSkew))
@@ -256,14 +273,15 @@ func (w *WorkloadAuthenticator) Authenticate(ctx context.Context, token, pin str
 		case recordErr != nil:
 			failure.Reason, failure.Detail = WorkloadStoreUnavailable, recordErr.Error()
 			w.observe(ctx, failure)
-			return Principal{}, false
+			return false
 		case !fresh:
 			failure.Reason = WorkloadReplay
 			w.observe(ctx, failure)
-			return Principal{}, false
+			return false
 		}
+		return true
 	}
-	return decision.principal, true
+	return decision.principal, commit, true
 }
 
 func (w *WorkloadAuthenticator) observe(ctx context.Context, event WorkloadEvent) {
@@ -283,18 +301,25 @@ func (w *WorkloadAuthenticator) denied(ctx context.Context, event WorkloadEvent,
 func (w *WorkloadAuthenticator) decide(ctx context.Context, token, pin string, issuer repository.WorkloadIssuer) (workloadDecision, error) {
 	now := w.opts.Now()
 	event := WorkloadEvent{Issuer: issuer.Issuer, IssuerID: issuer.ID, Pinned: pin != ""}
-	trusted := joseIssuer(issuer)
+	trusted := JoseIssuer(issuer)
 	trusted.AllowPrivateNetwork = trusted.AllowPrivateNetwork || w.opts.AllowPrivateNetwork
 	verified, err := w.opts.Verifier.Verify(ctx, token, trusted)
+	if errors.Is(err, jose.ErrKeySourceUnavailable) || errors.Is(err, jose.ErrInvalidConfig) {
+		// The issuer's keys could not be read: a transient outage must not be remembered as a verdict on the
+		// token, so this failure is observed but never cached.
+		event.Reason, event.Detail = WorkloadKeysUnavailable, err.Error()
+		w.observe(ctx, event)
+		return workloadDecision{}, err
+	}
 	if err != nil {
 		// The jose error names the failed check but never holds the token.
 		return w.denied(ctx, event, WorkloadVerifyFailed, err.Error())
 	}
 	subject, _ := verified.Claims["sub"].(string)
-	event.Subject = subject
+	event.Subject = truncate(subject, 256)
 	records, err := w.opts.Store.ListActiveWorkloadTrustPolicies(ctx, issuer.ID, now)
 	if err != nil {
-		w.observe(ctx, WorkloadEvent{Reason: WorkloadStoreUnavailable, Issuer: issuer.Issuer, IssuerID: issuer.ID, Subject: subject, Pinned: pin != "", Detail: err.Error()})
+		w.observe(ctx, WorkloadEvent{Reason: WorkloadStoreUnavailable, Issuer: issuer.Issuer, IssuerID: issuer.ID, Subject: truncate(subject, 256), Pinned: pin != "", Detail: err.Error()})
 		return workloadDecision{}, err
 	}
 	byID := make(map[string]repository.WorkloadTrustPolicy, len(records))
@@ -377,7 +402,7 @@ func (w *WorkloadAuthenticator) VerifyForIssuer(ctx context.Context, token strin
 	if w == nil {
 		return nil, errors.New("workload federation is disabled")
 	}
-	trusted := joseIssuer(issuer)
+	trusted := JoseIssuer(issuer)
 	trusted.AllowPrivateNetwork = trusted.AllowPrivateNetwork || w.opts.AllowPrivateNetwork
 	return w.opts.Verifier.Verify(ctx, token, trusted)
 }
@@ -458,7 +483,9 @@ func claimTime(raw any) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func joseIssuer(issuer repository.WorkloadIssuer) jose.Issuer {
+// JoseIssuer is the verifier-facing view of a registered issuer; every caller that verifies or probes an
+// issuer builds it here, so the mode mapping has one definition.
+func JoseIssuer(issuer repository.WorkloadIssuer) jose.Issuer {
 	mode := jose.ModeDiscovery
 	if issuer.JWKSMode == repository.WorkloadJWKSStatic {
 		mode = jose.ModeStatic

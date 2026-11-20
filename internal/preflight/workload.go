@@ -2,7 +2,6 @@ package preflight
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -73,17 +72,20 @@ func (r Runner) checkWorkloadIssuers(ctx context.Context, cfg config.Config) Res
 		return Result{Name: name, Status: StatusSkip, Summary: "no active workload issuers are registered"}
 	}
 	type outcome struct {
-		Name      string `json:"name"`
-		Reachable bool   `json:"reachable"`
-		Keys      int    `json:"keys"`
+		Name      string
+		Reachable bool
+		Keys      int
 	}
 	outcomes := make([]outcome, 0, len(issuers))
 	unreachable := 0
 	for _, issuer := range issuers {
 		probeCtx, cancel := context.WithTimeout(ctx, workloadProbeTimeout)
 		target := jose.Issuer{
-			Issuer: issuer.Issuer, Mode: jose.JWKSMode(issuer.JWKSMode), JWKSURI: issuer.JWKSURI, StaticJWKS: issuer.StaticJWKS,
+			Issuer: issuer.Issuer, Mode: jose.ModeDiscovery, JWKSURI: issuer.JWKSURI, StaticJWKS: issuer.StaticJWKS,
 			CABundlePEM: issuer.CABundlePEM, AllowPrivateNetwork: issuer.AllowPrivateNetwork || cfg.Workload.AllowPrivateNetwork,
+		}
+		if issuer.JWKSMode == string(jose.ModeStatic) {
+			target.Mode = jose.ModeStatic
 		}
 		result, probeErr := r.WorkloadProbe(probeCtx, target)
 		cancel()
@@ -93,9 +95,10 @@ func (r Runner) checkWorkloadIssuers(ctx context.Context, cfg config.Config) Res
 		}
 		outcomes = append(outcomes, item)
 	}
-	encoded, _ := json.Marshal(outcomes)
-	var details []any
-	_ = json.Unmarshal(encoded, &details)
+	details := make([]any, 0, len(outcomes))
+	for _, item := range outcomes {
+		details = append(details, map[string]any{"name": item.Name, "reachable": item.Reachable, "keys": item.Keys})
+	}
 	summary := Result{Name: name, Status: StatusPass, Summary: "every active workload issuer is reachable", Details: map[string]any{"issuers": details}}
 	if unreachable > 0 {
 		summary.Status, summary.Summary = StatusFail, "some active workload issuers are unreachable or publish no usable keys"

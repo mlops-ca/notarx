@@ -443,6 +443,7 @@ func TestWorkloadJWTAndExchangedTokenAuthenticateThroughTheSameAuthenticator(t *
 	if !ok {
 		t.Fatal("the workload JWT did not authenticate")
 	}
+	env.module.read.Authenticator.ResolverToken = "principal-token-signing-secret" // principal tokens are signed with it
 	exchanged, exchangedBody := env.do(t, http.MethodGet, "acme/widget/resolve/main/config.json", bearer(env.module.read.Authenticator.IssuePrincipalToken(principal)))
 	if exchanged.StatusCode != 200 || string(exchangedBody) != `{"k":1}` {
 		t.Fatalf("exchanged principal token = %d %q", exchanged.StatusCode, exchangedBody)

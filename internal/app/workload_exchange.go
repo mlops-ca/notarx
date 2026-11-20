@@ -3,6 +3,7 @@ package app
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -105,24 +106,31 @@ func (h *workloadExchangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	}
 	// Token minting reads through to the database: a disabled policy never gets a new token.
 	ctx := readcache.Bypass(r.Context())
-	issuer, known := h.authenticator.Workload.LookupIssuer(ctx, subject)
-	if known && !h.byIssuer.allow(issuer.ID, now) {
-		h.tooManyRequests(w)
-		return
-	}
-	principal, ok := h.authenticator.Workload.Authenticate(ctx, subject, form.Get("policy"))
+	principal, commit, ok := h.authenticator.Workload.AuthenticateDeferred(ctx, subject, form.Get("policy"))
 	if !ok {
 		writeTokenExchangeError(w, http.StatusBadRequest, "invalid_grant", workloadInvalidGrantMessage)
 		return
 	}
-	if audience := form.Get("audience"); audience != "" && !containsString(issuer.Audiences, audience) {
+	// The per-issuer budget is charged only for a token that verified: an unauthenticated caller who merely names a
+	// registered issuer in a forged token must not be able to exhaust it for the issuer's real workloads.
+	issuer, _ := h.authenticator.Workload.LookupIssuer(ctx, subject)
+	if !h.byIssuer.allow(issuer.ID, now) {
+		h.tooManyRequests(w)
+		return
+	}
+	if audience := form.Get("audience"); audience != "" && !slices.Contains(issuer.Audiences, audience) {
 		writeTokenExchangeError(w, http.StatusBadRequest, "invalid_target", "the audience is not accepted by the issuer of the subject token")
 		return
 	}
 	lifetime := h.maxTTL
-	if policy, err := h.policies.GetWorkloadTrustPolicy(ctx, principal.CredentialID); err == nil {
-		lifetime = min(lifetime, time.Duration(policy.MaxTokenTTLSeconds)*time.Second)
-	} else {
+	policy, err := h.policies.GetWorkloadTrustPolicy(ctx, principal.CredentialID)
+	if err != nil {
+		writeTokenExchangeError(w, http.StatusBadRequest, "invalid_grant", workloadInvalidGrantMessage)
+		return
+	}
+	lifetime = min(lifetime, time.Duration(policy.MaxTokenTTLSeconds)*time.Second)
+	// Every other refusal is behind us: only now is a single-use token consumed, so a refused exchange never burns it.
+	if !commit() {
 		writeTokenExchangeError(w, http.StatusBadRequest, "invalid_grant", workloadInvalidGrantMessage)
 		return
 	}
@@ -133,13 +141,4 @@ func (h *workloadExchangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Reque
 	_ = json.NewEncoder(w).Encode(map[string]any{
 		"access_token": token, "issued_token_type": tokenExchangeAccessTokenType, "token_type": "Bearer", "expires_in": int(lifetime / time.Second),
 	})
-}
-
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
 }

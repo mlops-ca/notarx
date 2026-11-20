@@ -13,6 +13,7 @@ export function IdentitySummary({ identity }: { identity: CurrentIdentity }) {
     api_key: "API Key",
     service_account_credential: t("identity.serviceAccountCredential"),
     oidc: "OIDC",
+    workload_federation: t("account.kind.workload_federation"),
   };
   const roleLabels = {
     none: t("identity.awaitingApproval"),

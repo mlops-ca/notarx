@@ -2567,7 +2567,8 @@ export type AuthenticationKind =
   | "local_session"
   | "api_key"
   | "service_account_credential"
-  | "oidc";
+  | "oidc"
+  | "workload_federation";
 
 export type OidcRoleMappingMatch = {
   externalRole: string;

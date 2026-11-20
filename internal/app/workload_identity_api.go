@@ -404,7 +404,7 @@ func (h workloadIdentityHandler) ProbeWorkloadIssuer(w http.ResponseWriter, r *h
 			writeWorkloadStoreError(w, err, "workload issuer")
 			return
 		}
-		target = jose.Issuer{Issuer: issuer.Issuer, Mode: jose.JWKSMode(issuer.JWKSMode), JWKSURI: issuer.JWKSURI, StaticJWKS: issuer.StaticJWKS, CABundlePEM: issuer.CABundlePEM, AllowPrivateNetwork: issuer.AllowPrivateNetwork}
+		target = authorization.JoseIssuer(issuer)
 	case request.Issuer != nil && request.JwksMode != nil:
 		target = jose.Issuer{Issuer: *request.Issuer, Mode: jose.JWKSMode(*request.JwksMode)}
 		if !strings.HasPrefix(target.Issuer, "https://") || target.Mode != jose.ModeDiscovery && target.Mode != jose.ModeStatic {
@@ -633,21 +633,20 @@ func (h workloadIdentityHandler) UpdateWorkloadTrustPolicy(w http.ResponseWriter
 		}
 		policy.Conditions = canonical
 	}
-	if request.ServiceAccountId != nil && request.ServiceAccountId.String() != policy.ServiceAccountID {
+	accountChanged := request.ServiceAccountId != nil && request.ServiceAccountId.String() != policy.ServiceAccountID
+	// Re-enabling a policy re-checks the admin mapping: the account may have gained an administrator grant while the
+	// policy was disabled, whatever else the request restates.
+	reenabled := request.State != nil && *request.State == adminopenapi.WorkloadState(repository.WorkloadActive) && policy.State == repository.WorkloadDisabled
+	if accountChanged {
 		accountID := request.ServiceAccountId.String()
 		if _, err := h.store.GetServiceAccount(r.Context(), accountID); err != nil {
 			writeWorkloadStoreError(w, err, "service account")
 			return
 		}
 		policy.ServiceAccountID = accountID
-		if !h.checkWorkloadAdminMapping(w, r, accountID, request.AllowAdmin != nil && *request.AllowAdmin) {
-			return
-		}
-	} else if request.AllowAdmin == nil && request.ServiceAccountId == nil && request.State != nil && *request.State == adminopenapi.WorkloadState(repository.WorkloadActive) && policy.State == repository.WorkloadDisabled {
-		// Re-enabling a policy re-checks the admin mapping, which may have changed while it was disabled.
-		if !h.checkWorkloadAdminMapping(w, r, policy.ServiceAccountID, false) {
-			return
-		}
+	}
+	if (accountChanged || reenabled) && !h.checkWorkloadAdminMapping(w, r, policy.ServiceAccountID, request.AllowAdmin != nil && *request.AllowAdmin) {
+		return
 	}
 	if request.MaxTokenTtlSeconds != nil {
 		policy.MaxTokenTTLSeconds = *request.MaxTokenTtlSeconds
