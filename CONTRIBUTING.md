@@ -235,7 +235,7 @@ image build of its architecture) run in parallel with `fail-fast: false`. The
 be skipped by change detection; pull request CI and the release gates (ADR 0024) both
 call that suite, and a push to `main` runs no tests. The
 former serial `core` lane is split into `core-checks`, `core-email`,
-`core-native-e2e`, `core-backup`, `core-integration-1`, `core-integration-2` and `core-integration-3`, followed by the native lanes (migration
+`core-native-e2e-1`, `core-native-e2e-2`, `core-backup`, `core-integration-1`, `core-integration-2` and `core-integration-3`, followed by the native lanes (migration
 clients, inventory, NuGet, OCI migration and discovery, private-upstream
 authentication, npm migration, Helm, RubyGems, PyPI migration). Each lane
 installs only the toolchains it declares, read from `go.mod`,

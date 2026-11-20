@@ -10,24 +10,31 @@
       "core-checks",
       "core-backup"
     ],
-    "packed-nuget-migrations": [
-      "nuget",
-      "oci-migration",
-      "npm-migration"
-    ],
-    "packed-maven-clients": [
-      "maven-oci-auth",
+    "packed-email-clients": [
+      "core-email",
       "migration-clients"
     ],
-    "packed-rubygems-discovery-auth": [
-      "rubygems",
-      "oci-discovery",
-      "six-format-auth"
-    ],
-    "packed-inventory-helm-pypi": [
-      "inventory",
-      "helm",
+    "packed-native-pypi": [
+      "core-native-e2e-2",
       "pypi-migration"
+    ],
+    "packed-native-auth-oci": [
+      "core-native-e2e-1",
+      "six-format-auth",
+      "oci-migration"
+    ],
+    "packed-maven-helm-npm": [
+      "maven-oci-auth",
+      "helm",
+      "npm-migration"
+    ],
+    "packed-nuget-rubygems": [
+      "nuget",
+      "rubygems"
+    ],
+    "packed-discovery-inventory": [
+      "oci-discovery",
+      "inventory"
     ]
   },
   "lanes": {
@@ -134,8 +141,8 @@
       ],
       "rawDirectories": []
     },
-    "core-native-e2e": {
-      "timeoutMinutes": 30,
+    "core-native-e2e-1": {
+      "timeoutMinutes": 20,
       "arm64": "pull-request",
       "needs": [
         "node"
@@ -183,18 +190,29 @@
           "timeoutSeconds": null
         },
         {
-          "name": "native-pypi-e2e",
-          "command": [
-            "make",
-            "native-pypi-e2e"
-          ],
-          "timeoutSeconds": null
-        },
-        {
           "name": "native-go-e2e",
           "command": [
             "make",
             "native-go-e2e"
+          ],
+          "timeoutSeconds": null
+        }
+      ],
+      "rawDirectories": []
+    },
+    "core-native-e2e-2": {
+      "timeoutMinutes": 20,
+      "arm64": "pull-request",
+      "needs": [
+        "node"
+      ],
+      "images": true,
+      "steps": [
+        {
+          "name": "native-pypi-e2e",
+          "command": [
+            "make",
+            "native-pypi-e2e"
           ],
           "timeoutSeconds": null
         },

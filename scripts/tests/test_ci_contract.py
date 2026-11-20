@@ -284,6 +284,13 @@ class PlanTests(unittest.TestCase):
                     self.assertEqual('rust' in lane.get('needs', []), shard == app_shard,
                                      f'{name} runs shard {shard}; only the shard with ./internal/app needs rust')
 
+    def test_every_lane_step_runs_once(self):
+        # A lane split (core-native-e2e into two halves, issue #518) or a move between
+        # lanes must not run a step twice.
+        commands = [tuple(s['command']) for lane in ci.PLAN['lanes'].values() for s in lane['steps']]
+        # A step left out of every lane fails test_every_notarx_gate_stays_planned.
+        self.assertEqual(sorted(c for c in set(commands) if commands.count(c) > 1), [])
+
     def test_every_notarx_gate_stays_planned(self):
         targets = {s['command'][1] for lane in ci.PLAN['lanes'].values()
                    for s in lane['steps'] if s['command'][0] == 'make'}
@@ -425,7 +432,7 @@ class PlanTests(unittest.TestCase):
         # architecture-sensitive pull request; a packed job's arm64 leg runs only those.
         self.assertEqual(pull_request, [lane for _, lanes in ci.jobs() for lane in lanes
                                         if ci.PLAN['lanes'][lane]['arm64'] == 'pull-request'])
-        self.assertEqual(sorted(pull_request), sorted(['core-checks', 'core-email', 'core-native-e2e', 'core-backup',
+        self.assertEqual(sorted(pull_request), sorted(['core-checks', 'core-email', 'core-native-e2e-1', 'core-native-e2e-2', 'core-backup',
                                                        'core-integration-1', 'core-integration-2',
                                                        'core-integration-3',
                                                        'six-format-auth', 'oci-discovery']))

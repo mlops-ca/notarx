@@ -1,10 +1,10 @@
 name: Install Playwright browser
 description: >-
   Installs the Playwright Chromium browser and its system dependencies in the
-  console directory (npm ci must have run). The browser download and the .deb
-  packages for the system dependencies are cached by runner image version,
-  architecture and @playwright/test version. On a warm cache the packages are
-  installed with dpkg and apt is never contacted.
+  console directory (npm ci must have run). The browser download is cached by
+  runner image (ImageOS), architecture and @playwright/test version; the .deb
+  packages for the system dependencies also by runner image version. On a warm
+  cache the packages are installed with dpkg and apt is never contacted.
 
 runs:
   using: composite
@@ -18,7 +18,13 @@ runs:
         echo "version=$version" >> "$GITHUB_OUTPUT"
         # ImageOS and ImageVersion are runner environment variables, not
         # expression contexts, so the cache keys read them from this output.
-        echo "image=${ImageOS}-${ImageVersion}-${RUNNER_ARCH}-$version" >> "$GITHUB_OUTPUT"
+        # Playwright downloads the same browser build whatever the runner image
+        # version, so that version stays out of the browser key: with it, every
+        # pull request missed the cache main saved (hosted runners of several image
+        # versions serve the repository at once) and saved about 300 MB of its own
+        # per image version, which helped push the repository past its 10 GB cache
+        # quota, where GitHub evicts the least recently used caches (issue #518).
+        echo "browser=${ImageOS}-${RUNNER_ARCH}-$version" >> "$GITHUB_OUTPUT"
         # The system dependency packages of every runner image version share a
         # prefix, so a runner image no cache was saved for starts from the packages
         # of another one (docs/ci.md, Playwright browser install).
@@ -28,7 +34,7 @@ runs:
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ steps.playwright.outputs.image }}
+        key: playwright-${{ steps.playwright.outputs.browser }}
     - name: Download browser
       shell: bash
       working-directory: console
