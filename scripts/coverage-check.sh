@@ -24,6 +24,10 @@ while [[ $# -gt 0 ]]; do
     *) printf 'coverage-check: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
+if [[ -n "$profile" && ${#race[@]} -gt 0 ]]; then
+  printf 'coverage-check: --race runs the tests, --profile reads an existing profile; pass one of them\n' >&2
+  exit 2
+fi
 
 if [[ -z "$profile" ]]; then
   profile=$(mktemp)
@@ -68,14 +72,17 @@ coverage=$(awk '
   }
 ' "$profile")
 
-actual=$(printf '%s\n' "$coverage" | awk '$1 == "total" { print $2 }')
-if ! awk -v actual="$actual" -v minimum="$minimum" 'BEGIN { exit !(actual + 0 >= minimum + 0) }'; then
-  printf 'Go coverage %.1f%% is below the required %.1f%%.\n' "$actual" "$minimum" >&2
-  exit 1
-fi
-printf 'Go coverage gate passed: %.1f%% >= %.1f%%.\n' "$actual" "$minimum"
-
+# Every floor is checked and reported before the script fails, so one run lists
+# every gap.
 status=0
+actual=$(printf '%s\n' "$coverage" | awk '$1 == "total" { print $2 }')
+if awk -v actual="$actual" -v minimum="$minimum" 'BEGIN { exit !(actual + 0 >= minimum + 0) }'; then
+  printf 'Go coverage gate passed: %.1f%% >= %.1f%%.\n' "$actual" "$minimum"
+else
+  printf 'Go coverage %.1f%% is below the required %.1f%%.\n' "$actual" "$minimum" >&2
+  status=1
+fi
+
 while read -r package package_minimum; do
   [[ -n "${package:-}" && "${package:0:1}" != "#" ]] || continue
   import_path="$module/${package#./}"

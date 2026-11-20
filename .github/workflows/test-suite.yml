@@ -218,6 +218,8 @@ jobs:
       - uses: ./.github/actions/go-quality
         with:
           race: "false"
+          # The quality job runs these tests with every other package.
+          lint-go-tests: "false"
           openapi-tools: "true"
       - name: Verify the native-build rules (no cross-compilation, no emulation)
         run: make native-build-check
@@ -249,12 +251,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ inputs.sha }}
-      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+      - uses: ./.github/actions/go-quality
         with:
-          go-version-file: go.mod
-          cache: true
-      - name: Run the unit tests once with the race detector and enforce the coverage floors
-        run: make race-coverage
+          lint: "false"
+          vet: "false"
+          race: "false"
+          race-coverage: "true"
 
   quality-arm64:
     if: inputs.go

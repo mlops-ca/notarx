@@ -248,10 +248,14 @@ integration-down:
 spellcheck:
 	@./scripts/spellcheck.sh
 
+# The Go tests of the lint tools run with make lint by default. The CI lint job sets
+# LINT_GO_TESTS=0 because its quality job runs every package's tests once (race-coverage).
+LINT_GO_TESTS ?= 1
+
 architecture-check:
 	@go run ./tools/architecture
 	@./scripts/check-no-anonymous-read.sh
-	@go test ./tools/architecture
+	@if [ "$(LINT_GO_TESTS)" != 0 ]; then go test ./tools/architecture; fi
 	@python3 scripts/check-no-cjk-go.py
 	@python3 -B -m unittest discover -s scripts/tests -p test_check_no_cjk_go.py
 	@python3 -B -m unittest discover -s scripts/tests -p test_check_no_chinese.py
@@ -262,7 +266,7 @@ actionlint-check:
 
 sqllint-check:
 	@go run ./tools/sqllint/cmd
-	@go test ./tools/sqllint/...
+	@if [ "$(LINT_GO_TESTS)" != 0 ]; then go test ./tools/sqllint/...; fi
 
 architecture-metrics:
 	@go run ./tools/architecture -metrics

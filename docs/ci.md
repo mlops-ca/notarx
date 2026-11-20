@@ -77,10 +77,19 @@ use. `quality-arm64` runs lint, vet and `make race` natively on arm64 (ADR 0016)
 golangci-lint runs in its pinned image as the calling user, against the host module
 and build caches (restored by `actions/setup-go`) and its own result cache in
 `GOLANGCI_LINT_CACHE` (default `~/.cache/notarx/golangci-lint`), which the composite
-action restores and saves with `actions/cache`, keyed by the lint image, `go.sum` and
-`.golangci.yml`. A warm run downloads no module and re-analyses only changed
-packages. Cache scopes are per branch, so the first run of a pull request is cold for
-this cache and later pushes are warm.
+action restores and saves with `actions/cache`. A warm run downloads no module and
+re-analyses only changed packages. The CI `lint` job sets `LINT_GO_TESTS=0`, so
+`make lint` skips the Go tests of `tools/architecture` and `tools/sqllint`, which
+`quality` runs with every other package; locally and on arm64 `make lint` runs them.
+
+The `quality` job keeps its own cache of the module and build caches
+(`go-race-*`), because the `actions/setup-go` cache is saved by `main` builds and a
+pull request restores it read-only, so it never holds the race-instrumented build.
+Both caches use daily keys (runner, toolchain or lint image, `go.sum`, the UTC date):
+an exact hit saves nothing, so a fixed key would freeze a cache at its first contents.
+The first run of a day misses once and saves a fresh cache, and the key prefixes
+restore the newest older one. A pull request can restore the caches the nightly
+release gates save on `main`; what a pull request saves stays in its own branch scope.
 
 ## Workflow linting
 

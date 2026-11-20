@@ -1,12 +1,12 @@
 name: Go quality checks
 description: >-
-  Sets up Go (and Node with the Console tools when lint runs) and runs the lint, vet
-  and race checks that every architecture runs (ADR 0016). quality-arm64 in
-  test-suite.yml runs all three on ubuntu-24.04-arm; on amd64 the lint job runs lint
-  and vet, and the quality job runs the race detector together with the coverage
-  floors in one pass (make race-coverage). The checkout stays in the job. Steps that
-  are architecture independent (coverage floor, dependency audit, packaging checks)
-  stay in the amd64 jobs.
+  Sets up Go (and Node with the Console tools when lint runs) and runs the Go checks
+  of the test suite, so their setup has one definition (ADR 0016). quality-arm64
+  runs lint, vet and race on ubuntu-24.04-arm. On amd64 the lint job runs lint and
+  vet, and the quality job runs the race detector together with every coverage floor
+  in one pass (race-coverage). The checkout stays in the job. Steps that are
+  architecture independent (coverage floor, dependency audit, packaging checks) stay
+  in the amd64 jobs.
 
 inputs:
   lint:
@@ -18,6 +18,16 @@ inputs:
   race:
     description: Run make race.
     default: "true"
+  race-coverage:
+    description: >-
+      Run make race-coverage (the unit tests once, with the race detector and the
+      coverage floors), with a build cache of its own for the race-instrumented build.
+    default: "false"
+  lint-go-tests:
+    description: >-
+      Let make lint run the Go tests of the lint tools (LINT_GO_TESTS). The amd64 lint
+      job turns it off because its quality job runs every package's tests once.
+    default: "true"
   openapi-tools:
     description: Also install tools/openapi (needed by the amd64 lint job's later steps).
     default: "false"
@@ -25,10 +35,43 @@ inputs:
 runs:
   using: composite
   steps:
+    # The race-coverage build keeps its own cache (below): the setup-go cache is the
+    # one main's builds save, and a pull request restores it read-only, so it never
+    # holds race-instrumented packages.
     - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
       with:
         go-version-file: go.mod
-        cache: true
+        cache: ${{ inputs.race-coverage != 'true' }}
+    # Daily cache keys for the lint results and the race build: an exact hit saves
+    # nothing, so a key that never changed would freeze the cache at its first
+    # contents. A new day (or go.sum) misses once and saves a fresh cache; the
+    # prefixes restore the newest older one. The nightly release gates run on main,
+    # whose caches every pull request can restore; a pull request's own saves stay
+    # in its branch scope.
+    - if: inputs.lint == 'true' || inputs.race-coverage == 'true'
+      name: Locate the Go caches
+      id: cache-dirs
+      shell: bash
+      run: |
+        {
+          echo "day=$(date -u +%Y-%m-%d)"
+          echo "lint=$HOME/.cache/notarx/golangci-lint"
+          echo "lint-image=$(sed -n 's/^LINT_IMAGE := //p' Makefile)"
+          echo "gomodcache=$(go env GOMODCACHE)"
+          echo "gocache=$(go env GOCACHE)"
+          echo "go=$(go env GOVERSION)"
+        } >> "$GITHUB_OUTPUT"
+    - if: inputs.race-coverage == 'true'
+      name: Restore the race build cache
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.cache-dirs.outputs.gomodcache }}
+          ${{ steps.cache-dirs.outputs.gocache }}
+        key: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}
+        restore-keys: |
+          go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-
+          go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-
     # make lint runs the en-CA spell check, which needs the Console tools.
     - if: inputs.lint == 'true' || inputs.openapi-tools == 'true'
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -46,30 +89,23 @@ runs:
       run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
       shell: bash
       working-directory: tools/openapi
-    # golangci-lint keeps its analysis results in GOLANGCI_LINT_CACHE (Makefile). Entries
-    # are content addressed, so an older cache is safe to restore: a pull request saves
-    # one cache per go.sum and lint configuration (cache scopes are per branch), and the
-    # prefix restores the newest older one.
-    - if: inputs.lint == 'true'
-      name: Locate the golangci-lint cache
-      id: lint-cache-dir
-      shell: bash
-      run: |
-        echo "dir=$HOME/.cache/notarx/golangci-lint" >> "$GITHUB_OUTPUT"
-        echo "version=$(sed -n 's/^LINT_IMAGE := //p' Makefile)" >> "$GITHUB_OUTPUT"
+    # golangci-lint keeps its analysis results in GOLANGCI_LINT_CACHE (Makefile); the
+    # entries are content addressed, so restoring an older cache is safe.
     - if: inputs.lint == 'true'
       name: Restore the golangci-lint cache
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
-        path: ${{ steps.lint-cache-dir.outputs.dir }}
-        key: golangci-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.lint-cache-dir.outputs.version }}-${{ hashFiles('go.sum', '.golangci.yml') }}
+        path: ${{ steps.cache-dirs.outputs.lint }}
+        key: golangci-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.lint-image }}-${{ hashFiles('go.sum', '.golangci.yml') }}-${{ steps.cache-dirs.outputs.day }}
         restore-keys: |
-          golangci-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.lint-cache-dir.outputs.version }}-
+          golangci-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.lint-image }}-${{ hashFiles('go.sum', '.golangci.yml') }}-
+          golangci-lint-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.lint-image }}-
     - if: inputs.lint == 'true'
       name: Run Go lint
       shell: bash
       env:
-        GOLANGCI_LINT_CACHE: ${{ steps.lint-cache-dir.outputs.dir }}
+        GOLANGCI_LINT_CACHE: ${{ steps.cache-dirs.outputs.lint }}
+        LINT_GO_TESTS: ${{ inputs.lint-go-tests == 'true' && '1' || '0' }}
       run: make lint
     - if: inputs.vet == 'true'
       name: Run Go vet
@@ -79,3 +115,7 @@ runs:
       name: Run race detector
       shell: bash
       run: make race
+    - if: inputs.race-coverage == 'true'
+      name: Run the unit tests once with the race detector and enforce the coverage floors
+      shell: bash
+      run: make race-coverage
