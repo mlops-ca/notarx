@@ -402,7 +402,11 @@ migrations with the Go runner and compares the ledger with `run-migrations.sh`. 
 ## Shared images
 
 `build-images-amd64` and `build-images-arm64` build the notarx and reference apt signer
-images once per run, natively on `ubuntu-24.04` and `ubuntu-24.04-arm`. Each job
+images once per run, natively on `ubuntu-24.04` and `ubuntu-24.04-arm`. The arm64
+job runs only when the arm64 contract lanes do (a Go change that is
+architecture-sensitive, and the release gates); until issue #518 it built the arm64
+images for every Go or Console change, which nothing loaded (about 1.8 runner-minutes
+per run). Each job
 builds both images in parallel with `docker buildx bake` (`.github/ci-images.hcl`,
 through the `.github/actions/ci-images` composite action; BuildKit layers cached in
 the GitHub Actions cache, one scope per image and architecture; the reference

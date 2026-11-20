@@ -101,19 +101,28 @@ hashes={name:hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for nam
 PY
 docker pull --platform "$platform" "$sdk_image" >"$evidence/dotnet-pull.log" 2>&1
 go build -o "$work/notarx" ./cmd/notarx
-# The SDK container runs on the Docker server's own platform, so the Linux notarx
-# is built natively inside a pinned Go container (no cross-compilation).
-go_image=$(sed -n 's/^GO_IMAGE := //p' Makefile)
-if [[ -z "$go_image" ]]; then
-  printf '%s\n' 'GO_IMAGE is not defined in the Makefile; cannot build the Linux notarx natively.' >&2
-  exit 1
+# The SDK container runs on the Docker server's own platform and needs a Linux
+# notarx built natively for it (no cross-compilation, ADR 0016). On a Linux host of
+# that platform (CI) the host toolchain is that native build and reuses the host
+# build cache; elsewhere (Docker Desktop on macOS) it is built in the pinned Go
+# container, which starts with an empty build cache.
+if [[ "$(go env GOOS)/$(go env GOARCH)" == "$platform" ]]; then
+  linux_build=host-toolchain
+  CGO_ENABLED=0 go build -buildvcs=false -o "$work/notarx-linux" ./cmd/notarx
+else
+  linux_build=pinned-go-container
+  go_image=$(sed -n 's/^GO_IMAGE := //p' Makefile)
+  if [[ -z "$go_image" ]]; then
+    printf '%s\n' 'GO_IMAGE is not defined in the Makefile; cannot build the Linux notarx natively.' >&2
+    exit 1
+  fi
+  docker run --rm --platform "$platform" -v "$PWD:/src:ro" -v "$work:/out" -v notarx-go-mod:/go/pkg/mod -w /src \
+    -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false "$go_image" go build -o /out/notarx-linux ./cmd/notarx
 fi
-docker run --rm --platform "$platform" -v "$PWD:/src:ro" -v "$work:/out" -v notarx-go-mod:/go/pkg/mod -w /src \
-  -e CGO_ENABLED=0 -e GOFLAGS=-buildvcs=false "$go_image" go build -o /out/notarx-linux ./cmd/notarx
-python3 - "$work/notarx" "$sdk_image" "$evidence/tool-provenance.json" <<'PY'
+python3 - "$work/notarx" "$sdk_image" "$evidence/tool-provenance.json" "$linux_build" <<'PY'
 import hashlib,json,pathlib,subprocess,sys
 p=pathlib.Path(sys.argv[3]);data=json.loads(p.read_text())
-data.update({'mode':'official-container','runtimeImageID':subprocess.check_output(['docker','image','inspect',sys.argv[2],'--format','{{.Id}}'],text=True).strip(),'gatewayBinarySHA256':hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest(),'proxyGroupGatewayRuntime':'linux-sdk-container','proxyGroupGatewayBinarySHA256':hashlib.sha256((pathlib.Path(sys.argv[1]).parent/'notarx-linux').read_bytes()).hexdigest(),'goVersion':subprocess.check_output(['go','version'],text=True).strip()})
+data.update({'mode':'official-container','runtimeImageID':subprocess.check_output(['docker','image','inspect',sys.argv[2],'--format','{{.Id}}'],text=True).strip(),'gatewayBinarySHA256':hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest(),'proxyGroupGatewayRuntime':'linux-sdk-container','proxyGroupGatewayBuild':sys.argv[4],'proxyGroupGatewayBinarySHA256':hashlib.sha256((pathlib.Path(sys.argv[1]).parent/'notarx-linux').read_bytes()).hexdigest(),'goVersion':subprocess.check_output(['go','version'],text=True).strip()})
 p.write_text(json.dumps(data,indent=2)+'\n')
 PY
 started=1

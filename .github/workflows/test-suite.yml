@@ -94,8 +94,10 @@ jobs:
           ref: ${{ inputs.sha }}
       - uses: ./.github/actions/ci-images
 
+  # Only the arm64 contract lanes load the arm64 images, and they run only for an
+  # architecture-sensitive Go change (inputs.arm64) and in the release gates.
   build-images-arm64:
-    if: inputs.go || inputs.console
+    if: inputs.go && inputs.arm64
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -553,6 +555,7 @@ jobs:
           CONSOLE: ${{ inputs.console }}
           DOCS: ${{ inputs.docs }}
           IMAGES: ${{ inputs.images }}
+          ARM64: ${{ inputs.arm64 }}
           # Jobs per contract group (scripts/ci-contract.py matrix --group); a group
           # without a job is skipped by design.
           EARLY_JOBS: ${{ needs.contract-plan.outputs.early-jobs }}
@@ -574,8 +577,10 @@ jobs:
           # contract-plan check already reports.
           group() { if [[ "$GO" == true && "${1:-0}" != 0 ]]; then echo true; else echo false; fi; }
           early=$(group "$EARLY_JOBS") amd64=$(group "$AMD64_JOBS") arm64=$(group "$ARM64_JOBS")
+          arm64images=false
+          if [[ "$GO" == true && "$ARM64" == true ]]; then arm64images=true; fi
           status=0
-          for pair in lint:$GO quality:$GO release-checks:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract-early:$early contract-amd64:$amd64 contract-arm64:$arm64 console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images-amd64:$e2e build-images-arm64:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in lint:$GO quality:$GO release-checks:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract-early:$early contract-amd64:$amd64 contract-arm64:$arm64 console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images-amd64:$e2e build-images-arm64:$arm64images docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then
