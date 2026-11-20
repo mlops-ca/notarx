@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,10 +17,6 @@ import (
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
-	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
-	mavenprotocol "github.com/mlops-ca/notarx/internal/protocol/maven"
-	npmprotocol "github.com/mlops-ca/notarx/internal/protocol/npm"
-	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -35,70 +32,9 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.Response
 			return
 		}
 		h.withRepositoryScopeForPrincipal(w, r, principal, request.TargetRepositoryId.String(), RepositoryAdmin, func(Principal, repository.HostedRepository) {
-			target, err := h.sessions.store.GetHostedRepository(r.Context(), request.TargetRepositoryId.String())
-			if err != nil || target.ID == source.ID || target.Format != source.Format || target.Type != repository.RepositoryTypeHosted || target.State != repository.RepositoryActive {
-				writeHostedProblem(w, http.StatusConflict, "invalid_target", "target must be an active Hosted repository with the same format")
-				return
-			}
-			if h.rejectQuarantinedDistribution(w, r, principal, source, target, request.Coordinate, request.Digest, "promote") {
-				return
-			}
-			policy, policyErr := h.securityPolicies.GetRepositorySecurityPolicy(r.Context(), target.ID)
-			if policyErr != nil {
-				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "get security policy failed")
-				return
-			}
-			var intelligence *repository.ArtifactIntelligence
-			if value, intelligenceErr := h.intelligence.GetArtifactIntelligence(r.Context(), source.ID, source.Format, request.Coordinate, request.Digest); intelligenceErr == nil {
-				intelligence = &value
-			} else if !errors.Is(intelligenceErr, repository.ErrNotFound) {
-				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "get artifact intelligence failed")
-				return
-			}
-			evaluation := repository.EvaluateRepositorySecurityPolicy(policy, intelligence)
-			if !evaluation.Allowed {
-				if h.audit != nil {
-					_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{GroupName: target.Name, Repository: target.Name, Actor: principal.Actor, Outcome: repository.AuditAccessDenied, OccurredAt: time.Now().UTC(), Format: "management", Resource: request.Coordinate, Representation: request.Digest, Operation: "promote.security_policy", Status: http.StatusForbidden, AuthorizationReason: strings.Join(evaluation.Reasons, ",")})
-				}
-				writeHostedProblem(w, http.StatusForbidden, "security_policy_denied", "promotion denied by security policy: "+strings.Join(evaluation.Reasons, ","))
-				return
-			}
-			promoteAudit := h.auditFor(repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: principal.Actor, Resource: request.Coordinate, Operation: "promote", Status: http.StatusAccepted})
-			var job repository.LifecycleJob
-			if capability, ok := formatmodule.Capability[formatmodule.Promotion](rawFormatRegistry(rawformat.Options{Store: h.sessions.store, Jobs: h.sessions.store}), source.Format); ok {
-				job, _, err = capability.EnqueuePromotion(r.Context(), source.ID, target.ID, request.Coordinate, request.Digest, string(params.IdempotencyKey), promoteAudit...)
-			} else {
-				switch source.Format {
-				case repository.FormatAPT:
-					job, _, err = (aptpublication.Distribution{Store: h.sessions.store}).EnqueuePromotion(r.Context(), target.ID, string(params.IdempotencyKey), aptpublication.PromotionPayload{SourceRepositoryID: source.ID, Coordinate: request.Coordinate, Digest: request.Digest, TargetSuite: *request.AptTargetSuite, Actor: principal.Actor}, promoteAudit...)
-				case repository.FormatMaven:
-					promotionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("maven-promotion:"+target.ID+":"+string(params.IdempotencyKey))).String()
-					job, _, err = (mavenprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), mavenprotocol.PromotionPayload{SourceRepositoryID: source.ID, Coordinate: request.Coordinate, Digest: request.Digest, PromotionID: promotionID}, promoteAudit...)
-				case repository.FormatOCI:
-					job, _, err = (ociprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), ociprotocol.PromotionPayload{SourceRepositoryID: source.ID, Name: request.Coordinate, Digest: request.Digest}, promoteAudit...)
-				case repository.FormatConan:
-					reference, revision, _ := strings.Cut(request.Coordinate, "#")
-					job, _, err = (conanprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), conanprotocol.PromotionPayload{SourceRepositoryID: source.ID, Reference: reference, Revision: revision, Digest: request.Digest}, promoteAudit...)
-				case repository.FormatNPM:
-					packageName, version, _ := parseNPMVersionCoordinate(request.Coordinate)
-					job, _, err = (npmprotocol.NativePromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), npmprotocol.PromotionPayload{SourceRepositoryID: source.ID, PackageName: packageName, Version: version, Digest: request.Digest}, promoteAudit...)
-				case repository.FormatPyPI:
-					project, version, _ := parsePyPIVersionCoordinate(request.Coordinate)
-					job, _, err = (NativePyPIPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), PyPIPromotionPayload{SourceRepositoryID: source.ID, Project: project, Version: version, Digest: request.Digest}, promoteAudit...)
-				case repository.FormatGo:
-					modulePath, version, _ := parseGoModuleVersionCoordinate(request.Coordinate)
-					job, _, err = (NativeGoPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), GoPromotionPayload{SourceRepositoryID: source.ID, Module: modulePath, Version: version, Digest: request.Digest}, promoteAudit...)
-				case repository.FormatCargo:
-					name, version, _ := splitVersionCoordinate(request.Coordinate)
-					job, _, err = (NativeCargoPromotion{Store: h.sessions.store}).Enqueue(r.Context(), target.ID, string(params.IdempotencyKey), CargoPromotionPayload{SourceRepositoryID: source.ID, Name: name, Version: version, Digest: request.Digest}, promoteAudit...)
-				}
-			}
-			if errors.Is(err, repository.ErrIdempotencyConflict) {
-				writeHostedProblem(w, http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing promotion job")
-				return
-			}
-			if err != nil {
-				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "enqueue promotion job failed")
+			job, perr := newPromotionService(h).Request(r.Context(), PromotionRequest{Principal: principal, Source: source, TargetID: request.TargetRepositoryId.String(), Coordinate: request.Coordinate, Digest: request.Digest, AptTargetSuite: request.AptTargetSuite, IdempotencyKey: string(params.IdempotencyKey)})
+			if perr != nil {
+				writeHostedProblem(w, perr.Status, perr.Code, perr.Message)
 				return
 			}
 			writeNativeMavenJSON(w, http.StatusAccepted, lifecycleJobResponse(job))
@@ -281,25 +217,33 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryReplication(w http.Respon
 }
 
 func (h generatedRepositoryAPIAdapter) rejectQuarantinedDistribution(w http.ResponseWriter, r *http.Request, principal Principal, source, target repository.HostedRepository, coordinate, digest, operation string) bool {
-	digests, err := h.artifactDistributionDigests(r.Context(), source, coordinate, digest)
-	if errors.Is(err, repository.ErrNotFound) {
-		writeHostedProblem(w, http.StatusNotFound, "not_found", "source artifact is unavailable")
-		return true
-	}
-	if err != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "evaluate distribution artifact identities failed")
-		return true
-	}
-	allowed, err := repository.ArtifactDistributionAllowedForDigests(r.Context(), h.quarantine, source.ID, source.Format, coordinate, digests)
-	if err != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "evaluate artifact quarantine failed")
-		return true
-	}
-	if allowed {
+	rejection := h.checkQuarantinedDistribution(r.Context(), principal, source, target, coordinate, digest, operation)
+	if rejection == nil {
 		return false
 	}
+	writeHostedProblem(w, rejection.Status, rejection.Code, rejection.Message)
+	return true
+}
+
+// checkQuarantinedDistribution refuses a distribution whose artifact is unavailable or quarantined,
+// recording the quarantine denial in the audit log.
+func (h generatedRepositoryAPIAdapter) checkQuarantinedDistribution(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest, operation string) *PromotionError {
+	digests, err := h.artifactDistributionDigests(ctx, source, coordinate, digest)
+	if errors.Is(err, repository.ErrNotFound) {
+		return promotionError(http.StatusNotFound, "not_found", "source artifact is unavailable")
+	}
+	if err != nil {
+		return promotionError(http.StatusInternalServerError, "internal_error", "evaluate distribution artifact identities failed")
+	}
+	allowed, err := repository.ArtifactDistributionAllowedForDigests(ctx, h.quarantine, source.ID, source.Format, coordinate, digests)
+	if err != nil {
+		return promotionError(http.StatusInternalServerError, "internal_error", "evaluate artifact quarantine failed")
+	}
+	if allowed {
+		return nil
+	}
 	if h.audit != nil {
-		_ = h.audit.RecordAudit(r.Context(), repository.AuditRecord{
+		_ = h.audit.RecordAudit(ctx, repository.AuditRecord{
 			GroupName: target.Name, Repository: target.Name, Actor: principal.Actor,
 			Outcome: repository.AuditAccessDenied, OccurredAt: time.Now().UTC(),
 			Format: string(source.Format), Resource: coordinate, Representation: digest,
@@ -308,8 +252,7 @@ func (h generatedRepositoryAPIAdapter) rejectQuarantinedDistribution(w http.Resp
 			CacheDisposition:    "bypass",
 		})
 	}
-	writeHostedProblem(w, http.StatusForbidden, repository.ArtifactQuarantinedReason, "artifact is quarantined and cannot be distributed")
-	return true
+	return promotionError(http.StatusForbidden, repository.ArtifactQuarantinedReason, "artifact is quarantined and cannot be distributed")
 }
 
 func validConanReplicationCoordinate(value string) bool {
