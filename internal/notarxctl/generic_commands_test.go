@@ -82,9 +82,7 @@ func (g *genericGateway) versionJSON(key string, withFiles bool) map[string]any 
 		for _, asset := range g.assets(key) {
 			files = append(files, map[string]any{"path": strings.TrimPrefix(asset.Path, name+"/"+version+"/"), "sha256": strings.TrimPrefix(asset.Digest, "sha256:"), "size": asset.Size})
 		}
-		for _, extra := range g.extraListed {
-			files = append(files, extra)
-		}
+		files = append(files, g.extraListed...)
 		body["files"] = files
 	}
 	return body
