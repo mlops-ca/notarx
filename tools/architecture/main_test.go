@@ -141,6 +141,27 @@ func TestDialectSeamKeepsDriversOutOfTheInterfacePackage(t *testing.T) {
 	}
 }
 
+func TestMigrateRunnerStaysALeaf(t *testing.T) {
+	inv := inventory{Imports: map[string]map[string]bool{
+		"internal/migrate": {"database/sql": true, "example.test/notarx/internal/database": true, "github.com/jackc/pgx/v5": true, mysqlDriver: true,
+			"example.test/notarx/internal/config": true, "example.test/notarx/internal/repository": true, "example.test/notarx/internal/app/x": true},
+	}}
+	want := []string{
+		"internal/migrate -> github.com/go-sql-driver/mysql",
+		"internal/migrate -> github.com/jackc/pgx/v5",
+		"internal/migrate -> internal/app/x",
+		"internal/migrate -> internal/config",
+		"internal/migrate -> internal/repository",
+	}
+	if got := dialectViolations(inv, "example.test/notarx"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %v; want %v", got, want)
+	}
+	inv.Imports["internal/migrate"] = map[string]bool{"example.test/notarx/internal/database": true}
+	if got := dialectViolations(inv, "example.test/notarx"); len(got) != 0 {
+		t.Fatalf("the migrate runner may import internal/database: %v", got)
+	}
+}
+
 func TestFutureFormatModulesCannotImportOtherFormats(t *testing.T) {
 	inv := inventory{Imports: map[string]map[string]bool{
 		"internal/format/raw": {"example.test/notarx/internal/protocol/raw": true, "example.test/notarx/internal/format/oci": true},

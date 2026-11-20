@@ -30,6 +30,7 @@ import (
 	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
 	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
 	"github.com/mlops-ca/notarx/internal/localcapacity"
+	"github.com/mlops-ca/notarx/internal/migrate"
 	"github.com/mlops-ca/notarx/internal/nexusmigration"
 	migrationpg "github.com/mlops-ca/notarx/internal/nexusmigration/pgstore"
 	"github.com/mlops-ca/notarx/internal/nexussource"
@@ -66,6 +67,12 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "backup" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		code := backupops.RunCLI(ctx, os.Args[2:], os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+	}
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := migrate.RunCLI(ctx, os.Args[2:], os.Stdout, os.Stderr)
 		stop()
 		os.Exit(code)
 	}

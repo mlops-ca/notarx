@@ -31,3 +31,4 @@
 3 ./internal/format/rubygems
 3 ./internal/capacity
 3 ./internal/lifecycle
+3 ./internal/migrate

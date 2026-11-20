@@ -7,7 +7,7 @@
 #
 # The connection string comes from NOTARX_DATABASE_URL, taken from the environment
 # or else from /etc/notarx/notarx.env. The packages never run this themselves.
-# Until the Go runner (ADR 0022) lands this drives run-migrations.sh through psql.
+# This drives run-migrations.sh through psql; the Go runner (notarx migrate, ADR 0022) runs beside it as a parity check.
 set -eu
 
 share_dir=${NOTARX_SHARE_DIR:-/usr/share/notarx}

@@ -29,6 +29,20 @@ services:
       - ./migrations/postgres:/migrations:ro
       - ./scripts/run-migrations.sh:/usr/local/bin/run-migrations:ro
 
+  # Started only for the shard that runs ./internal/migrate (scripts/integration-test.sh).
+  mysql:
+    image: mysql:8.4
+    command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_bin"]
+    environment:
+      MYSQL_DATABASE: notarx_test
+      MYSQL_ROOT_PASSWORD: integration-password
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -pintegration-password --silent"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 10s
+
   test:
     image: golang:1.27.4-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280
     depends_on:
@@ -38,6 +52,8 @@ services:
         condition: service_completed_successfully
     environment:
       TEST_DATABASE_URL: postgres://notarx:integration-password@postgres:5432/notarx_test?sslmode=disable
+      # Only the migration runner tests read it (internal/migrate); the mysql service runs for their shard only.
+      TEST_MYSQL_URL: mysql://root:integration-password@mysql:3306/notarx_test?tls=required
       TEST_OBJECT_STORE_ENDPOINT: http://rustfs:9000
       TEST_OBJECT_STORE_ACCESS_KEY: integration-rustfs
       TEST_OBJECT_STORE_SECRET_KEY: integration-password

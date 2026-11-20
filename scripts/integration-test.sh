@@ -50,7 +50,12 @@ trap cleanup EXIT
 docker volume create notarx-go-mod >/dev/null
 docker volume create notarx-go-build >/dev/null
 cleanup
-"${compose[@]}" up -d --wait postgres rustfs
+# The migration runner tests (internal/migrate) also need MySQL; no other package does.
+services=(postgres rustfs)
+for package in "${packages[@]}"; do
+  if [[ "$package" == ./internal/migrate ]]; then services+=(mysql); fi
+done
+"${compose[@]}" up -d --wait "${services[@]}"
 "${compose[@]}" run --rm --no-deps rustfs-ready
 "${compose[@]}" run --rm --no-deps migrate
 ./scripts/migration-runner-check.sh

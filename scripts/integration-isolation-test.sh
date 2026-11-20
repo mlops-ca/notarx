@@ -29,6 +29,10 @@ if [[ "$1" == port ]]; then
   esac
   exit 0
 fi
+if [[ "$*" == *TestPostgresLedgerIsByteIdenticalToTheScript* ]]; then
+  printf -- '--- PASS: TestPostgresLedgerIsByteIdenticalToTheScript (0.00s)\n'
+  exit 0
+fi
 if [[ "$*" == *"PGDATABASE=notarx_foreign_schema_test"* && "$*" == *migrate* ]]; then
   printf 'Database notarx_foreign_schema_test already holds 1 table(s) but no notarx migration ledger.\n' >&2
   exit 1
@@ -83,10 +87,19 @@ app_shard=$("$root/scripts/integration-test.sh" --list | awk '$2 == "./internal/
 while read -r shard; do
   : >"$NOTARX_ISOLATION_LOG"
   "$root/scripts/integration-test.sh" --shard "$shard" >/dev/null
+  # Only the shard that runs ./internal/migrate starts MySQL.
+  if "$root/scripts/integration-test.sh" --list | grep -Fqx "$shard ./internal/migrate"; then
+    expect_logged 'up -d --wait postgres rustfs mysql'
+  elif grep -Fq 'mysql' "$NOTARX_ISOLATION_LOG"; then
+    printf 'shard %s started MySQL, which only the shard of ./internal/migrate needs\n' "$shard" >&2
+    exit 1
+  fi
+  # The runner parity check of migration-runner-check.sh runs in every shard and names ./internal/migrate.
+  shard_calls=$(grep -Fv TestPostgresLedgerIsByteIdenticalToTheScript "$NOTARX_ISOLATION_LOG")
   while read -r listed_shard package; do
     if [[ "$listed_shard" == "$shard" ]]; then
-      grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG" || { printf 'shard %s did not run %s\n' "$shard" "$package" >&2; exit 1; }
-    elif grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG"; then
+      grep -Fqw -- "$package" <<<"$shard_calls" || { printf 'shard %s did not run %s\n' "$shard" "$package" >&2; exit 1; }
+    elif grep -Fqw -- "$package" <<<"$shard_calls"; then
       printf 'shard %s ran %s of shard %s\n' "$shard" "$package" "$listed_shard" >&2
       exit 1
     fi

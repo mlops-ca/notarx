@@ -20,4 +20,5 @@
 ./tools/datagen 95.0
 ./tools/perfload 90.0
 ./internal/dialect/postgres 90.0
+./internal/migrate 90.0
 ./internal/readcache 80.0

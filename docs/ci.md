@@ -360,8 +360,11 @@ second `go test -p 1` finds every compiled package in the build cache, so it spe
 seconds per package relinking or reusing the binary before running it. Each shard pays
 the stack start and its own compilation, about 1.5 minutes, which is why there are
 three shards and not more. Shard 1 holds `./internal/app` and runs the official Cargo
-replay on the host. Without `INTEGRATION_SHARD`, `make integration-test` runs every
-package in one stack, as before.
+replay on the host. The shard that holds `./internal/migrate` (ADR 0022) also starts a
+`mysql:8.4` container for the MySQL runner tests (`TEST_MYSQL_URL`); every shard runs the
+runner parity check of `scripts/migration-runner-check.sh`, which applies the PostgreSQL
+migrations with the Go runner and compares the ledger with `run-migrations.sh`. Without
+`INTEGRATION_SHARD`, `make integration-test` runs every package in one stack, as before.
 
 ## Shared images
 
