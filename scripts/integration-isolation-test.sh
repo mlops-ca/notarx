@@ -7,7 +7,7 @@ trap 'rm -rf "$workdir"' EXIT
 mkdir "$workdir/bin"
 export NOTARX_ISOLATION_LOG="$workdir/docker-calls"
 export NOTARX_ISOLATION_MIGRATIONS
-NOTARX_ISOLATION_MIGRATIONS=$(find "$root/migrations" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
+NOTARX_ISOLATION_MIGRATIONS=$(find "$root/migrations/postgres" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
 cat >"$workdir/bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -63,7 +63,7 @@ chmod +x "$workdir/bin/go"
 export PATH="$workdir/bin:$PATH"
 export COMPOSE_PROJECT_NAME=existing-local-service-must-not-be-touched
 export NOTARX_ISOLATION_LATEST
-NOTARX_ISOLATION_LATEST=$(find "$root/migrations" -maxdepth 1 -name '*.sql' | sort | tail -1)
+NOTARX_ISOLATION_LATEST=$(find "$root/migrations/postgres" -maxdepth 1 -name '*.sql' | sort | tail -1)
 NOTARX_ISOLATION_LATEST=${NOTARX_ISOLATION_LATEST##*/}
 "$root/scripts/integration-test.sh" >/dev/null
 make --no-print-directory -C "$root" integration-down >/dev/null

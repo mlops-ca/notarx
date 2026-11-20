@@ -5,7 +5,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 compose=(docker compose --env-file /dev/null --project-name notarx-integration -f "$root/compose.integration.yml")
 
 second_output=$(cd "$root" && "${compose[@]}" run --rm --no-deps migrate 2>&1)
-expected_skips=$(find "$root/migrations" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')
+expected_skips=$(find "$root/migrations/postgres" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')
 actual_skips=$(printf '%s\n' "$second_output" | grep -c '^Skipping applied migration ' || true)
 if [[ "$actual_skips" -ne "$expected_skips" ]] || printf '%s\n' "$second_output" | grep -q '^Applying migration '; then
   printf '%s\n' "$second_output" >&2
@@ -21,7 +21,7 @@ cleanup() {
   rm -rf "$probe_dir"
 }
 trap cleanup EXIT
-latest_migration=$(find "$root/migrations" -maxdepth 1 -type f -name '*.sql' | sort | tail -n 1)
+latest_migration=$(find "$root/migrations/postgres" -maxdepth 1 -type f -name '*.sql' | sort | tail -n 1)
 probe_name=${latest_migration##*/}
 cp "$latest_migration" "$probe_dir/$probe_name"
 printf '\n-- checksum drift probe\n' >> "$probe_dir/$probe_name"

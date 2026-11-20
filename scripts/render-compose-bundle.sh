@@ -71,7 +71,7 @@ source_dir=$root/deploy/oci-free-tier
 for path in "$source_dir/compose.yml" "$source_dir/Caddyfile" "$source_dir/.env.example" "$source_dir/cloud-init.yaml" "$root/scripts/run-migrations.sh"; do
   [[ -f "$path" ]] || fail "source file $path is missing"
 done
-[[ -d "$root/migrations" ]] || fail "$root/migrations is missing"
+[[ -d "$root/migrations/postgres" ]] || fail "$root/migrations/postgres is missing"
 
 bundle=notarx-compose-$version
 workdir=$(mktemp -d)
@@ -119,7 +119,7 @@ fi
 cp "$root/scripts/run-migrations.sh" "$stage/run-migrations.sh"
 chmod 0755 "$stage/run-migrations.sh"
 mkdir "$stage/migrations"
-cp -R "$root/migrations/." "$stage/migrations/"
+cp -R "$root/migrations/postgres/." "$stage/migrations/"
 chmod -R u+rwX,go+rX,go-w "$stage"
 chmod 0644 "$stage/compose.yml" "$stage/Caddyfile" "$stage/.env.example" "$stage/cloud-init.yaml"
 

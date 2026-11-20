@@ -266,7 +266,7 @@ func Export(ctx context.Context, source FrozenSource, directory string, release 
 	stage = "bundle_publication"
 	m.CompletedAt = time.Now().UTC()
 	m.Metadata = &metaFile
-	m.Database = backupmanifest.DatabaseExport{Format: "pg-custom-v1", File: dumpFile}
+	m.Database = backupmanifest.DatabaseExport{Format: "pg-custom-v1", Dialect: backupmanifest.DialectPostgres, File: dumpFile}
 	m.Schema = backupmanifest.SchemaExport{Format: "notarx-migrations-tsv-v1", File: schemaFile}
 	m.Objects = backupmanifest.ObjectExport{Format: objectFormat, Inventory: indexFile, Count: &r.VerifiedObjects, Bytes: &r.VerifiedBytes, Segments: segmentFiles}
 	if identified, ok := source.(interface{ RootID() string }); ok && objectFormat == backupmanifest.FormatFSBytes {

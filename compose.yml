@@ -229,7 +229,7 @@ services:
       PGPASSWORD: ${NOTARX_POSTGRES_PASSWORD:?set NOTARX_POSTGRES_PASSWORD in .env}
     entrypoint: ["/usr/local/bin/run-migrations"]
     volumes:
-      - ./migrations:/migrations:ro
+      - ./migrations/postgres:/migrations:ro
       - ./scripts/run-migrations.sh:/usr/local/bin/run-migrations:ro
 
   rustfs:

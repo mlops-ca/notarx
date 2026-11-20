@@ -26,7 +26,7 @@ services:
       PGDATABASE: notarx_test
     entrypoint: ["/usr/local/bin/run-migrations"]
     volumes:
-      - ./migrations:/migrations:ro
+      - ./migrations/postgres:/migrations:ro
       - ./scripts/run-migrations.sh:/usr/local/bin/run-migrations:ro
 
   test:

@@ -371,9 +371,14 @@ make integration-test
 The integration suite applies all migrations to a clean PostgreSQL database
 and verifies that a second run is a no-op.
 
+The files live in one directory per database dialect (ADR 0022): today only
+`migrations/postgres/`. Release archives, the compose bundle and the container
+mounts keep a flat `migrations/` directory that holds the files of the one
+dialect they serve.
+
 Rules (ADR 0015):
 
-- The schema starts from `migrations/000001_baseline.sql`, a normalized
+- The schema starts from `migrations/postgres/000001_baseline.sql`, a normalized
   `pg_dump`. Never edit it in place; schema changes are new files
   `000002_<snake_case>.sql`, `000003_...`, with a unique, gap-free 6-digit
   prefix.

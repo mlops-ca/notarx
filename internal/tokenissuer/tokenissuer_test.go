@@ -709,7 +709,7 @@ func TestJWKSServiceIsEvictedByTheScopeNotificationAndBoundedByTheWindow(t *test
 // The statement triggers of migration 000011 and the cache name the service registers must agree on the scope,
 // and the row trigger of migration 000007 must be gone so a bulk write cannot send one notification per row.
 func TestSigningKeyTriggerNamesTheCacheScope(t *testing.T) {
-	body, err := os.ReadFile("../../migrations/000011_read_cache_statement_notifications_accounts.sql")
+	body, err := os.ReadFile("../../migrations/postgres/000011_read_cache_statement_notifications_accounts.sql")
 	if err != nil {
 		t.Fatal(err)
 	}

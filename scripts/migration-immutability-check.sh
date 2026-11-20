@@ -5,7 +5,7 @@
 # Usage: scripts/migration-immutability-check.sh [--root DIR] [--dir RELATIVE_DIR]
 #
 #   --root  repository to check (default: the repository of this script)
-#   --dir   migration directory relative to the root (default: migrations)
+#   --dir   migration directory relative to the root (default: migrations/postgres)
 #
 # Two rules:
 #
@@ -24,7 +24,7 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-dir=migrations
+dir=migrations/postgres
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

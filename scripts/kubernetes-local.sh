@@ -171,7 +171,7 @@ apply_runtime_inputs() {
     --from-literal=NOTARX_APT_SIGNER_TOKEN="$configured_apt_signer_token" \
     --dry-run=client -o yaml | kubectl apply -f -
   kubectl -n "$namespace" create configmap notarx-migrations \
-    --from-file="$root/migrations" \
+    --from-file="$root/migrations/postgres" \
     --from-file=run-migrations.sh="$root/scripts/run-migrations.sh" \
     --dry-run=client -o yaml | kubectl apply -f -
 }

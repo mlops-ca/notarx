@@ -64,9 +64,16 @@ type File struct {
 	SHA256 string `json:"sha256"`
 }
 
+// DialectPostgres is the only database dialect a backup can carry today (ADR 0022).
+// A manifest written before the field existed has no dialect and is a PostgreSQL backup.
+const DialectPostgres = "postgres"
+
 type DatabaseExport struct {
 	Format string `json:"format"`
-	File   File   `json:"file"`
+	// Dialect names the database engine the dump came from, so a restore can refuse a
+	// cross-dialect backup. Empty means PostgreSQL (manifests written before ADR 0022).
+	Dialect string `json:"dialect,omitempty"`
+	File    File   `json:"file"`
 }
 type SchemaExport struct {
 	Format string `json:"format"`
@@ -305,7 +312,7 @@ func validate(m Manifest, now time.Time) (Status, string) {
 	if m.StartedAt.IsZero() || !m.CompletedAt.After(m.StartedAt) || m.CompletedAt.After(now) {
 		return Unknown, "backup_interval_unknown"
 	}
-	if m.Database.Format != "pg-custom-v1" || m.Schema.Format != "notarx-migrations-tsv-v1" || (m.Objects.Format != FormatS3Bytes && m.Objects.Format != FormatFSBytes) {
+	if (m.Database.Dialect != "" && m.Database.Dialect != DialectPostgres) || m.Database.Format != "pg-custom-v1" || m.Schema.Format != "notarx-migrations-tsv-v1" || (m.Objects.Format != FormatS3Bytes && m.Objects.Format != FormatFSBytes) {
 		return Unknown, "export_or_schema_format_unsupported"
 	}
 	if (m.Objects.Format == FormatS3Bytes && (len(m.Objects.Segments) != 0 || m.Objects.RootID != "")) || len(m.Objects.Segments) > MaxSegments {

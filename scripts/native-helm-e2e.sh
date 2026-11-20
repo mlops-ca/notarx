@@ -187,7 +187,7 @@ try:
         except Exception: pass
         time.sleep(0.5)
     else: raise RuntimeError('Owned RustFS failed readiness')
-    command(['docker','cp',str(root/'migrations'),pg+':/migrations'])
+    command(['docker','cp',str(root/'migrations/postgres'),pg+':/migrations'])
     migration=(root/'scripts/run-migrations.sh').read_text()
     migration_args=['docker','exec','-i','--env','PGHOST=127.0.0.1','--env','PGUSER=notarx','--env','PGDATABASE=notarx_test',pg,'sh']
     command(migration_args,input=migration,output='migrations-first.log')

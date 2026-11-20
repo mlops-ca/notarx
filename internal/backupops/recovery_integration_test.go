@@ -555,7 +555,7 @@ func integrationRelease(t *testing.T) Release {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("fixture binary: %v %s", err, out)
 	}
-	copyPrivateFixture(t, "../../migrations", filepath.Join(dir, "migrations"))
+	copyPrivateFixture(t, "../../migrations/postgres", filepath.Join(dir, "migrations"))
 	sum, _, err := describeBinary(filepath.Join(dir, "notarx"))
 	if err != nil {
 		t.Fatal(err)

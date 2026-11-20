@@ -45,7 +45,7 @@ func fixture(t *testing.T) (string, Manifest) {
 	m := Manifest{
 		SchemaVersion: 1, BackupID: "synthetic-backup", State: "complete", StartedAt: start, CompletedAt: start.Add(time.Minute),
 		Gateway:  GatewayIdentity{Version: "synthetic-v1", Revision: strings.Repeat("a", 40), ImageDigest: "sha256:" + strings.Repeat("b", 64)},
-		Database: DatabaseExport{Format: "pg-custom-v1", File: writeFixtureFile(t, dir, "database.dump", []byte("PGDMP-synthetic-not-a-restorable-dump"))},
+		Database: DatabaseExport{Format: "pg-custom-v1", Dialect: DialectPostgres, File: writeFixtureFile(t, dir, "database.dump", []byte("PGDMP-synthetic-not-a-restorable-dump"))},
 		Schema:   SchemaExport{Format: "notarx-migrations-tsv-v1", File: writeFixtureFile(t, dir, "migrations.tsv", []byte("filename\tsha256\n000000_schema_history.sql\t"+strings.Repeat("c", 64)+"\n"))},
 		Writers:  WriterEvidence{ScopeID: "synthetic-scope", InventoryDeclaredComplete: true, Writers: []Writer{{ID: "synthetic-api", StopConfirmed: true, StoppedAt: start.Add(-time.Minute), ConfirmedThrough: start.Add(2 * time.Minute)}}},
 	}
@@ -149,6 +149,7 @@ func TestUnknownVersionsAndQuantitiesRemainUnknown(t *testing.T) {
 	cases := map[string]func(*Manifest){
 		"manifest version":     func(m *Manifest) { m.SchemaVersion = 2 },
 		"schema format":        func(m *Manifest) { m.Schema.Format = "future-schema-v2" },
+		"database dialect":     func(m *Manifest) { m.Database.Dialect = "mysql" },
 		"legacy schema format": func(m *Manifest) { m.Schema.Format = "gateway-migrations-tsv-v1" },
 		"export format":        func(m *Manifest) { m.Objects.Format = "rustfs-physical-v1" },
 		"incomplete set":       func(m *Manifest) { m.State = "incomplete" },

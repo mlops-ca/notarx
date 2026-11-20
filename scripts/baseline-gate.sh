@@ -42,17 +42,17 @@ if [[ -n "$override" && "$override" != 0.1.0 ]]; then
   fail "version_override must be 0.1.0 while no stable tag exists, got $override"
 fi
 
-found=$(repo_git ls-tree -r --name-only "$sha" -- migrations/)
-[[ -n "$found" ]] || fail "migrations/ holds no file at $sha; 000001_baseline.sql is required"
-if [[ "$found" != migrations/000001_baseline.sql ]]; then
+found=$(repo_git ls-tree -r --name-only "$sha" -- migrations/postgres/)
+[[ -n "$found" ]] || fail "migrations/postgres/ holds no file at $sha; 000001_baseline.sql is required"
+if [[ "$found" != migrations/postgres/000001_baseline.sql ]]; then
   # Every file other than the baseline is reported, so the cause is visible at once.
-  extra=$(grep -v -x 'migrations/000001_baseline.sql' <<<"$found" | paste -sd ' ' -)
+  extra=$(grep -v -x 'migrations/postgres/000001_baseline.sql' <<<"$found" | paste -sd ' ' -)
   if [[ -z "$extra" ]]; then
-    fail "migrations/ at $sha is not exactly 000001_baseline.sql"
+    fail "migrations/postgres/ at $sha is not exactly 000001_baseline.sql"
   fi
-  if ! grep -q -x 'migrations/000001_baseline.sql' <<<"$found"; then
-    fail "migrations/000001_baseline.sql is missing at $sha (found: $extra)"
+  if ! grep -q -x 'migrations/postgres/000001_baseline.sql' <<<"$found"; then
+    fail "migrations/postgres/000001_baseline.sql is missing at $sha (found: $extra)"
   fi
-  fail "migrations/ at $sha holds more than the baseline before the first stable release: $extra"
+  fail "migrations/postgres/ at $sha holds more than the baseline before the first stable release: $extra"
 fi
-printf 'baseline-gate: %s holds exactly migrations/000001_baseline.sql\n' "$sha"
+printf 'baseline-gate: %s holds exactly migrations/postgres/000001_baseline.sql\n' "$sha"

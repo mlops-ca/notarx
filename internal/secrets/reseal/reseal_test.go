@@ -11,7 +11,7 @@ import (
 // TestTargetsCoverSealedColumns fails when the baseline schema gains a column
 // that looks sealed but is not resealed, which would block dropping a key.
 func TestTargetsCoverSealedColumns(t *testing.T) {
-	files, err := filepath.Glob("../../../migrations/*.sql")
+	files, err := filepath.Glob("../../../migrations/postgres/*.sql")
 	if err != nil || len(files) == 0 {
 		t.Fatalf("migrations: %v %v", files, err)
 	}
