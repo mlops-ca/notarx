@@ -34,7 +34,9 @@ func (s *PostgresStore) TransitionHelmGovernance(ctx context.Context, in HelmGov
 		return HelmPublication{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	p, err := s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, in.RepositoryID, in.Name, in.Version))
+	// A transition needs the identity and governance state only, so an externalised chart.yaml is not read (and a
+	// missing object does not block it): the returned publication leaves it empty.
+	p, _, err := scanHelmPublicationRef(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, in.RepositoryID, in.Name, in.Version))
 	if err != nil {
 		return HelmPublication{}, err
 	}

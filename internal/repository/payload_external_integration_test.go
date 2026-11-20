@@ -5,9 +5,11 @@ package repository
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -227,5 +229,123 @@ func TestPostgresScanSBOMBodyAboveAndBelowTheThreshold(t *testing.T) {
 	}
 	if payloads.puts != 1 {
 		t.Fatalf("only the large SBOM belongs in the object store, got %d writes", payloads.puts)
+	}
+}
+
+// connectionWatchPayloadStore is a payload store that counts the calls made while a pool connection is checked out
+// beyond the baseline: a call inside a transaction (or any other statement) holds one, so a call with the pool
+// idle proves no transaction, and so no row or advisory lock, waits on the object store.
+type connectionWatchPayloadStore struct {
+	*memoryPayloadStore
+	db       *sql.DB
+	baseline int
+	inTx     atomic.Int64
+}
+
+func watchPayloadStore(t *testing.T, store *PostgresStore, inlineMax int) *connectionWatchPayloadStore {
+	t.Helper()
+	watch := &connectionWatchPayloadStore{memoryPayloadStore: newMemoryPayloadStore(), db: store.db, baseline: store.db.Stats().InUse}
+	store.SetPayloadStore(watch, inlineMax)
+	return watch
+}
+
+func (w *connectionWatchPayloadStore) observe() {
+	if w.db.Stats().InUse > w.baseline {
+		w.inTx.Add(1)
+	}
+}
+
+func (w *connectionWatchPayloadStore) Put(ctx context.Context, data []byte) (string, string, error) {
+	w.observe()
+	return w.memoryPayloadStore.Put(ctx, data)
+}
+
+func (w *connectionWatchPayloadStore) Get(ctx context.Context, digest string) ([]byte, error) {
+	w.observe()
+	return w.memoryPayloadStore.Get(ctx, digest)
+}
+
+func requireNoPayloadCallInTransaction(t *testing.T, watch *connectionWatchPayloadStore) {
+	t.Helper()
+	if watch.puts == 0 {
+		t.Fatal("the run never wrote an externalised payload")
+	}
+	if n := watch.inTx.Load(); n != 0 {
+		t.Fatalf("%d object store calls ran while a database connection was checked out", n)
+	}
+}
+
+func TestPostgresNuGetAndHelmCommitsNeverCallThePayloadStoreInATransaction(t *testing.T) {
+	store := newPostgresNuGetStore(t)
+	watch := watchPayloadStore(t, store, 1)
+	testNuGetStoreContract(t, store)
+	testNuGetSourceStoreContract(t, store, func(t *testing.T, repository, actor string) func() {
+		return testsupport.FailSecurityAudits(t, store.db, repository, actor)
+	})
+	testHelmStoreContract(t, store)
+	testHelmSourceStoreContract(t, store)
+	requireNoPayloadCallInTransaction(t, watch)
+}
+
+func TestPostgresReplicationNeverCallsThePayloadStoreInATransaction(t *testing.T) {
+	t.Run("nuget", func(t *testing.T) {
+		store := newPostgresNuGetStore(t)
+		watch := watchPayloadStore(t, store, 1)
+		testNuGetReplicationStoreContract(t, store)
+		requireNoPayloadCallInTransaction(t, watch)
+	})
+	t.Run("helm", func(t *testing.T) {
+		store := newPostgresNuGetStore(t)
+		watch := watchPayloadStore(t, store, 1)
+		testHelmReplicationStoreContract(t, store)
+		requireNoPayloadCallInTransaction(t, watch)
+	})
+}
+
+func TestPostgresNPMNeverCallsThePayloadStoreInATransaction(t *testing.T) {
+	store, _, repo := openPostgresNPMDistTagStores(t)
+	watch := watchPayloadStore(t, store, 1)
+	exerciseNPMMetadataContract(t, store, repo.ID)
+	requireNoPayloadCallInTransaction(t, watch)
+}
+
+func TestPostgresNPMMetadataAndTombstoneSurviveAMissingManifestObject(t *testing.T) {
+	store, _, repo := openPostgresNPMDistTagStores(t)
+	payloads := externalizeEverything(t, store)
+	ctx := context.Background()
+	const name = "@scope/missing"
+	publishNPMDistTagFixture(t, store, repo.ID, name, "1.0.0", map[string]string{"latest": "1.0.0"})
+	publishNPMDistTagFixture(t, store, repo.ID, name, "1.1.0", map[string]string{"next": "1.1.0"})
+	var revision int64
+	if err := store.db.QueryRowContext(ctx, `SELECT revision FROM native_npm_packages WHERE repository_id=$1::uuid AND name=$2`, repo.ID, name).Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	payloads.mu.Lock()
+	clear(payloads.objects)
+	payloads.mu.Unlock()
+	if _, err := store.GetNPMPackage(ctx, repo.ID, name); err == nil {
+		t.Fatal("a read that needs the manifests must fail when their objects are gone")
+	}
+	mutation := NPMMetadataMutation{RepositoryID: repo.ID, PackageName: name, ExpectedRevision: revision,
+		Deprecations: map[string]string{"1.0.0": "use 1.1.0"}, Audit: npmDistTagMutation(repo.ID, name, "", "").Audit}
+	mutation.Audit.Operation = "npm.deprecate"
+	changed, err := store.UpdateNPMMetadata(ctx, mutation)
+	if err != nil || !changed.Changed {
+		t.Fatalf("deprecate without the manifest objects: %#v %v", changed, err)
+	}
+	mutation.ExpectedRevision, mutation.Deprecations = changed.Revision, nil
+	mutation.Unpublish, mutation.DistTags = []string{"1.0.0"}, map[string]string{"latest": "1.1.0", "next": "1.1.0"}
+	mutation.Audit.Operation = "npm.unpublish"
+	if changed, err = store.UpdateNPMMetadata(ctx, mutation); err != nil || !changed.Changed {
+		t.Fatalf("unpublish without the manifest objects: %#v %v", changed, err)
+	}
+	if _, err = store.TombstoneNPMVersion(ctx, repo.ID, name, "1.1.0"); err != nil {
+		t.Fatalf("tombstone without the manifest object: %v", err)
+	}
+	if _, err = store.RestoreNPMVersion(ctx, NPMRestoreRequest{RepositoryID: repo.ID, PackageName: name, Version: "1.1.0"}); err != nil {
+		t.Fatalf("restore without the manifest object: %v", err)
+	}
+	if _, err = store.GetNPMVersion(ctx, repo.ID, name, "1.1.0"); err == nil {
+		t.Fatal("only the caller that needs the manifest fails")
 	}
 }

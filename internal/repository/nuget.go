@@ -56,6 +56,8 @@ type NativeNuGetStore interface {
 	ExpireNuGetSessions(context.Context, time.Time, int) ([]NuGetSession, error)
 	MarkNuGetSessionCollected(context.Context, string, string) error
 	LockNuGetPublication(context.Context, string, string, string) (context.Context, func(), error)
+	// TransitionNuGetGovernance returns the publication's identity and governance state; a store that keeps the
+	// nuspec in the object store does not read it, so the returned Nuspec may be empty.
 	TransitionNuGetGovernance(context.Context, NuGetGovernanceChange) (NuGetPublication, error)
 	ReplaceNuGetQuarantineReadPolicy(context.Context, string, RepositoryQuarantineReadPolicy, string, string) (RepositoryQuarantineReadPolicy, error)
 	RepositoryQuarantineReadPolicyStore

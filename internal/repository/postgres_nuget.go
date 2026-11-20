@@ -34,21 +34,27 @@ func scanNuGetSession(row nuGetScanner) (NuGetSession, error) {
 	return v, err
 }
 func (s *PostgresStore) scanNuGetPublication(ctx context.Context, row nuGetScanner) (NuGetPublication, error) {
-	var v NuGetPublication
-	var updated sql.NullTime
-	var ref payloadRef
-	err := row.Scan(&v.RepositoryID, &v.PackageID, &v.Version, &v.SessionID, &v.Digest, &v.ObjectKey, &v.Size, &v.MetadataJSON, &v.Nuspec, &v.Publisher, &v.PublishedAt, &v.SourceVersion, &v.SourceURL, &v.RegistrationURL, &v.Governance.Version, &v.Governance.Listed, &v.Governance.Tombstoned, &v.Governance.Quarantined, &updated, &v.Governance.UpdatedBy, &v.Governance.Reason, &ref.digest, &ref.size, &ref.key)
-	if errors.Is(err, sql.ErrNoRows) {
-		return v, ErrNotFound
-	}
-	if updated.Valid {
-		v.Governance.UpdatedAt = updated.Time
-	}
+	v, ref, err := scanNuGetPublicationRef(row)
 	if err != nil {
 		return v, err
 	}
 	v.Nuspec, err = s.internalize(ctx, v.Nuspec, ref)
 	return v, err
+}
+
+// scanNuGetPublicationRef reads a publication row. The nuspec of an externalised one is left empty; ref names it.
+func scanNuGetPublicationRef(row nuGetScanner) (NuGetPublication, payloadRef, error) {
+	var v NuGetPublication
+	var updated sql.NullTime
+	var ref payloadRef
+	err := row.Scan(&v.RepositoryID, &v.PackageID, &v.Version, &v.SessionID, &v.Digest, &v.ObjectKey, &v.Size, &v.MetadataJSON, &v.Nuspec, &v.Publisher, &v.PublishedAt, &v.SourceVersion, &v.SourceURL, &v.RegistrationURL, &v.Governance.Version, &v.Governance.Listed, &v.Governance.Tombstoned, &v.Governance.Quarantined, &updated, &v.Governance.UpdatedBy, &v.Governance.Reason, &ref.digest, &ref.size, &ref.key)
+	if errors.Is(err, sql.ErrNoRows) {
+		return v, ref, ErrNotFound
+	}
+	if updated.Valid {
+		v.Governance.UpdatedAt = updated.Time
+	}
+	return v, ref, err
 }
 
 func (s *PostgresStore) nuGetTransaction(ctx context.Context, repo, sourceVersion string) (*sql.Tx, string, error) {
@@ -170,6 +176,14 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 	if err != nil {
 		return NuGetPublication{}, false, err
 	}
+	// A large nuspec goes to the object store before the transaction opens, so its locks and its connection never
+	// wait on the store. The transaction re-reads the session and stores again only if the payload changed meanwhile.
+	var staged stagedPayload
+	if before.State == "staged" {
+		if staged, err = s.stagePayload(ctx, before.Nuspec); err != nil {
+			return NuGetPublication{}, false, err
+		}
+	}
 	tx, name, err := s.nuGetTransaction(ctx, before.RepositoryID, before.SourceVersion)
 	if err != nil {
 		return NuGetPublication{}, false, err
@@ -183,11 +197,16 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 		return NuGetPublication{}, false, ErrNuGetPublicationConflict
 	}
 	if session.State == "committed" {
-		p, err := s.scanNuGetPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid`, id))
+		p, ref, err := scanNuGetPublicationRef(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid`, id))
 		if err != nil {
 			return NuGetPublication{}, false, err
 		}
-		return p, true, tx.Commit()
+		if err = tx.Commit(); err != nil {
+			return NuGetPublication{}, false, err
+		}
+		// The nuspec is read after the commit: the transaction holds no lock while the object store answers.
+		p.Nuspec, err = s.internalize(ctx, p.Nuspec, ref)
+		return p, true, err
 	}
 	if session.State == "expired" || !session.ExpiresAt.After(time.Now()) {
 		return NuGetPublication{}, false, ErrNuGetSessionExpired
@@ -199,7 +218,7 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 	if err = tx.QueryRowContext(ctx, `UPDATE native_nuget_publication_sessions SET state='committed',committed_at=now() WHERE id=$1::uuid RETURNING committed_at`, id).Scan(&published); err != nil {
 		return NuGetPublication{}, false, err
 	}
-	p, err := s.insertNuGetPublicationFromSession(ctx, tx, session)
+	p, err := s.insertNuGetPublicationFromSession(ctx, tx, session, staged)
 	if err != nil {
 		return NuGetPublication{}, false, err
 	}
@@ -298,13 +317,28 @@ func (s *PostgresStore) LockNuGetPublication(ctx context.Context, repo, id, vers
 }
 
 // insertNuGetPublicationFromSession publishes a staged session: the row copies the session's
-// metadata and moves the nuspec to the object store when it is above the inline threshold. The object is
-// written inside the commit transaction (issue #501 moves it out).
-func (s *PostgresStore) insertNuGetPublicationFromSession(ctx context.Context, tx *sql.Tx, session NuGetSession) (NuGetPublication, error) {
-	nuspec, ref, err := s.externalizeIn(ctx, tx, session.Nuspec)
+// metadata and keeps the nuspec in the object store when it is above the inline threshold. The caller stages the
+// object before its transaction opens; a payload staged for other bytes is stored here, the behaviour before
+// staging. The returned publication carries the session's nuspec, so no object is read.
+func (s *PostgresStore) insertNuGetPublicationFromSession(ctx context.Context, tx *sql.Tx, session NuGetSession, staged stagedPayload) (NuGetPublication, error) {
+	nuspec, ref, err := staged.externalizeIn(ctx, s, tx, session.Nuspec)
 	if err != nil {
 		return NuGetPublication{}, err
 	}
 	bodyDigest, bodySize, bodyKey := ref.columns()
-	return s.scanNuGetPublication(ctx, tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed,body_digest,body_size,body_key)SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,$2::bytea,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true),$3::text,$4::bigint,$5::text FROM native_nuget_publication_sessions WHERE id=$1::uuid RETURNING `+nuGetPublicationColumns, session.ID, nuspec, bodyDigest, bodySize, bodyKey))
+	p, _, err := scanNuGetPublicationRef(tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed,body_digest,body_size,body_key)SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,$2::bytea,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true),$3::text,$4::bigint,$5::text FROM native_nuget_publication_sessions WHERE id=$1::uuid RETURNING `+nuGetPublicationColumns, session.ID, nuspec, bodyDigest, bodySize, bodyKey))
+	if err == nil && ref.external() {
+		p.Nuspec = session.Nuspec
+	}
+	return p, err
+}
+
+// stageNuGetSession externalises the nuspec of a staged session before the transaction that commits it opens. A
+// session that cannot be read or is not staged stages nothing: the transaction reports its own state.
+func (s *PostgresStore) stageNuGetSession(ctx context.Context, id string) (stagedPayload, error) {
+	session, err := s.GetNuGetSession(ctx, id)
+	if err != nil || session.State != "staged" {
+		return stagedPayload{}, nil
+	}
+	return s.stagePayload(ctx, session.Nuspec)
 }

@@ -29,6 +29,12 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		}
 		manifests[v.Version] = npmManifest{inline: inline, ref: ref}
 	}
+	// The manifests of the versions already stored are compared with the incoming ones, so they are read before the
+	// transaction opens too.
+	prefetched, err := s.prefetchNPMManifests(ctx, c)
+	if err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -51,10 +57,11 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_npm_packages(repository_id,name,dist_tags)VALUES($1,$2,'{}'::jsonb)ON CONFLICT DO NOTHING`, c.RepositoryID, c.PackageName); err != nil {
 		return err
 	}
-	pkg, err := s.readNPMPackage(ctx, tx, c.RepositoryID, c.PackageName)
+	read, err := s.readNPMPackage(ctx, tx, c.RepositoryID, c.PackageName)
 	if err != nil {
 		return err
 	}
+	pkg := read.NPMPackage
 	if pkg.SourceEndpoint != "" || pkg.Negative {
 		return ErrNameExists
 	}
@@ -82,6 +89,12 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 			return ErrArtifactQuarantined
 		}
 		if old, exists := oldVersions[v.Version]; exists {
+			if old.State == "" || old.State == "visible" {
+				// A manifest that changed since the prefetch is read here, the behaviour before prefetching.
+				if old.Manifest, err = s.internalizeWith(ctx, old.Manifest, read.refs[v.Version], prefetched); err != nil {
+					return err
+				}
+			}
 			if !NPMImportVersionMatches(old, v) {
 				return ErrNameExists
 			}
@@ -123,4 +136,44 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		return err
 	}
 	return tx.Commit()
+}
+
+// prefetchNPMManifests reads the manifests of the visible stored versions the closure imports again, by digest, so
+// the import transaction compares them without waiting on the object store.
+func (s *PostgresStore) prefetchNPMManifests(ctx context.Context, c NPMImportClosure) (payloadPrefetch, error) {
+	if s.payloads.Load() == nil {
+		return nil, nil
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT repository_id::text,package_name,version,digest,integrity,shasum,
+		       tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at,body_digest,body_size,body_key
+		FROM native_npm_versions
+		WHERE repository_id=$1::uuid AND package_name=$2 AND state='visible' AND body_digest IS NOT NULL`, c.RepositoryID, c.PackageName)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	scanned, err := scanNPMVersionRows(rows)
+	if err != nil {
+		return nil, err
+	}
+	_ = rows.Close()
+	incoming := make(map[string]bool, len(c.Versions))
+	for _, v := range c.Versions {
+		incoming[v.Version] = true
+	}
+	var wanted []scannedNPMVersion
+	for _, version := range scanned {
+		if incoming[version.Version] {
+			wanted = append(wanted, version)
+		}
+	}
+	if err = s.resolveNPMManifests(ctx, wanted); err != nil {
+		return nil, err
+	}
+	prefetched := payloadPrefetch{}
+	for _, version := range wanted {
+		prefetched.add(version.ref, version.Manifest)
+	}
+	return prefetched, nil
 }

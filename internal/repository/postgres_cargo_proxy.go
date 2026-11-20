@@ -72,6 +72,10 @@ func (s *PostgresStore) PutCargoProxyIndex(ctx context.Context, value CargoProxy
 		return err
 	}
 	bodyDigest, bodySize, bodyKey := ref.columns()
+	prefetched, err := s.prefetchCargoProxyIndex(ctx, value.RepositoryID, identity.CollisionKey)
+	if err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -83,10 +87,7 @@ func (s *PostgresStore) PutCargoProxyIndex(ctx context.Context, value CargoProxy
 	if err := checkProxySourceVersion(ctx, tx, value.RepositoryID, value.SourceVersion); err != nil {
 		return err
 	}
-	var current CargoProxyIndex
-	err = s.scanCargoProxyIndex(ctx, tx.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
-		upstream_modified,fetched_at,expires_at,source_version,body_digest,body_size,body_key FROM native_cargo_proxy_indexes
-		WHERE repository_id=$1::uuid AND collision_key=$2 FOR UPDATE`, value.RepositoryID, identity.CollisionKey), &current)
+	current, err := s.lockCargoProxyIndex(ctx, tx, value.RepositoryID, identity.CollisionKey, prefetched)
 	var previous *CargoProxyIndex
 	if err == nil {
 		previous = &current
@@ -159,6 +160,10 @@ func (s *PostgresStore) PutCargoProxyCrate(ctx context.Context, value CargoProxy
 	if err != nil || value.RepositoryID == "" {
 		return ErrInvalidCargoIdentity
 	}
+	prefetched, err := s.prefetchCargoProxyIndex(ctx, value.RepositoryID, identity.CollisionKey)
+	if err != nil {
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -170,10 +175,7 @@ func (s *PostgresStore) PutCargoProxyCrate(ctx context.Context, value CargoProxy
 	if err := checkProxySourceVersion(ctx, tx, value.RepositoryID, value.SourceVersion); err != nil {
 		return err
 	}
-	var index CargoProxyIndex
-	err = s.scanCargoProxyIndex(ctx, tx.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
-		upstream_modified,fetched_at,expires_at,source_version,body_digest,body_size,body_key FROM native_cargo_proxy_indexes
-		WHERE repository_id=$1::uuid AND collision_key=$2 FOR UPDATE`, value.RepositoryID, identity.CollisionKey), &index)
+	index, err := s.lockCargoProxyIndex(ctx, tx, value.RepositoryID, identity.CollisionKey, prefetched)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ErrNotFound
 	}
@@ -208,13 +210,57 @@ func (s *PostgresStore) PutCargoProxyCrate(ctx context.Context, value CargoProxy
 
 func (s *PostgresStore) scanCargoProxyIndex(ctx context.Context, row interface{ Scan(...any) error }, value *CargoProxyIndex) error {
 	var ref payloadRef
-	if err := row.Scan(&value.RepositoryID, &value.Name, &value.Body, &value.Status, &value.ETag,
-		&value.Modified, &value.FetchedAt, &value.ExpiresAt, &value.SourceVersion, &ref.digest, &ref.size, &ref.key); err != nil {
+	if err := scanCargoProxyIndexRef(row, value, &ref); err != nil {
 		return err
 	}
 	body, err := s.internalize(ctx, value.Body, ref)
 	value.Body = body
 	return err
+}
+
+// scanCargoProxyIndexRef reads an index row. The body of an externalised one is left empty; ref names it.
+func scanCargoProxyIndexRef(row interface{ Scan(...any) error }, value *CargoProxyIndex, ref *payloadRef) error {
+	return row.Scan(&value.RepositoryID, &value.Name, &value.Body, &value.Status, &value.ETag,
+		&value.Modified, &value.FetchedAt, &value.ExpiresAt, &value.SourceVersion, &ref.digest, &ref.size, &ref.key)
+}
+
+// prefetchCargoProxyIndex reads the externalised body of an index before the transaction that locks the row opens,
+// so the transaction validates against it without waiting on the object store. A missing row or an inline body
+// prefetches nothing.
+func (s *PostgresStore) prefetchCargoProxyIndex(ctx context.Context, repositoryID, collisionKey string) (payloadPrefetch, error) {
+	var value CargoProxyIndex
+	var ref payloadRef
+	err := scanCargoProxyIndexRef(s.db.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
+		upstream_modified,fetched_at,expires_at,source_version,body_digest,body_size,body_key FROM native_cargo_proxy_indexes
+		WHERE repository_id=$1::uuid AND collision_key=$2`, repositoryID, collisionKey), &value, &ref)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && !ref.external() {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	body, err := s.internalize(ctx, nil, ref)
+	if err != nil {
+		return nil, err
+	}
+	prefetched := payloadPrefetch{}
+	prefetched.add(ref, body)
+	return prefetched, nil
+}
+
+// lockCargoProxyIndex locks and reads an index row. An externalised body comes from prefetched when it is still the
+// row's body, and from the object store otherwise, the behaviour before prefetching.
+func (s *PostgresStore) lockCargoProxyIndex(ctx context.Context, tx *sql.Tx, repositoryID, collisionKey string, prefetched payloadPrefetch) (CargoProxyIndex, error) {
+	var value CargoProxyIndex
+	var ref payloadRef
+	if err := scanCargoProxyIndexRef(tx.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
+		upstream_modified,fetched_at,expires_at,source_version,body_digest,body_size,body_key FROM native_cargo_proxy_indexes
+		WHERE repository_id=$1::uuid AND collision_key=$2 FOR UPDATE`, repositoryID, collisionKey), &value, &ref); err != nil {
+		return value, err
+	}
+	var err error
+	value.Body, err = s.internalizeWith(ctx, value.Body, ref, prefetched)
+	return value, err
 }
 
 func lockActiveCargoProxyRepository(ctx context.Context, tx *sql.Tx, repositoryID string) error {

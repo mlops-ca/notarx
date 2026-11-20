@@ -171,19 +171,22 @@ func helmReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job) (di
 	}
 	return a, nil
 }
-func (s *PostgresStore) helmReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (HelmPublication, error) {
+
+// helmReplicationSourceTx locks the source publication. Its chart.yaml stays in the object store when it is
+// externalised: ref names it, and alignPayloads compares it with another payload without a read.
+func (s *PostgresStore) helmReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (HelmPublication, payloadRef, error) {
 	if index < 0 || index >= len(j.Items) {
-		return HelmPublication{}, dist.ErrInvalid
+		return HelmPublication{}, payloadRef{}, dist.ErrInvalid
 	}
 	i := j.Items[index]
-	p, err := s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR SHARE`, j.SourceRepositoryID, i.Name, i.Version))
+	p, ref, err := scanHelmPublicationRef(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR SHARE`, j.SourceRepositoryID, i.Name, i.Version))
 	if errors.Is(err, ErrNotFound) {
-		return p, dist.ErrSourceChanged
+		return p, ref, dist.ErrSourceChanged
 	}
 	if err != nil {
-		return p, err
+		return p, ref, err
 	}
-	return p, helmReplicationSource(p, i)
+	return p, ref, helmReplicationSource(p, i)
 }
 func saveHelmReplicationItem(ctx context.Context, tx *sql.Tx, j dist.Job, index int) error {
 	i := j.Items[index]
@@ -242,7 +245,7 @@ func (s *PostgresStore) CreateHelmReplication(ctx context.Context, j dist.Job, c
 	}
 	extra := int64(0)
 	for i, item := range j.Items {
-		if _, err = s.helmReplicationSourceTx(ctx, tx, j, i); err != nil {
+		if _, _, err = s.helmReplicationSourceTx(ctx, tx, j, i); err != nil {
 			return dist.Job{}, false, err
 		}
 		var exists bool
@@ -401,7 +404,7 @@ func (s *PostgresStore) BindHelmReplicationSession(ctx context.Context, lease di
 	if err = helmReplicationCheck(ctx, check, a); err != nil {
 		return dist.Job{}, err
 	}
-	source, err := s.helmReplicationSourceTx(ctx, tx, j, index)
+	source, _, err := s.helmReplicationSourceTx(ctx, tx, j, index)
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -435,6 +438,11 @@ func (s *PostgresStore) BindHelmReplicationSession(ctx context.Context, lease di
 	return j, tx.Commit()
 }
 func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease dist.Lease, index int, proof dist.Commit, check dist.Check) (dist.Job, error) {
+	// The target's chart.yaml reaches the object store before the transaction opens (see CommitHelmPublication).
+	staged, err := s.stageHelmSession(ctx, proof.SessionID)
+	if err != nil {
+		return dist.Job{}, err
+	}
 	tx, j, err := s.helmReplicationTransaction(ctx, lease)
 	if err != nil {
 		return dist.Job{}, err
@@ -447,7 +455,7 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 	if err = helmReplicationCheck(ctx, check, a); err != nil {
 		return dist.Job{}, err
 	}
-	source, err := s.helmReplicationSourceTx(ctx, tx, j, index)
+	source, sourceRef, err := s.helmReplicationSourceTx(ctx, tx, j, index)
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -465,8 +473,9 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 	if session.RepositoryID != j.TargetRepositoryID {
 		return dist.Job{}, dist.ErrTargetBlocked
 	}
-	target, err := s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.Name, item.Version))
+	target, targetRef, err := scanHelmPublicationRef(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.Name, item.Version))
 	if err == nil {
+		alignPayloads(&source.ChartYAML, sourceRef, &target.ChartYAML, targetRef)
 		if err = helmReplicationExisting(source, target); err != nil {
 			return dist.Job{}, err
 		}
@@ -475,6 +484,7 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 		}
 		item.Result = "already_present"
 	} else if errors.Is(err, ErrNotFound) {
+		alignPayloads(&source.ChartYAML, sourceRef, &session.ChartYAML, payloadRef{})
 		if err = helmReplicationSession(source, session, j.TargetRepositoryID); err != nil {
 			return dist.Job{}, err
 		}
@@ -484,7 +494,7 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 		if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='committed',committed_at=clock_timestamp() WHERE id=$1::uuid`, session.ID); err != nil {
 			return dist.Job{}, err
 		}
-		target, err = s.insertHelmPublicationFromSession(ctx, tx, session)
+		target, err = s.insertHelmPublicationFromSession(ctx, tx, session, staged)
 		if err != nil {
 			return dist.Job{}, err
 		}
@@ -609,7 +619,7 @@ func (s *PostgresStore) AuthorizeHelmReplicationItem(ctx context.Context, lease 
 	if err = helmReplicationCheck(ctx, check, a); err != nil {
 		return err
 	}
-	if _, err = s.helmReplicationSourceTx(ctx, tx, j, index); err != nil {
+	if _, _, err = s.helmReplicationSourceTx(ctx, tx, j, index); err != nil {
 		return err
 	}
 	return tx.Commit()
