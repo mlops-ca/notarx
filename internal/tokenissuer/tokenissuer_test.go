@@ -706,14 +706,24 @@ func TestJWKSServiceIsEvictedByTheScopeNotificationAndBoundedByTheWindow(t *test
 	}
 }
 
-// The trigger of migration 000007 and the cache name the service registers must agree on the scope.
+// The statement triggers of migration 000011 and the cache name the service registers must agree on the scope,
+// and the row trigger of migration 000007 must be gone so a bulk write cannot send one notification per row.
 func TestSigningKeyTriggerNamesTheCacheScope(t *testing.T) {
-	body, err := os.ReadFile("../../migrations/000007_read_cache_account_state.sql")
+	body, err := os.ReadFile("../../migrations/000011_read_cache_statement_notifications_accounts.sql")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "ON public.token_signing_keys FOR EACH ROW EXECUTE FUNCTION public.notarx_notify_cache('" + CacheScope + "', '')"; !strings.Contains(string(body), want) {
-		t.Fatalf("migration 000007 does not announce %q on token_signing_keys", CacheScope)
+	for _, event := range []string{"INSERT", "UPDATE", "DELETE"} {
+		want := "AFTER " + event + " ON public.token_signing_keys "
+		if !strings.Contains(string(body), want) {
+			t.Fatalf("migration 000011 has no %s statement trigger on token_signing_keys", event)
+		}
+	}
+	if want := "FOR EACH STATEMENT EXECUTE FUNCTION public.notarx_notify_cache_statement_scope('" + CacheScope + "')"; !strings.Contains(string(body), want) {
+		t.Fatalf("migration 000011 does not announce %q on token_signing_keys", CacheScope)
+	}
+	if want := "DROP TRIGGER token_signing_keys_notify_cache ON public.token_signing_keys"; !strings.Contains(string(body), want) {
+		t.Fatalf("migration 000011 does not drop the row trigger of token_signing_keys")
 	}
 }
 
