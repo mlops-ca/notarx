@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/app"
@@ -14,6 +15,7 @@ import (
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
 	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/lifecycle"
 	"github.com/mlops-ca/notarx/internal/nexusmigration"
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 	conanprotocol "github.com/mlops-ca/notarx/internal/protocol/conan"
@@ -26,7 +28,7 @@ import (
 type backgroundRuntime struct {
 	migration           *nexusmigration.Service
 	migrationSchedules  *nexusmigration.ScheduleService
-	store               *repository.PostgresStore
+	store               *brokeredStore
 	objects             app.ObjectStore
 	taskQueue           *app.PostgresCacheTaskQueue
 	maintenance         *app.CacheMaintenance
@@ -44,11 +46,27 @@ type backgroundRuntime struct {
 	rubyGemsReplication *rubydist.Worker
 }
 
-func (r backgroundRuntime) Start(ctx context.Context, cfg config.Config) {
+// Start starts the background work of the node's roles and returns a function that waits for the work that
+// must finish before the stores close: the claim broker's release of what it still holds once ctx ends.
+func (r backgroundRuntime) Start(ctx context.Context, cfg config.Config) (wait func()) {
+	wait = func() {}
 	if cfg.HasRole(config.NodeRoleScheduler) {
 		r.startSchedulers(ctx, cfg, app.NativeRepositoryRetention{Store: r.store, Metrics: r.metrics})
 	}
 	if cfg.HasRole(config.NodeRoleWorker) {
+		brokerDone := make(chan struct{})
+		go func() {
+			defer close(brokerDone)
+			r.store.broker.Run(ctx)
+		}()
+		// A claim stuck on the database must not hold the exit: the wait ends at lifecycle.ShutdownWait.
+		wait = func() {
+			select {
+			case <-brokerDone:
+			case <-time.After(lifecycle.ShutdownWait):
+				slog.Warn("claim broker did not stop before shutdown; lease recovery returns what it held", "component", "lifecycle_claim_broker")
+			}
+		}
 		r.startWorkers(ctx, cfg, app.NativeRepositoryRetention{Store: r.store, Metrics: r.metrics, WorkerFormats: cfg.WorkerFormats})
 		if r.helmMaintenance != nil && cfg.WorkerEnabled("helm", "retention") {
 			r.helmMaintenance.Start(ctx, time.Minute)
@@ -72,6 +90,7 @@ func (r backgroundRuntime) Start(ctx context.Context, cfg config.Config) {
 		}
 	}
 	app.BackgroundOperationQueueObserver{Store: r.store, Metrics: r.metrics}.Start(ctx, time.Minute)
+	return wait
 }
 
 func (r backgroundRuntime) startSchedulers(ctx context.Context, cfg config.Config, retention app.NativeRepositoryRetention) {

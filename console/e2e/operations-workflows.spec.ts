@@ -162,13 +162,25 @@ test("a webhook subscription is created and paused", async ({
   await authenticate(page);
   const name = `e2e-webhook-${suffix}`;
   const stored = async () => {
-    const response = await request.get("/api/v2/webhook-subscriptions", {
-      headers: admin(),
-    });
-    expect(response.ok()).toBeTruthy();
-    return (
-      (await response.json()) as Array<{ name: string; enabled: boolean }>
-    ).find((subscription) => subscription.name === name);
+    // Subscriptions page by name: follow the cursor until the name is found.
+    let pageToken: string | undefined;
+    do {
+      const response = await request.get("/api/v2/webhook-subscriptions", {
+        headers: admin(),
+        params: pageToken ? { pageToken } : {},
+      });
+      expect(response.ok()).toBeTruthy();
+      const page = (await response.json()) as {
+        items: Array<{ name: string; enabled: boolean }>;
+        nextPageToken?: string;
+      };
+      const found = page.items.find(
+        (subscription) => subscription.name === name,
+      );
+      if (found) return found;
+      pageToken = page.nextPageToken;
+    } while (pageToken);
+    return undefined;
   };
 
   await page.goto("/operations?tab=webhooks");

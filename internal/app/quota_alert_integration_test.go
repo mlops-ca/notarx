@@ -58,8 +58,7 @@ func quotaHTTPTransitionsDeliverActualTLSMIME(t *testing.T, locale string) {
 	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 1000); err != nil {
 		t.Fatal(err)
 	}
-	f := testsupport.NewSMTPFixture(t, true)
-	cfg := emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "gateway@example.test", ApprovedIPs: []string{"192.0.2.10"}, CAFile: f.CAFile, ConsoleOrigin: "https://console.example.invalid"}
+	cfg, f := quotaEmailConfig(t)
 	h := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{Email: cfg}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatOCI: objectstore.NewMemoryStore(), repository.FormatRaw: objectstore.NewMemoryStore()}})
 	request := func(method, path, body string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -172,4 +171,94 @@ func quotaHTTPTransitionsDeliverActualTLSMIME(t *testing.T, locale string) {
 	if err != nil || len(events) != 3 {
 		t.Fatalf("stable duplicate: %v %v", events, err)
 	}
+}
+
+// A rule that becomes due notifies notarx_evaluations; the evaluation itself does not wake the evaluator again
+// (migration 000004), even when the next evaluation it schedules is already due.
+func TestPostgresQuotaRuleDueWakesEvaluationsChannelOnce(t *testing.T) {
+	url := os.Getenv("TEST_DATABASE_URL")
+	if url == "" {
+		t.Skip("TEST_DATABASE_URL is required")
+	}
+	t.Setenv("NOTARX_SETTINGS_ENCRYPTION_KEY", "01234567890123456789012345678901")
+	db, err := sql.Open("pgx", url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	if _, err = db.Exec(`TRUNCATE repository_quota_alert_events,email_test_deliveries,repository_quota_alert_rules,email_targets,email_test_requests`); err != nil {
+		t.Fatal(err)
+	}
+	store, err := repository.NewPostgresStore(url)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "quota-wake-" + uuid.NewString(), Format: repository.FormatRaw, Type: repository.RepositoryTypeHosted, State: repository.RepositoryActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplaceRepositoryCapacityQuota(ctx, repo.ID, 1000); err != nil {
+		t.Fatal(err)
+	}
+	// Alert rules need the email channel; this test sends no mail.
+	cfg, _ := quotaEmailConfig(t)
+	h := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{Email: cfg}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatRaw: objectstore.NewMemoryStore()}})
+	request := func(method, path, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		authorize(r, "admin-secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	targetResponse := request("POST", "/api/v2/email-targets", `{"name":"Synthetic wake","locale":"en-CA","recipient":"synthetic@example.test","enabled":true}`)
+	if targetResponse.Code != 201 {
+		t.Fatalf("target: %d %s", targetResponse.Code, targetResponse.Body.String())
+	}
+	var target struct{ ID string }
+	_ = json.Unmarshal(targetResponse.Body.Bytes(), &target)
+	wake := store.Listen(ctx, repository.QuotaEvaluationChannel)
+	// The subscription connects asynchronously: probe the channel until a probe comes back, so the test waits
+	// exactly as long as the connection takes.
+	connectBy := time.After(5 * time.Second)
+	for connected := false; !connected; {
+		if _, err = db.ExecContext(ctx, `SELECT pg_notify($1, 'probe')`, repository.QuotaEvaluationChannel); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-wake:
+			connected = true
+		case <-time.After(250 * time.Millisecond):
+		case <-connectBy:
+			t.Fatal("the notarx_evaluations subscription never connected")
+		}
+	}
+	body := fmt.Sprintf(`{"repositoryId":%q,"targetId":%q,"enabled":true,"policy":{"warningBasisPoints":8500,"criticalBasisPoints":9500,"recoveryBelowBasisPoints":8000,"warningForSeconds":1,"criticalForSeconds":1,"recoveryForSeconds":1,"maxSampleAgeSeconds":60}}`, repo.ID, target.ID)
+	if created := request("POST", "/api/v2/repository-quota-alert-rules", body); created.Code != 201 {
+		t.Fatalf("rule: %d %s", created.Code, created.Body.String())
+	}
+	select {
+	case <-wake:
+	case <-time.After(5 * time.Second):
+		t.Fatal("creating a due rule did not notify notarx_evaluations")
+	}
+	// A sample interval below a millisecond schedules the next evaluation at the evaluation time itself, so the
+	// row the evaluator writes is already due: it must still not notify.
+	if _, err = store.EvaluateNextRepositoryQuotaAlert(ctx, repository.QuotaAlertMailConfig{}, time.Nanosecond); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-wake:
+		t.Fatal("evaluating a rule woke the evaluator again")
+	case <-time.After(500 * time.Millisecond):
+	}
+}
+
+// quotaEmailConfig is a valid email channel whose TLS trust is an SMTP fixture's CA, and the fixture.
+func quotaEmailConfig(t *testing.T) (emailnotification.Config, *testsupport.SMTPFixture) {
+	t.Helper()
+	f := testsupport.NewSMTPFixture(t, true)
+	return emailnotification.Config{Enabled: true, Host: "smtp.example.test", Port: 465, Mode: "implicit_tls", From: "gateway@example.test", ApprovedIPs: []string{"192.0.2.10"}, CAFile: f.CAFile, ConsoleOrigin: "https://console.example.invalid"}, f
 }

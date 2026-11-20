@@ -376,3 +376,27 @@ func TestOptionTTLOverridesDisabledRegistry(t *testing.T) {
 		t.Fatal("own TTL not honoured")
 	}
 }
+
+// A negative result carries no entity, so only a cache that asks for it drops its negatives on an
+// invalidation of any entity; the others keep absorbing floods.
+func TestInvalidateNegativesIsOptIn(t *testing.T) {
+	for _, drop := range []bool{false, true} {
+		reg, cache, _ := newTestCache(5*time.Second, Options[string]{
+			Match:               func(value, id string) bool { return value == id },
+			IsNegative:          func(err error) bool { return errors.Is(err, errMissing) },
+			InvalidateNegatives: drop,
+		})
+		var calls atomic.Int32
+		load := func(context.Context) (string, error) { calls.Add(1); return "", errMissing }
+		_, _ = cache.Get(context.Background(), "unknown", load)
+		reg.Invalidate("thing", "someone-else")
+		_, _ = cache.Get(context.Background(), "unknown", load)
+		want := int32(1)
+		if drop {
+			want = 2
+		}
+		if calls.Load() != want {
+			t.Fatalf("InvalidateNegatives=%v: %d loads, want %d", drop, calls.Load(), want)
+		}
+	}
+}

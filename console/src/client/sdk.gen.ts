@@ -1637,6 +1637,9 @@ export const rotateIdentityProviderSpKey = <ThrowOnError extends boolean = false
     ...options
 });
 
+/**
+ * Lists subscriptions by name, paged by keyset on the unique name; continue with the nextPageToken of the previous page.
+ */
 export const listWebhookSubscriptions = <ThrowOnError extends boolean = false>(options?: Options<ListWebhookSubscriptionsData, ThrowOnError>): RequestResult<ListWebhookSubscriptionsResponses, ListWebhookSubscriptionsErrors, ThrowOnError> => (options?.client ?? client).get<ListWebhookSubscriptionsResponses, ListWebhookSubscriptionsErrors, ThrowOnError>({
     security: [{
             key: 'bearerAuth',
@@ -1685,6 +1688,9 @@ export const updateWebhookSubscription = <ThrowOnError extends boolean = false>(
     }
 });
 
+/**
+ * Lists deliveries newest first, paged by keyset on creation time then id; continue with the nextPageToken of the previous page, which is bound to the subscription and state filters.
+ */
 export const listWebhookDeliveries = <ThrowOnError extends boolean = false>(options?: Options<ListWebhookDeliveriesData, ThrowOnError>): RequestResult<ListWebhookDeliveriesResponses, ListWebhookDeliveriesErrors, ThrowOnError> => (options?.client ?? client).get<ListWebhookDeliveriesResponses, ListWebhookDeliveriesErrors, ThrowOnError>({
     security: [{
             key: 'bearerAuth',
@@ -2275,7 +2281,7 @@ export const listRepositoryCapacities = <ThrowOnError extends boolean = false>(o
 });
 
 /**
- * Lists the newest lifecycle jobs across repositories for the administrator console. A platform administrator sees every repository; any other caller sees only the repositories it administers, so a repository it cannot administer contributes no rows and is indistinguishable from one that does not exist.
+ * Lists the newest lifecycle jobs across repositories for the administrator console, paged by keyset on creation time then id (newest first): continue with the nextPageToken of the previous page. A platform administrator sees every repository; any other caller sees only the repositories it administers, so a repository it cannot administer contributes no rows and is indistinguishable from one that does not exist. Rows are filtered before the page is cut, so every page holds limit rows until the last one.
  */
 export const listLifecycleJobs = <ThrowOnError extends boolean = false>(options?: Options<ListLifecycleJobsData, ThrowOnError>): RequestResult<ListLifecycleJobsResponses, ListLifecycleJobsErrors, ThrowOnError> => (options?.client ?? client).get<ListLifecycleJobsResponses, ListLifecycleJobsErrors, ThrowOnError>({
     security: [{
@@ -2739,6 +2745,9 @@ export const restoreRepositoryArtifact = <ThrowOnError extends boolean = false>(
     }
 });
 
+/**
+ * Lists a repository's lifecycle jobs newest first, paged by keyset on creation time then id; continue with the nextPageToken of the previous page.
+ */
 export const listRepositoryLifecycleJobs = <ThrowOnError extends boolean = false>(options: Options<ListRepositoryLifecycleJobsData, ThrowOnError>): RequestResult<ListRepositoryLifecycleJobsResponses, ListRepositoryLifecycleJobsErrors, ThrowOnError> => (options.client ?? client).get<ListRepositoryLifecycleJobsResponses, ListRepositoryLifecycleJobsErrors, ThrowOnError>({
     security: [{
             key: 'bearerAuth',

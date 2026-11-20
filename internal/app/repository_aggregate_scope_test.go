@@ -3,8 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
@@ -74,12 +76,12 @@ func TestRepositoryConsoleAggregatesFollowRepositoryAdministration(t *testing.T)
 		if response.Code != http.StatusOK {
 			t.Fatalf("jobs=%d body=%s", response.Code, response.Body.String())
 		}
-		var jobs adminopenapi.RepositoryLifecycleJobList
+		var jobs adminopenapi.RepositoryLifecycleJobPage
 		if err := json.Unmarshal(response.Body.Bytes(), &jobs); err != nil {
 			t.Fatal(err)
 		}
-		names := make([]string, 0, len(jobs))
-		for _, item := range jobs {
+		names := make([]string, 0, len(jobs.Items))
+		for _, item := range jobs.Items {
 			names = append(names, item.RepositoryName)
 		}
 		return names
@@ -132,5 +134,109 @@ func TestRepositoryConsoleAggregatesFollowRepositoryAdministration(t *testing.T)
 	}
 	if count := capacityRepositoryCount("admin-secret"); count != 2 {
 		t.Fatalf("platform administrator sees %d capacities", count)
+	}
+}
+
+// A repository administrator's job listing is filtered by the store, so every page is full until the listing
+// ends however many rows of other repositories sit between its own.
+func TestLifecycleJobListingPagesFullForARepositoryAdministrator(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	managed, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "paged-managed", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "paged-foreign", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplaceRepositoryGrants(ctx, managed.ID, []repository.RepositoryGrant{{Principal: "repo-admin", Scopes: []string{"repositories:admin"}}}, "1"); err != nil {
+		t.Fatal(err)
+	}
+	for i := range 30 {
+		repositoryID := foreign.ID
+		if i%10 == 0 {
+			repositoryID = managed.ID
+		}
+		job := repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: repositoryID, Kind: repository.LifecycleJobRetention, IdempotencyKey: fmt.Sprint("paged-", i)}
+		if _, _, err = store.EnqueueLifecycleJob(ctx, job); err != nil {
+			t.Fatal(err)
+		}
+	}
+	authenticator := testAuthenticator()
+	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: authenticator})
+	token := authenticator.IssueToken("repo-admin")
+	var sizes []int
+	path := "/api/v2/lifecycle-jobs?limit=2"
+	for path != "" {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		authorize(req, token)
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != http.StatusOK {
+			t.Fatalf("jobs=%d body=%s", response.Code, response.Body.String())
+		}
+		var page adminopenapi.RepositoryLifecycleJobPage
+		if err = json.Unmarshal(response.Body.Bytes(), &page); err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range page.Items {
+			if item.RepositoryId.String() != managed.ID {
+				t.Fatalf("a repository administrator received a job of %s", item.RepositoryName)
+			}
+		}
+		sizes = append(sizes, len(page.Items))
+		path = ""
+		if page.NextPageToken != nil {
+			path = "/api/v2/lifecycle-jobs?limit=2&pageToken=" + url.QueryEscape(*page.NextPageToken)
+		}
+	}
+	if fmt.Sprint(sizes) != "[2 1]" {
+		t.Fatalf("page sizes %v, want [2 1]: a full page, then the last job", sizes)
+	}
+}
+
+// vanishingCursorStore loses the cursor row of the first continued repository walk, as a purge would.
+type vanishingCursorStore struct {
+	*repository.MemoryStore
+	vanished bool
+}
+
+func (s *vanishingCursorStore) ListHostedRepositories(ctx context.Context, size int, after string) ([]repository.HostedRepository, string, error) {
+	if after != "" && !s.vanished {
+		s.vanished = true
+		return nil, "", repository.ErrNotFound
+	}
+	return s.MemoryStore.ListHostedRepositories(ctx, size, after)
+}
+
+// A repository walk whose cursor row vanished starts over instead of failing the listing.
+func TestAdministeredRepositoriesWalkSurvivesAVanishedCursor(t *testing.T) {
+	ctx := context.Background()
+	memory := repository.NewMemoryStore()
+	var managed repository.HostedRepository
+	for i := range 201 {
+		repo, err := memory.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: fmt.Sprint("walk-", i), Format: repository.FormatRaw})
+		if err != nil {
+			t.Fatal(err)
+		}
+		managed = repo
+	}
+	if _, err := memory.ReplaceRepositoryGrants(ctx, managed.ID, []repository.RepositoryGrant{{Principal: "repo-admin", Scopes: []string{"repositories:admin"}}}, "1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := memory.EnqueueLifecycleJob(ctx, repository.LifecycleJob{ID: uuid.NewString(), RepositoryID: managed.ID, Kind: repository.LifecycleJobRetention, IdempotencyKey: "walk"}); err != nil {
+		t.Fatal(err)
+	}
+	store := &vanishingCursorStore{MemoryStore: memory}
+	authenticator := testAuthenticator()
+	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: authenticator})
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/lifecycle-jobs", nil)
+	authorize(req, authenticator.IssueToken("repo-admin"))
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, req)
+	var page adminopenapi.RepositoryLifecycleJobPage
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &page) != nil || len(page.Items) != 1 || !store.vanished {
+		t.Fatalf("jobs=%d body=%s vanished=%t", response.Code, response.Body.String(), store.vanished)
 	}
 }

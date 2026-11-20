@@ -19,11 +19,10 @@ async function mockDiagnostics(page: Page, gatewayVersion: string) {
       },
     }),
   );
-  for (const path of [
-    "lifecycle-jobs",
-    "audit-retention/jobs",
-    "scheduled-tasks",
-  ]) {
+  await page.route("**/api/v2/lifecycle-jobs**", (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
+  for (const path of ["audit-retention/jobs", "scheduled-tasks"]) {
     await page.route(`**/api/v2/${path}**`, (route) =>
       route.fulfill({ json: [] }),
     );

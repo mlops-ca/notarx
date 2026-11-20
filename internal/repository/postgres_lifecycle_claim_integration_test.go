@@ -82,8 +82,8 @@ func TestPostgresLifecycleClaimCandidateQueriesDoNotSortThePendingSet(t *testing
 		args  []any
 		index string
 	}{
-		{"one kind", claimLifecycleCandidatesByKindQuery, []any{string(LifecycleJobReclaim), "", []string{}, 10}, "lifecycle_jobs_kind_actionable_idx"},
-		{"all kinds", claimLifecycleCandidatesAnyKindQuery, []any{"", []string{}, 10}, "lifecycle_jobs_actionable_idx"},
+		{"one kind", claimLifecycleCandidatesByKindQuery, []any{string(LifecycleJobReclaim), []string{}, []string{}, 10}, "lifecycle_jobs_kind_actionable_idx"},
+		{"all kinds", claimLifecycleCandidatesAnyKindQuery, []any{[]string{}, []string{}, 10}, "lifecycle_jobs_actionable_idx"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tx, err := store.db.BeginTx(context.Background(), nil)
@@ -202,6 +202,80 @@ func TestPostgresLifecycleClaimScansPastAHotRepositoryBacklog(t *testing.T) {
 	}
 	if scanned < len(jobs) || scanned > QueueClaimScanCap {
 		t.Fatalf("scanned rows=%d for %d claimed jobs", scanned, len(jobs))
+	}
+}
+
+func TestPostgresLifecycleClaimAcrossKindsRoundRobinsWhenTheScanCapIsHit(t *testing.T) {
+	store := openClaimStore(t)
+	fixture := newClaimFixture(t, store)
+	hot := fixture.repository("hot")
+	// One repository's reclaim backlog fills the whole scan budget of the all-kinds index; only one of its jobs can run.
+	fixture.enqueue(hot, LifecycleJobReclaim, QueueClaimScanCap+10)
+	cold := fixture.repository("cold")
+	fixture.enqueue(cold, LifecycleJobPromotion, 1)
+	jobs, err := store.ClaimLifecycleJobs(context.Background(), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed := map[string]int{}
+	for _, job := range jobs {
+		claimed[job.RepositoryID]++
+	}
+	if claimed[hot] != 1 || claimed[cold] != 1 {
+		t.Fatalf("the promotion job behind the reclaim backlog was starved: %v", claimed)
+	}
+}
+
+func TestPostgresLifecycleClaimByKindAndFormatsGivesEachFormatItsShare(t *testing.T) {
+	store := openClaimStore(t)
+	fixture := newClaimFixture(t, store)
+	// A deep, older backlog of one format must not starve a newer job of another format in the same claim.
+	for i := 0; i < 20; i++ {
+		repo := fixture.repository("deep")
+		if _, _, err := store.EnqueueLifecycleJob(context.Background(), LifecycleJob{ID: uuid.NewString(), RepositoryID: repo, Kind: LifecycleJobReclaim, IdempotencyKey: uuid.NewString(), Payload: []byte(`{"format":"maven"}`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	other := fixture.repository("other")
+	if _, _, err := store.EnqueueLifecycleJob(context.Background(), LifecycleJob{ID: uuid.NewString(), RepositoryID: other, Kind: LifecycleJobReclaim, IdempotencyKey: uuid.NewString(), Payload: []byte(`{"format":"npm"}`)}); err != nil {
+		t.Fatal(err)
+	}
+	jobs, err := store.ClaimLifecycleJobsByKindAndFormats(context.Background(), LifecycleJobReclaim, []Format{FormatMaven, FormatNPM}, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var npm bool
+	for _, job := range jobs {
+		npm = npm || job.RepositoryID == other
+	}
+	if len(jobs) != 4 || !npm {
+		t.Fatalf("claimed %d jobs, npm served: %v; the older maven backlog starved npm", len(jobs), npm)
+	}
+}
+
+func TestPostgresLifecycleClaimByKindAndFormatsClaimsEveryListedFormatOnce(t *testing.T) {
+	store := openClaimStore(t)
+	fixture := newClaimFixture(t, store)
+	repoFormat := map[string]Format{}
+	for _, format := range []Format{FormatRaw, FormatNPM, FormatMaven} {
+		repo := fixture.repository("formats")
+		repoFormat[repo] = format
+		if _, _, err := store.EnqueueLifecycleJob(context.Background(), LifecycleJob{ID: uuid.NewString(), RepositoryID: repo, Kind: LifecycleJobReclaim, IdempotencyKey: uuid.NewString(), Payload: []byte(`{"format":"` + string(format) + `"}`)}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	jobs, err := store.ClaimLifecycleJobsByKindAndFormats(context.Background(), LifecycleJobReclaim, []Format{FormatRaw, FormatNPM}, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed := map[Format]bool{}
+	for _, job := range jobs {
+		if format, ok := repoFormat[job.RepositoryID]; ok {
+			claimed[format] = true
+		}
+	}
+	if !claimed[FormatRaw] || !claimed[FormatNPM] || claimed[FormatMaven] {
+		t.Fatalf("claimed formats %v, want raw and npm only", claimed)
 	}
 }
 

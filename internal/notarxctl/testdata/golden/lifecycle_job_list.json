@@ -18,16 +18,18 @@
         }
       }
     ],
-    "nextCursor": null
+    "nextCursor": "tok-2"
   },
   "error": null,
   "meta": {
     "pagination": {
-      "mode": "bounded",
-      "limit": 10
+      "mode": "cursor",
+      "pageSize": 10,
+      "pages": 1,
+      "complete": false
     },
     "scope": {
-      "limitAppliedBeforeAuthorization": true
+      "filteredToAdministeredRepositories": true
     }
   }
 }

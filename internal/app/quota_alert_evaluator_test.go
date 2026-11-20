@@ -75,3 +75,75 @@ func TestQuotaPollingWaitsAfterCompletedEvaluation(t *testing.T) {
 		t.Fatal("scheduler did not continue")
 	}
 }
+
+type quotaWakeStore struct {
+	repository.RepositoryQuotaAlertStore
+	wake  chan struct{}
+	calls chan struct{}
+}
+
+func (s *quotaWakeStore) Listen(_ context.Context, channel string) <-chan struct{} {
+	if channel != repository.QuotaEvaluationChannel {
+		return nil
+	}
+	return s.wake
+}
+
+func (s *quotaWakeStore) EvaluateNextRepositoryQuotaAlert(context.Context, repository.QuotaAlertMailConfig, time.Duration) (bool, error) {
+	s.calls <- struct{}{}
+	return false, nil
+}
+
+// A rule that becomes due wakes the evaluator on notarx_evaluations long before the poll interval, and the
+// poll stays the fallback when the channel closes.
+func TestQuotaEvaluationWakesOnTheEvaluationsChannelAndKeepsPolling(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := &quotaWakeStore{wake: make(chan struct{}, 1), calls: make(chan struct{}, 10)}
+	const interval = time.Hour
+	(QuotaAlertEvaluator{Store: s}).start(ctx, interval, time.Millisecond, time.Now)
+	select {
+	case <-s.calls: // the immediate pass at start
+	case <-time.After(time.Second):
+		t.Fatal("no initial evaluation")
+	}
+	s.wake <- struct{}{}
+	select {
+	case <-s.calls:
+	case <-time.After(time.Second):
+		t.Fatal("a notification on notarx_evaluations did not wake the evaluator")
+	}
+	close(s.wake) // a lost subscription must not stop the evaluator or spin it
+	select {
+	case <-s.calls:
+		t.Fatal("a closed wake channel triggered an evaluation without a timer")
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+// A burst of notifications right after a pass collapses into one more pass once the wake spacing has passed.
+func TestQuotaEvaluationCoalescesABurstOfWakeUps(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s := &quotaWakeStore{wake: make(chan struct{}, 1), calls: make(chan struct{}, 10)}
+	const spacing = 200 * time.Millisecond
+	(QuotaAlertEvaluator{Store: s}).start(ctx, time.Hour, spacing, time.Now)
+	select {
+	case <-s.calls: // the immediate pass at start
+	case <-time.After(time.Second):
+		t.Fatal("no initial evaluation")
+	}
+	for range 5 {
+		s.wake <- struct{}{}
+	}
+	select {
+	case <-s.calls:
+	case <-time.After(spacing + time.Second):
+		t.Fatal("the burst never triggered a pass")
+	}
+	select {
+	case <-s.calls:
+		t.Fatal("a burst of notifications triggered more than one pass")
+	case <-time.After(2 * spacing):
+	}
+}

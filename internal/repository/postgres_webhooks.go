@@ -47,21 +47,43 @@ VALUES ($1,$2,$3,$4,$5::jsonb,$6) RETURNING `+webhookSubscriptionColumns, value.
 	})
 }
 
-func (s *PostgresStore) ListWebhookSubscriptions(ctx context.Context) ([]WebhookSubscription, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+webhookSubscriptionColumns+` FROM webhook_subscriptions ORDER BY name`)
+const webhookSubscriptionsFilter = "webhook-subscriptions"
+
+// PageWebhookSubscriptions pages subscriptions by name in byte order with a keyset on the unique name,
+// served by webhook_subscriptions_name_bytes_idx (migration 000005) whatever the database collation.
+func (s *PostgresStore) PageWebhookSubscriptions(ctx context.Context, query WebhookSubscriptionQuery) (WebhookSubscriptionPage, error) {
+	limit := pageLimit(query.Limit, 500, 500)
+	after, present, err := decodeNameToken(query.PageToken, webhookSubscriptionsFilter)
 	if err != nil {
-		return nil, err
+		return WebhookSubscriptionPage{}, err
+	}
+	statement, args := `SELECT `+webhookSubscriptionColumns+` FROM webhook_subscriptions ORDER BY name COLLATE "C" LIMIT $1`, []any{limit + 1}
+	if present {
+		statement = `SELECT ` + webhookSubscriptionColumns + ` FROM webhook_subscriptions WHERE name COLLATE "C">$1 ORDER BY name COLLATE "C" LIMIT $2`
+		args = []any{after, limit + 1}
+	}
+	rows, err := s.db.QueryContext(ctx, statement, args...)
+	if err != nil {
+		return WebhookSubscriptionPage{}, err
 	}
 	defer func() { _ = rows.Close() }()
-	values := make([]WebhookSubscription, 0)
+	values := make([]WebhookSubscription, 0, limit+1)
 	for rows.Next() {
 		value, scanErr := scanWebhookSubscription(rows)
 		if scanErr != nil {
-			return nil, scanErr
+			return WebhookSubscriptionPage{}, scanErr
 		}
 		values = append(values, value)
 	}
-	return values, rows.Err()
+	if err = rows.Err(); err != nil {
+		return WebhookSubscriptionPage{}, err
+	}
+	page := WebhookSubscriptionPage{Items: values}
+	if len(values) > limit {
+		page.Items = values[:limit]
+		page.NextPageToken = EncodeKeysetToken(webhookSubscriptionsFilter, page.Items[limit-1].Name)
+	}
+	return page, nil
 }
 
 func (s *PostgresStore) GetWebhookSubscription(ctx context.Context, id string) (WebhookSubscription, error) {
@@ -164,26 +186,49 @@ func scanWebhookDelivery(scanner interface{ Scan(...any) error }) (WebhookDelive
 	return value, nil
 }
 
-func (s *PostgresStore) ListWebhookDeliveries(ctx context.Context, query WebhookDeliveryQuery) ([]WebhookDelivery, error) {
-	limit := query.Limit
-	if limit <= 0 || limit > 500 {
-		limit = 100
-	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+webhookDeliveryColumns+` FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id
-WHERE ($1='' OR d.subscription_id=$1::uuid) AND ($2='' OR d.state=$2) ORDER BY d.created_at DESC,d.id DESC LIMIT $3`, query.SubscriptionID, query.State, limit)
+func webhookDeliveriesFilter(query WebhookDeliveryQuery) string {
+	return "webhook-deliveries\x00" + query.SubscriptionID + "\x00" + string(query.State)
+}
+
+// PageWebhookDeliveries pages deliveries newest first by keyset on (created_at, id).
+func (s *PostgresStore) PageWebhookDeliveries(ctx context.Context, query WebhookDeliveryQuery) (WebhookDeliveryPage, error) {
+	limit := pageLimit(query.Limit, 100, 500)
+	cursorAt, cursorID, after, err := decodeCreatedAtToken(query.PageToken, webhookDeliveriesFilter(query))
 	if err != nil {
-		return nil, err
+		return WebhookDeliveryPage{}, err
+	}
+	const base = `SELECT ` + webhookDeliveryColumns + `,s.name FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id JOIN webhook_subscriptions s ON s.id=d.subscription_id
+WHERE ($1='' OR d.subscription_id=$1::uuid) AND ($2='' OR d.state=$2)`
+	statement, args := base+` ORDER BY d.created_at DESC,d.id DESC LIMIT $3`, []any{query.SubscriptionID, query.State, limit + 1}
+	if after {
+		statement = base + ` AND (d.created_at,d.id)<($3::timestamptz,$4::uuid) ORDER BY d.created_at DESC,d.id DESC LIMIT $5`
+		args = []any{query.SubscriptionID, query.State, cursorAt, cursorID, limit + 1}
+	}
+	rows, err := s.db.QueryContext(ctx, statement, args...)
+	if err != nil {
+		return WebhookDeliveryPage{}, err
 	}
 	defer func() { _ = rows.Close() }()
-	values := make([]WebhookDelivery, 0, limit)
+	values := make([]WebhookDelivery, 0, limit+1)
 	for rows.Next() {
-		value, scanErr := scanWebhookDelivery(rows)
+		var name string
+		value, scanErr := scanWebhookDelivery(extraColumns{rows, []any{&name}})
+		value.SubscriptionName = name
 		if scanErr != nil {
-			return nil, scanErr
+			return WebhookDeliveryPage{}, scanErr
 		}
 		values = append(values, value)
 	}
-	return values, rows.Err()
+	if err = rows.Err(); err != nil {
+		return WebhookDeliveryPage{}, err
+	}
+	page := WebhookDeliveryPage{Items: values}
+	if len(values) > limit {
+		page.Items = values[:limit]
+		last := page.Items[limit-1]
+		page.NextPageToken = encodeCreatedAtToken(webhookDeliveriesFilter(query), last.CreatedAt, last.ID)
+	}
+	return page, nil
 }
 
 func (s *PostgresStore) GetWebhookDelivery(ctx context.Context, id string) (WebhookDelivery, error) {
@@ -316,3 +361,14 @@ SELECT d.id::text,d.event_id::text,e.event_type,d.subscription_id::text,d.state,
        s.id::text,s.name,s.endpoint_url,s.secret_ciphertext,s.event_types,s.enabled,s.version::text,s.created_at,s.updated_at
 FROM claimed d JOIN webhook_events e ON e.id=d.event_id JOIN webhook_subscriptions s ON s.id=d.subscription_id
 ORDER BY d.created_at,d.id`
+
+// extraColumns scans the shared columns of a row into the destinations of a scan function and the columns a
+// query adds after them into extra.
+type extraColumns struct {
+	scanner interface{ Scan(...any) error }
+	extra   []any
+}
+
+func (e extraColumns) Scan(dest ...any) error {
+	return e.scanner.Scan(append(dest, e.extra...)...)
+}

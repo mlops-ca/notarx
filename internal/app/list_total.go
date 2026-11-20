@@ -2,6 +2,7 @@ package app
 
 import (
 	"net/http"
+	"strconv"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -10,6 +11,15 @@ import (
 // listTotalResponse maps a store total onto the {value, relation} object of every listing (ADR 0023 section 8).
 func listTotalResponse(total repository.ListTotal) adminopenapi.ListTotal {
 	return adminopenapi.ListTotal{Value: total.Value, Relation: adminopenapi.ListTotalRelation(total.Relation)}
+}
+
+// validListLimit answers 400 when an explicit page size is outside 1..maximum; an absent limit is the default.
+func validListLimit(w http.ResponseWriter, limit *int, maximum int) bool {
+	if limit == nil || (*limit >= 1 && *limit <= maximum) {
+		return true
+	}
+	writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and "+strconv.Itoa(maximum))
+	return false
 }
 
 // rejectOffsetParameter answers 400 when a client still pages with the offset parameter that keyset pages

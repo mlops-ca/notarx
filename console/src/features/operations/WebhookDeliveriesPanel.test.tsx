@@ -49,6 +49,7 @@ const deadDelivery: WebhookDelivery = {
   eventId: "33333333-3333-4333-8333-333333333333",
   eventType: "artifact.quarantined",
   subscriptionId: subscription.id,
+  subscriptionName: subscription.name,
   state: "dead",
   attempts: 8,
   lastStatus: 503,
@@ -81,10 +82,112 @@ afterEach(() => {
 });
 
 describe("WebhookDeliveriesPanel", () => {
+  it("names a delivery's subscription even when it is on another subscription page", async () => {
+    mockListSubscriptions.mockResolvedValue({
+      data: { items: [subscription], nextPageToken: "sub-2" },
+    } as never);
+    mockListDeliveries.mockResolvedValue({
+      data: {
+        items: [
+          {
+            ...deadDelivery,
+            subscriptionId: "55555555-5555-4555-8555-555555555555",
+            subscriptionName: "Release notifier",
+          },
+        ],
+      },
+    } as never);
+
+    renderPanel();
+    expect(await screen.findByText("Release notifier")).toBeInTheDocument();
+    expect(
+      screen.queryByText("55555555-5555-4555-8555-555555555555"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("continues the delivery log and the subscription list with their cursors", async () => {
+    const user = userEvent.setup();
+    const secondDelivery = {
+      ...deadDelivery,
+      id: "44444444-4444-4444-8444-444444444444",
+      lastError: "second page failure",
+    };
+    mockListSubscriptions.mockResolvedValue({
+      data: { items: [subscription] },
+    } as never);
+    mockListDeliveries.mockImplementation((async (options?: {
+      query?: { pageToken?: string };
+    }) =>
+      options?.query?.pageToken === "del-2"
+        ? { data: { items: [secondDelivery] } }
+        : {
+            data: { items: [deadDelivery], nextPageToken: "del-2" },
+          }) as never);
+
+    renderPanel();
+    expect(await screen.findByText("receiver unavailable")).toBeInTheDocument();
+    expect(mockListDeliveries.mock.calls[0]?.[0]?.query).toMatchObject({
+      limit: 20,
+      pageToken: undefined,
+    });
+
+    // The first pager is the subscription list (no next cursor), the second
+    // one belongs to the delivery log.
+    const next = await screen.findAllByRole("button", { name: "Next Page" });
+    await user.click(next[next.length - 1]);
+
+    expect(await screen.findByText("second page failure")).toBeInTheDocument();
+    expect(mockListDeliveries).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({ pageToken: "del-2" }),
+      }),
+    );
+  });
+
+  it("pages the subscription list by cursor", async () => {
+    const user = userEvent.setup();
+    const other = {
+      ...subscription,
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Second page automation",
+    };
+    mockListSubscriptions.mockImplementation((async (options?: {
+      query?: { pageToken?: string };
+    }) =>
+      options?.query?.pageToken === "sub-2"
+        ? { data: { items: [other] } }
+        : {
+            data: { items: [subscription], nextPageToken: "sub-2" },
+          }) as never);
+    mockListDeliveries.mockResolvedValue({
+      data: { items: [] },
+    } as never);
+
+    renderPanel();
+    expect(
+      (await screen.findAllByText("Security automation"))[0],
+    ).toBeInTheDocument();
+    const next = await screen.findAllByRole("button", { name: "Next Page" });
+    await user.click(next[0]);
+
+    expect(
+      (await screen.findAllByText("Second page automation"))[0],
+    ).toBeInTheDocument();
+    expect(mockListSubscriptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        query: { limit: 100, pageToken: "sub-2" },
+      }),
+    );
+  });
+
   it("shows delivery failures and explicitly replays dead deliveries", async () => {
     const user = userEvent.setup();
-    mockListSubscriptions.mockResolvedValue({ data: [subscription] } as never);
-    mockListDeliveries.mockResolvedValue({ data: [deadDelivery] } as never);
+    mockListSubscriptions.mockResolvedValue({
+      data: { items: [subscription] },
+    } as never);
+    mockListDeliveries.mockResolvedValue({
+      data: { items: [deadDelivery] },
+    } as never);
     mockReplay.mockResolvedValue({
       data: { ...deadDelivery, state: "pending", attempts: 0 },
     } as never);
@@ -105,8 +208,12 @@ describe("WebhookDeliveriesPanel", () => {
 
   it("creates a signed subscription with the supported event set", async () => {
     const user = userEvent.setup();
-    mockListSubscriptions.mockResolvedValue({ data: [] } as never);
-    mockListDeliveries.mockResolvedValue({ data: [] } as never);
+    mockListSubscriptions.mockResolvedValue({
+      data: { items: [] },
+    } as never);
+    mockListDeliveries.mockResolvedValue({
+      data: { items: [] },
+    } as never);
     mockCreate.mockResolvedValue({ data: subscription } as never);
 
     renderPanel();
@@ -146,8 +253,12 @@ describe("WebhookDeliveriesPanel", () => {
   });
 
   it("keeps one primary action when the subscription list is empty", async () => {
-    mockListSubscriptions.mockResolvedValue({ data: [] } as never);
-    mockListDeliveries.mockResolvedValue({ data: [] } as never);
+    mockListSubscriptions.mockResolvedValue({
+      data: { items: [] },
+    } as never);
+    mockListDeliveries.mockResolvedValue({
+      data: { items: [] },
+    } as never);
 
     renderPanel();
 
@@ -161,8 +272,12 @@ describe("WebhookDeliveriesPanel", () => {
 
   it("holds the editor shut while saving and reopens dismissal after a failure", async () => {
     const user = userEvent.setup();
-    mockListSubscriptions.mockResolvedValue({ data: [] } as never);
-    mockListDeliveries.mockResolvedValue({ data: [] } as never);
+    mockListSubscriptions.mockResolvedValue({
+      data: { items: [] },
+    } as never);
+    mockListDeliveries.mockResolvedValue({
+      data: { items: [] },
+    } as never);
     let rejectSave: (error: unknown) => void = () => {};
     mockCreate.mockImplementationOnce(
       () =>
@@ -207,8 +322,12 @@ describe("WebhookDeliveriesPanel", () => {
 
   it("frees the replay action when the request rejects", async () => {
     const user = userEvent.setup();
-    mockListSubscriptions.mockResolvedValue({ data: [subscription] } as never);
-    mockListDeliveries.mockResolvedValue({ data: [deadDelivery] } as never);
+    mockListSubscriptions.mockResolvedValue({
+      data: { items: [subscription] },
+    } as never);
+    mockListDeliveries.mockResolvedValue({
+      data: { items: [deadDelivery] },
+    } as never);
     mockReplay.mockRejectedValueOnce(new Error("network down"));
 
     renderPanel();

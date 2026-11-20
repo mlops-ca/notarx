@@ -642,57 +642,59 @@ export async function mockConsole(page: Page) {
   );
   await page.route("**/api/v2/lifecycle-jobs**", (route) =>
     route.fulfill({
-      json: [
-        {
-          repositoryId: "rep-oci-001",
-          repositoryName: "docker-release",
-          job: {
-            id: "job-101",
-            kind: "promotion",
-            state: "running",
-            createdAt: "2026-08-29T08:40:00Z",
-            startedAt: "2026-08-29T08:41:00Z",
-            attempts: 1,
-            maxAttempts: 3,
-            progressCurrent: 42,
-            progressTotal: 100,
-            progressMessage: "Copy layer 42/100",
+      json: {
+        items: [
+          {
+            repositoryId: "rep-oci-001",
+            repositoryName: "docker-release",
+            job: {
+              id: "job-101",
+              kind: "promotion",
+              state: "running",
+              createdAt: "2026-08-29T08:40:00Z",
+              startedAt: "2026-08-29T08:41:00Z",
+              attempts: 1,
+              maxAttempts: 3,
+              progressCurrent: 42,
+              progressTotal: 100,
+              progressMessage: "Copy layer 42/100",
+            },
           },
-        },
-        {
-          repositoryId: "rep-mvn-002",
-          repositoryName: "maven-internal",
-          job: {
-            id: "job-102",
-            kind: "retention",
-            state: "failed",
-            createdAt: "2026-08-29T07:10:00Z",
-            startedAt: "2026-08-29T07:10:10Z",
-            completedAt: "2026-08-29T07:12:00Z",
-            attempts: 3,
-            maxAttempts: 3,
-            progressCurrent: 0,
-            progressTotal: 0,
-            lastError: "storage backend timeout",
+          {
+            repositoryId: "rep-mvn-002",
+            repositoryName: "maven-internal",
+            job: {
+              id: "job-102",
+              kind: "retention",
+              state: "failed",
+              createdAt: "2026-08-29T07:10:00Z",
+              startedAt: "2026-08-29T07:10:10Z",
+              completedAt: "2026-08-29T07:12:00Z",
+              attempts: 3,
+              maxAttempts: 3,
+              progressCurrent: 0,
+              progressTotal: 0,
+              lastError: "storage backend timeout",
+            },
           },
-        },
-        {
-          repositoryId: "rep-go-005",
-          repositoryName: "go-modules",
-          job: {
-            id: "job-103",
-            kind: "reclaim",
-            state: "completed",
-            createdAt: "2026-08-28T22:00:00Z",
-            startedAt: "2026-08-28T22:00:05Z",
-            completedAt: "2026-08-28T22:03:00Z",
-            attempts: 1,
-            maxAttempts: 3,
-            progressCurrent: 12,
-            progressTotal: 12,
+          {
+            repositoryId: "rep-go-005",
+            repositoryName: "go-modules",
+            job: {
+              id: "job-103",
+              kind: "reclaim",
+              state: "completed",
+              createdAt: "2026-08-28T22:00:00Z",
+              startedAt: "2026-08-28T22:00:05Z",
+              completedAt: "2026-08-28T22:03:00Z",
+              attempts: 1,
+              maxAttempts: 3,
+              progressCurrent: 12,
+              progressTotal: 12,
+            },
           },
-        },
-      ],
+        ],
+      },
     }),
   );
   await page.route("**/api/v2/scheduled-tasks**", (route) =>

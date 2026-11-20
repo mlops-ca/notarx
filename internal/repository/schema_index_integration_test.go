@@ -99,8 +99,10 @@ func TestAddedIndexesServeTheirQueries(t *testing.T) {
 			"SELECT publisher FROM native_maven_publish_sessions WHERE repository_id=$1::uuid AND coordinate=$2 AND state='committed' ORDER BY expires_at DESC LIMIT 1", []any{id, "g:a:1"}},
 		{"conan committed publisher", "native_conan_publish_sessions_committed_idx",
 			"SELECT publisher FROM native_conan_publish_sessions WHERE repository_id=$1::uuid AND reference=$2 AND state='committed' ORDER BY expires_at DESC LIMIT 1", []any{id, "pkg/1.0@u/c"}},
+		// A kind other than scan: lifecycle_jobs_artifact_scan_identity_idx is partial on kind='scan', and once
+		// the table holds scan jobs the planner may prefer it, so a scan claim would test the statistics.
 		{"lifecycle claim by kind", "lifecycle_jobs_kind_actionable_idx",
-			"SELECT id FROM lifecycle_jobs WHERE state IN ('pending','retrying') AND kind=$1 AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT 10", []any{"scan"}},
+			"SELECT id FROM lifecycle_jobs WHERE state IN ('pending','retrying') AND kind=$1 AND next_attempt_at<=now() ORDER BY next_attempt_at LIMIT 10", []any{"promotion"}},
 		{"maven assets by digest", "native_maven_assets_digest_idx",
 			"SELECT repository_id FROM native_maven_assets WHERE digest=$1", []any{"sha256:x"}},
 		{"oci tags by digest", "native_oci_tags_repository_id_digest_name_fk_idx",

@@ -92,18 +92,66 @@ func (s *PostgresStore) CreateReplicationPlan(ctx context.Context, plan Replicat
 }
 
 func (s *PostgresStore) ClaimReplicationPlans(ctx context.Context, limit int) ([]ReplicationPlan, error) {
-	return s.claimReplicationPlans(ctx, "", limit)
+	return s.claimReplicationPlans(ctx, nil, limit)
 }
 
 func (s *PostgresStore) ClaimReplicationPlansByFormat(ctx context.Context, format Format, limit int) ([]ReplicationPlan, error) {
-	return s.claimReplicationPlans(ctx, format, limit)
+	return s.claimReplicationPlans(ctx, formatList(format), limit)
 }
 
-func (s *PostgresStore) claimReplicationPlans(ctx context.Context, format Format, limit int) ([]ReplicationPlan, error) {
+// ClaimReplicationPlansByFormats claims plans of any of formats in one claim (every format when empty); it is
+// the call of the per-process replication claimer (lifecycle.ClaimBroker).
+func (s *PostgresStore) ClaimReplicationPlansByFormats(ctx context.Context, formats []Format, limit int) ([]ReplicationPlan, error) {
+	return s.claimReplicationPlans(ctx, formats, limit)
+}
+
+// claimReplicationPlans claims up to limit plans. A claim for several formats (the per-process claimer)
+// follows the share plan of claimFormatShares, like the lifecycle claim, so a deep older backlog of one format
+// cannot starve the others. The batches share one transaction.
+func (s *PostgresStore) claimReplicationPlans(ctx context.Context, formats []Format, limit int) ([]ReplicationPlan, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	rows, err := s.db.QueryContext(ctx, claimReplicationPlansQuery, format, limit)
+	if len(formats) <= 1 {
+		return claimReplicationBatch(ctx, s.db, formatNames(formats), limit)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	plans := make([]ReplicationPlan, 0, limit)
+	err = claimFormatShares(ctx, formats, limit, s.claimRotation.Add(1), func(ctx context.Context, _ formatClaimPhase, batch []Format, want int) ([]Format, bool, error) {
+		more, err := claimReplicationBatch(ctx, tx, formatNames(batch), want)
+		if err != nil {
+			return nil, false, err
+		}
+		plans = append(plans, more...)
+		claimed := make([]Format, len(more))
+		for i, plan := range more {
+			claimed[i] = plan.Format
+		}
+		return claimed, len(more) < want, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return plans, nil
+}
+
+func formatNames(formats []Format) []string {
+	names := make([]string, len(formats))
+	for i, format := range formats {
+		names[i] = string(format)
+	}
+	return names
+}
+
+func claimReplicationBatch(ctx context.Context, q sqlRunner, names []string, limit int) ([]ReplicationPlan, error) {
+	rows, err := q.QueryContext(ctx, claimReplicationPlansQuery, names, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -181,6 +229,20 @@ func (s *PostgresStore) UpdateReplicationCheckpointWithLease(ctx context.Context
 
 func (s *PostgresStore) RenewReplicationPlanLease(ctx context.Context, id, leaseToken string) error {
 	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET lease_expires_at=clock_timestamp()+interval '10 minutes' WHERE id=$1::uuid AND state='running' AND lease_token=$2 AND lease_expires_at>clock_timestamp()`, id, leaseToken)
+	if err != nil {
+		return err
+	}
+	if count, _ := result.RowsAffected(); count != 1 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// ReleaseReplicationPlanLease hands a claimed plan that never ran back to the queue: it is pending and
+// claimable at once, and the attempt its claim counted is returned. A lease that is no longer the caller's, or
+// has expired, is ErrNotFound.
+func (s *PostgresStore) ReleaseReplicationPlanLease(ctx context.Context, id, leaseToken string) error {
+	result, err := s.db.ExecContext(ctx, `UPDATE replication_plans SET state='pending',started_at=NULL,next_attempt_at=NULL,lease_expires_at=NULL,lease_token=NULL,attempts=GREATEST(attempts-1,0) WHERE id=$1::uuid AND state='running' AND lease_token=$2 AND lease_expires_at>clock_timestamp()`, id, leaseToken)
 	if err != nil {
 		return err
 	}
@@ -369,10 +431,11 @@ func equivalentReplicationCheckpoints(existing, requested []ReplicationCheckpoin
 	return true
 }
 
-// claimReplicationPlansQuery takes due replication plans (format filter, limit); the hot-query registry plans it.
+// claimReplicationPlansQuery takes due replication plans (format list, empty for any, and limit); the hot-query
+// registry plans it.
 const claimReplicationPlansQuery = `
 		WITH candidates AS (
-			SELECT id FROM replication_plans WHERE ((state='pending' AND (next_attempt_at IS NULL OR next_attempt_at <= now())) OR (state='failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= now())) AND attempts < CASE WHEN max_attempts < 1 THEN 3 ELSE max_attempts END AND ($1='' OR format=$1) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $2
+			SELECT id FROM replication_plans WHERE ((state='pending' AND (next_attempt_at IS NULL OR next_attempt_at <= now())) OR (state='failed' AND next_attempt_at IS NOT NULL AND next_attempt_at <= now())) AND attempts < CASE WHEN max_attempts < 1 THEN 3 ELSE max_attempts END AND (cardinality($1::text[])=0 OR format=ANY($1::text[])) ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT $2
 		)
 		UPDATE replication_plans p SET state='running',started_at=now(),completed_at=NULL,last_error='',next_attempt_at=NULL,lease_expires_at=now()+interval '10 minutes',lease_token=md5(random()::text || clock_timestamp()::text || p.id::text),attempts=attempts+1,max_attempts=CASE WHEN max_attempts < 1 THEN 3 ELSE max_attempts END
 		FROM candidates WHERE p.id=candidates.id

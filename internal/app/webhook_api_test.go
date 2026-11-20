@@ -38,7 +38,8 @@ func TestWebhookManagementAPIEncryptsSecretsUsesCASAndReplaysDeadDelivery(t *tes
 	if created.Code != http.StatusCreated || created.Header().Get("ETag") != "1" || strings.Contains(created.Body.String(), "0123456789abcdef") || !strings.Contains(created.Body.String(), `"secretConfigured":true`) {
 		t.Fatalf("created=%d etag=%q body=%q", created.Code, created.Header().Get("ETag"), created.Body.String())
 	}
-	subscriptions, err := store.ListWebhookSubscriptions(ctx)
+	subscriptionsPage, err := store.PageWebhookSubscriptions(ctx, repository.WebhookSubscriptionQuery{})
+	subscriptions := subscriptionsPage.Items
 	if err != nil || len(subscriptions) != 1 || subscriptions[0].SecretCiphertext == "0123456789abcdef0123456789abcdef" {
 		t.Fatalf("persisted subscriptions=%#v err=%v", subscriptions, err)
 	}

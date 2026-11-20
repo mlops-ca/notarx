@@ -58,6 +58,8 @@ export const operationsFrCA: Record<keyof typeof operationsEnCA, string> = {
   "operations.allRepositories": "Tous les dépôts",
   "operations.loadingJobStatus": "Chargement de l’état des tâches…",
   "operations.noMatchingJobs": "Aucune tâche correspondante",
+  "operations.pageScopeNotice":
+    "Le sommaire et les filtres ne couvrent que les {length} tâches chargées sur cette page. Les tâches plus anciennes se trouvent sur les pages suivantes; utilisez la pagination pour les charger.",
   "operations.adjustTheFiltersOrRefreshAfterNewJobs":
     "Ajustez les filtres ou actualisez après la création de nouvelles tâches.",
   "operations.everyMinutes": "Toutes les {minutes} minutes",

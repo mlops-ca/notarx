@@ -14,18 +14,32 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-func (h generatedRepositoryAPIAdapter) ListRepositoryLifecycleJobs(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId) {
+func (h generatedRepositoryAPIAdapter) ListRepositoryLifecycleJobs(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId, params adminopenapi.ListRepositoryLifecycleJobsParams) {
 	h.withRepositoryScope(w, r, repositoryID.String(), RepositoryAdmin, func(Principal, repository.HostedRepository) {
-		jobs, err := h.lifecycleJobs.ListLifecycleJobs(r.Context(), repositoryID.String(), 100)
+		query := repository.LifecycleJobListQuery{}
+		if params.Limit != nil {
+			query.Limit = *params.Limit
+		}
+		if params.PageToken != nil {
+			query.PageToken = *params.PageToken
+		}
+		if !validListLimit(w, params.Limit, 100) {
+			return
+		}
+		page, err := h.lifecycleJobs.PageLifecycleJobs(r.Context(), repositoryID.String(), query)
+		if errors.Is(err, repository.ErrInvalidPageToken) {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "pageToken is not valid for this repository")
+			return
+		}
 		if err != nil {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list lifecycle jobs failed")
 			return
 		}
-		items := make([]adminopenapi.LifecycleJob, 0, len(jobs))
-		for _, job := range jobs {
-			items = append(items, lifecycleJobResponse(job))
+		response := adminopenapi.LifecycleJobPage{Items: make([]adminopenapi.LifecycleJob, 0, len(page.Items)), NextPageToken: optionalString(page.NextPageToken)}
+		for _, job := range page.Items {
+			response.Items = append(response.Items, lifecycleJobResponse(job))
 		}
-		writeNativeMavenJSON(w, http.StatusOK, adminopenapi.LifecycleJobList(items))
+		writeNativeMavenJSON(w, http.StatusOK, response)
 	})
 }
 
@@ -43,11 +57,14 @@ func (h generatedRepositoryAPIAdapter) ListLifecycleJobs(w http.ResponseWriter, 
 	if !ok {
 		return
 	}
-	limit := 500
+	query := repository.LifecycleJobListQuery{Limit: 500}
 	if params.Limit != nil {
-		limit = *params.Limit
+		query.Limit = *params.Limit
 	}
-	if limit < 1 || limit > 500 {
+	if params.PageToken != nil {
+		query.PageToken = *params.PageToken
+	}
+	if query.Limit < 1 || query.Limit > 500 {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 500")
 		return
 	}
@@ -56,23 +73,65 @@ func (h generatedRepositoryAPIAdapter) ListLifecycleJobs(w http.ResponseWriter, 
 		writeHostedProblem(w, http.StatusNotImplemented, "not_supported", "lifecycle job aggregation is unavailable")
 		return
 	}
-	records, err := store.ListAllLifecycleJobs(r.Context(), limit)
+	// A caller that administers only some repositories sees only their rows: the store filters by the set of
+	// repositories the caller administers, so every page is full until the listing ends.
+	if !principal.Admin {
+		ids, err := h.administeredRepositoryIDs(r, principal)
+		if err != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list lifecycle jobs failed")
+			return
+		}
+		if len(ids) == 0 {
+			writeNativeMavenJSON(w, http.StatusOK, adminopenapi.RepositoryLifecycleJobPage{Items: []adminopenapi.RepositoryLifecycleJob{}})
+			return
+		}
+		query.RepositoryIDs = ids
+	}
+	page, err := store.PageAllLifecycleJobs(r.Context(), query)
+	if errors.Is(err, repository.ErrInvalidPageToken) {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "pageToken is not valid for this listing")
+		return
+	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list lifecycle jobs failed")
 		return
 	}
-	items := make(adminopenapi.RepositoryLifecycleJobList, 0, len(records))
-	for _, record := range records {
-		if !h.mayAdministerRepository(r, principal, record.Job.RepositoryID) {
-			continue
-		}
-		items = append(items, adminopenapi.RepositoryLifecycleJob{
+	response := adminopenapi.RepositoryLifecycleJobPage{Items: make([]adminopenapi.RepositoryLifecycleJob, 0, len(page.Items)), NextPageToken: optionalString(page.NextPageToken)}
+	for _, record := range page.Items {
+		response.Items = append(response.Items, adminopenapi.RepositoryLifecycleJob{
 			RepositoryId:   uuid.MustParse(record.Job.RepositoryID),
 			RepositoryName: record.RepositoryName,
 			Job:            lifecycleJobResponse(record.Job),
 		})
 	}
-	writeNativeMavenJSON(w, http.StatusOK, items)
+	writeNativeMavenJSON(w, http.StatusOK, response)
+}
+
+// administeredRepositoryIDs lists the repositories the principal may administer: one authorization per
+// repository, the cost of the other cross-repository views (capacities, grants, overview), instead of one per
+// job row read. Repositories are soft-deleted, so the walk's cursor row stays; should it vanish anyway (a test
+// purge), the walk starts over rather than failing the listing.
+func (h generatedRepositoryAPIAdapter) administeredRepositoryIDs(r *http.Request, principal Principal) ([]string, error) {
+	ids := []string{}
+	for after, restarts := "", 0; ; {
+		batch, next, err := h.store.ListHostedRepositories(r.Context(), 200, after)
+		if errors.Is(err, repository.ErrNotFound) && after != "" && restarts < 3 {
+			ids, after, restarts = ids[:0], "", restarts+1
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		for _, repo := range batch {
+			if h.authorizer.Authorize(r.Context(), principal, repo, RepositoryAdmin).Allowed {
+				ids = append(ids, repo.ID)
+			}
+		}
+		if next == "" || len(batch) == 0 {
+			return ids, nil
+		}
+		after = next
+	}
 }
 
 func lifecycleJobResponse(job repository.LifecycleJob) adminopenapi.LifecycleJob {

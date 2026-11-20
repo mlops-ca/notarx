@@ -49,15 +49,27 @@ func (s *MemoryStore) CreateWebhookSubscription(ctx context.Context, value Webho
 	return cloneWebhookSubscription(value), nil
 }
 
-func (s *MemoryStore) ListWebhookSubscriptions(_ context.Context) ([]WebhookSubscription, error) {
+func (s *MemoryStore) PageWebhookSubscriptions(_ context.Context, query WebhookSubscriptionQuery) (WebhookSubscriptionPage, error) {
+	limit := pageLimit(query.Limit, 500, 500)
+	afterName, after, err := decodeNameToken(query.PageToken, webhookSubscriptionsFilter)
+	if err != nil {
+		return WebhookSubscriptionPage{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	values := make([]WebhookSubscription, 0, len(s.webhookSubscriptions))
 	for _, value := range s.webhookSubscriptions {
-		values = append(values, cloneWebhookSubscription(value))
+		if !after || value.Name > afterName {
+			values = append(values, cloneWebhookSubscription(value))
+		}
 	}
 	sort.Slice(values, func(i, j int) bool { return values[i].Name < values[j].Name })
-	return values, nil
+	page := WebhookSubscriptionPage{Items: values}
+	if len(values) > limit {
+		page.Items = values[:limit]
+		page.NextPageToken = EncodeKeysetToken(webhookSubscriptionsFilter, page.Items[limit-1].Name)
+	}
+	return page, nil
 }
 
 func (s *MemoryStore) GetWebhookSubscription(_ context.Context, id string) (WebhookSubscription, error) {
@@ -131,30 +143,35 @@ func (s *MemoryStore) enqueueWebhookEventLocked(event WebhookEvent) WebhookEvent
 	return cloneWebhookEvent(event)
 }
 
-func (s *MemoryStore) ListWebhookDeliveries(_ context.Context, query WebhookDeliveryQuery) ([]WebhookDelivery, error) {
+func (s *MemoryStore) PageWebhookDeliveries(_ context.Context, query WebhookDeliveryQuery) (WebhookDeliveryPage, error) {
+	limit := pageLimit(query.Limit, 100, 500)
+	cursorAt, cursorID, after, err := decodeCreatedAtToken(query.PageToken, webhookDeliveriesFilter(query))
+	if err != nil {
+		return WebhookDeliveryPage{}, err
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	limit := query.Limit
-	if limit <= 0 || limit > 500 {
-		limit = 100
-	}
 	values := make([]WebhookDelivery, 0, len(s.webhookDeliveries))
 	for _, value := range s.webhookDeliveries {
 		if query.SubscriptionID != "" && value.SubscriptionID != query.SubscriptionID || query.State != "" && value.State != query.State {
 			continue
 		}
+		if after && !createdAtBefore(value.CreatedAt, value.ID, cursorAt, cursorID) {
+			continue
+		}
+		value.SubscriptionName = s.webhookSubscriptions[value.SubscriptionID].Name
 		values = append(values, value)
 	}
 	sort.Slice(values, func(i, j int) bool {
-		if values[i].CreatedAt.Equal(values[j].CreatedAt) {
-			return values[i].ID > values[j].ID
-		}
-		return values[i].CreatedAt.After(values[j].CreatedAt)
+		return newerFirst(values[i].CreatedAt, values[i].ID, values[j].CreatedAt, values[j].ID)
 	})
+	page := WebhookDeliveryPage{Items: values}
 	if len(values) > limit {
-		values = values[:limit]
+		page.Items = values[:limit]
+		last := page.Items[limit-1]
+		page.NextPageToken = encodeCreatedAtToken(webhookDeliveriesFilter(query), last.CreatedAt, last.ID)
 	}
-	return values, nil
+	return page, nil
 }
 
 func (s *MemoryStore) GetWebhookDelivery(_ context.Context, id string) (WebhookDelivery, error) {

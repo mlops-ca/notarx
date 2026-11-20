@@ -105,11 +105,11 @@ type IdentityProviderStore interface {
 
 type WebhookStore interface {
 	CreateWebhookSubscription(context.Context, WebhookSubscription, ...AuditRecord) (WebhookSubscription, error)
-	ListWebhookSubscriptions(context.Context) ([]WebhookSubscription, error)
+	PageWebhookSubscriptions(context.Context, WebhookSubscriptionQuery) (WebhookSubscriptionPage, error)
 	GetWebhookSubscription(context.Context, string) (WebhookSubscription, error)
 	UpdateWebhookSubscription(context.Context, WebhookSubscription, string, ...AuditRecord) (WebhookSubscription, error)
 	EnqueueWebhookEvent(context.Context, WebhookEvent) (WebhookEvent, error)
-	ListWebhookDeliveries(context.Context, WebhookDeliveryQuery) ([]WebhookDelivery, error)
+	PageWebhookDeliveries(context.Context, WebhookDeliveryQuery) (WebhookDeliveryPage, error)
 	GetWebhookDelivery(context.Context, string) (WebhookDelivery, error)
 	ClaimWebhookDeliveries(context.Context, string, time.Time, time.Duration, int) ([]WebhookDeliveryClaim, error)
 	CompleteWebhookDelivery(context.Context, string, string, int, time.Time) error
@@ -240,11 +240,13 @@ type ArtifactQuarantineStore interface {
 type LifecycleJobStore interface {
 	EnqueueLifecycleJob(context.Context, LifecycleJob, ...AuditRecord) (LifecycleJob, bool, error)
 	ListLifecycleJobs(context.Context, string, int) ([]LifecycleJob, error)
+	PageLifecycleJobs(context.Context, string, LifecycleJobListQuery) (LifecycleJobPage, error)
 	GetLifecycleJob(context.Context, string, string) (LifecycleJob, error)
 	GetLatestArtifactScanJob(context.Context, string, Format, string, string) (LifecycleJob, error)
 	ClaimLifecycleJobs(context.Context, int) ([]LifecycleJob, error)
 	ClaimLifecycleJobsByKind(context.Context, LifecycleJobKind, int) ([]LifecycleJob, error)
 	ClaimLifecycleJobsByKindAndFormat(context.Context, LifecycleJobKind, Format, int) ([]LifecycleJob, error)
+	ClaimLifecycleJobsByKindAndFormats(context.Context, LifecycleJobKind, []Format, int) ([]LifecycleJob, error)
 	RecoverExpiredLifecycleJobs(context.Context, time.Time) (int, error)
 	RunLifecycleJobNow(context.Context, string, string, ...AuditRecord) (LifecycleJob, error)
 	RetryLifecycleJob(context.Context, string, string, ...AuditRecord) (LifecycleJob, error)
@@ -301,7 +303,7 @@ type ArtifactIdentityStore interface {
 }
 
 type RepositoryLifecycleJobStore interface {
-	ListAllLifecycleJobs(context.Context, int) ([]RepositoryLifecycleJob, error)
+	PageAllLifecycleJobs(context.Context, LifecycleJobListQuery) (RepositoryLifecycleJobPage, error)
 }
 
 type ScheduledTaskStore interface {
@@ -320,6 +322,7 @@ type ReplicationStore interface {
 	CreateReplicationPlan(context.Context, ReplicationPlan, []ReplicationCheckpoint, ...AuditRecord) (ReplicationPlan, bool, error)
 	ClaimReplicationPlans(context.Context, int) ([]ReplicationPlan, error)
 	ClaimReplicationPlansByFormat(context.Context, Format, int) ([]ReplicationPlan, error)
+	ClaimReplicationPlansByFormats(context.Context, []Format, int) ([]ReplicationPlan, error)
 	RecoverExpiredReplicationPlans(context.Context, time.Time) (int, error)
 	ListReplicationPlans(context.Context, string, int) ([]ReplicationPlan, error)
 	GetReplicationPlan(context.Context, string, string) (ReplicationPlan, error)

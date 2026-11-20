@@ -2688,7 +2688,13 @@ export type WebhookSubscription = {
   updatedAt: string;
 };
 
-export type WebhookSubscriptionList = Array<WebhookSubscription>;
+export type WebhookSubscriptionPage = {
+  items: Array<WebhookSubscription>;
+  /**
+   * Present while older subscriptions follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
 
 export type CreateWebhookSubscription = {
   name: string;
@@ -2712,6 +2718,10 @@ export type WebhookDelivery = {
   eventId: string;
   eventType: WebhookEventType;
   subscriptionId: string;
+  /**
+   * Name of the subscription, set in the delivery listing.
+   */
+  subscriptionName?: string;
   state: WebhookDeliveryState;
   attempts: number;
   nextAttemptAt?: string;
@@ -2722,7 +2732,13 @@ export type WebhookDelivery = {
   updatedAt: string;
 };
 
-export type WebhookDeliveryList = Array<WebhookDelivery>;
+export type WebhookDeliveryPage = {
+  items: Array<WebhookDelivery>;
+  /**
+   * Present while older deliveries follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
 
 export type RuntimeNode = {
   instanceId: string;
@@ -3323,7 +3339,13 @@ export type RepositoryLifecycleJob = {
   job: LifecycleJob;
 };
 
-export type RepositoryLifecycleJobList = Array<RepositoryLifecycleJob>;
+export type RepositoryLifecycleJobPage = {
+  items: Array<RepositoryLifecycleJob>;
+  /**
+   * Present while older jobs follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
 
 export type CreateScheduledTask = {
   name: string;
@@ -3421,6 +3443,14 @@ export type PromotionRequest = {
    * Required only for APT Hosted operator preview. Appends the immutable pool package to this target suite using the target signer. The pool coordinate preserves its component.
    */
   aptTargetSuite?: string;
+};
+
+export type LifecycleJobPage = {
+  items: Array<LifecycleJob>;
+  /**
+   * Present while older jobs follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
 };
 
 export type ArtifactScanStatus = {
@@ -9811,11 +9841,18 @@ export type RotateIdentityProviderSpKeyResponse =
 export type ListWebhookSubscriptionsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    limit?: number;
+    pageToken?: string;
+  };
   url: "/webhook-subscriptions";
 };
 
 export type ListWebhookSubscriptionsErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
   /**
    * Problem response
    */
@@ -9833,7 +9870,7 @@ export type ListWebhookSubscriptionsResponses = {
   /**
    * Webhook subscriptions
    */
-  200: WebhookSubscriptionList;
+  200: WebhookSubscriptionPage;
 };
 
 export type ListWebhookSubscriptionsResponse =
@@ -9986,6 +10023,7 @@ export type ListWebhookDeliveriesData = {
     subscriptionId?: string;
     state?: WebhookDeliveryState;
     limit?: number;
+    pageToken?: string;
   };
   url: "/webhook-deliveries";
 };
@@ -10012,7 +10050,7 @@ export type ListWebhookDeliveriesResponses = {
   /**
    * Recent webhook deliveries
    */
-  200: WebhookDeliveryList;
+  200: WebhookDeliveryPage;
 };
 
 export type ListWebhookDeliveriesResponse =
@@ -11693,11 +11731,16 @@ export type ListLifecycleJobsData = {
   path?: never;
   query?: {
     limit?: number;
+    pageToken?: string;
   };
   url: "/lifecycle-jobs";
 };
 
 export type ListLifecycleJobsErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
   /**
    * Problem response
    */
@@ -11709,9 +11752,9 @@ export type ListLifecycleJobsError =
 
 export type ListLifecycleJobsResponses = {
   /**
-   * Lifecycle jobs across all repositories, newest first
+   * A page of lifecycle jobs across all repositories, newest first
    */
-  200: RepositoryLifecycleJobList;
+  200: RepositoryLifecycleJobPage;
 };
 
 export type ListLifecycleJobsResponse =
@@ -12846,11 +12889,18 @@ export type ListRepositoryLifecycleJobsData = {
   path: {
     repositoryId: string;
   };
-  query?: never;
+  query?: {
+    limit?: number;
+    pageToken?: string;
+  };
   url: "/repositories/{repositoryId}/lifecycle-jobs";
 };
 
 export type ListRepositoryLifecycleJobsErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
   /**
    * Problem response
    */
@@ -12862,9 +12912,9 @@ export type ListRepositoryLifecycleJobsError =
 
 export type ListRepositoryLifecycleJobsResponses = {
   /**
-   * Lifecycle jobs for one repository, newest first
+   * A page of lifecycle jobs for one repository, newest first
    */
-  200: Array<LifecycleJob>;
+  200: LifecycleJobPage;
 };
 
 export type ListRepositoryLifecycleJobsResponse =

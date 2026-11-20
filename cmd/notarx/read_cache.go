@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/mlops-ca/notarx/internal/access"
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/readcache"
@@ -19,6 +20,7 @@ type readCaches struct {
 	registry *readcache.Registry
 	keys     *authorization.CachedAPIKeys
 	accounts *authorization.CachedServiceAccounts
+	access   *access.ReadCaches
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -33,7 +35,40 @@ func newReadCaches(cfg config.Config, store *repository.PostgresStore) *readCach
 		registry: registry,
 		keys:     authorization.NewCachedAPIKeys(store, registry, store, cfg.APIKeyLastUsedInterval, slog.Default()),
 		accounts: authorization.NewCachedServiceAccounts(store, registry),
+		access:   access.NewReadCaches(store, registry),
 	}
+}
+
+// cachedStore is the store the gateway reads the access-decision inputs through (ADR 0023 section 6): every
+// method is the PostgreSQL store's except the repository, group and public access policy getters, which the
+// caches answer. Writes and management reads carry readcache.Bypass and reach the database.
+type cachedStore struct {
+	*repository.PostgresStore
+	access *access.ReadCaches
+}
+
+func (c *readCaches) cachedStore(store *repository.PostgresStore) *cachedStore {
+	return &cachedStore{PostgresStore: store, access: c.access}
+}
+
+func (s *cachedStore) GetHostedRepository(ctx context.Context, id string) (repository.HostedRepository, error) {
+	return s.access.GetHostedRepository(ctx, id)
+}
+
+func (s *cachedStore) GetHostedRepositoryByName(ctx context.Context, name string) (repository.HostedRepository, error) {
+	return s.access.GetHostedRepositoryByName(ctx, name)
+}
+
+func (s *cachedStore) GetHostedGroup(ctx context.Context, id string) (repository.HostedGroup, error) {
+	return s.access.GetHostedGroup(ctx, id)
+}
+
+func (s *cachedStore) GetHostedGroupByName(ctx context.Context, name string) (repository.HostedGroup, error) {
+	return s.access.GetHostedGroupByName(ctx, name)
+}
+
+func (s *cachedStore) GetPublicAccessPolicy(ctx context.Context) (repository.PublicAccessPolicy, error) {
+	return s.access.GetPublicAccessPolicy(ctx)
 }
 
 // start runs the listener on a dedicated connection of the notification pool.

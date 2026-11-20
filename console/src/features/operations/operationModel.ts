@@ -42,9 +42,9 @@ export const KIND_LABELS: Record<string, MessageKey> = {
 /** Active jobs keep the history polling; settled ones do not. */
 export const ACTIVE_JOB_STATES = ["pending", "running", "retrying"];
 
-/** Lifecycle and audit-retention jobs as one list, newest first. */
+/** Lifecycle and audit-retention jobs as one list; either input may be empty. */
 export function toOperationRows(
-  lifecycleRecords: ListLifecycleJobsResponse,
+  lifecycleRecords: ListLifecycleJobsResponse["items"],
   auditRetention: ListAuditRetentionJobsResponse,
   t: Translate,
 ): OperationRow[] {

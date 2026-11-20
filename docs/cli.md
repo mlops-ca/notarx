@@ -669,14 +669,17 @@ These commands read; none of them changes anything.
   fields reach scripts) with a human summary. Diagnostics includes each
   local mount's status, reason, byte values, actual sample time and shared
   aliases, plus the observation scope and unit. Missing values remain unknown.
-- `notarxctl lifecycle-job list [--repo ID | --limit N]` reads the newest jobs of
-  one repository (at most 100), or a global window of at most 500 by default.
-  The server limits the global window before filtering repository permissions:
-  a short or empty result does not prove completeness. Both sources report
-  `mode: bounded`; global completeness stays unknown, and a repository window
-  is complete only when fewer than 100 jobs are returned.
-  `notarxctl lifecycle-job show JOB_ID` finds one job in the same window; a job
-  outside it answers exit 4 with the range that was searched.
+- `notarxctl lifecycle-job list [--repo ID] [--limit N] [--cursor TOKEN]` reads
+  one keyset page of the newest jobs, newest first: of one repository (`--limit`
+  1–100, default 100), or across the repositories you administer (`--limit`
+  1–500, default 500). Both report `mode: cursor`; `complete` is true only
+  when no next page exists, and `data.nextCursor` carries the `nextPageToken`
+  (the human output prints the full continuing command, `--repo` and
+  `--limit` included, because a token is bound to the filters that issued it).
+  Rows of repositories you do not administer are left out before the page is
+  cut, so a page holds the full limit until the last one.
+  `notarxctl lifecycle-job show JOB_ID` pages the same list until it finds the
+  job; a job in no page answers exit 4.
   Running, retrying, and cancelling jobs is not part of this command family
   yet.
 

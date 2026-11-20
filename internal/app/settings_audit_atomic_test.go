@@ -203,7 +203,8 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed de
 			}
 		}},
 		{"webhook create", http.MethodPost, "/webhook-subscriptions", strings.Replace(webhookBody, "%s", newHook, 1), "", func(t *testing.T) {
-			subscriptions, _ := store.ListWebhookSubscriptions(ctx)
+			subscriptionsPage, _ := store.PageWebhookSubscriptions(ctx, repository.WebhookSubscriptionQuery{})
+			subscriptions := subscriptionsPage.Items
 			for _, got := range subscriptions {
 				if got.Name == newHook {
 					t.Fatalf("webhook created: %+v", got)

@@ -8,7 +8,7 @@ import (
 )
 
 func cargoPromotionWebhookEvent(job LifecycleJob) (WebhookEvent, bool) {
-	if job.Kind != LifecycleJobPromotion || !lifecycleJobMatchesFormat(job.Payload, FormatCargo) ||
+	if job.Kind != LifecycleJobPromotion || !lifecycleJobMatchesFormats(job.Payload, []Format{FormatCargo}) ||
 		(job.State != LifecycleJobCompleted && job.State != LifecycleJobFailed) {
 		return WebhookEvent{}, false
 	}

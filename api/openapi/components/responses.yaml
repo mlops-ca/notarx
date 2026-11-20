@@ -311,7 +311,7 @@ WebhookSubscriptionList:
   description: Webhook subscriptions
   content:
     application/json:
-      schema: {"$ref": "../components/schemas.yaml#/WebhookSubscriptionList"}
+      schema: {"$ref": "../components/schemas.yaml#/WebhookSubscriptionPage"}
 WebhookDelivery:
   description: Durable webhook delivery state
   content:
@@ -321,7 +321,7 @@ WebhookDeliveryList:
   description: Recent webhook deliveries
   content:
     application/json:
-      schema: {"$ref": "../components/schemas.yaml#/WebhookDeliveryList"}
+      schema: {"$ref": "../components/schemas.yaml#/WebhookDeliveryPage"}
 SecurityPolicyEvaluation:
   description: Security admission evaluation for an immutable artifact
   content:
@@ -438,19 +438,17 @@ RetentionDryRun:
       schema:
         type: string
 LifecycleJobList:
-  description: Lifecycle jobs for one repository, newest first
+  description: A page of lifecycle jobs for one repository, newest first
   content:
     application/json:
       schema:
-        type: array
-        items:
-          "$ref": "../components/schemas.yaml#/LifecycleJob"
+        "$ref": "../components/schemas.yaml#/LifecycleJobPage"
 RepositoryLifecycleJobList:
-  description: Lifecycle jobs across all repositories, newest first
+  description: A page of lifecycle jobs across all repositories, newest first
   content:
     application/json:
       schema:
-        "$ref": "../components/schemas.yaml#/RepositoryLifecycleJobList"
+        "$ref": "../components/schemas.yaml#/RepositoryLifecycleJobPage"
 ArtifactTombstoneList:
   description: Tombstoned artifacts for one repository
   content:

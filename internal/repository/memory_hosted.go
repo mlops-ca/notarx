@@ -311,16 +311,12 @@ func (s *MemoryStore) ListHostedGroups(_ context.Context, limit int, after strin
 		items = append(items, cloneHostedGroup(group))
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].ID < items[j].ID })
+	// A keyset, as in PostgreSQL: the page after a cursor starts at the next id, whether or not its group still
+	// exists. A cursor that names no group and is no canonical uuid is ErrNotFound.
 	start := 0
 	if after != "" {
-		found := false
-		for i, group := range items {
-			if group.ID == after {
-				start, found = i+1, true
-				break
-			}
-		}
-		if !found {
+		start = sort.Search(len(items), func(i int) bool { return items[i].ID > after })
+		if (start == 0 || items[start-1].ID != after) && !isCanonicalUUID(after) {
 			return nil, "", ErrNotFound
 		}
 	}

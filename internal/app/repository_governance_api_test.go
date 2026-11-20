@@ -279,9 +279,9 @@ func TestRepositoryConsoleAggregatesRequireAdminAndReturnCrossRepositoryData(t *
 	}
 
 	jobsResponse := request("/api/v2/lifecycle-jobs?limit=10", "admin-secret")
-	var jobs adminopenapi.RepositoryLifecycleJobList
-	if jobsResponse.Code != http.StatusOK || json.Unmarshal(jobsResponse.Body.Bytes(), &jobs) != nil || len(jobs) != 1 || jobs[0].RepositoryId.String() != second.ID || jobs[0].RepositoryName != second.Name || jobs[0].Job.Id != job.ID {
-		t.Fatalf("jobs=%d body=%s decoded=%#v", jobsResponse.Code, jobsResponse.Body.String(), jobs)
+	var jobPage adminopenapi.RepositoryLifecycleJobPage
+	if jobsResponse.Code != http.StatusOK || json.Unmarshal(jobsResponse.Body.Bytes(), &jobPage) != nil || len(jobPage.Items) != 1 || jobPage.Items[0].RepositoryId.String() != second.ID || jobPage.Items[0].RepositoryName != second.Name || jobPage.Items[0].Job.Id != job.ID {
+		t.Fatalf("jobs=%d body=%s decoded=%#v", jobsResponse.Code, jobsResponse.Body.String(), jobPage)
 	}
 }
 

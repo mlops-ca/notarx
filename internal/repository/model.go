@@ -1655,17 +1655,19 @@ type WebhookDelivery struct {
 	EventID        string
 	EventType      WebhookEventType
 	SubscriptionID string
-	State          WebhookDeliveryState
-	Attempts       int
-	NextAttemptAt  time.Time
-	LeaseOwner     string
-	LeaseToken     string
-	LeaseExpiresAt time.Time
-	LastStatus     int
-	LastError      string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
-	DeliveredAt    time.Time
+	// SubscriptionName is filled by the delivery listing only.
+	SubscriptionName string
+	State            WebhookDeliveryState
+	Attempts         int
+	NextAttemptAt    time.Time
+	LeaseOwner       string
+	LeaseToken       string
+	LeaseExpiresAt   time.Time
+	LastStatus       int
+	LastError        string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+	DeliveredAt      time.Time
 }
 
 type WebhookDeliveryClaim struct {
@@ -1674,10 +1676,31 @@ type WebhookDeliveryClaim struct {
 	Subscription WebhookSubscription
 }
 
+// WebhookDeliveryQuery pages deliveries newest first; PageToken is the NextPageToken of the previous page and
+// is bound to the subscription and state filters.
 type WebhookDeliveryQuery struct {
 	SubscriptionID string
 	State          WebhookDeliveryState
 	Limit          int
+	PageToken      string
+}
+
+// WebhookDeliveryPage is one page of deliveries.
+type WebhookDeliveryPage struct {
+	Items         []WebhookDelivery
+	NextPageToken string
+}
+
+// WebhookSubscriptionQuery pages subscriptions by name.
+type WebhookSubscriptionQuery struct {
+	Limit     int
+	PageToken string
+}
+
+// WebhookSubscriptionPage is one page of subscriptions.
+type WebhookSubscriptionPage struct {
+	Items         []WebhookSubscription
+	NextPageToken string
 }
 
 type ArtifactQuarantineWebhookData struct {

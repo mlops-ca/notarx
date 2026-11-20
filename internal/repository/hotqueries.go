@@ -99,14 +99,16 @@ var hotQueries = []hotQuery{
 		noSeqScan:     []string{"hosted_repositories"},
 	},
 	{
-		name:          "lifecycle.claimByKind",
-		build:         fixed(claimLifecycleCandidatesByKindQuery, func(hotQueryFixture) []any { return []any{string(LifecycleJobKind("scan")), "", []string{}, 10} }),
+		name: "lifecycle.claimByKind",
+		build: fixed(claimLifecycleCandidatesByKindQuery, func(hotQueryFixture) []any {
+			return []any{string(LifecycleJobKind("scan")), []string{}, []string{}, 10}
+		}),
 		indexContains: []string{"lifecycle_jobs_kind_actionable_idx"},
 		noSeqScan:     []string{"lifecycle_jobs"},
 	},
 	{
 		name:          "lifecycle.claimAnyKind",
-		build:         fixed(claimLifecycleCandidatesAnyKindQuery, func(hotQueryFixture) []any { return []any{"", []string{}, 10} }),
+		build:         fixed(claimLifecycleCandidatesAnyKindQuery, func(hotQueryFixture) []any { return []any{[]string{}, []string{}, 10} }),
 		indexContains: []string{"lifecycle_jobs_actionable_idx"},
 		noSeqScan:     []string{"lifecycle_jobs"},
 	},
@@ -173,7 +175,7 @@ var hotQueries = []hotQuery{
 	},
 	{
 		name:          "replication.claim",
-		build:         fixed(claimReplicationPlansQuery, func(hotQueryFixture) []any { return []any{"", 10} }),
+		build:         fixed(claimReplicationPlansQuery, func(hotQueryFixture) []any { return []any{[]string{}, 10} }),
 		indexContains: []string{"replication_plans_claim_idx", "replication_plans_retry_idx"},
 		noSeqScan:     []string{"replication_plans"},
 	},
