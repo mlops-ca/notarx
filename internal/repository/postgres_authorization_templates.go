@@ -143,6 +143,9 @@ func (s *PostgresStore) applyAuthorizationTemplateMutation(ctx context.Context, 
 	if !repositoryExists {
 		return RepositoryGrantSet{}, ErrNotFound
 	}
+	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_grant_sets (repository_id,version) VALUES ($1,1) ON CONFLICT DO NOTHING`, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
@@ -159,9 +162,6 @@ func (s *PostgresStore) applyAuthorizationTemplateMutation(ctx context.Context, 
 		return RepositoryGrantSet{}, ErrVersionConflict
 	}
 	if err != nil {
-		return RepositoryGrantSet{}, err
-	}
-	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id=$1::uuid`, repositoryID); err != nil {

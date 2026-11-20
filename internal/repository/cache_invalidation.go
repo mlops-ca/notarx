@@ -3,8 +3,6 @@ package repository
 import (
 	"context"
 	"time"
-
-	"github.com/mlops-ca/notarx/internal/tokenissuer"
 )
 
 // CacheNotifyChannel is the NOTIFY channel of read-cache invalidations (ADR 0023
@@ -27,9 +25,6 @@ const (
 	CacheScopeUser       = "user"
 	CacheScopeQuarantine = "quarantine"
 	CacheScopeGrants     = "grants"
-	// CacheScopeSigningKeys is the published signing key set of the notarx issuer (ADR 0020); a change flushes the
-	// scope because a key row announces no entity.
-	CacheScopeSigningKeys = tokenissuer.CacheScope
 	// CacheScopeWorkloadIssuer and CacheScopeWorkloadPolicy are the workload issuers and trust policies of ADR 0019.
 	CacheScopeWorkloadIssuer = "workload_issuer"
 	CacheScopeWorkloadPolicy = "workload_policy"
@@ -63,8 +58,6 @@ func (s *PostgresStore) invalidateLocal(scope, id string) {
 	}
 }
 
-// invalidateLocalScope flushes every cached entry of a scope in this process, for a change whose affected
-// entities are not known one by one (a repository visibility change affects the groups that contain it).
 // invalidateGrants evicts what a grant mutation of a repository changes in this process: the grant set and the
 // repository row, whose grants_version the grant set is keyed on.
 func (s *PostgresStore) invalidateGrants(repositoryID string) {
@@ -72,6 +65,8 @@ func (s *PostgresStore) invalidateGrants(repositoryID string) {
 	s.invalidateLocal(CacheScopeRepository, repositoryID)
 }
 
+// invalidateLocalScope flushes every cached entry of a scope in this process, for a change whose affected
+// entities are not known one by one (a repository visibility change affects the groups that contain it).
 func (s *PostgresStore) invalidateLocalScope(scope string) {
 	if invalidate := s.cacheInvalidator.Load(); invalidate != nil {
 		(*invalidate)(scope, "")

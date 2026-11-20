@@ -14,14 +14,20 @@ import (
 // DefaultJWKSCacheTTL is the lifetime of the published key set on a service that has no shared registry.
 const DefaultJWKSCacheTTL = 30 * time.Second
 
+// DisabledJWKSCacheTTL is the lifetime of the key set when the registry disables every cache
+// (NOTARX_AUTHZ_CACHE_TTL=0). The anonymous issuer route carries no authorization decision and is reachable
+// without credentials, so it never reads the database per request; a key change on this node still evicts at once.
+const DisabledJWKSCacheTTL = time.Second
+
 // CacheScope is the invalidation scope of the published signing key set. The database announces a change of any
 // token_signing_keys row on it (migration 000007), and the key manager evicts the local node synchronously.
 const CacheScope = "signing_keys"
 
 // JWKSService serves the public key set from a read cache of internal/readcache (ADR 0023 section 6), so
 // anonymous traffic never reaches the database per request. The entry lives at most the authorization window of
-// the registry (NOTARX_AUTHZ_CACHE_TTL) and is evicted sooner by a key change on any node. It reads public
-// columns only and never holds a lock across a database call.
+// the registry (NOTARX_AUTHZ_CACHE_TTL) and is evicted sooner by a key change on any node; with the caches
+// disabled it still lives DisabledJWKSCacheTTL, so anonymous traffic never reaches the database per request.
+// It reads public columns only and never holds a lock across a database call.
 type JWKSService struct {
 	Store PublicKeyReader
 	// Registry owns the cache, its TTL and its invalidation scope. A nil registry gives the service a private
@@ -51,8 +57,11 @@ func (s *JWKSService) init() {
 		if s.Registry == nil {
 			s.Registry = readcache.NewRegistry(DefaultJWKSCacheTTL)
 		}
-		s.cache = readcache.New[struct{}, jwksDocument](s.Registry, readcache.Options[jwksDocument]{
-			Name: "signing_key_set", Scope: CacheScope, IgnoreBypass: true})
+		options := readcache.Options[jwksDocument]{Name: "signing_key_set", Scope: CacheScope, IgnoreBypass: true}
+		if !s.Registry.Enabled() {
+			options.TTL = DisabledJWKSCacheTTL
+		}
+		s.cache = readcache.New[struct{}, jwksDocument](s.Registry, options)
 	})
 }
 

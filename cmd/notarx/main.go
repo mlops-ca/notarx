@@ -462,6 +462,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			slog.Error("configure RubyGems preview publication store", "error", err)
 			return 1
 		}
+		rubyGemsStore.OnReadPolicyChange(func(repositoryID string) { caches.registry.Invalidate(repository.CacheScopeQuarantine, repositoryID) })
 		rubyGemsMaintenance, err = rubygemsformat.NewMaintenance(rubyGemsStore, objectStore)
 		if err != nil {
 			slog.Error("configure RubyGems preview maintenance", "error", err)

@@ -60,7 +60,7 @@ type Options struct {
 	JWKSTTL     time.Duration
 	// JWKSStaleMax is how long past its TTL an unrefreshable key set keeps being served.
 	JWKSStaleMax time.Duration
-	// KidRefetchInterval rate limits kid-miss refetches (and failed refreshes) per issuer.
+	// KidRefetchInterval rate limits kid-miss refetches per issuer; failed refreshes use FailedFetchRetry.
 	KidRefetchInterval time.Duration
 	// FailedFetchRetry rate limits the next fetch after a failed one; zero selects DefaultFailedFetchRetry.
 	FailedFetchRetry time.Duration

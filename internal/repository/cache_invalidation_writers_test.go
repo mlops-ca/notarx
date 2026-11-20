@@ -23,7 +23,7 @@ func TestCachedTablesHaveNoOtherWriters(t *testing.T) {
 		"internal/repository/postgres_quarantine_read_policy.go",  // the quarantine read policy mutations evict their repository
 		"internal/repository/postgres_helm_governance.go",         // idem
 		"internal/repository/postgres_nuget_governance.go",        // idem
-		"internal/rubygemspublication/pgstore/read_policy.go",     // RubyGems read policy: the trigger notification evicts, this store has no invalidator
+		"internal/rubygemspublication/pgstore/read_policy.go",     // ReplaceReadPolicy runs the OnReadPolicyChange hook, which main wires to the quarantine scope
 		"internal/repository/postgres_workload.go",                // workload issuer and policy mutations evict their entity
 		"internal/repository/postgres_public_access.go",           // ReplacePublicAccessPolicy evicts the policy scope
 		"internal/repositorypreset/pgstore/store.go",              // first-install presets run before the caches start

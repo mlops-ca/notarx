@@ -449,7 +449,8 @@ Every node runs the rotation worker; one acts at a time under the PostgreSQL adv
 promoted only after it was published for the whole lead, so verifiers trust it before it signs. A
 retired key stays published until `retired_at` plus the maximum token lifetime plus the lead.
 Nodes cache the active key for at most 30 seconds; the published key set (JWKS) is a read cache
-of the authorization window and is evicted on every node when a key rotates or is revoked. Switching `NOTARX_ISSUER_ALG` only changes which
+of the authorization window (one second when `NOTARX_AUTHZ_CACHE_TTL=0`, so anonymous traffic never reaches the
+database per request) and is evicted on every node when a key rotates or is revoked. Switching `NOTARX_ISSUER_ALG` only changes which
 active key signs; the missing algorithm's key pair is created on the next pass.
 
 Each key row carries an `integrity_mac` keyed from the encryption key ring. Rows that fail it

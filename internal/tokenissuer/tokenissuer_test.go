@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -685,13 +686,34 @@ func TestJWKSServiceIsEvictedByTheScopeNotificationAndBoundedByTheWindow(t *test
 			t.Fatalf("window %v: a lost notification must end at the window: %d reads", window, store.lists)
 		}
 	}
+	// With every cache disabled the anonymous route still never reads the database per request.
 	registry := readcache.NewRegistry(0)
+	registry.SetClock(clock.Now)
 	service := &JWKSService{Store: store, Registry: registry, Now: clock.Now}
 	store.lists = 0
+	for range 5 {
+		_, _, _ = service.Document(t.Context())
+	}
+	if store.lists != 1 {
+		t.Fatalf("a window of 0 must still absorb anonymous traffic: %d reads for 5 requests", store.lists)
+	}
+	service.Invalidate()
 	_, _, _ = service.Document(t.Context())
+	clock.Advance(DisabledJWKSCacheTTL)
 	_, _, _ = service.Document(t.Context())
-	if store.lists != 2 {
-		t.Fatalf("a window of 0 must read through: %d reads", store.lists)
+	if store.lists != 3 {
+		t.Fatalf("a key change and the floor must reload: %d reads", store.lists)
+	}
+}
+
+// The trigger of migration 000007 and the cache name the service registers must agree on the scope.
+func TestSigningKeyTriggerNamesTheCacheScope(t *testing.T) {
+	body, err := os.ReadFile("../../migrations/000007_read_cache_account_state.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ON public.token_signing_keys FOR EACH ROW EXECUTE FUNCTION public.notarx_notify_cache('" + CacheScope + "', '')"; !strings.Contains(string(body), want) {
+		t.Fatalf("migration 000007 does not announce %q on token_signing_keys", CacheScope)
 	}
 }
 

@@ -823,6 +823,9 @@ func (s *PostgresStore) replaceRepositoryGrantsMutation(ctx context.Context, rep
 	if !exists {
 		return RepositoryGrantSet{}, ErrNotFound
 	}
+	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_grant_sets (repository_id,version) VALUES ($1,1) ON CONFLICT DO NOTHING`, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
@@ -832,9 +835,6 @@ func (s *PostgresStore) replaceRepositoryGrantsMutation(ctx context.Context, rep
 		return RepositoryGrantSet{}, ErrVersionConflict
 	}
 	if err != nil {
-		return RepositoryGrantSet{}, err
-	}
-	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	if _, err = tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id=$1::uuid`, repositoryID); err != nil {
@@ -875,6 +875,9 @@ func (s *PostgresStore) upsertRepositoryGrantMutation(ctx context.Context, repos
 	if !exists {
 		return RepositoryGrantSet{}, ErrNotFound
 	}
+	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO repository_grant_sets (repository_id,version) VALUES ($1,1) ON CONFLICT DO NOTHING`, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
@@ -884,9 +887,6 @@ func (s *PostgresStore) upsertRepositoryGrantMutation(ctx context.Context, repos
 	}
 	var version string
 	if err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id=$1::uuid RETURNING version::text`, repositoryID).Scan(&version); err != nil {
-		return RepositoryGrantSet{}, err
-	}
-	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	set, err := loadRepositoryGrants(ctx, tx, repositoryID, version)
@@ -923,6 +923,9 @@ func (s *PostgresStore) deleteRepositoryGrantMutation(ctx context.Context, repos
 	if !exists {
 		return RepositoryGrantSet{}, ErrNotFound
 	}
+	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
+		return RepositoryGrantSet{}, err
+	}
 	result, err := tx.ExecContext(ctx, `DELETE FROM repository_grants WHERE repository_id=$1::uuid AND principal=$2 AND resource_prefix=$3`, repositoryID, principal, resourcePrefix)
 	if err != nil {
 		return RepositoryGrantSet{}, err
@@ -936,9 +939,6 @@ func (s *PostgresStore) deleteRepositoryGrantMutation(ctx context.Context, repos
 	}
 	var version string
 	if err = tx.QueryRowContext(ctx, `UPDATE repository_grant_sets SET version=version+1 WHERE repository_id=$1::uuid RETURNING version::text`, repositoryID).Scan(&version); err != nil {
-		return RepositoryGrantSet{}, err
-	}
-	if err = bumpGrantsVersion(ctx, tx, repositoryID); err != nil {
 		return RepositoryGrantSet{}, err
 	}
 	set, err := loadRepositoryGrants(ctx, tx, repositoryID, version)
@@ -956,6 +956,8 @@ func (s *PostgresStore) deleteRepositoryGrantMutation(ctx context.Context, repos
 
 // bumpGrantsVersion is the version stamp of the grant-set read cache (ADR 0023 section 6): every transaction
 // that changes the grants of a repository bumps it, so a cached grant set read under the old value is a miss.
+// It runs first, so the repository row is locked before the grant-set row, the order of the other paths that
+// hold the repository row.
 func bumpGrantsVersion(ctx context.Context, q sqlRunner, repositoryID string) error {
 	_, err := q.ExecContext(ctx, `UPDATE hosted_repositories SET grants_version=grants_version+1 WHERE id=$1::uuid`, repositoryID)
 	return err

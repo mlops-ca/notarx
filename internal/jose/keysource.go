@@ -215,7 +215,8 @@ func (v *Verifier) lookup(ctx context.Context, issuer Issuer, kid, alg string) (
 		err := v.fetch(context.WithoutCancel(ctx), set, issuer)
 		set.mu.Lock()
 		set.generation++
-		set.fetching, set.lastErr = false, err
+		// The retry gate counts from the end of the attempt, so a fetch that fails slowly is not retried at once.
+		set.fetching, set.lastErr, set.lastAttempt = false, err, v.opts.Now()
 		set.mu.Unlock()
 		return nil, err
 	})
