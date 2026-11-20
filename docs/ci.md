@@ -143,32 +143,35 @@ It is a workflow of its own, so the `cancel-in-progress` group of `ci.yml` canno
 cancel it before it saves (a newer push waits for it), and it does not gate `main`; a
 failed warm shows as a failed `Go cache` run.
 
-Measured cost and effect (issue #518). The first warm (run 44758544218, after the push of
-#529) started from the morning's daily cache: 2.0 minutes on amd64 (1.3 of them for
+Measured cost and effect (issue #518). The first warm (run 44758544218, after the push
+of #529) started from the morning's daily cache: 2.0 minutes on amd64 (1.3 of them for
 `make race-coverage-build`) and 2.7 on arm64 (1.0 each for `make vet-build` and
-`make race-build`), restore and save 8 to 16 seconds each. The next warm (run
-44767423075, after #533, which changed no Go code) took 1.3 and 1.4 minutes, the floor of
-setting up and linking every test binary again. Such pushes no longer start the warm:
-it runs only for a change to Go code, modules, the directories that hold Go packages
-or the warm itself. The draft Go pull request run 44759372025 restored the warm cache:
-`quality` took 4.2 and 4.3 minutes (attempts 1 and 2), `quality-arm64` 3.8 and 3.3.
-On the daily cache `quality` took 4.2 minutes on the morning's cache and 7.3 once
-`main` had moved (runs 44723845622 and 44740891885), `quality-arm64` 4.3 to 4.6
-(runs 44738044844 and 44740891885). A pull request run therefore saves about 1 minute
-when `main` has not moved since the last cache and up to about 4 when it has; against
-2.7 to 4.7 runner-minutes per warm, the warm pays off when Go pull request runs follow
-a push to `main` before the next one, which is the usual case on this repository.
+`make race-build`), restore and save 8 to 16 seconds each, 4.7 runner-minutes in all.
+The next warm (run 44767423075, after #533, which changed no Go code) took 1.3 and 1.4
+minutes, 2.7 runner-minutes only to set up and link every test binary again. Such
+pushes no longer start the warm: it runs for a change to Go code, modules, the
+directories that hold Go packages, the Makefile, the coverage script or the warm
+itself, and by hand (`workflow_dispatch`) to retry a failed one. The draft Go pull
+request run 44759372025 restored the warm cache: `quality` took 4.2 and 4.3 minutes
+(attempts 1 and 2), `quality-arm64` 3.8 and 3.3. On the daily cache `quality` took
+4.2 minutes while `main` had not moved since the save and 7.3 once it had (runs
+44723845622 and 44740891885), `quality-arm64` 4.3 to 4.6 (runs 44738044844 and
+44740891885). A Go pull request run therefore saves about 0.5 to 1.3 minutes on arm64
+and up to about 3 more on amd64 when `main` has moved, against 2.7 to 4.7
+runner-minutes per warm: it pays off when two or more Go pull request runs follow a
+push to `main` that moved the Go code.
 
 The repository has a 10 GB cache quota, and beyond it GitHub evicts the least recently
 used entries (11.8 GB were in use on 2026-11-20, most of it BuildKit layers and
 Playwright browsers saved by pull requests; issue #518 took the runner image version
 out of the browser key). Every Go pull request restores the newest race and lint caches,
 so they stay recently used. A superseded daily lint entry is no longer restored and is
-the first to go. The warm deletes the race build caches of its architecture and flavour
-(any toolchain) that are older than the newest one before its own, so at most two of
-each stay, about 3.4 GB in all (0.7 GB on amd64, 1.0 GB on arm64 each). The two daily
-race caches saved before issue #518 carry no flavour and were deleted by hand on
-2026-11-20.
+the first to go. When the warm has saved its cache, it deletes the
+older race build caches of its architecture and flavour (any toolchain) except the
+newest of them, which a pull request may be restoring, so at most two of each stay:
+about 3.4 GB in all (0.7 GB on amd64, 1.0 GB on arm64 each). The two daily race caches
+saved before issue #518 carry no flavour, so no prefix of the warm matches them; they
+were deleted by hand on 2026-11-20.
 
 ## Workflow linting
 

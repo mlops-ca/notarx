@@ -54,8 +54,9 @@ runs:
     # runs on main: an exact hit saves nothing, so a fixed key would freeze the cache,
     # and saves from every pull request would crowd the repository's cache quota. The
     # lint cache has a daily key (the release gates save it). The race build cache gets
-    # a key per run, saved by the build-only warm of every push to main (go-cache.yml)
-    # and by the release gates; the warm deletes the entries it supersedes. Pull requests restore
+    # a key per run, saved by the build-only warm of a push to main that changes the Go
+    # build (go-cache.yml) and by the release gates; the warm deletes the entries it
+    # supersedes. Pull requests restore
     # main's newest cache by prefix.
     - if: inputs.lint == 'true' || inputs.race == 'true' || inputs.race-coverage == 'true'
       name: Locate the Go caches
@@ -77,7 +78,8 @@ runs:
           race_arch="go-race-$RUNNER_OS-$RUNNER_ARCH-"
           race_prefix="$race_arch$FLAVOUR-$(go env GOVERSION)-"
           echo "race-arch-prefix=$race_arch"
-          echo "race-flavour-prefix=$race_arch$FLAVOUR-"
+          # "-go" ends the flavour, so the race prefix does not also match race-coverage.
+          echo "race-flavour-prefix=$race_arch$FLAVOUR-go"
           echo "race-prefix=$race_prefix"
           echo "race-sum-prefix=$race_prefix$GO_SUM-"
           echo "race-key=$race_prefix$GO_SUM-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
