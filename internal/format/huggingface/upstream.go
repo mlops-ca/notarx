@@ -89,9 +89,9 @@ func upstreamStatusError(status int) *UpstreamError {
 type Upstream struct {
 	// Endpoint is the https origin of the Hub.
 	Endpoint string
-	// Token is the upstream credential. It is sent to Endpoint only, never to a redirect
-	// target.
-	Token string
+	// Credential applies the upstream credential to a request to Endpoint; nil sends none. The
+	// credential is never sent to a redirect target: the hop request is built without it.
+	Credential func(*http.Request) error
 	// Proxy is the repository egress configuration; nil keeps the environment default.
 	Proxy *repository.EgressProxy
 	Hooks egress.Hooks
@@ -185,8 +185,10 @@ func (u *Upstream) newRequest(ctx context.Context, method, rawURL string, header
 		request.Header[name] = append([]string(nil), values...)
 	}
 	request.Header.Set("User-Agent", upstreamUserAgent)
-	if u.Token != "" {
-		request.Header.Set("Authorization", "Bearer "+u.Token)
+	if u.Credential != nil {
+		if err := u.Credential(request); err != nil {
+			return nil, &UpstreamError{Code: CodeUpstreamInvalid, Err: fmt.Errorf("apply upstream credential: %w", err)}
+		}
 	}
 	return request, nil
 }
@@ -413,6 +415,12 @@ func (u *Upstream) Open(ctx context.Context, repoType, repoName, rev, filePath s
 	if err != nil {
 		return nil, &UpstreamError{Code: CodeUpstreamUnavailable, Err: err}
 	}
+	xet := response.Header.Get(headerXetHash) != "" || response.Header.Get(headerXetLink) != ""
+	if xet && !egress.IsRedirect(response.StatusCode) {
+		// A Xet hash without a plain HTTP route to the bytes: the file is unsupported (ADR 0027).
+		_ = response.Body.Close()
+		return nil, &UpstreamError{Code: CodeXetOnly, Status: response.StatusCode}
+	}
 	if egress.IsRedirect(response.StatusCode) {
 		hopClient := *u.base()
 		hopClient.Timeout = 0
@@ -427,6 +435,10 @@ func (u *Upstream) Open(ctx context.Context, repoType, repoName, rev, filePath s
 	}
 	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusPartialContent {
 		_ = response.Body.Close()
+		if xet && response.StatusCode >= 400 {
+			// The Git LFS bridge stopped serving a Xet-backed file.
+			return nil, &UpstreamError{Code: CodeXetOnly, Status: response.StatusCode}
+		}
 		return nil, upstreamStatusError(response.StatusCode)
 	}
 	return response, nil

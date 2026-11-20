@@ -8,6 +8,9 @@ import (
 	"golang.org/x/sync/singleflight"
 )
 
+// treeFlights shares one tree fetch per commit across every request of the process.
+var treeFlights singleflight.Group
+
 // treeFetchTimeout bounds one tree ingest (all pages).
 const treeFetchTimeout = 5 * time.Minute
 
@@ -36,8 +39,6 @@ type Ingest struct {
 	Config Config
 	// Now supplies the clock; nil uses time.Now.
 	Now func() time.Time
-
-	trees singleflight.Group
 }
 
 func (i *Ingest) now() time.Time {
@@ -117,6 +118,25 @@ func (i *Ingest) ResolveRevision(ctx context.Context, repo Repo, rev string) (Re
 	return Resolution{Commit: commit}, nil
 }
 
+// pinWindow is how long a ref resolution pins file reads: a GET that names a mutable ref uses the
+// resolution a recent HEAD returned, however short NOTARX_HF_REF_TTL is, so the bytes of a file
+// never come from another commit than the one its headers named.
+const pinWindow = 15 * time.Minute
+
+// ResolveForRead is ResolveRevision for a byte request. A mutable ref that was resolved within
+// pinWindow answers without revalidation; only an unknown or older ref goes upstream.
+func (i *Ingest) ResolveForRead(ctx context.Context, repo Repo, rev string) (Resolution, error) {
+	if !ValidCommit(rev) && rev != "" {
+		if ref, _, err := i.lookupRef(ctx, repo, rev); err == nil && i.now().Sub(ref.CheckedAt) < pinWindow {
+			if commit, err := i.Store.GetCommit(ctx, repo.ID, ref.CommitSHA); err == nil {
+				_ = i.Store.TouchCommit(ctx, commit.ID)
+				return Resolution{Commit: commit, Cached: true}, nil
+			}
+		}
+	}
+	return i.ResolveRevision(ctx, repo, rev)
+}
+
 // lookupRef finds the stored ref for rev; a tag and a branch may share a name, the branch
 // wins as it does on the Hub.
 func (i *Ingest) lookupRef(ctx context.Context, repo Repo, rev string) (Ref, string, error) {
@@ -147,7 +167,7 @@ func (i *Ingest) EnsureTree(ctx context.Context, repo Repo, commit Commit) (Comm
 	// keeps a stuck upstream from holding the slot forever.
 	fetchCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), treeFetchTimeout)
 	defer cancel()
-	result, err, _ := i.trees.Do(commit.ID, func() (any, error) {
+	result, err, _ := treeFlights.Do(commit.ID, func() (any, error) {
 		ctx := fetchCtx
 		// Another node may have stored the tree since the caller read the commit.
 		current, err := i.Store.GetCommit(ctx, repo.ID, commit.SHA)

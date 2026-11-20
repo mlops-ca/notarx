@@ -118,8 +118,9 @@ func TestModuleIdentityAndCapabilities(t *testing.T) {
 	if _, ok := formatmodule.Capability[formatmodule.Usage](registry, "huggingface"); !ok {
 		t.Error("Usage capability missing")
 	}
-	if _, ok := formatmodule.Capability[formatmodule.NativeRoutes](registry, "huggingface"); ok {
-		t.Error("the skeleton must not mount routes yet")
+	routes, ok := formatmodule.Capability[formatmodule.NativeRoutes](registry, "huggingface")
+	if !ok || len(routes.Routes()) != 0 {
+		t.Error("a module without read options must mount no routes")
 	}
 	profile := module.Profile()
 	if profile.Format != repository.FormatHuggingFace || !profile.GroupSupported || len(profile.RepositoryTypes) != 2 {

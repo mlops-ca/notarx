@@ -600,3 +600,95 @@ RawVersion:
     application/json:
       schema:
         "$ref": "../components/schemas.yaml#/RawVersion"
+
+HuggingFaceFile:
+  description: The complete file.
+  headers:
+    X-Repo-Commit:
+      description: The 40 character commit the response is for. A GET serves this commit.
+      schema: {type: string, pattern: '^[0-9a-f]{40}$'}
+    ETag:
+      description: Quoted sha256 of an LFS file, quoted git blob id of a regular file.
+      schema: {type: string}
+    X-Linked-Etag:
+      description: Quoted sha256 of an LFS file; absent for a regular file.
+      schema: {type: string}
+    X-Linked-Size:
+      description: Size in bytes of an LFS file; absent for a regular file.
+      schema: {type: string}
+    Accept-Ranges:
+      schema: {type: string, enum: [bytes]}
+    Content-Length:
+      schema: {type: integer, format: int64}
+    X-Notarx-Stale:
+      description: true when the revision was answered from an expired ref because upstream was unreachable.
+      schema: {type: string, enum: ['true']}
+  content:
+    application/octet-stream:
+      schema: {type: string, format: binary}
+HuggingFaceRange:
+  description: One range, or multipart/byteranges for several.
+  headers:
+    X-Repo-Commit:
+      description: The 40 character commit the response is for. A GET serves this commit.
+      schema: {type: string, pattern: '^[0-9a-f]{40}$'}
+    ETag:
+      description: Quoted sha256 of an LFS file, quoted git blob id of a regular file.
+      schema: {type: string}
+    X-Linked-Etag:
+      description: Quoted sha256 of an LFS file; absent for a regular file.
+      schema: {type: string}
+    X-Linked-Size:
+      description: Size in bytes of an LFS file; absent for a regular file.
+      schema: {type: string}
+    Accept-Ranges:
+      schema: {type: string, enum: [bytes]}
+    Content-Length:
+      schema: {type: integer, format: int64}
+    X-Notarx-Stale:
+      description: true when the revision was answered from an expired ref because upstream was unreachable.
+      schema: {type: string, enum: ['true']}
+  content:
+    application/octet-stream:
+      schema: {type: string, format: binary}
+    multipart/byteranges:
+      schema: {type: string, format: binary}
+HuggingFaceHead:
+  description: Headers of the file; never a redirect and never the bytes.
+  headers:
+    X-Repo-Commit:
+      description: The 40 character commit the response is for. A GET serves this commit.
+      schema: {type: string, pattern: '^[0-9a-f]{40}$'}
+    ETag:
+      description: Quoted sha256 of an LFS file, quoted git blob id of a regular file.
+      schema: {type: string}
+    X-Linked-Etag:
+      description: Quoted sha256 of an LFS file; absent for a regular file.
+      schema: {type: string}
+    X-Linked-Size:
+      description: Size in bytes of an LFS file; absent for a regular file.
+      schema: {type: string}
+    Accept-Ranges:
+      schema: {type: string, enum: [bytes]}
+    Content-Length:
+      schema: {type: integer, format: int64}
+    X-Notarx-Stale:
+      description: true when the revision was answered from an expired ref because upstream was unreachable.
+      schema: {type: string, enum: ['true']}
+HuggingFaceError:
+  description: >-
+    Hub-shaped error: a JSON body with an error message and an X-Error-Code header. Codes include
+    RepoNotFound, RevisionNotFound, EntryNotFound, authentication_required, access_denied,
+    unsupported_repo_type, xet_not_supported, upstream_unavailable, upstream_gated,
+    upstream_tree_too_large, upstream_path_too_long, upstream_xet_only, upstream_redirect_rejected,
+    upstream_digest_mismatch, quota_exceeded, object_too_large and fetch_capacity.
+  headers:
+    X-Error-Code:
+      schema: {type: string}
+  content:
+    application/json:
+      schema:
+        type: object
+        required: [error]
+        properties:
+          error: {type: string}

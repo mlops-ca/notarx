@@ -55,6 +55,8 @@ type Metrics struct {
 	rawUpstreamFailure             atomic.Uint64
 	rawResponseBytes               atomic.Uint64
 	rawSpoolRejected               atomic.Uint64
+	huggingFaceFetches             [len(huggingFaceFetchOutcomes)]atomic.Uint64
+	huggingFaceXetOnly             atomic.Uint64
 	conanGetRequests               atomic.Uint64
 	conanHeadRequests              atomic.Uint64
 	conanOtherRequests             atomic.Uint64
@@ -445,6 +447,31 @@ func (m *Metrics) recordRawCacheMiss()        { m.rawCacheMiss.Add(1) }
 func (m *Metrics) recordRawNegativeCacheHit() { m.rawNegativeHit.Add(1) }
 func (m *Metrics) recordRawSpoolRejected()    { m.rawSpoolRejected.Add(1) }
 
+// huggingFaceFetchOutcomes is the bounded label set of notarx_hf_object_requests_total; an
+// outcome outside it is not recorded, so a caller can never grow the series.
+var huggingFaceFetchOutcomes = [...]string{"hit", "fetched", "digest_mismatch", "quota", "too_large", "capacity", "upstream_error"}
+
+// RecordHuggingFaceFetch counts one Hugging Face object request by outcome.
+func (m *Metrics) RecordHuggingFaceFetch(outcome string) {
+	for index, known := range huggingFaceFetchOutcomes {
+		if known == outcome {
+			m.huggingFaceFetches[index].Add(1)
+			return
+		}
+	}
+}
+
+// RecordHuggingFaceXetOnly counts a file refused because upstream serves it only through Xet.
+func (m *Metrics) RecordHuggingFaceXetOnly() { m.huggingFaceXetOnly.Add(1) }
+
+func (m *Metrics) writeHuggingFaceMetrics(w http.ResponseWriter) {
+	_, _ = w.Write([]byte("# TYPE notarx_hf_object_requests_total counter\n"))
+	for index, outcome := range huggingFaceFetchOutcomes {
+		_, _ = w.Write([]byte("notarx_hf_object_requests_total{outcome=\"" + outcome + "\"} " + utoa(m.huggingFaceFetches[index].Load()) + "\n"))
+	}
+	_, _ = w.Write([]byte("# TYPE notarx_hf_xet_only_total counter\nnotarx_hf_xet_only_total " + utoa(m.huggingFaceXetOnly.Load()) + "\n"))
+}
+
 func (m *Metrics) recordConanRequest(method string) {
 	switch strings.ToLower(method) {
 	case "get":
@@ -556,6 +583,7 @@ func (m *Metrics) Handler(w http.ResponseWriter, _ *http.Request) {
 	}
 	m.writeObjectStoreMetrics(w)
 	m.writeAPTSigningMetrics(w)
+	m.writeHuggingFaceMetrics(w)
 	_, _ = w.Write([]byte("# TYPE notarx_cache_quota_rejections_total counter\nnotarx_cache_quota_rejections_total " + utoa(m.cacheQuotaDenied.Load()) + "\n# TYPE notarx_anonymous_reads_total counter\nnotarx_anonymous_reads_total " + utoa(m.anonymousReads.Load()) + "\n"))
 	_, _ = w.Write([]byte("# TYPE notarx_repository_authorization_denials_total counter\n"))
 	for formatIndex, format := range repositoryAuthorizationFormats {

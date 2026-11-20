@@ -23,6 +23,7 @@ type fixture struct {
 	store        *Store
 	db           *sql.DB
 	repositoryID string
+	name         string
 }
 
 // newFixture opens the selected engine and creates one huggingface repository row. The
@@ -37,7 +38,8 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(func() { _ = db.Close() })
 	dialect := Dialect(driver)
 	f := &fixture{t: t, db: db, store: NewStore(db, dialect), repositoryID: ids.New()}
-	name := "hf-" + strings.ReplaceAll(f.repositoryID, "-", "")[:24]
+	f.name = "hf-" + strings.ReplaceAll(f.repositoryID, "-", "")[:24]
+	name := f.name
 	f.exec("INSERT INTO hosted_repositories (id, name, format) VALUES (?, ?, 'huggingface')", f.repositoryID, name)
 	t.Cleanup(func() {
 		ctx := context.Background()

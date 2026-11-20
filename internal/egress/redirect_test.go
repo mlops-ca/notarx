@@ -124,7 +124,7 @@ func TestFollowOnceRejections(t *testing.T) {
 			req, resp := redirectTo(t, tc.location)
 			got, err := fixture.follower.Follow(context.Background(), req, resp)
 			if err == nil {
-				got.Body.Close()
+				_ = got.Body.Close()
 				t.Fatal("Follow succeeded, want rejection")
 			}
 			if !errors.Is(err, ErrRedirectRejected) {
@@ -145,7 +145,7 @@ func TestFollowOnceRejectsSecondRedirect(t *testing.T) {
 	req, resp := redirectTo(t, "https://example.com/blob")
 	got, err := fixture.follower.Follow(context.Background(), req, resp)
 	if err == nil {
-		got.Body.Close()
+		_ = got.Body.Close()
 		t.Fatal("second redirect was followed")
 	}
 	if !errors.Is(err, ErrRedirectRejected) || !strings.Contains(err.Error(), "second redirect") {
@@ -175,7 +175,7 @@ func TestFollowOnceDNSRebindingCannotChangeDialTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Follow: %v", err)
 	}
-	got.Body.Close()
+	_ = got.Body.Close()
 	for _, address := range fixture.dialed {
 		if strings.HasPrefix(address, "127.") {
 			t.Fatalf("dialed rebound address %s", address)
@@ -264,5 +264,5 @@ func TestDoFollowsOriginRedirectOnce(t *testing.T) {
 	if err != nil || direct.StatusCode != http.StatusOK {
 		t.Fatalf("non-redirect passthrough: %v", err)
 	}
-	direct.Body.Close()
+	_ = direct.Body.Close()
 }

@@ -20,6 +20,9 @@ type Options struct {
 	Objects objectstore.Store
 	// GCPause is the pause between full garbage collection batches; zero selects 200 ms.
 	GCPause time.Duration
+	// Read configures the read protocol (resolve and HEAD under /hf/); nil leaves the module
+	// without routes.
+	Read *ReadOptions
 }
 
 // Module is the huggingface format module. It registers the format and its
@@ -29,6 +32,7 @@ type Module struct {
 	store   *Store
 	objects objectstore.Store
 	gcPause time.Duration
+	read    *reader
 }
 
 // New returns the module.
@@ -40,7 +44,27 @@ func New(options Options) (*Module, error) {
 	if pause <= 0 {
 		pause = 200 * time.Millisecond
 	}
-	return &Module{store: options.Store, objects: options.Objects, gcPause: pause}, nil
+	module := &Module{store: options.Store, objects: options.Objects, gcPause: pause}
+	if options.Read != nil {
+		read, err := newReader(*options.Read, options.Store, options.Objects)
+		if err != nil {
+			return nil, err
+		}
+		module.read = read
+	}
+	return module, nil
+}
+
+// EnableRead turns on the read protocol (resolve and HEAD under /hf/). The composition root calls
+// it once, before the routes are mounted, with the authentication and authorization ports of the
+// gateway.
+func (m *Module) EnableRead(options ReadOptions) error {
+	read, err := newReader(options, m.store, m.objects)
+	if err != nil {
+		return err
+	}
+	m.read = read
+	return nil
 }
 
 var (
@@ -50,6 +74,7 @@ var (
 	_ formatmodule.Browse           = (*Module)(nil)
 	_ formatmodule.Usage            = (*Module)(nil)
 	_ formatmodule.CacheMaintenance = (*Module)(nil)
+	_ formatmodule.NativeRoutes     = (*Module)(nil)
 )
 
 // Format identifies the module.

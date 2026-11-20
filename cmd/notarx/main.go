@@ -47,6 +47,7 @@ import (
 	rubygemspg "github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
 	"github.com/mlops-ca/notarx/internal/scanning"
 	"github.com/mlops-ca/notarx/internal/snapshotimport"
+	"github.com/mlops-ca/notarx/internal/spool"
 )
 
 func main() {
@@ -316,6 +317,11 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	ociCache := app.NewDefaultOCICache(cacheStore, cfg.OCIProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithTTL(cfg.OCICacheTTL)
 	rawCache := app.NewDefaultRawCache(cacheStore, cfg.RawProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.RawCacheMaxObjectBytes).WithMaxConcurrentSpools(cfg.RawCacheMaxConcurrentSpools).WithTTL(cfg.RawCacheTTL)
 	conanCache := app.NewDefaultConanCache(cacheStore, nil).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.ConanCacheMaxObjectBytes).WithTTL(cfg.ConanCacheTTL)
+	huggingFaceConfig, err := huggingfaceformat.LoadConfig(os.LookupEnv)
+	if err != nil {
+		slog.Error("configure Hugging Face format", "error", err)
+		return 1
+	}
 	huggingFace, err := huggingfaceformat.New(huggingfaceformat.Options{Store: huggingfaceformat.NewStore(databasePool, huggingFaceDialect(cfg.DatabaseDriver)), Objects: objectStore})
 	if err != nil {
 		slog.Error("configure Hugging Face format", "error", err)
@@ -548,6 +554,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		}
 		gatewayOptions := app.GatewayOptions{
 			HuggingFace:       huggingFace,
+			HuggingFaceConfig: huggingFaceConfig,
+			HuggingFaceLocker: spool.Locker{Coordinator: coordinator, Lease: spool.DefaultLockLease, RenewEvery: spool.DefaultLockLease / 3},
 			Dependencies:      dependencies,
 			Store:             gatewayStore,
 			ConanPublications: store,

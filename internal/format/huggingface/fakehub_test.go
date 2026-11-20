@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -43,21 +44,71 @@ type fakeHub struct {
 
 type hubFile struct {
 	Content []byte
-	LFS     bool
+	// Synth, when positive, makes the file a synthetic object of that many bytes (a repeating
+	// pseudo-random block) that is generated on the fly, so multi-gigabyte objects cost no memory
+	// on the Hub side. SynthDigest is its sha256.
+	Synth       int64
+	SynthDigest string
+	LFS         bool
 	// Xet advertises X-Xet-Hash on resolve; XetOnly additionally withholds the redirect.
 	Xet, XetOnly bool
 	// Corrupt serves different bytes than the digest says.
 	Corrupt bool
 }
 
+func (f *hubFile) size() int64 {
+	if f.Synth > 0 {
+		return f.Synth
+	}
+	return int64(len(f.Content))
+}
+
 func (f *hubFile) sha256() string {
+	if f.Synth > 0 {
+		return f.SynthDigest
+	}
 	sum := sha256.Sum256(f.Content)
 	return hex.EncodeToString(sum[:])
 }
 
+// synthBlock is the 1 MiB pattern a synthetic object repeats.
+var synthBlock = func() []byte {
+	block := make([]byte, 1<<20)
+	state := uint64(0x9e3779b97f4a7c15)
+	for i := range block {
+		state ^= state << 13
+		state ^= state >> 7
+		state ^= state << 17
+		block[i] = byte(state)
+	}
+	return block
+}()
+
+// writeSynth streams size bytes of the synthetic pattern.
+func writeSynth(w io.Writer, size int64) error {
+	for size > 0 {
+		chunk := synthBlock
+		if int64(len(chunk)) > size {
+			chunk = chunk[:size]
+		}
+		if _, err := w.Write(chunk); err != nil {
+			return err
+		}
+		size -= int64(len(chunk))
+	}
+	return nil
+}
+
+// newSynthFile returns a synthetic LFS file of the given size with its digest computed.
+func newSynthFile(size int64) *hubFile {
+	sum := sha256.New()
+	_ = writeSynth(sum, size)
+	return &hubFile{Synth: size, SynthDigest: hex.EncodeToString(sum.Sum(nil)), LFS: true}
+}
+
 func (f *hubFile) gitBlob() string {
 	h := sha1.New() //nolint:gosec
-	fmt.Fprintf(h, "blob %d\x00", len(f.Content))
+	fmt.Fprintf(h, "blob %d\x00", f.size())
 	h.Write(f.Content)
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -136,7 +187,7 @@ func (h *fakeHub) upstream() *Upstream {
 	}
 	return &Upstream{
 		Endpoint:     "https://example.com",
-		Token:        "upstream-secret",
+		Credential:   func(r *http.Request) error { r.Header.Set("Authorization", "Bearer upstream-secret"); return nil },
 		Hooks:        hooks,
 		Client:       &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}},
 		CDNAllowlist: []string{"example.com"},
@@ -211,9 +262,9 @@ func (h *fakeHub) serveTree(w http.ResponseWriter, r *http.Request) {
 	entries := []map[string]any{{"type": "directory", "oid": commitID(1), "path": "dir"}}
 	for _, name := range names[start:end] {
 		file := files[name]
-		entry := map[string]any{"type": "file", "oid": file.gitBlob(), "size": len(file.Content), "path": name}
+		entry := map[string]any{"type": "file", "oid": file.gitBlob(), "size": file.size(), "path": name}
 		if file.LFS {
-			entry["lfs"] = map[string]any{"oid": file.sha256(), "size": len(file.Content), "pointerSize": 134}
+			entry["lfs"] = map[string]any{"oid": file.sha256(), "size": file.size(), "pointerSize": 134}
 		}
 		entries = append(entries, entry)
 	}
@@ -249,7 +300,7 @@ func (h *fakeHub) serveResolve(w http.ResponseWriter, r *http.Request) {
 	if file.LFS {
 		w.Header().Set("ETag", `"`+file.sha256()+`"`)
 		w.Header().Set("X-Linked-Etag", `"`+file.sha256()+`"`)
-		w.Header().Set("X-Linked-Size", strconv.Itoa(len(file.Content)))
+		w.Header().Set("X-Linked-Size", strconv.FormatInt(file.size(), 10))
 		w.Header().Set("Location", "https://example.com/cdn/"+sha+"/"+path)
 		w.WriteHeader(http.StatusFound)
 		return
@@ -283,9 +334,13 @@ func (h *fakeHub) serveCDN(w http.ResponseWriter, r *http.Request) {
 		body = append([]byte(nil), body...)
 		body[len(body)/2] ^= 0xff
 	}
-	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.Header().Set("Content-Length", strconv.FormatInt(file.size(), 10))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	if r.Method == http.MethodHead {
+		return
+	}
+	if file.Synth > 0 {
+		_ = writeSynth(w, file.Synth)
 		return
 	}
 	if slow != nil {

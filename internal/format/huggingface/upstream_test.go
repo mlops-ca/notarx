@@ -185,7 +185,7 @@ func TestOpenFollowsOneRedirectWithoutTheCredential(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(response.Body)
-	response.Body.Close()
+	_ = response.Body.Close()
 	if string(body) != strings.Repeat("w", 1000) {
 		t.Fatalf("body = %d bytes", len(body))
 	}
@@ -204,7 +204,7 @@ func TestOpenFollowsOneRedirectWithoutTheCredential(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	regular.Body.Close()
+	_ = regular.Body.Close()
 }
 
 func TestOpenRejectsADisallowedHostAndASecondRedirect(t *testing.T) {
