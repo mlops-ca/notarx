@@ -486,7 +486,7 @@ func TestWorkloadDoesNotChangeOtherCredentialPaths(t *testing.T) {
 	if p, ok := auth.Authenticate("Bearer " + v1); !ok || p.Actor != "someone" {
 		t.Fatalf("v1 token: %+v %v", p, ok)
 	}
-	var disabled Authenticator = auth
+	disabled := auth
 	disabled.Workload = nil
 	if _, ok := disabled.Authenticate("Bearer " + f.token(t, nil)); ok {
 		t.Fatal("a workload JWT authenticated with the feature off")
