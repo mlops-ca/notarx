@@ -134,7 +134,9 @@ func TestArtifactCatalogBackfillEqualsTheProjectionAndResumes(t *testing.T) {
 	}
 
 	for pass := 1; pass <= 3; pass++ {
-		progress, err := store.BackfillArtifactCatalog(ctx, 2)
+		// The shared test database holds every other test's rows too, so the pass uses the
+		// production batch size: a tiny one would make it thousands of transactions.
+		progress, err := store.BackfillArtifactCatalog(ctx, CatalogBackfillBatchSize)
 		if err != nil {
 			t.Fatalf("pass %d: %v", pass, err)
 		}
