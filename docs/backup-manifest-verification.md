@@ -65,7 +65,7 @@ Explicit negative v1 object totals are invalid, rather than missing evidence.
 | `schemaVersion`, `backupId`, `state` | Version 1 or 2; opaque identity; `complete` declaration. Unsupported versions/incomplete state return unknown. |
 | `startedAt`, `completedAt` | Nonzero RFC3339 timestamps; completion strictly after start and no later than verification. Record UTC. |
 | `gateway` | `version`, 40 lowercase hex `revision`, full `imageDigest: sha256:<64 lowercase hex digits>`. These identify declared software, not proven compatibility. |
-| `database` | `format: pg-custom-v1` and `file` reference to dump bytes. No connection, dump parsing or restore is performed. |
+| `database` | `format: pg-custom-v1`, `dialect: postgres` (absent in manifests written before ADR 0022, which are PostgreSQL backups; any other value is unsupported) and `file` reference to dump bytes. No connection, dump parsing or restore is performed. |
 | `schema` | `format: notarx-migrations-tsv-v1` and `file` reference to the native migration ledger representation below. |
 | `objects` | `format: s3-bytes-v1` or `fs-bytes-v1`, an `inventory` file reference, and nonnegative int64 `count` and `bytes` matching the streamed inventory. `fs-bytes-v1` also carries `segments` and an optional `rootId` (below). RustFS physical tar is a different profile and returns unknown. |
 | `writers` | `scopeId`, explicit `inventoryDeclaredComplete`, and nonempty `writers` declarations described below. |

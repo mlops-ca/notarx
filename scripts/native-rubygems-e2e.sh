@@ -206,7 +206,7 @@ try:
         if r.returncode==0:break
         time.sleep(0.2)
     else:raise RuntimeError('Owned RustFS readiness failed')
-    command(['docker','cp',str(root/'migrations'),pg+':/migrations']);migration=(root/'scripts/run-migrations.sh').read_text();migration_args=['docker','exec','-i','--env','PGHOST=127.0.0.1','--env','PGUSER=notarx','--env','PGDATABASE=notarx_test',pg,'sh'];command(migration_args,input=migration,output='migrations-first.log');command(migration_args,input=migration,output='migrations-noop.log')
+    command(['docker','cp',str(root/'migrations/postgres'),pg+':/migrations']);migration=(root/'scripts/run-migrations.sh').read_text();migration_args=['docker','exec','-i','--env','PGHOST=127.0.0.1','--env','PGUSER=notarx','--env','PGDATABASE=notarx_test',pg,'sh'];command(migration_args,input=migration,output='migrations-first.log');command(migration_args,input=migration,output='migrations-noop.log')
     env.update(TEST_DATABASE_URL='postgres://notarx:'+password+'@'+pg_address+'/notarx_test?sslmode=disable',TEST_OBJECT_STORE_ENDPOINT='http://'+rust_address,TEST_OBJECT_STORE_ACCESS_KEY=access,TEST_OBJECT_STORE_SECRET_KEY=secret,RUBYGEMS_TEST_IMAGE=image,RUBYGEMS_OWNED_EVIDENCE_DIR=str(evidence),RUBYGEMS_OWNED_PROJECT=run_id,RUBYGEMS_OWNED_RESTART_CONTAINERS=pg+','+rust,NOTARX_REPOSITORY_PRESETS='none')
     command(['go','build','-o',str(work/'notarx'),'./cmd/notarx'],output='notarx-build.log')
     env['RUBYGEMS_NOTARX_BIN']=str(work/'notarx')

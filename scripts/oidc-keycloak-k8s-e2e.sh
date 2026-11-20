@@ -56,7 +56,7 @@ kubectl -n "$namespace" create configmap notarx-oidc-test-config \
   --from-literal="NOTARX_OIDC_REDIRECT_URL=http://127.0.0.1:${console_port}/auth/oidc/default/callback" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n "$namespace" create configmap notarx-oidc-migrations \
-  --from-file="$root/migrations" \
+  --from-file="$root/migrations/postgres" \
   --from-file=run-migrations.sh="$root/scripts/run-migrations.sh" \
   --dry-run=client -o yaml | kubectl apply -f -
 kubectl kustomize "$root/deploy/oidc-test" \

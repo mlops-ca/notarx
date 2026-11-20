@@ -79,7 +79,7 @@ Inputs: `channel` (`nightly` or `stable`, default `nightly`), `nightly_tag` (def
 
 1. `plan` runs `scripts/release-plan.sh stable` and, for the first release, `scripts/baseline-gate.sh`. It fails when the
    nightly tag is missing, when the commit is not an ancestor of `main`, when `vX.Y.Z` already exists, or when
-   `version_override` is not newer than the latest stable tag. While no stable tag exists the gate requires `migrations/` to hold
+   `version_override` is not newer than the latest stable tag. While no stable tag exists the gate requires `migrations/postgres/` to hold
    exactly `000001_baseline.sql` at that commit and rejects a `version_override` other than `0.1.0`; after `v0.1.0` exists
    `scripts/migration-immutability-check.sh` governs.
 2. `verify-nightly` (`scripts/promote-release.sh verify`) downloads the nightly's `release-manifest.json` and assets, requires the

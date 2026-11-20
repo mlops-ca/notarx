@@ -51,7 +51,7 @@ NOTARX_POSTGRES_PASSWORD=$(openssl rand -hex 16)
 NOTARX_ADMIN_TOKEN=$admin_token
 NOTARX_RESOLVER_TOKEN=$(openssl rand -hex 16)
 NOTARX_DATA_DIR=$workdir/data
-NOTARX_MIGRATIONS_DIR=$repo_root/migrations
+NOTARX_MIGRATIONS_DIR=$repo_root/migrations/postgres
 NOTARX_MIGRATION_RUNNER=$repo_root/scripts/run-migrations.sh
 ENV
   [[ -z "${NOTARX_IMAGE:-}" ]] || echo "NOTARX_IMAGE=$NOTARX_IMAGE" >>"$workdir/.env"

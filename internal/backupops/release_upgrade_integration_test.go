@@ -205,7 +205,12 @@ func taggedUpgradeRelease(t *testing.T, tag string) Release {
 	if out, err = cmd.CombinedOutput(); err != nil {
 		t.Fatalf("release build: %v %s", err, out)
 	}
-	copyPrivateFixture(t, filepath.Join(source, "migrations"), filepath.Join(releaseDir, "migrations"))
+	// Releases cut before the dialect directories (ADR 0022) keep the files directly in migrations/.
+	migrations := filepath.Join(source, "migrations")
+	if info, statErr := os.Stat(filepath.Join(migrations, "postgres")); statErr == nil && info.IsDir() {
+		migrations = filepath.Join(migrations, "postgres")
+	}
+	copyPrivateFixture(t, migrations, filepath.Join(releaseDir, "migrations"))
 	sum, _, err := describeBinary(filepath.Join(releaseDir, "notarx"))
 	if err != nil {
 		t.Fatal(err)

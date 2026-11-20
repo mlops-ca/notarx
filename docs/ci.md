@@ -360,8 +360,11 @@ second `go test -p 1` finds every compiled package in the build cache, so it spe
 seconds per package relinking or reusing the binary before running it. Each shard pays
 the stack start and its own compilation, about 1.5 minutes, which is why there are
 three shards and not more. Shard 1 holds `./internal/app` and runs the official Cargo
-replay on the host. Without `INTEGRATION_SHARD`, `make integration-test` runs every
-package in one stack, as before.
+replay on the host. The shard that holds `./internal/migrate` (ADR 0022) also starts a
+`mysql:8.4` container for the MySQL runner tests (`TEST_MYSQL_URL`); every shard runs the
+runner parity check of `scripts/migration-runner-check.sh`, which applies the PostgreSQL
+migrations with the Go runner and compares the ledger with `run-migrations.sh`. Without
+`INTEGRATION_SHARD`, `make integration-test` runs every package in one stack, as before.
 
 ## Shared images
 
@@ -510,6 +513,13 @@ It always enforces unique, gap-free, snake_case migration names. Once a stable
 `vX.Y.Z` tag exists it also fails any diff of a released migration against the
 latest stable tag; nightly tags are ignored. `make test` runs the script's bash
 fixtures.
+
+The `lint` job also runs `make schema-parity` (`scripts/schema-parity.sh`, ADR 0022): it
+migrates a throwaway PostgreSQL (and a MySQL once `migrations/mysql` holds a baseline) and
+compares its `information_schema` with the neutral catalogue `migrations/catalogue.yaml`.
+`make test` also fails when a migration after the baseline exists in only one of
+`migrations/postgres` and `migrations/mysql` without an entry (dialect and reason) in
+`migrations/dialect-scope.yaml`.
 
 Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.
 

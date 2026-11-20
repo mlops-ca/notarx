@@ -13,7 +13,7 @@ import (
 // member table of the baseline carries a visibility or anonymous column and no
 // later migration may add one.
 func TestNoDerivedMemberVisibilityIsStored(t *testing.T) {
-	files, err := filepath.Glob("../../migrations/*.sql")
+	files, err := filepath.Glob("../../migrations/postgres/*.sql")
 	if err != nil || len(files) == 0 {
 		t.Fatalf("migrations not found: %v", err)
 	}

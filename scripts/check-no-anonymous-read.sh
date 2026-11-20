@@ -30,7 +30,7 @@ fi
 
 # The re-squashed baseline (ADR 0015 slice 7) must carry the visibility enum and
 # none of the retired names, so a regeneration never reintroduces them.
-baseline=migrations/000001_baseline.sql
+baseline=migrations/postgres/000001_baseline.sql
 if [[ -f "$baseline" ]]; then
   grep -q 'visibility character varying' "$baseline" || { printf '%s has no visibility column\n' "$baseline" >&2; exit 1; }
   stale=$(grep -nE 'anonymous_read|anonymous_access_policy' "$baseline" || true)

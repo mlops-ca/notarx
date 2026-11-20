@@ -371,9 +371,14 @@ make integration-test
 The integration suite applies all migrations to a clean PostgreSQL database
 and verifies that a second run is a no-op.
 
+The files live in one directory per database dialect (ADR 0022): today only
+`migrations/postgres/`. Release archives, the compose bundle and the container
+mounts keep a flat `migrations/` directory that holds the files of the one
+dialect they serve.
+
 Rules (ADR 0015):
 
-- The schema starts from `migrations/000001_baseline.sql`, a normalized
+- The schema starts from `migrations/postgres/000001_baseline.sql`, a normalized
   `pg_dump`. Never edit it in place; schema changes are new files
   `000002_<snake_case>.sql`, `000003_...`, with a unique, gap-free 6-digit
   prefix.
@@ -389,6 +394,31 @@ Rules (ADR 0015):
   the baseline was re-squashed from the whole chain just before the tag (ADR
   0015 slice 7), so a database created earlier must be recreated. After that
   tag, released migrations are immutable.
+
+`notarx migrate` (`internal/migrate`, ADR 0022) is the Go runner. On PostgreSQL it
+applies each file in one transaction, under a session advisory lock, and writes the same
+`notarx_schema_migrations` ledger as `scripts/run-migrations.sh`, which stays the deployed runner; the integration
+job compares the two ledgers on every run (`scripts/migration-runner-check.sh`). On
+MySQL, which has no transactional DDL, it holds `GET_LOCK("notarx-migrate:<db>")`,
+records each file as `applying` with the number of statements done, and marks it
+`applied` at the end. After a crash `notarx migrate --repair` shows where the file
+stopped; confirm whether the next statement took effect, then resume with
+`notarx migrate --repair --completed N`. The same command adopts a half-applied file that
+you corrected after the failure. A file whose statements were all recorded finishes by itself. `notarx migrate lint` (also a unit test over
+`migrations/mysql`) requires every MySQL file after the baseline to be re-runnable: one
+specification per `ALTER TABLE`, `INSERT ... ON DUPLICATE KEY UPDATE` instead of
+`INSERT IGNORE` or `REPLACE`, no `TRUNCATE`, `WHERE` on every `UPDATE` and `DELETE`, and the
+`IF [NOT] EXISTS` guards MySQL offers.
+
+The neutral schema catalogue `migrations/catalogue.yaml` (ADR 0022) lists every table with
+its logical column types, nullability, keys, unique sets, generated columns and seed rows.
+It is generated from a migrated PostgreSQL, never edited by hand: after a schema change run
+`go run ./tools/schemaparity generate` against a migrated database (`TEST_DATABASE_URL`) and
+commit the result. `make schema-parity` compares it with a migrated PostgreSQL, and with a
+migrated MySQL once `migrations/mysql` exists, through the logical-type mapping in
+`internal/schemaparity/types.go`, and fails on drift. Every migration after the baseline ships in
+both `migrations/postgres` and `migrations/mysql`, or is named with its one dialect and the
+reason in `migrations/dialect-scope.yaml`; `make test` fails otherwise.
 
 `make migration-check` (`scripts/migration-immutability-check.sh`) runs in CI
 and in `make preflight`. It always rejects duplicate, out-of-sequence or gapped

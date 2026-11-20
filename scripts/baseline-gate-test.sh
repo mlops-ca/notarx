@@ -36,7 +36,7 @@ repo=
 new_repo() {
   repo=$(mktemp -d "$workdir/repo.XXXXXX")
   git -C "$repo" init -q -b main
-  mkdir "$repo/migrations"
+  mkdir -p "$repo/migrations/postgres"
 }
 commit_all() {
   git -C "$repo" add -A
@@ -46,7 +46,7 @@ gate() { bash "$root/scripts/baseline-gate.sh" --repo "$repo" "$@"; }
 head_sha() { git -C "$repo" rev-parse HEAD; }
 
 new_repo
-printf 'create table t();\n' >"$repo/migrations/000001_baseline.sql"
+printf 'create table t();\n' >"$repo/migrations/postgres/000001_baseline.sql"
 commit_all 'feat(db): baseline'
 good=$(head_sha)
 expect_ok 'exactly the baseline' gate --sha "$good"
@@ -56,13 +56,13 @@ expect_fail 'override 1.0.0 is rejected before the first stable' 'must be 0\.1\.
 expect_fail 'an unknown commit is rejected' 'not in' gate --sha 0123456789abcdef0123456789abcdef01234567
 expect_fail 'the sha is required' 'sha is required' gate
 
-printf 'alter table t add column c int;\n' >"$repo/migrations/000002_more.sql"
+printf 'alter table t add column c int;\n' >"$repo/migrations/postgres/000002_more.sql"
 commit_all 'feat(db): second migration'
 expect_fail 'an extra migration is rejected' 'more than the baseline.*000002_more\.sql' gate --sha "$(head_sha)"
 expect_ok 'the earlier commit still passes' gate --sha "$good"
 
 new_repo
-printf 'x\n' >"$repo/migrations/000002_more.sql"
+printf 'x\n' >"$repo/migrations/postgres/000002_more.sql"
 commit_all 'feat(db): no baseline'
 expect_fail 'a missing baseline is rejected' '000001_baseline\.sql is missing' gate --sha "$(head_sha)"
 
@@ -73,8 +73,8 @@ expect_fail 'no migrations at all is rejected' 'holds no file' gate --sha "$(hea
 
 # After the first stable tag the immutability check governs: any layout and override pass here.
 new_repo
-printf 'create table t();\n' >"$repo/migrations/000001_baseline.sql"
-printf 'x\n' >"$repo/migrations/000002_more.sql"
+printf 'create table t();\n' >"$repo/migrations/postgres/000001_baseline.sql"
+printf 'x\n' >"$repo/migrations/postgres/000002_more.sql"
 commit_all 'feat(db): two migrations'
 git -C "$repo" tag v0.1.0
 expect_ok 'after a stable tag the gate passes' gate --sha "$(head_sha)" --version-override 0.2.0

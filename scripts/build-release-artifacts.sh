@@ -101,7 +101,7 @@ for target in "${targets[@]}"; do
   mkdir -p "$stage"
   CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/notarx" ./cmd/notarx
   CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$stage/notarx-healthcheck" ./cmd/healthcheck
-  cp -R "$root/migrations" "$stage/migrations"
+  cp -R "$root/migrations/postgres" "$stage/migrations"
   cp "$root/scripts/run-migrations.sh" "$stage/run-migrations.sh"
   cp "$root/.env.example" "$stage/notarx.env.example"
   chmod +x "$stage/run-migrations.sh"

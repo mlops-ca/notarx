@@ -7,7 +7,7 @@ trap 'rm -rf "$workdir"' EXIT
 mkdir "$workdir/bin"
 export NOTARX_ISOLATION_LOG="$workdir/docker-calls"
 export NOTARX_ISOLATION_MIGRATIONS
-NOTARX_ISOLATION_MIGRATIONS=$(find "$root/migrations" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
+NOTARX_ISOLATION_MIGRATIONS=$(find "$root/migrations/postgres" -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
 cat >"$workdir/bin/docker" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -27,6 +27,10 @@ if [[ "$1" == port ]]; then
     rustfs:9000) printf '127.0.0.1:19000\n' ;;
     *) exit 12 ;;
   esac
+  exit 0
+fi
+if [[ "$*" == *TestPostgresLedgerIsByteIdenticalToTheScript* ]]; then
+  printf -- '--- PASS: TestPostgresLedgerIsByteIdenticalToTheScript (0.00s)\n'
   exit 0
 fi
 if [[ "$*" == *"PGDATABASE=notarx_foreign_schema_test"* && "$*" == *migrate* ]]; then
@@ -63,7 +67,7 @@ chmod +x "$workdir/bin/go"
 export PATH="$workdir/bin:$PATH"
 export COMPOSE_PROJECT_NAME=existing-local-service-must-not-be-touched
 export NOTARX_ISOLATION_LATEST
-NOTARX_ISOLATION_LATEST=$(find "$root/migrations" -maxdepth 1 -name '*.sql' | sort | tail -1)
+NOTARX_ISOLATION_LATEST=$(find "$root/migrations/postgres" -maxdepth 1 -name '*.sql' | sort | tail -1)
 NOTARX_ISOLATION_LATEST=${NOTARX_ISOLATION_LATEST##*/}
 "$root/scripts/integration-test.sh" >/dev/null
 make --no-print-directory -C "$root" integration-down >/dev/null
@@ -83,10 +87,19 @@ app_shard=$("$root/scripts/integration-test.sh" --list | awk '$2 == "./internal/
 while read -r shard; do
   : >"$NOTARX_ISOLATION_LOG"
   "$root/scripts/integration-test.sh" --shard "$shard" >/dev/null
+  # Only the shard that runs ./internal/migrate and ./internal/schemaparity starts MySQL.
+  if "$root/scripts/integration-test.sh" --list | grep -Eqx "$shard ./internal/(migrate|schemaparity)"; then
+    expect_logged 'up -d --wait postgres rustfs mysql'
+  elif grep -Fq 'mysql' "$NOTARX_ISOLATION_LOG"; then
+    printf 'shard %s started MySQL, which only the shard of ./internal/migrate and ./internal/schemaparity needs\n' "$shard" >&2
+    exit 1
+  fi
+  # The runner parity check of migration-runner-check.sh runs in every shard and names ./internal/migrate.
+  shard_calls=$(grep -Fv TestPostgresLedgerIsByteIdenticalToTheScript "$NOTARX_ISOLATION_LOG")
   while read -r listed_shard package; do
     if [[ "$listed_shard" == "$shard" ]]; then
-      grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG" || { printf 'shard %s did not run %s\n' "$shard" "$package" >&2; exit 1; }
-    elif grep -Fqw -- "$package" "$NOTARX_ISOLATION_LOG"; then
+      grep -Fqw -- "$package" <<<"$shard_calls" || { printf 'shard %s did not run %s\n' "$shard" "$package" >&2; exit 1; }
+    elif grep -Fqw -- "$package" <<<"$shard_calls"; then
       printf 'shard %s ran %s of shard %s\n' "$shard" "$package" "$listed_shard" >&2
       exit 1
     fi

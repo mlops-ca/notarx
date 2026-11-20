@@ -27,7 +27,7 @@ for f in compose.yml Caddyfile .env.example cloud-init.yaml run-migrations.sh RE
 done
 cases=$((cases + 1))
 [[ -x "$dir/run-migrations.sh" ]] || fail 'run-migrations.sh is not executable'
-expect_eq 'migrations are the repository migrations' "$(cd "$root/migrations" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256)" "$(cd "$dir/migrations" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256)"
+expect_eq 'migrations are the repository migrations' "$(cd "$root/migrations/postgres" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256)" "$(cd "$dir/migrations" && find . -type f | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256)"
 cases=$((cases + 1))
 cmp -s "$root/scripts/run-migrations.sh" "$dir/run-migrations.sh" || fail 'run-migrations.sh differs from the source'
 
@@ -112,7 +112,7 @@ expect_fail 'an unknown argument' 'unknown argument' "$render" --bogus x
 fake=$workdir/fake
 mkdir -p "$fake/deploy" "$fake/scripts"
 cp -R "$root/deploy/oci-free-tier" "$fake/deploy/oci-free-tier"
-cp -R "$root/migrations" "$fake/migrations"
+mkdir -p "$fake/migrations" && cp -R "$root/migrations/postgres" "$fake/migrations/postgres"
 cp "$root/scripts/run-migrations.sh" "$fake/scripts/"
 sed -i.bak -E 's|(NOTARX_CADDY_IMAGE:-caddy:2.11-alpine)@sha256:[0-9a-f]+|\1|' "$fake/deploy/oci-free-tier/compose.yml"
 rm -f "$fake/deploy/oci-free-tier/compose.yml.bak"

@@ -50,7 +50,15 @@ trap cleanup EXIT
 docker volume create notarx-go-mod >/dev/null
 docker volume create notarx-go-build >/dev/null
 cleanup
-"${compose[@]}" up -d --wait postgres rustfs
+# The migration runner and schema parity tests (internal/migrate, internal/schemaparity) also need MySQL.
+services=(postgres rustfs)
+for package in "${packages[@]}"; do
+  if [[ "$package" == ./internal/migrate || "$package" == ./internal/schemaparity ]]; then
+    services+=(mysql)
+    break
+  fi
+done
+"${compose[@]}" up -d --wait "${services[@]}"
 "${compose[@]}" run --rm --no-deps rustfs-ready
 "${compose[@]}" run --rm --no-deps migrate
 ./scripts/migration-runner-check.sh

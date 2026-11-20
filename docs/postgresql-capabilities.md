@@ -49,8 +49,8 @@ seam, but every implementation is raw PostgreSQL SQL. Counts from the tree on
 | --- | --- |
 | Advisory-lock calls (`pg_advisory_*`, `pg_try_advisory_*`) | about 41 lines in 26 files, wrapped by `internal/repository/postgres_advisory_lock.go` and used by `internal/cache/coordinator.go` |
 | `FOR UPDATE SKIP LOCKED` work-queue claims | about 27 sites in 21 files |
-| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in `migrations/000001_baseline.sql` |
-| `CREATE TRIGGER` statements | 10 in `migrations/000001_baseline.sql` |
+| `LISTEN` and `pg_notify` | listener in `internal/database/notification.go`, `pg_notify` in `internal/app/postgres_cache_task_queue.go`, notify triggers in `migrations/postgres/000001_baseline.sql` |
+| `CREATE TRIGGER` statements | 10 in `migrations/postgres/000001_baseline.sql` |
 | `gin_trgm_ops` (`pg_trgm`) indexes | 13 in the baseline |
 | `ON CONFLICT` / `RETURNING` | about 113 / 146 |
 | `::` casts | about 1,400 |
@@ -330,13 +330,13 @@ The dashboard reads `pg_stat_statements_seconds_total`, `pg_stat_statements_call
 
 | Area | Primary implementation |
 | --- | --- |
-| Partitioned audit tables | `internal/partitions`, partitioned `resolver_audit_log` and `security_audit_log` in `migrations/000001_baseline.sql`, `internal/repository/postgres_audit.go` |
+| Partitioned audit tables | `internal/partitions`, partitioned `resolver_audit_log` and `security_audit_log` in `migrations/postgres/000001_baseline.sql`, `internal/repository/postgres_audit.go` |
 | Advisory locks | `internal/cache/coordinator.go`, `internal/repository/postgres_advisory_lock.go`, `postgres_{oci,raw,maven,npm}.go` |
 | `SKIP LOCKED` and leases | `internal/repository/postgres_lifecycle.go`, `postgres_replication.go`, `postgres_webhooks.go`, `postgres_scheduled_tasks.go` |
-| `LISTEN/NOTIFY` | `internal/database/notification.go`, notification triggers in `migrations/000001_baseline.sql` |
-| Extensions and indexes | extension header and trigram, BRIN and prefix-pattern indexes in `migrations/000001_baseline.sql` |
-| Cross-format search | `artifact_search_projection` view in `migrations/000001_baseline.sql` |
-| Capacity serialization | `repository_usage_counters` and its functions in `migrations/000001_baseline.sql` |
+| `LISTEN/NOTIFY` | `internal/database/notification.go`, notification triggers in `migrations/postgres/000001_baseline.sql` |
+| Extensions and indexes | extension header and trigram, BRIN and prefix-pattern indexes in `migrations/postgres/000001_baseline.sql` |
+| Cross-format search | `artifact_search_projection` view in `migrations/postgres/000001_baseline.sql` |
+| Capacity serialization | `repository_usage_counters` and its functions in `migrations/postgres/000001_baseline.sql` |
 
 `scripts/run-migrations.sh` applies migrations in checksum order. Changes to
 startup settings such as `shared_preload_libraries` require a PostgreSQL restart

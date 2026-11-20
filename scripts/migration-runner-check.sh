@@ -5,7 +5,7 @@ root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 compose=(docker compose --env-file /dev/null --project-name notarx-integration -f "$root/compose.integration.yml")
 
 second_output=$(cd "$root" && "${compose[@]}" run --rm --no-deps migrate 2>&1)
-expected_skips=$(find "$root/migrations" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')
+expected_skips=$(find "$root/migrations/postgres" -maxdepth 1 -type f -name '*.sql' | wc -l | tr -d ' ')
 actual_skips=$(printf '%s\n' "$second_output" | grep -c '^Skipping applied migration ' || true)
 if [[ "$actual_skips" -ne "$expected_skips" ]] || printf '%s\n' "$second_output" | grep -q '^Applying migration '; then
   printf '%s\n' "$second_output" >&2
@@ -21,7 +21,7 @@ cleanup() {
   rm -rf "$probe_dir"
 }
 trap cleanup EXIT
-latest_migration=$(find "$root/migrations" -maxdepth 1 -type f -name '*.sql' | sort | tail -n 1)
+latest_migration=$(find "$root/migrations/postgres" -maxdepth 1 -type f -name '*.sql' | sort | tail -n 1)
 probe_name=${latest_migration##*/}
 cp "$latest_migration" "$probe_dir/$probe_name"
 printf '\n-- checksum drift probe\n' >> "$probe_dir/$probe_name"
@@ -51,3 +51,20 @@ if [[ "$foreign_status" -eq 0 ]] || ! printf '%s\n' "$foreign_output" | grep -Fq
   exit 1
 fi
 printf 'Migration foreign-schema check passed: a database without a notarx ledger is refused.\n'
+
+# ADR 0022 slice 2: the Go runner (notarx migrate) is wired as a parity check, not as the deployed
+# runner. It applies the same files to a fresh database and must leave a ledger, and a column
+# catalogue, byte-identical to what run-migrations.sh produced above. The test fails instead of
+# skipping when the database is missing, so a broken wiring cannot pass silently.
+parity_output=$(cd "$root" && "${compose[@]}" run --rm --no-deps --env NOTARX_MIGRATE_INTEGRATION_REQUIRED=1 test \
+  go test -count=1 -tags=integration -v -run '^TestPostgresLedgerIsByteIdenticalToTheScript$' ./internal/migrate 2>&1) || {
+  printf '%s\n' "$parity_output" >&2
+  printf 'Migration runner parity check failed.\n' >&2
+  exit 1
+}
+if ! printf '%s\n' "$parity_output" | grep -q -- '^--- PASS: TestPostgresLedgerIsByteIdenticalToTheScript'; then
+  printf '%s\n' "$parity_output" >&2
+  printf 'Migration runner parity check did not run.\n' >&2
+  exit 1
+fi
+printf 'Migration runner parity check passed: the Go runner ledger is byte-identical to run-migrations.sh.\n'

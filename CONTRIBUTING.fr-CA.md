@@ -429,9 +429,14 @@ make integration-test
 La suite d’intégration applique toutes les migrations à une base PostgreSQL
 vierge et vérifie qu’une seconde exécution ne change rien.
 
+Les fichiers vivent dans un répertoire par dialecte de base de données (ADR 0022) :
+pour l’instant seulement `migrations/postgres/`. Les archives de version, le lot
+compose et les montages de conteneur gardent un répertoire `migrations/` plat qui
+contient les fichiers du seul dialecte qu’ils servent.
+
 Règles (ADR 0015) :
 
-- Le schéma part de `migrations/000001_baseline.sql`, un `pg_dump` normalisé. Ne
+- Le schéma part de `migrations/postgres/000001_baseline.sql`, un `pg_dump` normalisé. Ne
   le modifiez jamais sur place; les changements de schéma sont de nouveaux
   fichiers `000002_<snake_case>.sql`, `000003_...`, avec un préfixe unique à
   6 chiffres, sans trou.
