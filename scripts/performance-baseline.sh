@@ -359,7 +359,7 @@ run_load_profile() {
   read -r cpu_count cpu_avg cpu_max <"$private_dir/postgres-cpu-summary.txt"
   jq --argjson samples "$cpu_count" --argjson avg "$cpu_avg" --argjson max "$cpu_max" --argjson cpus "$host_cpus" \
     --arg commit "$(git rev-parse HEAD)" \
-    '. + {gitCommit: $commit, databaseCpu: {samples: $samples, averagePercentOfHost: $avg, maxPercentOfHost: $max, hostCpus: $cpus}}' \
+    '. + {gitCommit: $commit, databaseCpu: {samples: $samples, averagePercentOfHost: $avg, maxPercentOfHost: $max, hostCpuCount: $cpus}}' \
     "$report" >"$repo_root/docs/perf/${load_profile}.json"
   jq -e '[.scenarios[].errors] | all(. == 0)' "$repo_root/docs/perf/${load_profile}.json" >/dev/null ||
     { printf '%s\n' 'The load profile recorded failed requests.' >&2; return 1; }

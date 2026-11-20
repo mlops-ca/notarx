@@ -8,6 +8,7 @@ package perfload
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"math"
@@ -241,7 +242,10 @@ func (r *runner) read(ctx context.Context, target Target) sample {
 }
 
 func (r *runner) publish(ctx context.Context, scenario string, i int) sample {
-	body := bytes.Repeat([]byte{byte(i)}, payloadBytes)
+	// Every body is unique (the run, the scenario and the index seed it), so publishes do not
+	// deduplicate onto a few objects and measure real small-artifact writes.
+	seed := sha256.Sum256([]byte(fmt.Sprintf("%s/%s/%d", r.runID, scenario, i)))
+	body := bytes.Repeat(seed[:], payloadBytes/len(seed))
 	path := fmt.Sprintf("/raw/%s/perfload/%s/%s-%d.bin", url.PathEscape(r.cfg.PublishRepository), r.runID, scenario, i)
 	return r.do(ctx, http.MethodPut, path, body)
 }

@@ -103,7 +103,7 @@ func (s *PostgresStore) BackfillArtifactCatalog(ctx context.Context, batchSize i
 // the stored cursor and advances the cursor in the same transaction, so an interrupted
 // run loses at most the batch in flight. busy is true when another node holds the format.
 func (s *PostgresStore) backfillArtifactCatalogBatch(ctx context.Context, format Format, batchSize int) (refreshed int64, completed, busy bool, err error) {
-	literal, err := catalogFormatLiteral(format)
+	keyset, err := catalogKeysetSQL(format)
 	if err != nil {
 		return 0, false, false, err
 	}
@@ -122,41 +122,43 @@ func (s *PostgresStore) backfillArtifactCatalogBatch(ctx context.Context, format
 	if _, err = tx.ExecContext(ctx, `INSERT INTO artifact_catalog_backfill (format) VALUES ($1) ON CONFLICT (format) DO NOTHING`, string(format)); err != nil {
 		return 0, false, false, err
 	}
-	var cursorRepository, cursorCoordinate string
+	var cursorRepository, cursorKey string
 	var done sql.NullTime
-	if err = tx.QueryRowContext(ctx, `SELECT cursor_repository_id::text, cursor_coordinate, completed_at FROM artifact_catalog_backfill WHERE format=$1`, string(format)).
-		Scan(&cursorRepository, &cursorCoordinate, &done); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT cursor_repository_id::text, cursor_key, completed_at FROM artifact_catalog_backfill WHERE format=$1`, string(format)).
+		Scan(&cursorRepository, &cursorKey, &done); err != nil {
 		return 0, false, false, err
 	}
 	if done.Valid {
 		return 0, true, false, nil
 	}
-	rows, err := tx.QueryContext(ctx, `
-		SELECT p.repository_id::text, p.coordinate
-		FROM artifact_search_projection p
-		WHERE p.format=`+literal+` AND (p.repository_id, p.coordinate) > ($1::uuid, $2)
-		GROUP BY p.repository_id, p.coordinate
-		ORDER BY p.repository_id, p.coordinate
-		LIMIT $3`, cursorRepository, cursorCoordinate, batchSize)
+	rows, err := tx.QueryContext(ctx, keyset, cursorRepository, cursorKey, batchSize)
 	if err != nil {
 		return 0, false, false, err
 	}
+	var lastRepository, lastKey string
 	var repositoryIDs, coordinates []string
+	seen := map[[2]string]bool{}
+	read := 0
 	for rows.Next() {
-		var repositoryID, coordinate string
-		if err = rows.Scan(&repositoryID, &coordinate); err != nil {
+		var repositoryID, key, coordinate string
+		if err = rows.Scan(&repositoryID, &key, &coordinate); err != nil {
 			_ = rows.Close()
 			return 0, false, false, err
 		}
-		repositoryIDs = append(repositoryIDs, repositoryID)
-		coordinates = append(coordinates, coordinate)
+		read++
+		lastRepository, lastKey = repositoryID, key
+		if pair := [2]string{repositoryID, coordinate}; !seen[pair] {
+			seen[pair] = true
+			repositoryIDs = append(repositoryIDs, repositoryID)
+			coordinates = append(coordinates, coordinate)
+		}
 	}
 	if err = rows.Err(); err != nil {
 		_ = rows.Close()
 		return 0, false, false, err
 	}
 	_ = rows.Close()
-	if len(coordinates) == 0 {
+	if read == 0 {
 		if _, err = tx.ExecContext(ctx, `UPDATE artifact_catalog_backfill SET completed_at=now(), updated_at=now() WHERE format=$1`, string(format)); err != nil {
 			return 0, false, false, err
 		}
@@ -165,9 +167,8 @@ func (s *PostgresStore) backfillArtifactCatalogBatch(ctx context.Context, format
 	if err = refreshArtifactCatalogPairs(ctx, tx, format, repositoryIDs, coordinates); err != nil {
 		return 0, false, false, err
 	}
-	last := len(coordinates) - 1
-	if _, err = tx.ExecContext(ctx, `UPDATE artifact_catalog_backfill SET cursor_repository_id=$2::uuid, cursor_coordinate=$3, updated_at=now() WHERE format=$1`,
-		string(format), repositoryIDs[last], coordinates[last]); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE artifact_catalog_backfill SET cursor_repository_id=$2::uuid, cursor_key=$3, updated_at=now() WHERE format=$1`,
+		string(format), lastRepository, lastKey); err != nil {
 		return 0, false, false, err
 	}
 	return int64(len(coordinates)), false, false, tx.Commit()
@@ -176,7 +177,10 @@ func (s *PostgresStore) backfillArtifactCatalogBatch(ctx context.Context, format
 var _ ArtifactCatalogStore = (*PostgresStore)(nil)
 
 // refreshAPTSnapshotCatalog refreshes every path of the assets of the snapshots: the one
-// that became visible and, when there is one, the one it replaced.
+// that became visible and, when there is one, the one it replaced. A path both snapshots hold
+// still changes its row, because the projection dates a snapshot's assets with the snapshot's
+// own creation time; the set-based statements keep the cost at one pass over the paths the
+// publish already wrote row by row.
 func refreshAPTSnapshotCatalog(ctx context.Context, tx *sql.Tx, repositoryID, snapshotID, previousSnapshotID string) error {
 	rows, err := tx.QueryContext(ctx, `SELECT DISTINCT path FROM native_apt_snapshot_assets
 		WHERE snapshot_id=$1::uuid OR snapshot_id=NULLIF($2,'')::uuid ORDER BY path`, snapshotID, previousSnapshotID)

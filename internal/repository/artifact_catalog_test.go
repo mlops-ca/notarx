@@ -80,3 +80,29 @@ func TestRefreshArtifactCatalogRejectsMismatchedArguments(t *testing.T) {
 		t.Fatal("an uncovered format was refreshed")
 	}
 }
+
+func TestCatalogKeysetStatementsReadTheFormatTablesInKeyOrder(t *testing.T) {
+	for _, entry := range artifactCatalogRegistry {
+		statement, err := catalogKeysetSQL(entry.Format)
+		if !entry.Covered {
+			if err == nil {
+				t.Errorf("%s: a backfill source exists for an uncovered format", entry.Format)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", entry.Format, err)
+		}
+		if strings.Contains(statement, "artifact_search_projection") {
+			t.Errorf("%s: the backfill reads through the projection view, which costs a full aggregation per batch", entry.Format)
+		}
+		for _, want := range []string{"$1::uuid", "$2", "$3", "ORDER BY repository_id"} {
+			if !strings.Contains(statement, want) {
+				t.Errorf("%s: statement lacks %q: %s", entry.Format, want, statement)
+			}
+		}
+	}
+	if _, err := catalogKeysetSQL(Format("unknown")); err == nil {
+		t.Error("an unknown format has a backfill source")
+	}
+}

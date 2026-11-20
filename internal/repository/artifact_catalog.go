@@ -92,7 +92,7 @@ const catalogAggregate = `
 	       (array_agg(COALESCE(p.digest,'') ` + catalogOrdering + `))[1] AS latest_digest,
 	       (array_agg(p.created_at ` + catalogOrdering + `))[1] AS latest_published_at,
 	       (array_agg(COALESCE(p.publisher,'') ` + catalogOrdering + `))[1] AS publisher,
-	       count(DISTINCT COALESCE(p.version,''))::int AS version_count,
+	       count(DISTINCT COALESCE(NULLIF(p.version,''), p.digest))::int AS version_count,
 	       (array_agg(p.size ` + catalogOrdering + `))[1] AS size_bytes`
 
 // catalogTombstoneFilter hides Go versions that have a tombstone; the other formats
@@ -162,10 +162,57 @@ func catalogRecomputeSQL(format Format) (string, error) {
 		    publisher=a.publisher, version_count=a.version_count, size_bytes=a.size_bytes
 		FROM agg a
 		WHERE c.repository_id=a.repository_id AND c.format=` + literal + ` AND c.coordinate=a.coordinate
+		  AND (c.latest_version, c.latest_digest, c.latest_published_at, c.publisher, c.version_count, c.size_bytes)
+		      IS DISTINCT FROM (a.latest_version, a.latest_digest, a.latest_published_at, a.publisher, a.version_count, a.size_bytes)
 		RETURNING 1
 	)
 	DELETE FROM artifact_catalog c
 	USING keys k
 	WHERE c.repository_id=k.repository_id AND c.format=` + literal + ` AND c.coordinate=k.coordinate
 	  AND NOT EXISTS (SELECT 1 FROM agg a WHERE a.repository_id=k.repository_id AND a.coordinate=k.coordinate)`, nil
+}
+
+// catalogKeysetSQL returns the statement that reads the next batch of a format's backfill
+// from the per-format table itself, in primary-key order, so each batch costs its own size
+// however far the cursor has advanced (reading it through artifact_search_projection would
+// aggregate every remaining row per batch). It takes the cursor $1 (repository id, a uuid)
+// and $2 (key) and the batch size $3, and returns (repository id, key, coordinate) rows; the
+// key orders the scan and the coordinate is what the refresh recomputes. It reads a superset
+// of the visible rows: the refresh deletes the row of a coordinate that has none.
+func catalogKeysetSQL(format Format) (string, error) {
+	if !ArtifactCatalogCovered(format) {
+		return "", fmt.Errorf("artifact catalogue does not cover format %q", format)
+	}
+	single := func(table, key string) string {
+		return "SELECT repository_id::text, " + key + ", " + key + " FROM " + table +
+			" WHERE (repository_id, " + key + ") > ($1::uuid, $2) ORDER BY repository_id, " + key + " LIMIT $3"
+	}
+	switch format {
+	case FormatMaven:
+		return single("native_maven_artifacts", "coordinate"), nil
+	case FormatOCI:
+		return single("native_oci_manifests", "name"), nil
+	case FormatConan:
+		return single("native_conan_recipe_revisions", "reference"), nil
+	case FormatRaw:
+		return single("native_raw_assets", "path"), nil
+	case FormatNPM:
+		return single("native_npm_versions", "package_name"), nil
+	case FormatGo:
+		return single("native_go_versions", "module_path"), nil
+	case FormatPyPI:
+		return "SELECT repository_id::text, filename, project FROM native_pypi_files" +
+			" WHERE (repository_id, filename) > ($1::uuid, $2) ORDER BY repository_id, filename LIMIT $3", nil
+	case FormatAPT:
+		return `SELECT repository_id::text, path, path FROM (
+			(SELECT repository_id, path FROM native_apt_assets
+			  WHERE (repository_id, path) > ($1::uuid, $2) ORDER BY repository_id, path LIMIT $3)
+			UNION ALL
+			(SELECT a.repository_id, a.path FROM native_apt_snapshot_assets a
+			  WHERE (a.repository_id, a.path) > ($1::uuid, $2)
+			    AND EXISTS (SELECT 1 FROM native_apt_repository_snapshots s WHERE s.id=a.snapshot_id AND s.state='visible')
+			  ORDER BY a.repository_id, a.path LIMIT $3)
+		) u ORDER BY repository_id, path LIMIT $3`, nil
+	}
+	return "", fmt.Errorf("no backfill source for format %q", format)
 }

@@ -307,7 +307,7 @@ milliseconds, nearest-rank percentiles:
     }
   ],
   "auditFlush": { "p99Seconds": 0.05, "flushes": 12, "bufferDepthAfter": 0, "dropped": 0 },
-  "databaseCpu": { "samples": 9, "averagePercentOfHost": 14.2, "maxPercentOfHost": 31.0, "hostCpus": 8 }
+  "databaseCpu": { "samples": 9, "averagePercentOfHost": 14.2, "maxPercentOfHost": 31.0, "hostCpuCount": 8 }
 }
 ```
 

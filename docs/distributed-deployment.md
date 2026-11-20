@@ -357,13 +357,17 @@ Optional explicit directory capacity is described in [operational signal sources
 
 ## Large payloads and the meta namespace
 
-Metadata payloads above `NOTARX_INLINE_MAX_BYTES` (default 16384) are kept out of the
-database (ADR 0023 section 9). The row stores the payload digest, size and object key,
-and the bytes live in the object store under `meta/sha256/<hex>`: content-addressed
-and immutable, so a key can never change meaning. Every read re-verifies the digest
-and rejects a mismatch, and each node keeps a small in-process LRU of recent reads.
-A payload at or below the threshold stays inline in its row. `0` externalises every
-non-empty payload. Both object-store drivers (filesystem and S3) support the namespace.
+ADR 0023 section 9 keeps metadata payloads above `NOTARX_INLINE_MAX_BYTES` (default 16384) out of
+the database: the row stores the payload digest, size and object key, and the bytes live in the
+object store under `meta/sha256/<hex>`, content-addressed and immutable, so a key can never
+change meaning. Every read re-verifies the digest and rejects a mismatch, and each node keeps a
+small in-process LRU of recent reads. A payload at or below the threshold stays inline in its row.
+`0` moves every non-empty payload out of the database.
+
+The setting and the namespace are in place and both object-store drivers (filesystem and S3)
+support the namespace. The writers of each payload kind (SBOMs and other intelligence documents,
+`nuspec` and `chart_yaml`, proxy documents, npm version manifests) adopt them in the following
+slices of ADR 0023, so today no payload is moved by this setting.
 
 ```env
 NOTARX_INLINE_MAX_BYTES=16384

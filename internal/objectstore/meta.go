@@ -7,16 +7,32 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 )
 
-// MetaPrefix is the object-store namespace of externalised metadata payloads (ADR 0023
+// MetaPrefix is the object-store namespace of metadata payloads kept out of the database (ADR 0023
 // section 9). Objects under it are content-addressed and immutable: the key is the
 // SHA-256 digest of the bytes, so a write can never change what a key means.
 const MetaPrefix = "meta/sha256/"
 
 // DefaultMetaCacheBytes bounds the in-process LRU of a MetaStore.
 const DefaultMetaCacheBytes = 16 << 20
+
+// IsMetaObjectKey reports whether key is exactly meta/sha256/<64 lowercase hex characters>,
+// the only form the namespace accepts.
+func IsMetaObjectKey(key string) bool {
+	hexPart, ok := strings.CutPrefix(key, MetaPrefix)
+	if !ok || len(hexPart) != sha256.Size*2 {
+		return false
+	}
+	for _, c := range hexPart {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'f') {
+			return false
+		}
+	}
+	return true
+}
 
 // MetaKey returns the object key of a "sha256:<hex>" digest.
 func MetaKey(digest string) (string, error) {
@@ -38,6 +54,9 @@ type MetaStore struct {
 	bytes    int64
 	order    *list.List // front is the most recently used
 	entries  map[string]*list.Element
+	// deletes counts Delete calls. A Get that started before one never caches what it read,
+	// so a delete cannot be undone by a read that raced it.
+	deletes uint64
 }
 
 type metaEntry struct {
@@ -60,24 +79,36 @@ func (m *MetaStore) Put(ctx context.Context, data []byte) (digest, key string, e
 	sum := sha256.Sum256(data)
 	digest = digestPrefix + hex.EncodeToString(sum[:])
 	key = MetaPrefix + hex.EncodeToString(sum[:])
+	epoch := m.epoch()
 	if err := m.store.PutVerifiedReader(ctx, key, bytes.NewReader(data), int64(len(data)), digest); err != nil {
 		return "", "", fmt.Errorf("store meta object: %w", err)
 	}
-	m.remember(digest, data)
+	m.remember(digest, data, epoch)
 	return digest, key, nil
+}
+
+// normalize returns the canonical "sha256:<lowercase hex>" form of digest, so one object has
+// one cache key however the caller spelled the digest.
+func normalize(digest string) (string, error) {
+	hexPart, err := parseDigest(digest)
+	if err != nil {
+		return "", err
+	}
+	return digestPrefix + hexPart, nil
 }
 
 // Get returns the bytes stored under digest. It returns ErrNotFound for an absent
 // object and ErrDigestMismatch when the stored bytes do not hash to digest.
 func (m *MetaStore) Get(ctx context.Context, digest string) ([]byte, error) {
-	key, err := MetaKey(digest)
+	digest, err := normalize(digest)
 	if err != nil {
 		return nil, err
 	}
 	if data, ok := m.cached(digest); ok {
 		return data, nil
 	}
-	data, err := m.store.Get(ctx, key)
+	epoch := m.epoch()
+	data, err := m.store.Get(ctx, MetaPrefix+strings.TrimPrefix(digest, digestPrefix))
 	if err != nil {
 		return nil, err
 	}
@@ -85,19 +116,33 @@ func (m *MetaStore) Get(ctx context.Context, digest string) ([]byte, error) {
 	if digestPrefix+hex.EncodeToString(sum[:]) != digest {
 		return nil, ErrDigestMismatch
 	}
-	m.remember(digest, data)
+	m.remember(digest, data, epoch)
 	return data, nil
 }
 
 // Delete removes the object of digest; it is for the sweep that deletes unreferenced
 // meta objects after their grace period.
 func (m *MetaStore) Delete(ctx context.Context, digest string) error {
-	key, err := MetaKey(digest)
+	digest, err := normalize(digest)
 	if err != nil {
 		return err
 	}
+	// Bumping the epoch first stops every read that is already in flight from caching what it
+	// read; forgetting after the delete drops an entry a read cached before the bump.
+	m.mu.Lock()
+	m.deletes++
+	m.mu.Unlock()
+	if err := m.store.Delete(ctx, MetaPrefix+strings.TrimPrefix(digest, digestPrefix)); err != nil {
+		return err
+	}
 	m.forget(digest)
-	return m.store.Delete(ctx, key)
+	return nil
+}
+
+func (m *MetaStore) epoch() uint64 {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.deletes
 }
 
 func (m *MetaStore) cached(digest string) ([]byte, bool) {
@@ -111,13 +156,16 @@ func (m *MetaStore) cached(digest string) ([]byte, bool) {
 	return bytes.Clone(element.Value.(*metaEntry).data), true
 }
 
-func (m *MetaStore) remember(digest string, data []byte) {
+func (m *MetaStore) remember(digest string, data []byte, epoch uint64) {
 	size := int64(len(data))
 	if size > m.maxBytes {
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.deletes != epoch {
+		return
+	}
 	if element, ok := m.entries[digest]; ok {
 		m.order.MoveToFront(element)
 		return

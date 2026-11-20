@@ -1,7 +1,10 @@
 package objectstore_test
 
 import (
+	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mlops-ca/notarx/internal/objectstore"
@@ -65,5 +68,86 @@ func TestMetaStoreCachedBytesAreCopies(t *testing.T) {
 	second, err := meta.Get(ctx, digest)
 	if err != nil || string(second) != "immutable" {
 		t.Fatalf("cache returned mutated bytes %q, %v", second, err)
+	}
+}
+
+func TestMetaStoreNormalizesTheDigestSpelling(t *testing.T) {
+	ctx := t.Context()
+	store := objectstore.NewMemoryStore()
+	meta := objectstore.NewMetaStore(store, 0)
+	digest, _, err := meta.Put(ctx, []byte("spelling"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	upper := "sha256:" + strings.ToUpper(strings.TrimPrefix(digest, "sha256:"))
+	if got, err := meta.Get(ctx, upper); err != nil || string(got) != "spelling" {
+		t.Fatalf("Get with an uppercase digest = %q, %v", got, err)
+	}
+	if err := meta.Delete(ctx, upper); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := meta.Get(ctx, digest); !errors.Is(err, objectstore.ErrNotFound) {
+		t.Fatalf("after deleting by the uppercase spelling, Get = %v, want ErrNotFound (a stale cache entry survived)", err)
+	}
+}
+
+// slowGetStore holds every Get after it has read the object until release is closed, so a test
+// can interleave a Delete with a read that is already in flight.
+type slowGetStore struct {
+	objectstore.Store
+	read    chan struct{}
+	release chan struct{}
+}
+
+func (s *slowGetStore) Get(ctx context.Context, key string) ([]byte, error) {
+	data, err := s.Store.Get(ctx, key)
+	if err == nil {
+		s.read <- struct{}{}
+		<-s.release
+	}
+	return data, err
+}
+
+func TestMetaStoreDeleteIsNotUndoneByAReadInFlight(t *testing.T) {
+	ctx := t.Context()
+	inner := objectstore.NewMemoryStore()
+	digest, _, err := objectstore.NewMetaStore(inner, 0).Put(ctx, []byte("swept"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	slow := &slowGetStore{Store: inner, read: make(chan struct{}), release: make(chan struct{})}
+	meta := objectstore.NewMetaStore(slow, 0)
+	done := make(chan error, 1)
+	go func() {
+		_, err := meta.Get(ctx, digest)
+		done <- err
+	}()
+	<-slow.read // the read has the bytes and has not cached them yet
+	if err := meta.Delete(ctx, digest); err != nil {
+		t.Fatal(err)
+	}
+	close(slow.release)
+	if err := <-done; err != nil {
+		t.Fatalf("the in-flight read failed: %v", err)
+	}
+	if _, err := meta.Get(ctx, digest); !errors.Is(err, objectstore.ErrNotFound) {
+		t.Fatalf("Get after Delete = %v, want ErrNotFound: the racing read re-cached the object", err)
+	}
+}
+
+func TestIsMetaObjectKey(t *testing.T) {
+	hex := strings.Repeat("a", 64)
+	for key, want := range map[string]bool{
+		"meta/sha256/" + hex:                     true,
+		"meta/sha256/" + strings.Repeat("A", 64): false,
+		"meta/sha256/" + hex + "/x":              false,
+		"meta/sha256/" + hex[:63]:                false,
+		"meta/sha256/" + strings.Repeat("g", 64): false,
+		"data/sha256/" + hex:                     false,
+		"":                                       false,
+	} {
+		if got := objectstore.IsMetaObjectKey(key); got != want {
+			t.Errorf("IsMetaObjectKey(%q) = %v, want %v", key, got, want)
+		}
 	}
 }

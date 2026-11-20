@@ -62,6 +62,10 @@ func run(ctx context.Context, profile, baseURL, databaseURL, publishRepository, 
 	return os.WriteFile(output, data, 0o644)
 }
 
+// packagesPerRepository bounds how many packages of one repository become read targets, so the
+// targets cover every seeded repository, hottest first, instead of the first one alone.
+const packagesPerRepository = 50
+
 // loadTargets returns packages of the datagen repositories, hottest repository first:
 // datagen places packages by popularity, so a repository with a lower number holds more.
 func loadTargets(ctx context.Context, databaseURL string) ([]perfload.Target, error) {
@@ -71,12 +75,15 @@ func loadTargets(ctx context.Context, databaseURL string) ([]perfload.Target, er
 	}
 	defer func() { _ = conn.Close(ctx) }()
 	rows, err := conn.Query(ctx, `
-		SELECT r.name, p.name
-		  FROM hosted_repositories r
-		  JOIN native_npm_packages p ON p.repository_id = r.id
-		 WHERE r.name LIKE 'perf-npm-%'
-		 ORDER BY r.name, p.name
-		 LIMIT 1000`)
+		SELECT repo, pkg FROM (
+			SELECT r.name AS repo, p.name AS pkg,
+			       row_number() OVER (PARTITION BY r.id ORDER BY p.name) AS rank
+			  FROM hosted_repositories r
+			  JOIN native_npm_packages p ON p.repository_id = r.id
+			 WHERE r.name LIKE 'perf-npm-%'
+		) ranked
+		 WHERE rank <= $1
+		 ORDER BY repo, pkg`, packagesPerRepository)
 	if err != nil {
 		return nil, err
 	}

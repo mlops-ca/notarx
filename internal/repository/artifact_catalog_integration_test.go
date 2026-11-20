@@ -126,7 +126,7 @@ func TestArtifactCatalogBackfillEqualsTheProjectionAndResumes(t *testing.T) {
 		}
 	}
 	var cursors int
-	if err := store.db.QueryRow(`SELECT count(*) FROM artifact_catalog_backfill WHERE cursor_coordinate <> ''`).Scan(&cursors); err != nil {
+	if err := store.db.QueryRow(`SELECT count(*) FROM artifact_catalog_backfill WHERE cursor_key <> ''`).Scan(&cursors); err != nil {
 		t.Fatal(err)
 	}
 	if cursors == 0 {
