@@ -26,6 +26,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/evidence"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
+	huggingfaceformat "github.com/mlops-ca/notarx/internal/format/huggingface"
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
 	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
 	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
@@ -46,6 +47,7 @@ import (
 	rubygemspg "github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
 	"github.com/mlops-ca/notarx/internal/scanning"
 	"github.com/mlops-ca/notarx/internal/snapshotimport"
+	"github.com/mlops-ca/notarx/internal/spool"
 )
 
 func main() {
@@ -315,7 +317,25 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	ociCache := app.NewDefaultOCICache(cacheStore, cfg.OCIProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithTTL(cfg.OCICacheTTL)
 	rawCache := app.NewDefaultRawCache(cacheStore, cfg.RawProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.RawCacheMaxObjectBytes).WithMaxConcurrentSpools(cfg.RawCacheMaxConcurrentSpools).WithTTL(cfg.RawCacheTTL)
 	conanCache := app.NewDefaultConanCache(cacheStore, nil).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.ConanCacheMaxObjectBytes).WithTTL(cfg.ConanCacheTTL)
-	maintenance := app.NewCacheMaintenanceWithRaw(cacheStore, ociCache, rawCache).WithConan(conanCache)
+	huggingFaceConfig, err := huggingfaceformat.LoadConfig(os.LookupEnv)
+	if err != nil {
+		slog.Error("configure Hugging Face format", "error", err)
+		return 1
+	}
+	// Every cold fetch holds a coordinator connection for its whole transfer (a session advisory lock), like
+	// a Raw spool does. Keep a few connections free for the short locks of the other formats.
+	if available := max(1, cfg.DatabaseCoordinatorPool.MaxOpenConns-cfg.RawCacheMaxConcurrentSpools-2); huggingFaceConfig.MaxConcurrentFetches > available {
+		slog.Warn("reducing NOTARX_HF_MAX_CONCURRENT_FETCHES to fit the coordinator connection pool",
+			"configured", huggingFaceConfig.MaxConcurrentFetches, "effective", available,
+			"raise", "NOTARX_DATABASE_COORDINATOR_MAX_OPEN_CONNS")
+		huggingFaceConfig.MaxConcurrentFetches = available
+	}
+	huggingFace, err := huggingfaceformat.New(huggingfaceformat.Options{Store: huggingfaceformat.NewStore(databasePool, huggingFaceDialect(cfg.DatabaseDriver)), Objects: objectStore})
+	if err != nil {
+		slog.Error("configure Hugging Face format", "error", err)
+		return 1
+	}
+	maintenance := app.NewCacheMaintenanceWithRaw(cacheStore, ociCache, rawCache).WithConan(conanCache).WithHuggingFace(huggingFace)
 	caches := newReadCaches(cfg, store)
 	gatewayStore := caches.cachedStore(store)
 	caches.start(notificationPool)
@@ -541,6 +561,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 				"change", "unset NOTARX_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
 		}
 		gatewayOptions := app.GatewayOptions{
+			HuggingFace:       huggingFace,
+			HuggingFaceConfig: huggingFaceConfig,
+			HuggingFaceLocker: spool.Locker{Coordinator: coordinator, Lease: spool.DefaultLockLease, RenewEvery: spool.DefaultLockLease / 3},
 			Dependencies:      dependencies,
 			Store:             gatewayStore,
 			ConanPublications: store,
@@ -667,4 +690,13 @@ func nodeRoleStrings(roles []config.NodeRole) []string {
 		values = append(values, string(role))
 	}
 	return values
+}
+
+// huggingFaceDialect maps the configured database driver to the SQL variant of the
+// Hugging Face store; an empty driver is PostgreSQL, as database.Open reads it.
+func huggingFaceDialect(driver string) huggingfaceformat.Dialect {
+	if driver == database.DriverMySQL {
+		return huggingfaceformat.MySQL
+	}
+	return huggingfaceformat.Postgres
 }

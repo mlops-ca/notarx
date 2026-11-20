@@ -36,6 +36,7 @@
 2 ./internal/preflight
 3 ./internal/backupops
 3 ./internal/format/nuget
+3 ./internal/format/huggingface
 3 ./internal/capacity
 3 ./internal/lifecycle
 3 ./internal/migrate

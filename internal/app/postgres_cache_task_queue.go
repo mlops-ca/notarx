@@ -22,9 +22,11 @@ const (
 	cacheCollectionFormatOCI   = "oci"
 	cacheCollectionFormatRaw   = "raw"
 	cacheCollectionFormatConan = "conan"
+	// cacheCollectionFormatHuggingFace collects Hugging Face blobs no commit references any more.
+	cacheCollectionFormatHuggingFace = "huggingface"
 )
 
-var cacheCollectionFormats = []string{cacheCollectionFormatOCI, cacheCollectionFormatRaw, cacheCollectionFormatConan}
+var cacheCollectionFormats = []string{cacheCollectionFormatOCI, cacheCollectionFormatRaw, cacheCollectionFormatConan, cacheCollectionFormatHuggingFace}
 
 type postgresCacheTask struct {
 	ID, ClaimToken string

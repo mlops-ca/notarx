@@ -26,6 +26,10 @@ const (
 	// FormatConan is a managed authorization target with native Hosted, Proxy,
 	// and Group protocol routes.
 	FormatConan Format = "conan"
+	// FormatHuggingFace serves Hugging Face model and dataset repositories
+	// (ADR 0027). Repositories are Hosted, Proxy or Group; the coordinate is
+	// <repo_type>/<org>/<name>@<commit_sha>.
+	FormatHuggingFace Format = "huggingface"
 )
 
 type RepositoryState string

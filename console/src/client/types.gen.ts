@@ -621,7 +621,16 @@ export type BrowseNodePage = {
 };
 
 export type Format =
-  "raw" | "oci" | "maven" | "conan" | "npm" | "pypi" | "go" | "cargo" | "apt";
+  | "raw"
+  | "oci"
+  | "maven"
+  | "conan"
+  | "npm"
+  | "pypi"
+  | "go"
+  | "cargo"
+  | "apt"
+  | "huggingface";
 
 /**
  * Opt-in preview worker formats outside the formal format catalog.

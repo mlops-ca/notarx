@@ -594,6 +594,114 @@ tables:
       id: identity
     indexes:
       - created_at
+  hf_blobs:
+    columns:
+      created_at: timestamp
+      hf_repo_id: uuid
+      sha256: text
+      size: int64
+    primaryKey: [hf_repo_id, sha256]
+    foreignKeys:
+      - hf_repo_id -> hf_repos(id) on delete cascade
+    defaults:
+      created_at: now()
+    indexes:
+      - sha256
+    checks:
+      hf_blobs_sha256_check: (sha256 ~ '^[0-9a-f]{64}$'::text)
+      hf_blobs_size_check: (size >= 0)
+  hf_commits:
+    columns:
+      author: text?
+      commit_sha: text
+      committed_at: timestamp
+      file_count: int32?
+      hf_repo_id: uuid
+      id: uuid
+      last_read_at: timestamp
+      message: text?
+      parent_sha: text?
+      source: text
+      total_bytes: int64?
+    primaryKey: [id]
+    unique: [[hf_repo_id, commit_sha]]
+    foreignKeys:
+      - hf_repo_id -> hf_repos(id) on delete cascade
+    defaults:
+      last_read_at: now()
+    indexes:
+      - hf_repo_id,committed_at desc,id desc
+      - last_read_at
+    checks:
+      hf_commits_counts_check: (((file_count IS NULL) OR (file_count >= 0)) AND ((total_bytes IS NULL) OR (total_bytes >= 0)))
+      hf_commits_parent_check: ((parent_sha IS NULL) OR (parent_sha ~ '^[0-9a-f]{40}$'::text))
+      hf_commits_sha_check: (commit_sha ~ '^[0-9a-f]{40}$'::text)
+      hf_commits_source_check: ((source)::text = ANY (ARRAY['upstream'::text, 'hosted'::text, 'promoted'::text]))
+  hf_files:
+    columns:
+      cached: bool
+      commit_id: uuid
+      git_blob_id: text?
+      lfs: bool
+      path: text
+      pickle_flag: bool
+      sha256: text?
+      size: int64
+    primaryKey: [commit_id, path]
+    foreignKeys:
+      - commit_id -> hf_commits(id) on delete cascade
+    defaults:
+      cached: "false"
+      lfs: "false"
+      pickle_flag: "false"
+    indexes:
+      - sha256
+    checks:
+      hf_files_sha256_check: ((sha256 IS NULL) OR (sha256 ~ '^[0-9a-f]{64}$'::text))
+      hf_files_size_check: (size >= 0)
+  hf_refs:
+    columns:
+      checked_at: timestamp
+      commit_sha: text
+      expires_at: timestamp
+      hf_repo_id: uuid
+      ref_kind: text
+      ref_name: text
+    primaryKey: [hf_repo_id, ref_kind, ref_name]
+    foreignKeys:
+      - hf_repo_id -> hf_repos(id) on delete cascade
+    indexes:
+      - expires_at
+    checks:
+      hf_refs_kind_check: ((ref_kind)::text = ANY (ARRAY['branch'::text, 'tag'::text]))
+      hf_refs_sha_check: (commit_sha ~ '^[0-9a-f]{40}$'::text)
+  hf_repos:
+    columns:
+      created_at: timestamp
+      id: uuid
+      repo_name: text
+      repo_type: text
+      repository_id: uuid
+    primaryKey: [id]
+    unique: [[repository_id, repo_type, repo_name]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+    defaults:
+      created_at: now()
+    checks:
+      hf_repos_repo_type_check: ((repo_type)::text = ANY (ARRAY['model'::text, 'dataset'::text]))
+  hf_repository_settings:
+    columns:
+      max_object_bytes: int64?
+      repository_id: uuid
+      updated_at: timestamp
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      updated_at: now()
+    checks:
+      hf_repository_settings_max_object_bytes_check: ((max_object_bytes IS NULL) OR (max_object_bytes > 0))
   hosted_group_idempotency:
     columns:
       actor: text
@@ -640,7 +748,7 @@ tables:
     indexes:
       - visibility,name
     checks:
-      hosted_groups_format_check: (format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text, 'nuget'::text, 'helm'::text]))
+      hosted_groups_format_check: (format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text, 'nuget'::text, 'helm'::text, 'huggingface'::text]))
       hosted_groups_name_check: (name ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text)
       hosted_groups_visibility_check: ((visibility)::text = ANY (ARRAY[('private'::character varying)::text, ('authenticated'::character varying)::text, ('public'::character varying)::text]))
   hosted_repositories:
@@ -682,7 +790,7 @@ tables:
       - created_at,id
       - visibility,name
     checks:
-      hosted_repositories_format_check: (format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text, 'nuget'::text, 'helm'::text, 'rubygems'::text]))
+      hosted_repositories_format_check: (format = ANY (ARRAY['raw'::text, 'oci'::text, 'maven'::text, 'conan'::text, 'npm'::text, 'pypi'::text, 'go'::text, 'apt'::text, 'cargo'::text, 'nuget'::text, 'helm'::text, 'rubygems'::text, 'huggingface'::text]))
       hosted_repositories_maven_strict_publication_check: ((NOT maven_strict_publication) OR ((format = 'maven'::text) AND (repo_type = 'hosted'::text)))
       hosted_repositories_name_check: (name ~ '^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$'::text)
       hosted_repositories_raw_layout_check: (raw_layout = ANY (ARRAY['path'::text, 'versioned'::text]))

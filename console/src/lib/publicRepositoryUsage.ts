@@ -5,7 +5,8 @@ export type PublicRepositoryFormat =
   "oci" | "maven" | "conan" | "raw" | "npm" | "pypi" | "go" | "cargo" | "apt";
 
 export interface PublicRepositoryUsageContext {
-  format: PublicRepositoryFormat;
+  /** Hugging Face has usage guidance but no public catalogue card yet. */
+  format: PublicRepositoryFormat | "huggingface";
   repositoryName: string;
   origin: string;
   host: string;
@@ -97,6 +98,13 @@ export function publicRepositoryUsage({
         label: t("lib.downloadAnArtifact"),
         code: `curl -fsSL ${source}/pool/<component>/<path>/<package>.deb -o package.deb`,
       },
+    ];
+  }
+  if (format === "huggingface") {
+    const endpoint = `${origin}/hf/${repositoryName}`;
+    return [
+      { label: "HF_ENDPOINT", code: `export HF_ENDPOINT=${endpoint}` },
+      { label: "HF_TOKEN", code: "export HF_TOKEN=<token>" },
     ];
   }
   return [

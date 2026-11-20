@@ -34,6 +34,7 @@ var artifactCatalogRegistry = []ArtifactCatalogFormat{
 	{Format: FormatHelm, Pending: "not part of artifact_search_projection yet; joins with the search rewrite"},
 	{Format: FormatNuGet, Pending: "not part of artifact_search_projection yet; joins with the search rewrite"},
 	{Format: FormatRubyGems, Pending: "not part of artifact_search_projection yet; joins with the search rewrite"},
+	{Format: FormatHuggingFace, Pending: "browse reads hf_commits directly; joins with the search rewrite"},
 }
 
 // ArtifactCatalogFormats returns the registry.

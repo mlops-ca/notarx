@@ -70,6 +70,12 @@ func TestFormatProfilesAPINeedsAnAuthenticatedCallerAndReturnsCapabilities(t *te
 			}
 			continue
 		}
+		if item.Format == adminopenapi.FormatHuggingface {
+			if !item.GroupSupported || len(item.RepositoryTypes) != 2 || len(item.HostedOperations) != 2 || len(item.ProxyOperations) != 2 {
+				t.Errorf("Hugging Face must expose Hosted, Proxy and Group read/browse only: %#v", item)
+			}
+			continue
+		}
 		if item.Format == adminopenapi.FormatNpm {
 			if !item.GroupSupported || len(item.RepositoryTypes) != 2 || len(item.ProxyOperations) != 2 {
 				t.Errorf("npm must expose Hosted, Proxy, and Group read/browse: %#v", item)
@@ -173,5 +179,56 @@ func TestBackgroundOperationMetricFormatsTrackProfiles(t *testing.T) {
 		if backgroundOperationFormats[index] != format {
 			t.Fatalf("metric format[%d]=%q want=%q", index, backgroundOperationFormats[index], format)
 		}
+	}
+}
+
+func TestHuggingFaceAdmissionCreatesHostedProxyAndGroup(t *testing.T) {
+	store := repository.NewMemoryStore()
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	call := func(path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+		authorize(request, "admin-secret")
+		request.Header.Set("Idempotency-Key", uuid.NewString())
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, request)
+		return response
+	}
+	create := func(body string) repository.HostedRepository {
+		t.Helper()
+		response := call("/api/v2/repositories", body)
+		if response.Code != http.StatusCreated {
+			t.Fatalf("create Hugging Face repository=%d %s", response.Code, response.Body.String())
+		}
+		var repo repository.HostedRepository
+		if err := json.Unmarshal(response.Body.Bytes(), &repo); err != nil {
+			t.Fatal(err)
+		}
+		return repo
+	}
+	hosted := create(`{"name":"hf-hosted","format":"huggingface"}`)
+	if hosted.Format != repository.FormatHuggingFace || hosted.Type != repository.RepositoryTypeHosted {
+		t.Fatalf("Hosted=%+v", hosted)
+	}
+	if response := call("/api/v2/repositories", `{"name":"hf-hosted-endpoint","format":"huggingface","endpoint":"`+defaultHuggingFaceEndpoint+`"}`); response.Code != http.StatusBadRequest {
+		t.Fatalf("Hosted with an upstream endpoint=%d %s", response.Code, response.Body.String())
+	}
+	defaulted := create(`{"name":"hf-proxy-default","format":"huggingface","type":"proxy"}`)
+	if defaulted.Endpoint != defaultHuggingFaceEndpoint {
+		t.Fatalf("a Proxy without an endpoint must default to the Hub, got %q", defaulted.Endpoint)
+	}
+	mirror := create(`{"name":"hf-proxy-mirror","format":"huggingface","type":"proxy","endpoint":"https://hub.mirror.example"}`)
+	if mirror.Endpoint != "https://hub.mirror.example" {
+		t.Fatalf("a configured mirror was replaced: %q", mirror.Endpoint)
+	}
+	if response := call("/api/v2/repositories", `{"name":"hf-proxy-http","format":"huggingface","type":"proxy","endpoint":"http://hub.mirror.example"}`); response.Code != http.StatusBadRequest {
+		t.Fatalf("a plain http upstream=%d %s", response.Code, response.Body.String())
+	}
+	if response := call("/api/v2/repositories", `{"name":"hf-hosted-default","format":"raw","type":"proxy"}`); response.Code != http.StatusBadRequest {
+		t.Fatalf("the Hub default must not leak into other formats=%d %s", response.Code, response.Body.String())
+	}
+	groupBody := `{"name":"hf-group","format":"huggingface","members":[{"repositoryId":"` + hosted.ID + `","position":0},{"repositoryId":"` + defaulted.ID + `","position":1}]}`
+	if response := call("/api/v2/groups", groupBody); response.Code != http.StatusCreated {
+		t.Fatalf("Hugging Face group=%d %s", response.Code, response.Body.String())
 	}
 }

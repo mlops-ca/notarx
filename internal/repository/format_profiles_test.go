@@ -38,8 +38,8 @@ func TestPyPIYankCapabilityBelongsToHosted(t *testing.T) {
 
 func TestSupportedFormatProfilesAreCompleteAndUnique(t *testing.T) {
 	profiles := SupportedFormatProfiles()
-	if len(profiles) != 9 {
-		t.Fatalf("profiles=%d want=9", len(profiles))
+	if len(profiles) != 10 {
+		t.Fatalf("profiles=%d want=10", len(profiles))
 	}
 	seen := make(map[Format]bool, len(profiles))
 	for _, profile := range profiles {
@@ -59,6 +59,27 @@ func TestSupportedFormatProfilesAreCompleteAndUnique(t *testing.T) {
 			}
 			if len(profile.HostedOperations) != 0 || !FormatSupportsOperation(profile.Format, RepositoryTypeProxy, RepositoryOperationRead) || !FormatSupportsOperation(profile.Format, RepositoryTypeProxy, RepositoryOperationBrowse) {
 				t.Errorf("APT advertises unsupported capabilities: %#v", profile)
+			}
+			continue
+		}
+		if profile.Format == FormatHuggingFace {
+			if profile.PublicationScanning || FormatSupportsPublicationScanning(profile.Format, RepositoryTypeHosted) {
+				t.Errorf("Hugging Face advertises publication scanning: %#v", profile)
+			}
+			if len(profile.RepositoryTypes) != 2 || !FormatSupportsRepositoryType(profile.Format, RepositoryTypeHosted) || !FormatSupportsRepositoryType(profile.Format, RepositoryTypeProxy) || !profile.GroupSupported {
+				t.Errorf("Hugging Face must expose Hosted, Proxy, and Group: %#v", profile)
+			}
+			for _, repositoryType := range []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy} {
+				for _, operation := range []RepositoryOperation{RepositoryOperationRead, RepositoryOperationBrowse} {
+					if !FormatSupportsOperation(profile.Format, repositoryType, operation) {
+						t.Errorf("Hugging Face %s missing operation %q", repositoryType, operation)
+					}
+				}
+				for _, operation := range []RepositoryOperation{RepositoryOperationPublish, RepositoryOperationDelete, RepositoryOperationPromote, RepositoryOperationReplicate} {
+					if FormatSupportsOperation(profile.Format, repositoryType, operation) {
+						t.Errorf("Hugging Face %s advertises unimplemented operation %q", repositoryType, operation)
+					}
+				}
 			}
 			continue
 		}

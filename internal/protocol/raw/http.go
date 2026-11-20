@@ -15,6 +15,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/artifacthttp"
 	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/spool"
 	"github.com/mlops-ca/notarx/internal/v2contract"
 )
 
@@ -162,7 +163,7 @@ func ServeContent(w http.ResponseWriter, r *http.Request, name string, content C
 	if r.Method != http.MethodGet {
 		ranges = nil
 	}
-	if len(ranges) > 0 && (len(r.Header.Values("If-Range")) > 1 || !ifRangeMatches(r.Header.Get("If-Range"), w.Header().Get("ETag"))) {
+	if len(ranges) > 0 && (len(r.Header.Values("If-Range")) > 1 || !spool.IfRangeMatches(r.Header.Get("If-Range"), w.Header().Get("ETag"))) {
 		ranges = nil
 	}
 	if len(ranges) > 0 {
@@ -171,16 +172,22 @@ func ServeContent(w http.ResponseWriter, r *http.Request, name string, content C
 			statusWriter.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 			return statusWriter.result()
 		}
-		intervals, ok := parseRanges(ranges[0], size)
+		intervals, ok := spool.ParseRanges(ranges[0], size)
 		if !ok {
 			w.Header().Set("Content-Range", "bytes */"+utoa(uint64(size)))
 			statusWriter.WriteHeader(http.StatusRequestedRangeNotSatisfiable)
 			return statusWriter.result()
 		}
 		if len(intervals) > 1 {
-			return serveMultipart(statusWriter, r, content, size, intervals)
+			contentType := content.ContentType
+			if err := spool.WriteMultipart(statusWriter, r.Context(), contentType, size, intervals, func(ctx context.Context, offset, length int64) (io.ReadCloser, int64, error) {
+				return openContentRange(ctx, content, offset, length)
+			}); errors.Is(err, spool.ErrUnavailable) {
+				http.Error(statusWriter, "Raw object unavailable", http.StatusInternalServerError)
+			}
+			return statusWriter.result()
 		}
-		start, end := intervals[0].start, intervals[0].end
+		start, end := intervals[0].Start, intervals[0].End
 		length := end - start + 1
 		var reader io.ReadCloser
 		if r.Method != http.MethodHead {

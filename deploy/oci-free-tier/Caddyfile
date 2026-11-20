@@ -16,7 +16,7 @@
 
 	# Artifact and management protocols go straight to notarx. Keep this list in
 	# step with deploy/kubernetes/console/default.conf and the format routes.
-	@notarx path /api /api/* /auth /auth/* /v2 /v2/* /raw/* /repository/* /maven/* /conan/* /npm/* /pypi/* /go/* /apt/* /cargo/* /nuget/* /helm/* /rubygems/* /livez /readyz /healthz
+	@notarx path /api /api/* /auth /auth/* /v2 /v2/* /raw/* /repository/* /maven/* /conan/* /npm/* /pypi/* /go/* /apt/* /cargo/* /nuget/* /helm/* /rubygems/* /hf/* /livez /readyz /healthz
 	handle @notarx {
 		reverse_proxy notarx:8080 {
 			flush_interval -1

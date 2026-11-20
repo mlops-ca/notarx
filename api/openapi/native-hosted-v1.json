@@ -10939,6 +10939,374 @@
       "x-gateway-catchAll": "path",
       "x-gateway-visibility": "cached_proxy_assets"
     },
+    "/hf/{repository}/{org}/{name}/resolve/{revision}/{path}": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryName"
+        },
+        {
+          "name": "org",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          }
+        },
+        {
+          "name": "name",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          }
+        },
+        {
+          "name": "revision",
+          "in": "path",
+          "required": true,
+          "description": "A branch, a tag or a full commit sha. A slash inside a branch name is percent encoded.",
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        {
+          "name": "path",
+          "in": "path",
+          "required": true,
+          "allowReserved": true,
+          "description": "Path of the file in the commit, at most 512 characters, without empty, dot or dot-dot segments.",
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      ],
+      "get": {
+        "operationId": "resolveHuggingFaceModelFile",
+        "description": "Stream a file of a model repository.",
+        "security": [
+          {
+            "protocolBearerAuth": []
+          },
+          {
+            "protocolBasicAuth": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HuggingFaceFile"
+          },
+          "206": {
+            "$ref": "#/components/responses/HuggingFaceRange"
+          },
+          "401": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "413": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "416": {
+            "description": "The range cannot be satisfied"
+          },
+          "501": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "502": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "504": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "507": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          }
+        }
+      },
+      "head": {
+        "operationId": "headHuggingFaceModelFile",
+        "description": "Metadata of a file of a model repository: commit, ETag and, for LFS files, the linked ETag and size. Never redirects and never fetches the bytes.",
+        "security": [
+          {
+            "protocolBearerAuth": []
+          },
+          {
+            "protocolBasicAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HuggingFaceHead"
+          },
+          "401": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "502": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "504": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          }
+        }
+      }
+    },
+    "/hf/{repository}/datasets/{org}/{name}/resolve/{revision}/{path}": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryName"
+        },
+        {
+          "name": "org",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          }
+        },
+        {
+          "name": "name",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 96
+          }
+        },
+        {
+          "name": "revision",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        },
+        {
+          "name": "path",
+          "in": "path",
+          "required": true,
+          "allowReserved": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048
+          }
+        }
+      ],
+      "get": {
+        "operationId": "resolveHuggingFaceDatasetFile",
+        "description": "Stream a file of a dataset repository. Same behaviour as for a model.",
+        "security": [
+          {
+            "protocolBearerAuth": []
+          },
+          {
+            "protocolBasicAuth": []
+          },
+          {}
+        ],
+        "parameters": [
+          {
+            "name": "Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Range",
+            "in": "header",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HuggingFaceFile"
+          },
+          "206": {
+            "$ref": "#/components/responses/HuggingFaceRange"
+          },
+          "401": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "413": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "416": {
+            "description": "The range cannot be satisfied"
+          },
+          "501": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "502": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "503": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "504": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "507": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          }
+        }
+      },
+      "head": {
+        "operationId": "headHuggingFaceDatasetFile",
+        "description": "Metadata of a file of a dataset repository.",
+        "security": [
+          {
+            "protocolBearerAuth": []
+          },
+          {
+            "protocolBasicAuth": []
+          },
+          {}
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/HuggingFaceHead"
+          },
+          "401": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "403": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "404": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "502": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          },
+          "504": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          }
+        }
+      }
+    },
+    "/hf/{repository}/api/{repoType}/{org}/{name}/xet-read-token/{revision}": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryName"
+        },
+        {
+          "name": "repoType",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "enum": [
+              "models",
+              "datasets"
+            ]
+          }
+        },
+        {
+          "name": "org",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "name",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "revision",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getHuggingFaceXetReadToken",
+        "description": "Xet is not implemented, so no read token is ever issued. Clients fall back to plain HTTP.",
+        "security": [
+          {}
+        ],
+        "responses": {
+          "404": {
+            "$ref": "#/components/responses/HuggingFaceError"
+          }
+        }
+      }
+    },
     "/v2/{name}/blobs/uploads/": {
       "servers": [
         {
@@ -15066,7 +15434,8 @@
           "pypi",
           "go",
           "cargo",
-          "apt"
+          "apt",
+          "huggingface"
         ]
       },
       "FormatProfile": {
@@ -22769,6 +23138,212 @@
             "schema": {
               "type": "string",
               "contentEncoding": "binary"
+            }
+          }
+        }
+      },
+      "HuggingFaceFile": {
+        "description": "The complete file.",
+        "headers": {
+          "X-Repo-Commit": {
+            "description": "The 40 character commit the response is for. A GET serves this commit.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          },
+          "ETag": {
+            "description": "Quoted sha256 of an LFS file, quoted git blob id of a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Linked-Etag": {
+            "description": "Quoted sha256 of an LFS file; absent for a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Linked-Size": {
+            "description": "Size in bytes of an LFS file; absent for a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Accept-Ranges": {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bytes"
+              ]
+            }
+          },
+          "Content-Length": {
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "X-Notarx-Stale": {
+            "description": "true when the revision was answered from an expired ref because upstream was unreachable.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
+          }
+        },
+        "content": {
+          "application/octet-stream": {
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          }
+        }
+      },
+      "HuggingFaceRange": {
+        "description": "One range, or multipart/byteranges for several.",
+        "headers": {
+          "X-Repo-Commit": {
+            "description": "The 40 character commit the response is for. A GET serves this commit.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          },
+          "ETag": {
+            "description": "Quoted sha256 of an LFS file, quoted git blob id of a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Linked-Etag": {
+            "description": "Quoted sha256 of an LFS file; absent for a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Linked-Size": {
+            "description": "Size in bytes of an LFS file; absent for a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Accept-Ranges": {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bytes"
+              ]
+            }
+          },
+          "Content-Length": {
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "X-Notarx-Stale": {
+            "description": "true when the revision was answered from an expired ref because upstream was unreachable.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
+            }
+          }
+        },
+        "content": {
+          "application/octet-stream": {
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          },
+          "multipart/byteranges": {
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          }
+        }
+      },
+      "HuggingFaceError": {
+        "description": "Hub-shaped error: a JSON body with an error message and an X-Error-Code header. Codes include RepoNotFound, RevisionNotFound, EntryNotFound, authentication_required, access_denied, unsupported_repo_type, xet_not_supported, upstream_unavailable, upstream_gated, upstream_tree_too_large, upstream_path_too_long, upstream_xet_only, upstream_redirect_rejected, upstream_digest_mismatch, quota_exceeded, object_too_large, fetch_capacity, fetch_in_progress and group_not_supported.",
+        "headers": {
+          "X-Error-Code": {
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": [
+                "error"
+              ],
+              "properties": {
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      "HuggingFaceHead": {
+        "description": "Headers of the file; never a redirect and never the bytes.",
+        "headers": {
+          "X-Repo-Commit": {
+            "description": "The 40 character commit the response is for. A GET serves this commit.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          },
+          "ETag": {
+            "description": "Quoted sha256 of an LFS file, quoted git blob id of a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Linked-Etag": {
+            "description": "Quoted sha256 of an LFS file; absent for a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "X-Linked-Size": {
+            "description": "Size in bytes of an LFS file; absent for a regular file.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "Accept-Ranges": {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "bytes"
+              ]
+            }
+          },
+          "Content-Length": {
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          "X-Notarx-Stale": {
+            "description": "true when the revision was answered from an expired ref because upstream was unreachable.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true"
+              ]
             }
           }
         }

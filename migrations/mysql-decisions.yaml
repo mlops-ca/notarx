@@ -63,6 +63,24 @@ columns:
   repository_grants.resource_prefix:
     width: 480
     reason: "keeps the primary key (repository, principal, prefix) under the 3072-byte key limit"
+  hf_files.path:
+    width: 512
+    reason: "Hugging Face file paths are bounded at 512 characters (2048 bytes in utf8mb4_0900_bin), inside the key with the 36-byte commit id; longer paths are rejected (ADR 0027)"
+  hf_files.sha256:
+    width: 64
+    reason: "a sha256 digest is 64 hexadecimal characters"
+  hf_blobs.sha256:
+    width: 64
+    reason: "a sha256 digest is 64 hexadecimal characters"
+  hf_commits.commit_sha:
+    width: 40
+    reason: "a git commit sha is 40 hexadecimal characters"
+  hf_repos.repo_type:
+    width: 16
+    reason: "model or dataset"
+  hf_refs.ref_kind:
+    width: 8
+    reason: "branch or tag"
   native_go_versions.version:
     width: 512
     reason: "the schema allows Go versions up to 512 characters"

@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"maps"
 	"net/http"
 	"strings"
@@ -14,8 +16,10 @@ import (
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	rubygemsapi "github.com/mlops-ca/notarx/internal/admin/rubygems"
 	"github.com/mlops-ca/notarx/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/egress"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
+	huggingfaceformat "github.com/mlops-ca/notarx/internal/format/huggingface"
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
@@ -352,6 +356,21 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		}
 		modules = append(modules, rubyGemsModule)
 		rubyGemsPreview = rubyGemsModule.Preview()
+	}
+	if options.HuggingFace != nil {
+		huggingFaceConfig := options.HuggingFaceConfig
+		if huggingFaceConfig.MaxObjectBytes == 0 {
+			huggingFaceConfig = huggingfaceformat.DefaultConfig()
+		}
+		if err := options.HuggingFace.EnableRead(huggingfaceformat.ReadOptions{
+			Repositories: store, Groups: store, Authenticator: authenticator, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator},
+			Audit: store, Anonymous: store, Config: huggingFaceConfig, Hooks: egress.DefaultHooks(), Locker: options.HuggingFaceLocker, Metrics: metrics,
+		}); errors.Is(err, huggingfaceformat.ErrDialectUnsupported) {
+			slog.Warn("Hugging Face repositories are served only on PostgreSQL; the /hf/ routes are not mounted", "error", err)
+		} else if err != nil {
+			return nil, err
+		}
+		modules = append(modules, options.HuggingFace)
 	}
 	formatModules, err := formatmodule.New(modules...)
 	if err != nil {

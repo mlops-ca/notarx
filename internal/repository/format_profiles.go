@@ -147,6 +147,22 @@ var supportedFormatProfiles = []FormatProfile{
 			RepositoryOperationBrowse,
 		},
 	},
+	{
+		// Hosted commits and LFS upload arrive in a later phase (ADR 0027); the
+		// profile advertises what the read path implements today.
+		Format:           FormatHuggingFace,
+		RepositoryTypes:  []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy},
+		GroupSupported:   true,
+		PublicVisibility: true,
+		HostedOperations: []RepositoryOperation{
+			RepositoryOperationRead,
+			RepositoryOperationBrowse,
+		},
+		ProxyOperations: []RepositoryOperation{
+			RepositoryOperationRead,
+			RepositoryOperationBrowse,
+		},
+	},
 }
 
 func formatProfile(format Format) FormatProfile {

@@ -10,6 +10,7 @@
 scripts/__pycache__/
 **/target/
 console/node_modules/
+node_modules/
 tools/openapi/node_modules/
 console/dist/
 console/test-results/

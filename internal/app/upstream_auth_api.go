@@ -40,7 +40,7 @@ func upstreamAuthSupported(format repository.Format, repoType repository.Reposit
 		return false
 	}
 	switch format {
-	case repository.FormatGo, repository.FormatMaven, repository.FormatOCI, repository.FormatNPM, repository.FormatPyPI, repository.FormatCargo, repository.FormatRaw, repository.FormatAPT, repository.FormatConan:
+	case repository.FormatGo, repository.FormatMaven, repository.FormatOCI, repository.FormatNPM, repository.FormatPyPI, repository.FormatCargo, repository.FormatRaw, repository.FormatAPT, repository.FormatConan, repository.FormatHuggingFace:
 		return true
 	default:
 		return false

@@ -65,6 +65,7 @@ export default defineConfig(({ command, mode }) => {
         "/pypi": gateway,
         "/go": gateway,
         "/apt": gateway,
+        "/hf": gateway,
       },
     },
   };

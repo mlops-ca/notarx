@@ -275,7 +275,9 @@ func (h hostedRepositoryAPIHandler) createWithIdempotencyKey(w http.ResponseWrit
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 	decoder.DisallowUnknownFields()
 	var request createHostedRepositoryRequest
-	if err := decoder.Decode(&request); err != nil || !validHostedRepository(request) {
+	decodeErr := decoder.Decode(&request)
+	request = withFormatDefaults(request)
+	if decodeErr != nil || !validHostedRepository(request) {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "name, format, type, endpoint, and allowedHosts must be valid")
 		return
 	}
@@ -622,6 +624,19 @@ func validRawLayoutRequest(request createHostedRepositoryRequest) bool {
 		return (request.SealMode == "" || request.SealMode == repository.RawSealExplicit) && !request.Strict
 	}
 	return true
+}
+
+// defaultHuggingFaceEndpoint is the upstream of a Hugging Face Proxy repository created
+// without one (ADR 0027).
+const defaultHuggingFaceEndpoint = "https://huggingface.co"
+
+// withFormatDefaults fills the create-time defaults a format documents. The request is a
+// copy, so a rejected request is reported as the client sent it.
+func withFormatDefaults(request createHostedRepositoryRequest) createHostedRepositoryRequest {
+	if request.Format == repository.FormatHuggingFace && request.Type == string(repository.RepositoryTypeProxy) && request.Endpoint == "" {
+		request.Endpoint = defaultHuggingFaceEndpoint
+	}
+	return request
 }
 
 func validProxyEndpoint(endpoint string) bool {

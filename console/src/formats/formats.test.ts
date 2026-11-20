@@ -134,7 +134,11 @@ describe("format registry", () => {
     expect(only((f) => d(f).distributionSuite)).toEqual(["apt"]);
     expect(only((f) => d(f).digestReferences)).toEqual(["oci"]);
     expect(only((f) => d(f).groupKey)).toEqual(["maven"]);
-    expect(only((f) => !d(f).scannerSupport)).toEqual(["apt", "cargo"]);
+    expect(only((f) => !d(f).scannerSupport)).toEqual([
+      "apt",
+      "cargo",
+      "huggingface",
+    ]);
     expect(only((f) => d(f).retentionModel === "snapshots")).toEqual(["maven"]);
     expect(only((f) => d(f).retentionModel === "paths")).toEqual(["raw"]);
   });

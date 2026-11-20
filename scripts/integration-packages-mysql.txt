@@ -8,3 +8,4 @@
 ./internal/mysqlbaseline
 ./internal/dialect/mysql
 ./internal/tasklease
+./internal/format/huggingface
