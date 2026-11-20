@@ -328,7 +328,7 @@ func (s *Store) ClaimRubyGemsReplication(ctx context.Context, owner string, d ti
 	}
 	defer func() { _ = tx.Rollback() }()
 	var id string
-	err = tx.QueryRowContext(ctx, `SELECT id::text FROM native_rubygems_replication_jobs WHERE state='queued' OR state='running' AND lease_until<=clock_timestamp() ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT id::text FROM native_rubygems_replication_jobs WHERE state='queued' OR state='running' AND lease_until<=clock_timestamp() ORDER BY created_at,native_rubygems_replication_jobs.id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return dist.Job{}, dist.ErrNotFound
 	}

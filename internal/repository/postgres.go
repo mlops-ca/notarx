@@ -23,6 +23,8 @@ type PostgresStore struct {
 	claimObserver    queueClaimObserverHolder
 	// claimRotation rotates the first kind of the round-robin continuation of an all-kinds claim.
 	claimRotation atomic.Uint64
+	// payloads moves large payloads to the object store meta namespace (ADR 0023 section 9).
+	payloads atomic.Pointer[payloadSettings]
 }
 
 // SetQueueClaimObserver reports the rows each lifecycle claim examined (ADR 0023 section 7).

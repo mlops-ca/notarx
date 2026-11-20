@@ -130,7 +130,7 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 		if err != nil {
 			return CargoPublication{}, false, err
 		}
-		if err := preflightPostgresCargoGroupMembers(ctx, tx, groupID, members,
+		if err := s.preflightPostgresCargoGroupMembers(ctx, tx, groupID, members,
 			cargoGroupKnownIndex{RepositoryID: publication.RepositoryID, Body: publication.IndexRow}); err != nil {
 			return CargoPublication{}, false, err
 		}

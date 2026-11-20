@@ -9,22 +9,32 @@ import (
 
 func (s *PostgresStore) GetHelmSourceDocument(ctx context.Context, id, version string) (HelmSourceDocument, error) {
 	var in HelmSourceDocument
-	e := s.db.QueryRowContext(ctx, `SELECT d.repository_id::text,d.repository_version,d.body,d.digest,d.etag,d.last_modified,d.fetched_at,d.expires_at FROM native_helm_source_documents d JOIN hosted_repositories h ON h.id=d.repository_id WHERE h.id=$1::uuid AND h.version=$2::text::bigint AND h.format='helm' AND h.repo_type='proxy' AND h.state='active' AND d.repository_version=$2`, id, version).Scan(&in.RepositoryID, &in.RepositoryVersion, &in.Body, &in.Digest, &in.ETag, &in.LastModified, &in.FetchedAt, &in.ExpiresAt)
+	var ref payloadRef
+	e := s.db.QueryRowContext(ctx, `SELECT d.repository_id::text,d.repository_version,d.body,d.digest,d.etag,d.last_modified,d.fetched_at,d.expires_at,d.body_digest,d.body_size,d.body_key FROM native_helm_source_documents d JOIN hosted_repositories h ON h.id=d.repository_id WHERE h.id=$1::uuid AND h.version=$2::text::bigint AND h.format='helm' AND h.repo_type='proxy' AND h.state='active' AND d.repository_version=$2`, id, version).Scan(&in.RepositoryID, &in.RepositoryVersion, &in.Body, &in.Digest, &in.ETag, &in.LastModified, &in.FetchedAt, &in.ExpiresAt, &ref.digest, &ref.size, &ref.key)
 	if errors.Is(e, sql.ErrNoRows) {
-		e = ErrNotFound
+		return in, ErrNotFound
 	}
+	if e != nil {
+		return in, e
+	}
+	in.Body, e = s.internalize(ctx, in.Body, ref)
 	return in, e
 }
 func (s *PostgresStore) PutHelmSourceDocument(ctx context.Context, in HelmSourceDocument) error {
 	if !validHelmDocument(in) {
 		return ErrInvalidHelmPublication
 	}
+	body, ref, e := s.externalize(ctx, in.Body)
+	if e != nil {
+		return e
+	}
+	bodyDigest, bodySize, bodyKey := ref.columns()
 	tx, _, e := s.helmSourceTransaction(ctx, in.RepositoryID, in.RepositoryVersion)
 	if e != nil {
 		return e
 	}
 	defer func() { _ = tx.Rollback() }()
-	_, e = tx.ExecContext(ctx, `INSERT INTO native_helm_source_documents(repository_id,repository_version,body,digest,etag,last_modified,fetched_at,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(repository_id) DO UPDATE SET repository_version=EXCLUDED.repository_version,body=EXCLUDED.body,digest=EXCLUDED.digest,etag=EXCLUDED.etag,last_modified=EXCLUDED.last_modified,fetched_at=EXCLUDED.fetched_at,expires_at=EXCLUDED.expires_at`, in.RepositoryID, in.RepositoryVersion, in.Body, in.Digest, in.ETag, in.LastModified, in.FetchedAt, in.ExpiresAt)
+	_, e = tx.ExecContext(ctx, `INSERT INTO native_helm_source_documents(repository_id,repository_version,body,digest,etag,last_modified,fetched_at,expires_at,body_digest,body_size,body_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(repository_id) DO UPDATE SET repository_version=EXCLUDED.repository_version,body=EXCLUDED.body,digest=EXCLUDED.digest,etag=EXCLUDED.etag,last_modified=EXCLUDED.last_modified,fetched_at=EXCLUDED.fetched_at,expires_at=EXCLUDED.expires_at,body_digest=EXCLUDED.body_digest,body_size=EXCLUDED.body_size,body_key=EXCLUDED.body_key`, in.RepositoryID, in.RepositoryVersion, body, in.Digest, in.ETag, in.LastModified, in.FetchedAt, in.ExpiresAt, bodyDigest, bodySize, bodyKey)
 	if e != nil {
 		return e
 	}

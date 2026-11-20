@@ -536,7 +536,7 @@ func (s *PostgresStore) createHostedGroupIdempotentlyMutation(ctx context.Contex
 		if err := lockCargoGroupRepositories(ctx, tx, group.Members); err != nil {
 			return HostedGroup{}, false, err
 		}
-		if err := preflightPostgresCargoGroupMembers(ctx, tx, group.ID, group.Members); err != nil {
+		if err := s.preflightPostgresCargoGroupMembers(ctx, tx, group.ID, group.Members); err != nil {
 			return HostedGroup{}, false, err
 		}
 	}
@@ -682,7 +682,7 @@ func (s *PostgresStore) replaceHostedGroup(ctx context.Context, id, name string,
 		return HostedGroup{}, err
 	}
 	if group.Format == FormatCargo {
-		if err := preflightPostgresCargoGroupMembers(ctx, tx, id, members); err != nil {
+		if err := s.preflightPostgresCargoGroupMembers(ctx, tx, id, members); err != nil {
 			return HostedGroup{}, err
 		}
 	}

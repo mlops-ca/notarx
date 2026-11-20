@@ -222,6 +222,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		return 1
 	}
 	defer func() { _ = store.Close() }()
+	// Payloads above NOTARX_INLINE_MAX_BYTES (cached proxy documents, npm manifests, nuspec, chart.yaml,
+	// vulnerability findings, large SBOMs) go to the object store meta namespace (ADR 0023 section 9).
+	store.SetPayloadStore(objectstore.NewMetaStore(objectStore, 0), cfg.InlineMaxBytes)
 	auditWriter := startAuditWriter(cfg, store)
 	defer func() {
 		if err := stopAuditWriter(auditWriter, store, cfg.ShutdownFlushTimeout); err != nil {

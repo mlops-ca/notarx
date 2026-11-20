@@ -25,6 +25,14 @@ func (s *PostgresStore) PutScanSBOM(ctx context.Context, sbom ScanSBOM) (ScanSBO
 	if err != nil {
 		return ScanSBOM{}, err
 	}
+	// A body above the inline threshold goes to the object store; the row keeps BodyKey and no body.
+	if sbom.BodyKey == "" {
+		if _, ref, err := s.externalize(ctx, sbom.Body); err != nil {
+			return ScanSBOM{}, err
+		} else if ref.external() {
+			sbom.BodyKey, sbom.BodyDigest, sbom.BodySize, sbom.Body = ref.key.String, ref.digest.String, ref.size.Int64, nil
+		}
+	}
 	var body any
 	if len(sbom.Body) > 0 {
 		body = string(sbom.Body)
@@ -41,6 +49,18 @@ RETURNING id::text, created_at`,
 		return ScanSBOM{}, err
 	}
 	return sbom, nil
+}
+
+// ScanSBOMBody returns the document of sbom: the inline body, or the object stored at its BodyKey.
+func (s *PostgresStore) ScanSBOMBody(ctx context.Context, sbom ScanSBOM) ([]byte, error) {
+	if sbom.BodyKey == "" {
+		return sbom.Body, nil
+	}
+	return s.internalize(ctx, nil, payloadRef{
+		digest: sql.NullString{String: sbom.BodyDigest, Valid: true},
+		size:   sql.NullInt64{Int64: sbom.BodySize, Valid: true},
+		key:    sql.NullString{String: sbom.BodyKey, Valid: true},
+	})
 }
 
 const scanSBOMColumns = `id::text, repository_id::text, artifact_digest, kind, source, generator, generator_version, spec_version, body_digest, body_size, body_key, body::text, component_count, created_at`
@@ -367,7 +387,7 @@ func (s *PostgresStore) ListScanHistory(ctx context.Context, repositoryID, artif
 		return nil, err
 	}
 	rows, err := s.db.QueryContext(ctx, `SELECT id::text, repository_id::text, artifact_digest, scanner_version, db_generation_id::text, status, critical, high, medium, low, unknown, scanned_at
-FROM artifact_scan_history WHERE repository_id = $1::uuid AND artifact_digest = $2 ORDER BY scanned_at DESC, id DESC LIMIT $3`, repository, artifactDigest, limit)
+FROM artifact_scan_history WHERE repository_id = $1::uuid AND artifact_digest = $2 ORDER BY scanned_at DESC, artifact_scan_history.id DESC LIMIT $3`, repository, artifactDigest, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -402,7 +422,7 @@ func (s *PostgresStore) LatestScannerDBGeneration(ctx context.Context, kind stri
 		return ScannerDBGeneration{}, err
 	}
 	var g ScannerDBGeneration
-	err := s.db.QueryRowContext(ctx, `SELECT id::text, kind, oci_digest, built_at, observed_at, source FROM scanner_db_generation WHERE kind = $1 ORDER BY built_at DESC, id DESC LIMIT 1`, kind).
+	err := s.db.QueryRowContext(ctx, `SELECT id::text, kind, oci_digest, built_at, observed_at, source FROM scanner_db_generation WHERE kind = $1 ORDER BY built_at DESC, scanner_db_generation.id DESC LIMIT 1`, kind).
 		Scan(&g.ID, &g.Kind, &g.OCIDigest, &g.BuiltAt, &g.ObservedAt, &g.Source)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ScannerDBGeneration{}, ErrNotFound
@@ -425,7 +445,7 @@ func (s *PostgresStore) ListVEXDocuments(ctx context.Context, repositoryID strin
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT id::text, repository_id::text, format, body_digest, body_key, author, created_at, created_by::text FROM repository_vex_document WHERE repository_id = $1::uuid ORDER BY created_at DESC, id DESC`, repository)
+	rows, err := s.db.QueryContext(ctx, `SELECT id::text, repository_id::text, format, body_digest, body_key, author, created_at, created_by::text FROM repository_vex_document WHERE repository_id = $1::uuid ORDER BY created_at DESC, repository_vex_document.id DESC`, repository)
 	if err != nil {
 		return nil, err
 	}

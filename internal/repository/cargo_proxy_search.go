@@ -65,7 +65,7 @@ func (s *PostgresStore) SearchCargoProxyCrates(ctx context.Context, repositoryID
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT name,body FROM native_cargo_proxy_indexes
+	rows, err := s.db.QueryContext(ctx, `SELECT name,body,body_digest,body_size,body_key FROM native_cargo_proxy_indexes
 		WHERE repository_id=$1::uuid AND status=200 AND `+searchTextSQL("name", "$2", []ArtifactSearchMatch{searchMatch(matches, ArtifactSearchContains)})+`
 		AND collision_key>$3 ORDER BY collision_key LIMIT $4`, repositoryID, searchTextPattern(strings.TrimSpace(query), []ArtifactSearchMatch{searchMatch(matches, ArtifactSearchContains)}), afterKey, limit)
 	if err != nil {
@@ -75,7 +75,12 @@ func (s *PostgresStore) SearchCargoProxyCrates(ctx context.Context, repositoryID
 	items := make([]CargoCrateSummary, 0, limit)
 	for rows.Next() {
 		var index CargoProxyIndex
-		if err := rows.Scan(&index.Name, &index.Body); err != nil {
+		var ref payloadRef
+		if err := rows.Scan(&index.Name, &index.Body, &ref.digest, &ref.size, &ref.key); err != nil {
+			return nil, err
+		}
+		var err error
+		if index.Body, err = s.internalize(ctx, index.Body, ref); err != nil {
 			return nil, err
 		}
 		summary, err := cargoProxyCrateSummary(index)

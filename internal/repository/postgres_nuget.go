@@ -13,7 +13,7 @@ import (
 
 const nuGetSessionColumns = `id::text,repository_id::text,package_id,version,digest,size,actor,state,object_key,metadata_json,nuspec,created_at,expires_at,committed_at,collected_at,source_version,source_url,registration_url`
 const nuGetGovernanceColumns = `governance_version::text,listed,tombstoned,quarantined,governance_updated_at,governance_updated_by,governance_reason`
-const nuGetPublicationColumns = `repository_id::text,package_id,version,session_id::text,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,` + nuGetGovernanceColumns
+const nuGetPublicationColumns = `repository_id::text,package_id,version,session_id::text,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,` + nuGetGovernanceColumns + `,body_digest,body_size,body_key`
 
 type nuGetScanner interface{ Scan(...any) error }
 
@@ -33,16 +33,21 @@ func scanNuGetSession(row nuGetScanner) (NuGetSession, error) {
 	}
 	return v, err
 }
-func scanNuGetPublication(row nuGetScanner) (NuGetPublication, error) {
+func (s *PostgresStore) scanNuGetPublication(ctx context.Context, row nuGetScanner) (NuGetPublication, error) {
 	var v NuGetPublication
 	var updated sql.NullTime
-	err := row.Scan(&v.RepositoryID, &v.PackageID, &v.Version, &v.SessionID, &v.Digest, &v.ObjectKey, &v.Size, &v.MetadataJSON, &v.Nuspec, &v.Publisher, &v.PublishedAt, &v.SourceVersion, &v.SourceURL, &v.RegistrationURL, &v.Governance.Version, &v.Governance.Listed, &v.Governance.Tombstoned, &v.Governance.Quarantined, &updated, &v.Governance.UpdatedBy, &v.Governance.Reason)
+	var ref payloadRef
+	err := row.Scan(&v.RepositoryID, &v.PackageID, &v.Version, &v.SessionID, &v.Digest, &v.ObjectKey, &v.Size, &v.MetadataJSON, &v.Nuspec, &v.Publisher, &v.PublishedAt, &v.SourceVersion, &v.SourceURL, &v.RegistrationURL, &v.Governance.Version, &v.Governance.Listed, &v.Governance.Tombstoned, &v.Governance.Quarantined, &updated, &v.Governance.UpdatedBy, &v.Governance.Reason, &ref.digest, &ref.size, &ref.key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, ErrNotFound
 	}
 	if updated.Valid {
 		v.Governance.UpdatedAt = updated.Time
 	}
+	if err != nil {
+		return v, err
+	}
+	v.Nuspec, err = s.internalize(ctx, v.Nuspec, ref)
 	return v, err
 }
 
@@ -178,7 +183,7 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 		return NuGetPublication{}, false, ErrNuGetPublicationConflict
 	}
 	if session.State == "committed" {
-		p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid`, id))
+		p, err := s.scanNuGetPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid`, id))
 		if err != nil {
 			return NuGetPublication{}, false, err
 		}
@@ -194,7 +199,7 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 	if err = tx.QueryRowContext(ctx, `UPDATE native_nuget_publication_sessions SET state='committed',committed_at=now() WHERE id=$1::uuid RETURNING committed_at`, id).Scan(&published); err != nil {
 		return NuGetPublication{}, false, err
 	}
-	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed)SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,nuspec,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true) FROM native_nuget_publication_sessions WHERE id=$1::uuid RETURNING `+nuGetPublicationColumns, id))
+	p, err := s.insertNuGetPublicationFromSession(ctx, tx, session)
 	if err != nil {
 		return NuGetPublication{}, false, err
 	}
@@ -210,7 +215,7 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 }
 
 func (s *PostgresStore) GetNuGetPublication(ctx context.Context, repo, id, version string) (NuGetPublication, error) {
-	return scanNuGetPublication(s.db.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='nuget' AND h.state='active' AND source_version=CASE WHEN h.repo_type='proxy' THEN h.version::text ELSE '' END)`, repo, id, version))
+	return s.scanNuGetPublication(ctx, s.db.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.format='nuget' AND h.state='active' AND source_version=CASE WHEN h.repo_type='proxy' THEN h.version::text ELSE '' END)`, repo, id, version))
 }
 
 func (s *PostgresStore) ListNuGetPublications(ctx context.Context, repo, id string, limit int, after string) ([]NuGetPublication, error) {
@@ -224,14 +229,14 @@ func (s *PostgresStore) ListNuGetPublications(ctx context.Context, repo, id stri
 	if !exists {
 		return nil, ErrNotFound
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,package_id,version,session_id::text,digest,object_key,size,metadata_json,''::bytea,publisher,published_at,source_version,source_url,registration_url,`+nuGetGovernanceColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND ($2='' OR package_id=$2) AND (package_id||'@'||version) COLLATE "C">$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.state='active' AND source_version=CASE WHEN h.repo_type='proxy' THEN h.version::text ELSE '' END) ORDER BY (package_id||'@'||version) COLLATE "C" LIMIT $4`, repo, id, after, limit)
+	rows, err := s.db.QueryContext(ctx, `SELECT repository_id::text,package_id,version,session_id::text,digest,object_key,size,metadata_json,''::bytea,publisher,published_at,source_version,source_url,registration_url,`+nuGetGovernanceColumns+`,NULL::text,NULL::bigint,NULL::text FROM native_nuget_publications WHERE repository_id=$1::uuid AND ($2='' OR package_id=$2) AND (package_id||'@'||version) COLLATE "C">$3 AND EXISTS(SELECT 1 FROM hosted_repositories h WHERE h.id=repository_id AND h.state='active' AND source_version=CASE WHEN h.repo_type='proxy' THEN h.version::text ELSE '' END) ORDER BY (package_id||'@'||version) COLLATE "C" LIMIT $4`, repo, id, after, limit)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
 	out := []NuGetPublication{}
 	for rows.Next() {
-		p, err := scanNuGetPublication(rows)
+		p, err := s.scanNuGetPublication(ctx, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -290,4 +295,15 @@ func (s *PostgresStore) MarkNuGetSessionCollected(ctx context.Context, id, key s
 
 func (s *PostgresStore) LockNuGetPublication(ctx context.Context, repo, id, version string) (context.Context, func(), error) {
 	return s.lockPostgresAdvisoryKeys(ctx, []string{"native-nuget-publication:" + repo + ":" + id + ":" + version})
+}
+
+// insertNuGetPublicationFromSession publishes a staged session: the row copies the session's
+// metadata and moves the nuspec to the object store when it is above the inline threshold.
+func (s *PostgresStore) insertNuGetPublicationFromSession(ctx context.Context, tx *sql.Tx, session NuGetSession) (NuGetPublication, error) {
+	nuspec, ref, err := s.externalize(ctx, session.Nuspec)
+	if err != nil {
+		return NuGetPublication{}, err
+	}
+	bodyDigest, bodySize, bodyKey := ref.columns()
+	return s.scanNuGetPublication(ctx, tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed,body_digest,body_size,body_key)SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,$2::bytea,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true),$3::text,$4::bigint,$5::text FROM native_nuget_publication_sessions WHERE id=$1::uuid RETURNING `+nuGetPublicationColumns, session.ID, nuspec, bodyDigest, bodySize, bodyKey))
 }

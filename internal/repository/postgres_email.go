@@ -27,7 +27,7 @@ func (s *PostgresStore) GetEmailTarget(ctx context.Context, id string) (EmailTar
 	return scanEmailTarget(s.db.QueryRowContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets WHERE id=$1::uuid`, id))
 }
 func (s *PostgresStore) ListEmailTargets(ctx context.Context) ([]EmailTarget, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+emailTargetColumns+` FROM email_targets ORDER BY email_targets.id`)
 	if err != nil {
 		return nil, err
 	}

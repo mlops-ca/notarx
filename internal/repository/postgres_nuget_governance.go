@@ -22,7 +22,7 @@ func (s *PostgresStore) TransitionNuGetGovernance(ctx context.Context, in NuGetG
 		return NuGetPublication{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid FOR UPDATE`, before.SessionID))
+	p, err := s.scanNuGetPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid FOR UPDATE`, before.SessionID))
 	if err != nil {
 		return NuGetPublication{}, err
 	}

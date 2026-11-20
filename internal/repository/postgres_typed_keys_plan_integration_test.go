@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 // TestPostgresTypedKeyQueriesUseIndexes plans the production statements of the hot
@@ -93,6 +94,34 @@ func TestPostgresTypedKeyQueriesUseIndexes(t *testing.T) {
 			if !indexed || sequential {
 				t.Fatalf("%s does not use an index on %s: %s", tc.name, tc.relation, raw)
 			}
+		})
+	}
+}
+
+// TestPostgresIDKeysetListingsReadTheKeyInOrder plans the id-keyset listings. Each selects id::text,
+// so a bare ORDER BY id would sort that text output column and add a Sort node on every page; the
+// listings qualify the column and read the primary key in order instead (ADR 0023 sections 4 and 8).
+func TestPostgresIDKeysetListingsReadTheKeyInOrder(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	id := uuid.NewString()
+	for _, tc := range []struct {
+		name, relation, query string
+		args                  []any
+	}{
+		{"workload issuers", "workload_issuers", listWorkloadIssuersQuery, []any{id, 50}},
+		{"workload trust policies", "workload_trust_policies", listWorkloadPoliciesQuery, []any{id, 50}},
+		{"service accounts", "service_accounts", listServiceAccountsQuery, []any{id, 50}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testsupport.RequireOrderedByIndex(t, store.db, tc.relation, tc.query, tc.args...)
 		})
 	}
 }

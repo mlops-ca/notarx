@@ -394,10 +394,13 @@ change meaning. Every read re-verifies the digest and rejects a mismatch, and ea
 small in-process LRU of recent reads. A payload at or below the threshold stays inline in its row.
 `0` moves every non-empty payload out of the database.
 
-The setting and the namespace are in place and both object-store drivers (filesystem and S3)
-support the namespace. The writers of each payload kind (SBOMs and other intelligence documents,
-`nuspec` and `chart_yaml`, proxy documents, npm version manifests) adopt them in the following
-slices of ADR 0023, so today no payload is moved by this setting.
+Both object-store drivers (filesystem and S3) support the namespace. These payloads move when
+they exceed the threshold: SBOM bodies, the findings of an artifact's vulnerability result (the
+counts stay in the row), NuGet `nuspec` and Helm `chart_yaml` of published packages, the cached
+NuGet and Helm source documents, Cargo proxy index bodies, OCI discovery snapshots and npm
+version manifests. Rows written before the move stay inline and keep working. A node reads an
+externalised payload through the object store, so the `meta/` objects belong in every backup
+of the object store, and a database restored without them cannot serve those rows.
 
 ```env
 NOTARX_INLINE_MAX_BYTES=16384

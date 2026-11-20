@@ -171,12 +171,12 @@ func helmReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job) (di
 	}
 	return a, nil
 }
-func helmReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (HelmPublication, error) {
+func (s *PostgresStore) helmReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (HelmPublication, error) {
 	if index < 0 || index >= len(j.Items) {
 		return HelmPublication{}, dist.ErrInvalid
 	}
 	i := j.Items[index]
-	p, err := scanHelmPublication(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR SHARE`, j.SourceRepositoryID, i.Name, i.Version))
+	p, err := s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR SHARE`, j.SourceRepositoryID, i.Name, i.Version))
 	if errors.Is(err, ErrNotFound) {
 		return p, dist.ErrSourceChanged
 	}
@@ -242,7 +242,7 @@ func (s *PostgresStore) CreateHelmReplication(ctx context.Context, j dist.Job, c
 	}
 	extra := int64(0)
 	for i, item := range j.Items {
-		if _, err = helmReplicationSourceTx(ctx, tx, j, i); err != nil {
+		if _, err = s.helmReplicationSourceTx(ctx, tx, j, i); err != nil {
 			return dist.Job{}, false, err
 		}
 		var exists bool
@@ -357,7 +357,7 @@ func (s *PostgresStore) ClaimHelmReplication(ctx context.Context, owner string, 
 	}
 	defer func() { _ = tx.Rollback() }()
 	var id string
-	err = tx.QueryRowContext(ctx, `SELECT id::text FROM native_helm_replication_jobs WHERE state='queued' OR state='running' AND lease_until<=clock_timestamp() ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT id::text FROM native_helm_replication_jobs WHERE state='queued' OR state='running' AND lease_until<=clock_timestamp() ORDER BY created_at,native_helm_replication_jobs.id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return dist.Job{}, dist.ErrNotFound
 	}
@@ -401,7 +401,7 @@ func (s *PostgresStore) BindHelmReplicationSession(ctx context.Context, lease di
 	if err = helmReplicationCheck(ctx, check, a); err != nil {
 		return dist.Job{}, err
 	}
-	source, err := helmReplicationSourceTx(ctx, tx, j, index)
+	source, err := s.helmReplicationSourceTx(ctx, tx, j, index)
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -447,7 +447,7 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 	if err = helmReplicationCheck(ctx, check, a); err != nil {
 		return dist.Job{}, err
 	}
-	source, err := helmReplicationSourceTx(ctx, tx, j, index)
+	source, err := s.helmReplicationSourceTx(ctx, tx, j, index)
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -465,7 +465,7 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 	if session.RepositoryID != j.TargetRepositoryID {
 		return dist.Job{}, dist.ErrTargetBlocked
 	}
-	target, err := scanHelmPublication(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.Name, item.Version))
+	target, err := s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.Name, item.Version))
 	if err == nil {
 		if err = helmReplicationExisting(source, target); err != nil {
 			return dist.Job{}, err
@@ -484,7 +484,7 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 		if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='committed',committed_at=clock_timestamp() WHERE id=$1::uuid`, session.ID); err != nil {
 			return dist.Job{}, err
 		}
-		target, err = scanHelmPublication(tx.QueryRowContext(ctx, `INSERT INTO native_helm_publications(repository_id,name,version,session_id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at) SELECT repository_id,name,version,id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,actor,committed_at FROM native_helm_publication_sessions WHERE id=$1::uuid RETURNING `+helmPublicationColumns, session.ID))
+		target, err = s.insertHelmPublicationFromSession(ctx, tx, session)
 		if err != nil {
 			return dist.Job{}, err
 		}
@@ -609,7 +609,7 @@ func (s *PostgresStore) AuthorizeHelmReplicationItem(ctx context.Context, lease 
 	if err = helmReplicationCheck(ctx, check, a); err != nil {
 		return err
 	}
-	if _, err = helmReplicationSourceTx(ctx, tx, j, index); err != nil {
+	if _, err = s.helmReplicationSourceTx(ctx, tx, j, index); err != nil {
 		return err
 	}
 	return tx.Commit()

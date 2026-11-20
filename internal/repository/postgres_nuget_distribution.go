@@ -175,12 +175,12 @@ func nuGetReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job) (d
 	}
 	return a, nil
 }
-func nuGetReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (NuGetPublication, error) {
+func (s *PostgresStore) nuGetReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (NuGetPublication, error) {
 	if index < 0 || index >= len(j.Items) {
 		return NuGetPublication{}, dist.ErrInvalid
 	}
 	i := j.Items[index]
-	p, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 FOR SHARE`, j.SourceRepositoryID, i.PackageID, i.Version))
+	p, err := s.scanNuGetPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 FOR SHARE`, j.SourceRepositoryID, i.PackageID, i.Version))
 	if errors.Is(err, ErrNotFound) {
 		return p, dist.ErrSourceChanged
 	}
@@ -246,7 +246,7 @@ func (s *PostgresStore) CreateNuGetReplication(ctx context.Context, j dist.Job, 
 	}
 	extra := int64(0)
 	for i, item := range j.Items {
-		if _, err = nuGetReplicationSourceTx(ctx, tx, j, i); err != nil {
+		if _, err = s.nuGetReplicationSourceTx(ctx, tx, j, i); err != nil {
 			return dist.Job{}, false, err
 		}
 		var exists bool
@@ -361,7 +361,7 @@ func (s *PostgresStore) ClaimNuGetReplication(ctx context.Context, owner string,
 	}
 	defer func() { _ = tx.Rollback() }()
 	var id string
-	err = tx.QueryRowContext(ctx, `SELECT id::text FROM native_nuget_replication_jobs WHERE state='queued' OR state='running' AND lease_until<=clock_timestamp() ORDER BY created_at,id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id)
+	err = tx.QueryRowContext(ctx, `SELECT id::text FROM native_nuget_replication_jobs WHERE state='queued' OR state='running' AND lease_until<=clock_timestamp() ORDER BY created_at,native_nuget_replication_jobs.id FOR UPDATE SKIP LOCKED LIMIT 1`).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return dist.Job{}, dist.ErrNotFound
 	}
@@ -405,7 +405,7 @@ func (s *PostgresStore) BindNuGetReplicationSession(ctx context.Context, lease d
 	if err = nuGetReplicationCheck(ctx, check, a); err != nil {
 		return dist.Job{}, err
 	}
-	source, err := nuGetReplicationSourceTx(ctx, tx, j, index)
+	source, err := s.nuGetReplicationSourceTx(ctx, tx, j, index)
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -451,7 +451,7 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 	if err = nuGetReplicationCheck(ctx, check, a); err != nil {
 		return dist.Job{}, err
 	}
-	source, err := nuGetReplicationSourceTx(ctx, tx, j, index)
+	source, err := s.nuGetReplicationSourceTx(ctx, tx, j, index)
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -469,7 +469,7 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 	if session.RepositoryID != j.TargetRepositoryID {
 		return dist.Job{}, dist.ErrTargetBlocked
 	}
-	target, err := scanNuGetPublication(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.PackageID, item.Version))
+	target, err := s.scanNuGetPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.PackageID, item.Version))
 	if err == nil {
 		if err = nuGetReplicationExisting(source, target); err != nil {
 			return dist.Job{}, err
@@ -488,7 +488,7 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 		if _, err = tx.ExecContext(ctx, `UPDATE native_nuget_publication_sessions SET state='committed',committed_at=clock_timestamp() WHERE id=$1::uuid`, session.ID); err != nil {
 			return dist.Job{}, err
 		}
-		target, err = scanNuGetPublication(tx.QueryRowContext(ctx, `INSERT INTO native_nuget_publications(repository_id,package_id,version,session_id,digest,object_key,size,metadata_json,nuspec,publisher,published_at,source_version,source_url,registration_url,listed) SELECT repository_id,package_id,version,id,digest,object_key,size,metadata_json,nuspec,actor,committed_at,source_version,source_url,registration_url,COALESCE((metadata_json::jsonb->>'listed')::boolean,true) FROM native_nuget_publication_sessions WHERE id=$1::uuid RETURNING `+nuGetPublicationColumns, session.ID))
+		target, err = s.insertNuGetPublicationFromSession(ctx, tx, session)
 		if err != nil {
 			return dist.Job{}, err
 		}
@@ -615,7 +615,7 @@ func (s *PostgresStore) AuthorizeNuGetReplicationItem(ctx context.Context, lease
 	if err = nuGetReplicationCheck(ctx, check, a); err != nil {
 		return err
 	}
-	if _, err = nuGetReplicationSourceTx(ctx, tx, j, index); err != nil {
+	if _, err = s.nuGetReplicationSourceTx(ctx, tx, j, index); err != nil {
 		return err
 	}
 	return tx.Commit()

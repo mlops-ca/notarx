@@ -18,7 +18,7 @@ func (s *PostgresStore) CreateAPIKey(ctx context.Context, key APIKey) (APIKey, e
 }
 
 func (s *PostgresStore) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id::text, '', name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at FROM api_keys WHERE service_account_id IS NULL ORDER BY created_at, id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id::text, '', name, array_to_json(roles), created_at, revoked_at, expires_at, last_used_at FROM api_keys WHERE service_account_id IS NULL ORDER BY created_at, api_keys.id`)
 	if err != nil {
 		return nil, err
 	}

@@ -34,7 +34,7 @@ func (s *PostgresStore) TransitionHelmGovernance(ctx context.Context, in HelmGov
 		return HelmPublication{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	p, err := scanHelmPublication(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, in.RepositoryID, in.Name, in.Version))
+	p, err := s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, in.RepositoryID, in.Name, in.Version))
 	if err != nil {
 		return HelmPublication{}, err
 	}

@@ -103,6 +103,10 @@ func (r *Reconciler) Run(ctx context.Context) {
 	}
 }
 
+// reconcileBatchQuery pages the repositories by id. ORDER BY names the table column: a bare id would
+// resolve to the selected id::text output column and sort the text on every page.
+const reconcileBatchQuery = `SELECT id::text,format FROM hosted_repositories WHERE id>$1::uuid ORDER BY hosted_repositories.id LIMIT $2`
+
 // RunOnce walks every repository in id order, in batches, and returns the
 // pass statistics.
 func (r *Reconciler) RunOnce(ctx context.Context) (Stats, error) {
@@ -110,7 +114,7 @@ func (r *Reconciler) RunOnce(ctx context.Context) (Stats, error) {
 	after := "00000000-0000-0000-0000-000000000000"
 	var errs []error
 	for {
-		rows, err := r.db.QueryContext(ctx, `SELECT id::text,format FROM hosted_repositories WHERE id>$1::uuid ORDER BY id LIMIT $2`, after, r.batch)
+		rows, err := r.db.QueryContext(ctx, reconcileBatchQuery, after, r.batch)
 		if err != nil {
 			errs = append(errs, err)
 			break

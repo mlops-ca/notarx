@@ -45,7 +45,7 @@ func (s *PostgresStore) UpdateNPMMetadata(ctx context.Context, mutation NPMMetad
 	if err = lockHostedNPMPackage(ctx, tx, mutation.RepositoryID, mutation.PackageName); err != nil {
 		return NPMMetadataChange{}, err
 	}
-	pkg, err := readNPMPackage(ctx, tx, mutation.RepositoryID, mutation.PackageName)
+	pkg, err := s.readNPMPackage(ctx, tx, mutation.RepositoryID, mutation.PackageName)
 	if err != nil {
 		return NPMMetadataChange{}, err
 	}
@@ -87,7 +87,7 @@ func (s *PostgresStore) UpdateNPMMetadata(ctx context.Context, mutation NPMMetad
 		}
 	} else {
 		for _, version := range versions {
-			if _, err = tombstoneNPMVersionTx(ctx, tx, mutation.RepositoryID, mutation.PackageName, version); err != nil {
+			if _, err = s.tombstoneNPMVersionTx(ctx, tx, mutation.RepositoryID, mutation.PackageName, version); err != nil {
 				return NPMMetadataChange{}, err
 			}
 		}
