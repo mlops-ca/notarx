@@ -58,8 +58,7 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 	if err != nil {
 		return err
 	}
-	staged := stagedOCISnapshot{data: data, inline: inline, ref: ref}
-	err = s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, staged, nil)
+	err = s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, data, inline, ref, nil)
 	if !errors.Is(err, errPayloadNotPrefetched) {
 		return err
 	}
@@ -67,23 +66,13 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 	if err != nil {
 		return err
 	}
-	if err = s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, staged, prefetched); errors.Is(err, errPayloadNotPrefetched) {
+	if err = s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, data, inline, ref, prefetched); errors.Is(err, errPayloadNotPrefetched) {
 		// The stored snapshot changed again while its payload was read: it is not the snapshot being saved.
 		return discovery.ErrChanged
 	}
 	return err
 }
 
-// stagedOCISnapshot is a snapshot payload externalised before the save transaction opens.
-type stagedOCISnapshot struct {
-	data   []byte
-	inline string
-	ref    payloadRef
-}
-
-// A snapshot id that is already stored with different bytes needs the stored payload to decide whether it is the same
-// snapshot; the transaction never reads the object store for it, so it returns errPayloadNotPrefetched, the payload is
-// read outside the transaction (prefetchOCIDiscoveryPayload) and the save starts over with it.
 // prefetchOCIDiscoveryPayload reads the externalised payload of the stored snapshot id, outside any transaction.
 func (s *PostgresStore) prefetchOCIDiscoveryPayload(ctx context.Context, id string) (payloadPrefetch, error) {
 	var ref payloadRef
@@ -104,8 +93,11 @@ func (s *PostgresStore) prefetchOCIDiscoveryPayload(ctx context.Context, id stri
 	return prefetched, nil
 }
 
-func (s *PostgresStore) saveOCIDiscoverySnapshotOnce(ctx context.Context, snapshot discovery.Snapshot, staged stagedOCISnapshot, prefetched payloadPrefetch) error {
-	data, inline, ref := staged.data, staged.inline, staged.ref
+// saveOCIDiscoverySnapshotOnce saves the snapshot whose payload (data, or inline and ref once externalised) is already
+// staged. A snapshot id that is already stored with different bytes needs the stored payload to decide whether it is the
+// same snapshot; the transaction never reads the object store for it, so it returns errPayloadNotPrefetched and
+// SaveOCIDiscoverySnapshot reads the payload outside the transaction (prefetchOCIDiscoveryPayload) and starts over.
+func (s *PostgresStore) saveOCIDiscoverySnapshotOnce(ctx context.Context, snapshot discovery.Snapshot, data []byte, inline string, ref payloadRef, prefetched payloadPrefetch) error {
 	bodyDigest, bodySize, bodyKey := ref.columns()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -196,13 +188,15 @@ func (s *PostgresStore) GetOCIDiscoverySnapshot(ctx context.Context, id, owner s
 		return discovery.Snapshot{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// The row was selected before the object read: a snapshot that expired or was purged meanwhile is gone (database clock).
-	var live bool
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM oci_discovery_snapshots WHERE id=$1::uuid AND owner=$2 AND expires_at>clock_timestamp())`, id, owner).Scan(&live); err != nil {
-		return discovery.Snapshot{}, err
-	}
-	if !live {
-		return discovery.Snapshot{}, discovery.ErrNotFound
+	// The row was selected before the object read: a snapshot that expired or was purged during a slow read is gone (database clock). An inline payload has no such window.
+	if ref.external() {
+		var live bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM oci_discovery_snapshots WHERE id=$1::uuid AND owner=$2 AND expires_at>clock_timestamp())`, id, owner).Scan(&live); err != nil {
+			return discovery.Snapshot{}, err
+		}
+		if !live {
+			return discovery.Snapshot{}, discovery.ErrNotFound
+		}
 	}
 	if err := checkPostgresOCIGuards(ctx, tx, snapshot.Guards); err != nil {
 		return discovery.Snapshot{}, err

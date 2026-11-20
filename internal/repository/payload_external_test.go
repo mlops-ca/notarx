@@ -7,11 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	discovery "github.com/mlops-ca/notarx/internal/ocidiscovery"
 )
 
 // memoryPayloadStore is an in-memory PayloadStore that counts its calls.
@@ -331,14 +332,12 @@ func TestInternalizeWithPrefersThePrefetchedPayload(t *testing.T) {
 	}
 }
 
-type plainStore struct{}
-
-func TestStagePayloadStagesOnceAndTheCommitReusesIt(t *testing.T) {
+func TestStagedPayloadOnContextIsReusedByTheCommit(t *testing.T) {
 	payloads := newMemoryPayloadStore()
 	store := &PostgresStore{}
 	store.SetPayloadStore(payloads, 4)
 	data := []byte("a chart.yaml above the inline threshold")
-	ctx, err := StagePayload(context.Background(), store, data)
+	ctx, err := store.stageOnContext(context.Background(), data)
 	if err != nil || payloads.puts != 1 {
 		t.Fatalf("stage: puts=%d err=%v", payloads.puts, err)
 	}
@@ -357,15 +356,28 @@ func TestStagePayloadStagesOnceAndTheCommitReusesIt(t *testing.T) {
 	}
 }
 
-func TestStagePayloadIgnoresStoresThatCannotStageAndReportsFailures(t *testing.T) {
-	ctx := context.Background()
-	if got, err := StagePayload(ctx, plainStore{}, []byte("x")); err != nil || got != ctx {
-		t.Fatalf("a store without staging leaves the context alone: %v", err)
-	}
+func TestStageOnContextReportsAFailedPut(t *testing.T) {
 	store := &PostgresStore{}
 	store.SetPayloadStore(&failingPayloadStore{}, 1)
-	if _, err := StagePayload(ctx, store, []byte("large payload")); err == nil {
+	if _, err := store.stageOnContext(context.Background(), []byte("large payload")); err == nil {
 		t.Fatal("a failed put must fail the staging")
+	}
+}
+
+func TestInternalizeStoredReadsTheStoreOnlyWhenAllowed(t *testing.T) {
+	payloads := newMemoryPayloadStore()
+	store := &PostgresStore{}
+	store.SetPayloadStore(payloads, 1)
+	data := []byte("manifest above the threshold")
+	_, ref, err := store.externalize(context.Background(), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.internalizeStored(context.Background(), nil, ref, nil, false); !errors.Is(err, errPayloadNotPrefetched) {
+		t.Fatalf("a miss must restart: %v", err)
+	}
+	if got, err := store.internalizeStored(context.Background(), nil, ref, nil, true); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("the last attempt reads the store: %q %v", got, err)
 	}
 }
 

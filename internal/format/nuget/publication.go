@@ -209,13 +209,10 @@ func (m *Module) push(w http.ResponseWriter, r *http.Request, repo repository.Ho
 	}
 	// A large nuspec goes to the object store before the publication lock is taken, so the lock and its connection
 	// never wait on the store while the commit runs.
-	// A version that is already published (an idempotent replay or a conflict) needs no new object.
-	staged := r.Context()
-	if _, e := m.store.GetNuGetPublication(staged, repo.ID, strings.ToLower(meta.ID), meta.Version); errors.Is(e, repository.ErrNotFound) {
-		if staged, err = repository.StagePayload(staged, m.store, nuspec); err != nil {
-			m.failure(w, err)
-			return
-		}
+	staged, err := repository.StageNuGetNuspec(r.Context(), m.store, repo.ID, strings.ToLower(meta.ID), meta.Version, nuspec)
+	if err != nil {
+		m.failure(w, err)
+		return
 	}
 	ctx, unlock, err := m.store.LockNuGetPublication(staged, repo.ID, strings.ToLower(meta.ID), meta.Version)
 	if err != nil {

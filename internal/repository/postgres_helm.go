@@ -287,6 +287,15 @@ func (s *PostgresStore) helmWriteTransaction(ctx context.Context, id, version st
 	return s.helmTransaction(ctx, id)
 }
 
+// StageHelmChart implements HelmChartStager.
+func (s *PostgresStore) StageHelmChart(ctx context.Context, repo, name, version string, chartYAML []byte) (context.Context, error) {
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3)`, repo, name, version).Scan(&exists); err != nil || exists {
+		return ctx, err
+	}
+	return s.stageOnContext(ctx, chartYAML)
+}
+
 // stageHelmChart externalises the chart.yaml of a session before the transaction that commits it opens, unless the
 // handler already staged it on ctx (StagePayload, before the publication lock). A commit the transaction would refuse
 // (another actor, a session that is not pending or has expired) stages nothing here; an object a handler staged for a

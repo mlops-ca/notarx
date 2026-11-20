@@ -331,6 +331,15 @@ func (s *PostgresStore) insertNuGetPublicationFromSession(ctx context.Context, t
 	return p, err
 }
 
+// StageNuGetNuspec implements NuGetNuspecStager.
+func (s *PostgresStore) StageNuGetNuspec(ctx context.Context, repo, id, version string, nuspec []byte) (context.Context, error) {
+	var exists bool
+	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3)`, repo, id, version).Scan(&exists); err != nil || exists {
+		return ctx, err
+	}
+	return s.stageOnContext(ctx, nuspec)
+}
+
 // stageNuGetNuspec externalises the nuspec of a session before the transaction that commits it opens, unless the
 // handler already staged it on ctx (StagePayload, before the publication lock). A commit the transaction would refuse
 // (another actor, a session that is not staged or has expired) stages nothing here; an object a handler staged for a

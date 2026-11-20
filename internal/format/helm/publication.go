@@ -110,13 +110,10 @@ func (m *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 	}
 	// A large chart.yaml goes to the object store before the publication lock is taken, so the lock and its
 	// connection never wait on the store while the commit runs.
-	// A version that is already published (an idempotent replay or a conflict) needs no new object.
-	staged := r.Context()
-	if _, e := m.store.GetHelmPublication(staged, repo.ID, name, version); errors.Is(e, repository.ErrNotFound) {
-		if staged, err = repository.StagePayload(staged, m.store, inspection.ChartYAML); err != nil {
-			m.failure(w, err)
-			return
-		}
+	staged, err := repository.StageHelmChart(r.Context(), m.store, repo.ID, name, version, inspection.ChartYAML)
+	if err != nil {
+		m.failure(w, err)
+		return
 	}
 	ctx, release, err := m.store.LockHelmPublication(staged, repo.ID, name, version)
 	if err != nil {

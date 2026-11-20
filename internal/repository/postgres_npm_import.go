@@ -32,13 +32,10 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		if err != nil {
 			return err
 		}
-		err = s.publishNPMImportLocked(ctx, c, keys, manifests, prefetched)
+		// The last attempt reads a missing manifest under the lock rather than fail an import that is only racing others.
+		err = s.publishNPMImportLocked(ctx, c, keys, manifests, prefetched, attempt == npmImportPrefetchAttempts)
 		if !errors.Is(err, errPayloadNotPrefetched) {
 			return err
-		}
-		if attempt == npmImportPrefetchAttempts {
-			// Concurrent imports kept storing versions of this closure: it no longer matches what is stored.
-			return ErrNameExists
 		}
 	}
 }
@@ -47,7 +44,7 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 const npmImportPrefetchAttempts = 3
 
 // publishNPMImportLocked runs the import under the publication advisory locks of its versions.
-func (s *PostgresStore) publishNPMImportLocked(ctx context.Context, c NPMImportClosure, keys []string, manifests map[string]npmManifest, prefetched payloadPrefetch) error {
+func (s *PostgresStore) publishNPMImportLocked(ctx context.Context, c NPMImportClosure, keys []string, manifests map[string]npmManifest, prefetched payloadPrefetch, mayReadStore bool) error {
 	ctx, release, err := s.lockPostgresAdvisoryKeys(ctx, keys)
 	if err != nil {
 		return err
@@ -108,8 +105,8 @@ func (s *PostgresStore) publishNPMImportLocked(ctx context.Context, c NPMImportC
 		}
 		if old, exists := oldVersions[v.Version]; exists {
 			if old.State == "" || old.State == "visible" {
-				// A manifest stored since the prefetch restarts the import (errPayloadNotPrefetched): the object store is never read here.
-				if old.Manifest, err = s.internalizePrefetched(old.Manifest, read.refs[v.Version], prefetched); err != nil {
+				// A manifest stored since the prefetch restarts the import (errPayloadNotPrefetched) instead of reading the object store here.
+				if old.Manifest, err = s.internalizeStored(ctx, old.Manifest, read.refs[v.Version], prefetched, mayReadStore); err != nil {
 					return err
 				}
 			}

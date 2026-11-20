@@ -160,29 +160,44 @@ func (s *PostgresStore) stagePayload(ctx context.Context, data []byte) (stagedPa
 
 type stagedPayloadContextKey struct{}
 
-var _ PayloadStager = (*PostgresStore)(nil)
-
-// PayloadStager is implemented by a store that can externalise a payload ahead of its commit (PostgresStore).
-type PayloadStager interface {
-	// StagePayload externalises data now and returns a context that carries the result, so the commit made with
-	// that context (or one derived from it, such as the one a publication advisory lock returns) finds the object
-	// already stored and never calls the object store itself.
-	StagePayload(ctx context.Context, data []byte) (context.Context, error)
+// HelmChartStager and NuGetNuspecStager are implemented by a store that can externalise a payload ahead of its commit
+// (PostgresStore). The stage methods return a context that carries the result, so the commit made with that context (or
+// one derived from it, such as the one a publication advisory lock returns) finds the object already stored and never
+// calls the object store itself. A version that is already published stages nothing, so an idempotent replay or a
+// conflicting push writes no object; a request refused later (quota, a conflicting session) leaves the staged object
+// unreferenced for the sweep of unreferenced objects, like a rolled-back transaction does.
+type HelmChartStager interface {
+	StageHelmChart(ctx context.Context, repo, name, version string, chartYAML []byte) (context.Context, error)
 }
 
-// StagePayload stages data on store when it supports staging and returns ctx unchanged otherwise. A publication
-// handler calls it before it takes the publication advisory lock, so the lock and its dedicated connection never
-// wait on the object store. The staged object is unreferenced until the commit uses it; a commit that is refused
-// leaves it for the sweep of unreferenced objects.
-func StagePayload(ctx context.Context, store any, data []byte) (context.Context, error) {
-	if stager, ok := store.(PayloadStager); ok {
-		return stager.StagePayload(ctx, data)
+// NuGetNuspecStager is HelmChartStager for the nuspec of a NuGet package.
+type NuGetNuspecStager interface {
+	StageNuGetNuspec(ctx context.Context, repo, id, version string, nuspec []byte) (context.Context, error)
+}
+
+var (
+	_ HelmChartStager   = (*PostgresStore)(nil)
+	_ NuGetNuspecStager = (*PostgresStore)(nil)
+)
+
+// StageHelmChart stages chartYAML on store when it supports staging and returns ctx unchanged otherwise.
+func StageHelmChart(ctx context.Context, store NativeHelmStore, repo, name, version string, chartYAML []byte) (context.Context, error) {
+	if stager, ok := store.(HelmChartStager); ok {
+		return stager.StageHelmChart(ctx, repo, name, version, chartYAML)
 	}
 	return ctx, nil
 }
 
-// StagePayload implements PayloadStager.
-func (s *PostgresStore) StagePayload(ctx context.Context, data []byte) (context.Context, error) {
+// StageNuGetNuspec stages nuspec on store when it supports staging and returns ctx unchanged otherwise.
+func StageNuGetNuspec(ctx context.Context, store NativeNuGetStore, repo, id, version string, nuspec []byte) (context.Context, error) {
+	if stager, ok := store.(NuGetNuspecStager); ok {
+		return stager.StageNuGetNuspec(ctx, repo, id, version, nuspec)
+	}
+	return ctx, nil
+}
+
+// stageOnContext externalises data now and returns a context that carries the result.
+func (s *PostgresStore) stageOnContext(ctx context.Context, data []byte) (context.Context, error) {
 	staged, err := s.stagePayload(ctx, data)
 	if err != nil {
 		return ctx, err
@@ -245,6 +260,14 @@ func (s *PostgresStore) internalizePrefetched(inline []byte, ref payloadRef, pre
 		return nil, ErrPayloadStoreUnavailable
 	}
 	return nil, errPayloadNotPrefetched
+}
+
+// internalizeStored is internalizePrefetched that falls back to reading the object store when mayReadStore is set.
+func (s *PostgresStore) internalizeStored(ctx context.Context, inline []byte, ref payloadRef, pre payloadPrefetch, mayReadStore bool) ([]byte, error) {
+	if mayReadStore {
+		return s.internalizeWith(ctx, inline, ref, pre)
+	}
+	return s.internalizePrefetched(inline, ref, pre)
 }
 
 // internalize returns the payload of a row: inline when ref is empty, otherwise the verified

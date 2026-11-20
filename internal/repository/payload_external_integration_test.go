@@ -323,7 +323,7 @@ func TestPostgresStagedHelmAndNuGetCommitsNeverCallThePayloadStoreUnderTheLock(t
 	commitHelm := func(staging bool, version string) {
 		staged := ctx
 		if staging {
-			if staged, err = StagePayload(ctx, store, chart); err != nil {
+			if staged, err = StageHelmChart(ctx, store, helmRepo.ID, "staged", version, chart); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -353,7 +353,7 @@ func TestPostgresStagedHelmAndNuGetCommitsNeverCallThePayloadStoreUnderTheLock(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	staged, err := StagePayload(ctx, store, nuspec)
+	staged, err := StageNuGetNuspec(ctx, store, nugetRepo.ID, "acme.staged", "1.0.0", nuspec)
 	if err != nil {
 		t.Fatal(err)
 	}
