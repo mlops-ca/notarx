@@ -348,14 +348,20 @@ def check(render_only, evidence=None, fixture_subnets=None):
 
         try:
             run(["go", "build", "-o", str(notarxctl), "./cmd/notarxctl"])
-            if os.environ.get("NOTARX_COMPOSE_BUILD_FLAG", "--build") == "--build":
-                # Builds the per-project fixture image this check names itself.
-                run(compose + ["build", "notarx"])
-            else:
+            if os.environ.get("NOTARX_COMPOSE_BUILD_FLAG") == "--no-build":
                 # CI lanes load the prebuilt image (docs/ci.md, Shared images) and run
                 # Compose with --no-build: name that image for this project instead of
                 # rebuilding it from source. The cleanup below removes only this tag.
-                run(["docker", "image", "tag", os.environ.get("NOTARX_IMAGE") or "notarx:local", image])
+                source_image = os.environ.get("NOTARX_IMAGE") or "notarx:local"
+                run(["docker", "image", "tag", source_image, image])
+                fixture_image = {"built": False, "source": source_image}
+            else:
+                # Builds the per-project fixture image this check names itself.
+                run(compose + ["build", "notarx"])
+                fixture_image = {"built": True, "source": "compose build notarx"}
+            fixture_image["id"] = run(["docker", "image", "inspect", "--format", "{{.Id}}", image]).strip()
+            if evidence:
+                (evidence / "fixture-image.json").write_text(json.dumps(fixture_image, indent=2) + "\n")
             run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-days", "1",
                  "-subj", "/CN=smtp.example.test", "-addext", "subjectAltName=DNS:smtp.example.test",
                  "-keyout", str(sink / "key.pem"), "-out", str(sink / "cert.pem")])

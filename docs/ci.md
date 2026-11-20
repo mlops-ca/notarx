@@ -96,7 +96,8 @@ too for an architecture-sensitive one (ADR 0016, amendment of 2026-11-19).
 already runs those tests.
 
 `golangci-lint` runs in its pinned image as the calling user, against the host module
-and build caches (restored by `actions/setup-go`) and its own result cache in
+and build caches (restored by `actions/setup-go` in `lint`, and by the race build cache
+below in `quality-arm64`) and its own result cache in
 `GOLANGCI_LINT_CACHE` (default `~/.cache/notarx/golangci-lint`). A warm run downloads
 no module and re-analyses only changed packages. The `quality` and `quality-arm64` jobs
 keep their own cache of the module and build caches (`go-race-*`, one per runner
@@ -111,6 +112,13 @@ date): an exact hit saves nothing, so a fixed key would freeze a cache at its fi
 contents, and a save from every pull request would crowd the repository's cache quota.
 A pull request restores the newest cache `main` saved, by key prefix. The unit-test
 pass uses `-count=1`, so a restored build cache never replays an earlier test result.
+
+The repository has a 10 GB cache quota, and beyond it GitHub evicts the least recently
+used entries (11.8 GB were in use on 2026-11-20, most of it BuildKit layers and
+Playwright browsers saved by pull requests; issue #518 took the runner image version
+out of the browser key). Every Go pull request restores the newest race and lint caches,
+so they stay recently used; a superseded daily entry is no longer restored and is the
+first to go.
 
 ## Workflow linting
 
