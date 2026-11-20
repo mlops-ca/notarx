@@ -29,6 +29,8 @@ type HelmGovernanceChange struct {
 // HelmGovernanceStore is explicitly composed separately from publication and
 // GatewayStore ports. Mutations and their audit record commit atomically.
 type HelmGovernanceStore interface {
+	// TransitionHelmGovernance returns the publication's identity and governance state; a store that keeps
+	// chart.yaml in the object store does not read it, so the returned ChartYAML may be empty.
 	TransitionHelmGovernance(context.Context, HelmGovernanceChange) (HelmPublication, error)
 	GetRepositoryQuarantineReadPolicy(context.Context, string) (RepositoryQuarantineReadPolicy, error)
 	ReplaceHelmQuarantineReadPolicy(context.Context, string, RepositoryQuarantineReadPolicy, string, string) (RepositoryQuarantineReadPolicy, error)

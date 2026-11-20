@@ -123,6 +123,12 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	if err != nil {
 		return HelmPublication{}, false, err
 	}
+	// A large chart.yaml goes to the object store before the transaction opens, so its locks and its connection never
+	// wait on the store. The transaction re-reads the session and stores again only if the payload changed meanwhile.
+	staged, err := s.stageHelmChart(ctx, before, actor)
+	if err != nil {
+		return HelmPublication{}, false, err
+	}
 	tx, name, err := s.helmWriteTransaction(ctx, before.RepositoryID, before.SourceVersion)
 	if err != nil {
 		return HelmPublication{}, false, err
@@ -136,11 +142,16 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 		return HelmPublication{}, false, ErrHelmPublicationConflict
 	}
 	if in.State == "committed" {
-		p, e := s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE session_id=$1::uuid`, id))
+		p, ref, e := scanHelmPublicationRef(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE session_id=$1::uuid`, id))
 		if e != nil {
 			return HelmPublication{}, false, e
 		}
-		return p, true, tx.Commit()
+		if err = tx.Commit(); err != nil {
+			return HelmPublication{}, false, err
+		}
+		// The chart.yaml is read after the commit: the transaction holds no lock while the object store answers.
+		p.ChartYAML, err = s.internalize(ctx, p.ChartYAML, ref)
+		return p, true, err
 	}
 	if in.State == "expired" || !in.ExpiresAt.After(time.Now()) {
 		return HelmPublication{}, false, ErrHelmSessionExpired
@@ -151,7 +162,7 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	if _, err = tx.ExecContext(ctx, `UPDATE native_helm_publication_sessions SET state='committed',committed_at=now() WHERE id=$1::uuid`, id); err != nil {
 		return HelmPublication{}, false, err
 	}
-	p, err := s.insertHelmPublicationFromSession(ctx, tx, in)
+	p, err := s.insertHelmPublicationFromSession(ctx, tx, in, staged)
 	if err != nil {
 		return HelmPublication{}, false, err
 	}
@@ -276,14 +287,29 @@ func (s *PostgresStore) helmWriteTransaction(ctx context.Context, id, version st
 	return s.helmTransaction(ctx, id)
 }
 
+// stageHelmChart externalises the chart.yaml of a session before the transaction that commits it opens. A commit the
+// transaction would refuse (another actor, a session that is not pending or has expired) stages nothing, so a
+// rejected request never writes an object.
+func (s *PostgresStore) stageHelmChart(ctx context.Context, session HelmSession, actor string) (stagedPayload, error) {
+	if session.State != "pending" || session.Actor != actor || !session.ExpiresAt.After(time.Now()) {
+		return stagedPayload{}, nil
+	}
+	return s.stagePayload(ctx, session.ChartYAML)
+}
+
 // insertHelmPublicationFromSession publishes a committed session: the row copies the session's
-// metadata and moves chart.yaml to the object store when it is above the inline threshold. The object is
-// written inside the commit transaction (issue #501 moves it out).
-func (s *PostgresStore) insertHelmPublicationFromSession(ctx context.Context, tx *sql.Tx, session HelmSession) (HelmPublication, error) {
-	chart, ref, err := s.externalizeIn(ctx, tx, session.ChartYAML)
+// metadata and keeps chart.yaml in the object store when it is above the inline threshold. The caller stages the
+// object before its transaction opens; a payload staged for other bytes is stored here, the behaviour before
+// staging. The returned publication carries the session's chart.yaml, so no object is read.
+func (s *PostgresStore) insertHelmPublicationFromSession(ctx context.Context, tx *sql.Tx, session HelmSession, staged stagedPayload) (HelmPublication, error) {
+	chart, ref, err := staged.externalizeIn(ctx, s, tx, session.ChartYAML)
 	if err != nil {
 		return HelmPublication{}, err
 	}
 	bodyDigest, bodySize, bodyKey := ref.columns()
-	return s.scanHelmPublication(ctx, tx.QueryRowContext(ctx, `INSERT INTO native_helm_publications(repository_id,name,version,session_id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at,body_digest,body_size,body_key) SELECT repository_id,name,version,id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,$2::bytea,actor,committed_at,$3::text,$4::bigint,$5::text FROM native_helm_publication_sessions WHERE id=$1::uuid RETURNING `+helmPublicationColumns, session.ID, chart, bodyDigest, bodySize, bodyKey))
+	p, _, err := scanHelmPublicationRef(tx.QueryRowContext(ctx, `INSERT INTO native_helm_publications(repository_id,name,version,session_id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,chart_yaml,publisher,published_at,body_digest,body_size,body_key) SELECT repository_id,name,version,id,digest,object_key,size,provenance_digest,provenance_key,provenance_size,metadata_json,$2::bytea,actor,committed_at,$3::text,$4::bigint,$5::text FROM native_helm_publication_sessions WHERE id=$1::uuid RETURNING `+helmPublicationColumns, session.ID, chart, bodyDigest, bodySize, bodyKey))
+	if err == nil && ref.external() {
+		p.ChartYAML = session.ChartYAML
+	}
+	return p, err
 }

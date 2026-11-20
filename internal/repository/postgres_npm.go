@@ -378,12 +378,12 @@ func (s *PostgresStore) CacheNPMProxyTarball(ctx context.Context, incoming NPMVe
 		return NPMVersion{}, ErrVersionConflict
 	}
 	var stored NPMVersion
-	err = s.scanNPMVersion(ctx, tx.QueryRowContext(ctx, `
+	err = scanNPMVersionRef(tx.QueryRowContext(ctx, `
 		SELECT repository_id::text,package_name,version,digest,integrity,shasum,
 		       tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at,body_digest,body_size,body_key
 		FROM native_npm_versions
 		WHERE repository_id=$1::uuid AND package_name=$2 AND version=$3 FOR UPDATE`,
-		incoming.RepositoryID, incoming.PackageName, incoming.Version), &stored)
+		incoming.RepositoryID, incoming.PackageName, incoming.Version), &stored, &payloadRef{})
 	if errors.Is(err, sql.ErrNoRows) {
 		return NPMVersion{}, ErrNotFound
 	}
@@ -402,14 +402,14 @@ func (s *PostgresStore) CacheNPMProxyTarball(ctx context.Context, incoming NPMVe
 		}
 		return stored, tx.Commit()
 	}
-	err = s.scanNPMVersion(ctx, tx.QueryRowContext(ctx, `
+	err = scanNPMVersionRef(tx.QueryRowContext(ctx, `
 		UPDATE native_npm_versions
 		SET digest=$4,object_key=$5,size=$6,cached_at=$7
 		WHERE repository_id=$1::uuid AND package_name=$2 AND version=$3
 		RETURNING repository_id::text,package_name,version,digest,integrity,shasum,
 		          tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at,body_digest,body_size,body_key`,
 		incoming.RepositoryID, incoming.PackageName, incoming.Version, incoming.Digest,
-		incoming.ObjectKey, incoming.Size, incoming.CachedAt), &stored)
+		incoming.ObjectKey, incoming.Size, incoming.CachedAt), &stored, &payloadRef{})
 	if err != nil {
 		return NPMVersion{}, err
 	}
@@ -434,17 +434,41 @@ func (s *PostgresStore) GetNPMPackage(ctx context.Context, repositoryID, name st
 		return NPMPackage{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	pkg, err := s.readNPMPackage(ctx, tx, repositoryID, name)
+	read, err := s.readNPMPackage(ctx, tx, repositoryID, name)
 	if err != nil {
 		return NPMPackage{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return NPMPackage{}, err
 	}
-	return pkg, nil
+	// The manifests are read after the transaction: no connection waits on the object store.
+	if err = s.resolveNPMPackage(ctx, &read); err != nil {
+		return NPMPackage{}, err
+	}
+	return read.NPMPackage, nil
 }
 
-func (s *PostgresStore) readNPMPackage(ctx context.Context, tx *sql.Tx, repositoryID, name string) (NPMPackage, error) {
+// npmPackageRead is a package read inside a transaction. The manifest of an externalised version is not resolved;
+// refs names it by version, for the callers that need the bytes (resolveNPMPackage, npmManifestsOf).
+type npmPackageRead struct {
+	NPMPackage
+	refs map[string]payloadRef
+}
+
+// resolveNPMPackage fetches the externalised manifests of a package read, once its transaction is over.
+func (s *PostgresStore) resolveNPMPackage(ctx context.Context, read *npmPackageRead) error {
+	var slots []payloadSlot
+	for _, versions := range [][]NPMVersion{read.Versions, read.TombstonedVersions} {
+		for i := range versions {
+			slots = append(slots, payloadSlot{ref: read.refs[versions[i].Version], set: func(data []byte) { versions[i].Manifest = data }})
+		}
+	}
+	return s.resolvePayloads(ctx, slots)
+}
+
+// readNPMPackage reads a package and its versions without touching the object store, so a transaction that holds
+// the package's locks never waits on it. A caller that needs a manifest resolves it itself.
+func (s *PostgresStore) readNPMPackage(ctx context.Context, tx *sql.Tx, repositoryID, name string) (npmPackageRead, error) {
 	var pkg NPMPackage
 	var tags []byte
 	var metadataExpiresAt, negativeExpiresAt sql.NullTime
@@ -452,13 +476,13 @@ func (s *PostgresStore) readNPMPackage(ctx context.Context, tx *sql.Tx, reposito
 		Scan(&pkg.RepositoryID, &pkg.Name, &tags, &pkg.SourceEndpoint, &pkg.UpstreamETag, &pkg.UpstreamModified,
 			&metadataExpiresAt, &negativeExpiresAt, &pkg.Negative, &pkg.CreatedAt, &pkg.UpdatedAt, &pkg.Revision, &pkg.SourceVersion)
 	if errors.Is(err, sql.ErrNoRows) {
-		return NPMPackage{}, ErrNotFound
+		return npmPackageRead{}, ErrNotFound
 	}
 	if err != nil {
-		return NPMPackage{}, err
+		return npmPackageRead{}, err
 	}
 	if err = json.Unmarshal(tags, &pkg.DistTags); err != nil {
-		return NPMPackage{}, err
+		return npmPackageRead{}, err
 	}
 	if metadataExpiresAt.Valid {
 		pkg.MetadataExpiresAt = metadataExpiresAt.Time
@@ -473,28 +497,24 @@ func (s *PostgresStore) readNPMPackage(ctx context.Context, tx *sql.Tx, reposito
 		WHERE repository_id=$1::uuid AND package_name=$2
 		ORDER BY created_at DESC,version DESC`, repositoryID, name)
 	if err != nil {
-		return NPMPackage{}, err
+		return npmPackageRead{}, err
 	}
 	defer func() { _ = rows.Close() }()
 	scanned, err := scanNPMVersionRows(rows)
 	if err != nil {
-		return NPMPackage{}, err
+		return npmPackageRead{}, err
 	}
 	_ = rows.Close()
-	if err = s.resolveNPMManifests(ctx, scanned); err != nil {
-		return NPMPackage{}, err
-	}
+	refs := make(map[string]payloadRef, len(scanned))
 	for _, version := range scanned {
+		refs[version.Version] = version.ref
 		if version.State == "deleted" {
 			pkg.TombstonedVersions = append(pkg.TombstonedVersions, version.NPMVersion)
 		} else {
 			pkg.Versions = append(pkg.Versions, version.NPMVersion)
 		}
 	}
-	if err = rows.Err(); err != nil {
-		return NPMPackage{}, err
-	}
-	return pkg, nil
+	return npmPackageRead{NPMPackage: pkg, refs: refs}, nil
 }
 
 // The hot npm reads. They are named so the plan-regression registry (hotqueries_test.go)
@@ -604,12 +624,12 @@ func (s *PostgresStore) TombstoneNPMVersion(ctx context.Context, repositoryID, n
 
 func (s *PostgresStore) tombstoneNPMVersionTx(ctx context.Context, tx *sql.Tx, repositoryID, name, version string) (NPMVersion, error) {
 	var item NPMVersion
-	err := s.scanNPMVersion(ctx, tx.QueryRowContext(ctx, `
+	err := scanNPMVersionRef(tx.QueryRowContext(ctx, `
 		UPDATE native_npm_versions SET state='deleted',deleted_at=now()
 		WHERE repository_id=$1::uuid AND package_name=$2 AND version=$3 AND state='visible'
 		RETURNING repository_id::text,package_name,version,digest,integrity,shasum,
 		          tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at,body_digest,body_size,body_key`,
-		repositoryID, name, version), &item)
+		repositoryID, name, version), &item, &payloadRef{})
 	if errors.Is(err, sql.ErrNoRows) {
 		return NPMVersion{}, ErrNotFound
 	}
@@ -663,12 +683,12 @@ func (s *PostgresStore) RestoreNPMVersion(ctx context.Context, request NPMRestor
 		return NPMVersion{}, err
 	}
 	var item NPMVersion
-	err = s.scanNPMVersion(ctx, tx.QueryRowContext(ctx, `
+	err = scanNPMVersionRef(tx.QueryRowContext(ctx, `
 		UPDATE native_npm_versions SET state='visible',deleted_at=NULL
 		WHERE repository_id=$1::uuid AND package_name=$2 AND version=$3 AND state='deleted' AND collected_at IS NULL AND collecting_at IS NULL
 		RETURNING repository_id::text,package_name,version,digest,integrity,shasum,
 		          tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at,body_digest,body_size,body_key`,
-		repositoryID, name, version), &item)
+		repositoryID, name, version), &item, &payloadRef{})
 	if errors.Is(err, sql.ErrNoRows) {
 		return NPMVersion{}, ErrDisabled
 	}
@@ -831,6 +851,11 @@ func scanNPMVersionRef(row interface{ Scan(...any) error }, version *NPMVersion,
 		&version.Size, &version.Manifest, &version.Publisher, &version.State, &cachedAt, &deletedAt, &collectedAt, &version.CreatedAt, &version.Deprecated, &collectingAt, &ref.digest, &ref.size, &ref.key)
 	if err != nil {
 		return err
+	}
+	if ref.external() {
+		// The column holds a placeholder: the manifest is in the object store, so a row read without resolving
+		// carries none rather than a wrong one.
+		version.Manifest = nil
 	}
 	if cachedAt.Valid {
 		version.CachedAt = cachedAt.Time

@@ -93,8 +93,12 @@ func exerciseNPMMetadataContract(t *testing.T, store npmGovernanceTestStore, rep
 		t.Fatalf("deleted identity reusable: %v", err)
 	}
 	restored, err := store.RestoreNPMVersion(ctx, NPMRestoreRequest{RepositoryID: repositoryID, PackageName: name, Version: "1.0.0"})
-	if err != nil || restored.Digest != first.Digest || restored.ObjectKey != first.ObjectKey || restored.Size != first.Size || !reflect.DeepEqual(restored.Manifest, first.Manifest) {
+	if err != nil || restored.Digest != first.Digest || restored.ObjectKey != first.ObjectKey || restored.Size != first.Size {
 		t.Fatalf("restore changed identity=%#v %v", restored, err)
+	}
+	// The restore result carries identity and state; the manifest is read back through the version.
+	if again, getErr := store.GetNPMVersion(ctx, repositoryID, name, "1.0.0"); getErr != nil || !reflect.DeepEqual(again.Manifest, first.Manifest) {
+		t.Fatalf("restore changed the manifest=%#v %v", again, getErr)
 	}
 	pkg, _ = store.GetNPMPackage(ctx, repositoryID, name)
 	mutation.ExpectedRevision, mutation.Unpublish, mutation.DistTags = pkg.Revision, []string{"1.0.0", "1.1.0"}, map[string]string{}

@@ -442,12 +442,15 @@ type NativeNPMStore interface {
 	StoreNPMProxyNegative(context.Context, NPMPackage) error
 	// CacheNPMProxyTarball commits only under the source version and complete
 	// tarball metadata captured before fetching and verifying the object.
+	// The returned version carries identity and state; the manifest may be empty (see RestoreNPMVersion).
 	CacheNPMProxyTarball(context.Context, NPMVersion) (NPMVersion, error)
 	LockNPMProxy(context.Context, string) (func(), error)
 	LockNPMObject(context.Context, string) (func(), error)
 	GetNPMPackage(context.Context, string, string) (NPMPackage, error)
 	ListNPMVersions(context.Context, string, string) ([]NPMVersion, error)
 	GetNPMVersion(context.Context, string, string, string) (NPMVersion, error)
+	// TombstoneNPMVersion returns the tombstoned version's identity and state; the manifest may be empty (see
+	// RestoreNPMVersion), so a tombstone never waits on, or fails with, the object store.
 	TombstoneNPMVersion(context.Context, string, string, string, ...AuditRecord) (NPMVersion, error)
 	ListReclaimableNPMObjects(context.Context, time.Time, int) ([]NPMObject, error)
 	NPMObjectHasVisibleReference(context.Context, string) (bool, error)

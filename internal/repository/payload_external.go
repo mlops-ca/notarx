@@ -1,8 +1,11 @@
 package repository
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
@@ -13,7 +16,7 @@ import (
 // (ADR 0023 section 9): content-addressed, so writing the same bytes twice stores one object.
 // objectstore.MetaStore implements it.
 type PayloadStore interface {
-	// Put stores data and returns its "sha256:<hex>" digest and object key.
+	// Put stores data and returns its "sha256:<hex>" digest (of data) and object key.
 	Put(ctx context.Context, data []byte) (digest, key string, err error)
 	// Get returns the bytes stored under digest, verified against it.
 	Get(ctx context.Context, digest string) ([]byte, error)
@@ -110,6 +113,79 @@ func (s *PostgresStore) externalizeJSON(ctx context.Context, data []byte, placeh
 		return placeholder, ref, nil
 	}
 	return string(inline), ref, nil
+}
+
+// matches reports whether data is the payload the reference names: the digest is the sha256 of the bytes
+// (PayloadStore.Put), so no object read is needed.
+func (r payloadRef) matches(data []byte) bool {
+	if !r.external() || r.size.Int64 != int64(len(data)) {
+		return false
+	}
+	sum := sha256.Sum256(data)
+	return r.digest.String == "sha256:"+hex.EncodeToString(sum[:])
+}
+
+// payloadsEqual reports whether two payloads are equal without reading the object store, for the comparison a
+// locking transaction must make between a row whose payload is externalised and another payload. A payload scanned
+// without resolving holds no bytes (its reference names them): two references are equal when their digests are, and
+// a reference equals bytes that hash to its digest.
+func payloadsEqual(a []byte, aRef payloadRef, b []byte, bRef payloadRef) bool {
+	switch {
+	case aRef.external() && bRef.external():
+		return aRef.digest.String == bRef.digest.String && aRef.size.Int64 == bRef.size.Int64
+	case aRef.external():
+		return aRef.matches(b)
+	case bRef.external():
+		return bRef.matches(a)
+	}
+	return bytes.Equal(a, b)
+}
+
+// stagedPayload is a payload externalised before a transaction opens, so the object store write never runs while
+// the transaction holds locks and a pool connection. The zero value stages nothing.
+type stagedPayload struct {
+	data, inline []byte
+	ref          payloadRef
+	staged       bool
+}
+
+// stagePayload externalises data now (see externalize).
+func (s *PostgresStore) stagePayload(ctx context.Context, data []byte) (stagedPayload, error) {
+	inline, ref, err := s.externalize(ctx, data)
+	if err != nil {
+		return stagedPayload{}, err
+	}
+	return stagedPayload{data: data, inline: inline, ref: ref, staged: true}, nil
+}
+
+// externalizeIn returns the staged result when data is the staged payload. When the row changed after the payload
+// was staged it externalises data now through q, the transaction's connection (see PostgresStore.externalizeIn),
+// the behaviour before staging; the object staged for the old bytes is left for the sweep.
+func (p stagedPayload) externalizeIn(ctx context.Context, s *PostgresStore, q sqlRunner, data []byte) ([]byte, payloadRef, error) {
+	if p.staged && bytes.Equal(p.data, data) {
+		return p.inline, p.ref, nil
+	}
+	return s.externalizeIn(ctx, q, data)
+}
+
+// payloadPrefetch holds payloads read before a transaction opens, by digest, for a transaction that needs the bytes
+// of a row it locks.
+type payloadPrefetch map[string][]byte
+
+// add keeps data under the digest of ref.
+func (p payloadPrefetch) add(ref payloadRef, data []byte) {
+	if ref.external() {
+		p[ref.digest.String] = data
+	}
+}
+
+// internalizeWith is internalize that uses a prefetched payload when one matches the reference. A row that changed
+// after the prefetch reads its object, the behaviour before prefetching.
+func (s *PostgresStore) internalizeWith(ctx context.Context, inline []byte, ref payloadRef, pre payloadPrefetch) ([]byte, error) {
+	if data, ok := pre[ref.digest.String]; ok && ref.external() && int64(len(data)) == ref.size.Int64 {
+		return data, nil
+	}
+	return s.internalize(ctx, inline, ref)
 }
 
 // internalize returns the payload of a row: inline when ref is empty, otherwise the verified

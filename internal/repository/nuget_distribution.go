@@ -27,19 +27,24 @@ func nuGetReplicationMetadata(a, b []byte) bool {
 	y, _ := json.Marshal(right)
 	return bytes.Equal(x, y)
 }
-func nuGetReplicationSession(source NuGetPublication, session NuGetSession, target string) error {
+
+// nuGetReplicationSession checks a target session against its source; sameBody reports whether the source and the
+// session carry the same nuspec, which the caller decides because the source's may be in the object store.
+func nuGetReplicationSession(source NuGetPublication, session NuGetSession, target string, sameBody bool) error {
 	var metadata struct {
 		Listed *bool `json:"listed"`
 	}
 	if session.RepositoryID != target || session.SourceVersion != "" || session.PackageID != source.PackageID || session.Version != source.Version || session.Digest != source.Digest || session.Size != source.Size ||
-		!nuGetReplicationMetadata(source.MetadataJSON, session.MetadataJSON) || !bytes.Equal(source.Nuspec, session.Nuspec) || json.Unmarshal(session.MetadataJSON, &metadata) != nil || metadata.Listed == nil || *metadata.Listed != source.Governance.Listed {
+		!nuGetReplicationMetadata(source.MetadataJSON, session.MetadataJSON) || !sameBody || json.Unmarshal(session.MetadataJSON, &metadata) != nil || metadata.Listed == nil || *metadata.Listed != source.Governance.Listed {
 		return dist.ErrTargetBlocked
 	}
 	return nil
 }
-func nuGetReplicationExisting(source, target NuGetPublication) error {
+
+// nuGetReplicationExisting checks an existing target publication against its source (see nuGetReplicationSession for sameBody).
+func nuGetReplicationExisting(source, target NuGetPublication, sameBody bool) error {
 	if target.Digest != source.Digest || target.Size != source.Size || target.SourceVersion != "" || target.Governance.Tombstoned || target.Governance.Quarantined || target.Governance.Listed != source.Governance.Listed ||
-		!nuGetReplicationMetadata(source.MetadataJSON, target.MetadataJSON) || !bytes.Equal(source.Nuspec, target.Nuspec) {
+		!nuGetReplicationMetadata(source.MetadataJSON, target.MetadataJSON) || !sameBody {
 		return dist.ErrTargetBlocked
 	}
 	return nil

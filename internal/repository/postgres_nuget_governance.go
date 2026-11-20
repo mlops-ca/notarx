@@ -22,7 +22,9 @@ func (s *PostgresStore) TransitionNuGetGovernance(ctx context.Context, in NuGetG
 		return NuGetPublication{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	p, err := s.scanNuGetPublication(ctx, tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid FOR UPDATE`, before.SessionID))
+	// A transition needs the identity and governance state only, so an externalised nuspec is not read (and a
+	// missing object does not block it): the returned publication leaves it empty.
+	p, _, err := scanNuGetPublicationRef(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE session_id=$1::uuid FOR UPDATE`, before.SessionID))
 	if err != nil {
 		return NuGetPublication{}, err
 	}

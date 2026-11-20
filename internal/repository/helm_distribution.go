@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"bytes"
 	"context"
 	"strings"
 	"time"
@@ -16,16 +15,21 @@ func helmReplicationSource(p HelmPublication, item dist.Item) error {
 	}
 	return nil
 }
-func helmReplicationSession(source HelmPublication, session HelmSession, target string) error {
+
+// helmReplicationSession checks a target session against its source; sameBody reports whether the source and the
+// session carry the same chart.yaml, which the caller decides because the source's may be in the object store.
+func helmReplicationSession(source HelmPublication, session HelmSession, target string, sameBody bool) error {
 	if session.RepositoryID != target || session.SourceVersion != "" || session.Name != source.Name || session.Version != source.Version || session.Digest != source.Digest || session.Size != source.Size || session.ProvenanceDigest != source.ProvenanceDigest || session.ProvenanceSize != source.ProvenanceSize ||
-		!jsonmeta.Equal(source.MetadataJSON, session.MetadataJSON) || !bytes.Equal(source.ChartYAML, session.ChartYAML) {
+		!jsonmeta.Equal(source.MetadataJSON, session.MetadataJSON) || !sameBody {
 		return dist.ErrTargetBlocked
 	}
 	return nil
 }
-func helmReplicationExisting(source, target HelmPublication) error {
+
+// helmReplicationExisting checks an existing target publication against its source (see helmReplicationSession for sameBody).
+func helmReplicationExisting(source, target HelmPublication, sameBody bool) error {
 	if target.Digest != source.Digest || target.Size != source.Size || target.ProvenanceDigest != source.ProvenanceDigest || target.ProvenanceSize != source.ProvenanceSize || target.Governance.Tombstoned || target.Governance.Quarantined ||
-		!jsonmeta.Equal(source.MetadataJSON, target.MetadataJSON) || !bytes.Equal(source.ChartYAML, target.ChartYAML) {
+		!jsonmeta.Equal(source.MetadataJSON, target.MetadataJSON) || !sameBody {
 		return dist.ErrTargetBlocked
 	}
 	return nil

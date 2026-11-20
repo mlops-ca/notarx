@@ -5,9 +5,12 @@ package repository
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -84,7 +87,9 @@ func TestPostgresExternalizedNPMManifestsRoundTrip(t *testing.T) {
 	}
 }
 
-func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
+// newCargoProxyFixture opens a store with an active Cargo proxy repository and its config.
+func newCargoProxyFixture(t *testing.T) (*PostgresStore, HostedRepository, time.Time) {
+	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is required")
@@ -108,6 +113,12 @@ func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
 	if err := store.PutCargoProxyConfig(ctx, CargoProxyConfig{RepositoryID: repo.ID, SourceVersion: repo.Version, DownloadTemplate: "https://static.example.test/crates", FetchedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
+	return store, repo, now
+}
+
+func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
+	store, repo, now := newCargoProxyFixture(t)
+	ctx := context.Background()
 	payloads := newMemoryPayloadStore()
 	store.SetPayloadStore(payloads, 1000)
 	body := func(name string, versions int) []byte {
@@ -228,4 +239,216 @@ func TestPostgresScanSBOMBodyAboveAndBelowTheThreshold(t *testing.T) {
 	if payloads.puts != 1 {
 		t.Fatalf("only the large SBOM belongs in the object store, got %d writes", payloads.puts)
 	}
+}
+
+// connectionWatchPayloadStore is a payload store that counts the calls made while a pool connection is checked out
+// beyond the baseline: a call inside a transaction (or any other statement) holds one, so a call with the pool
+// idle proves no transaction, and so no row lock, waits on the object store. The advisory locks a handler takes use
+// a separate pool, and the test must drive the store from one goroutine, since another operation's transaction would
+// also hold a connection.
+type connectionWatchPayloadStore struct {
+	*memoryPayloadStore
+	db       *sql.DB
+	baseline int
+	inTx     atomic.Int64
+}
+
+func watchPayloadStore(t *testing.T, store *PostgresStore, inlineMax int) *connectionWatchPayloadStore {
+	t.Helper()
+	watch := &connectionWatchPayloadStore{memoryPayloadStore: newMemoryPayloadStore(), db: store.db, baseline: store.db.Stats().InUse}
+	store.SetPayloadStore(watch, inlineMax)
+	return watch
+}
+
+func (w *connectionWatchPayloadStore) observe() {
+	if w.db.Stats().InUse > w.baseline {
+		w.inTx.Add(1)
+	}
+}
+
+func (w *connectionWatchPayloadStore) Put(ctx context.Context, data []byte) (string, string, error) {
+	w.observe()
+	return w.memoryPayloadStore.Put(ctx, data)
+}
+
+func (w *connectionWatchPayloadStore) Get(ctx context.Context, digest string) ([]byte, error) {
+	w.observe()
+	return w.memoryPayloadStore.Get(ctx, digest)
+}
+
+func requireNoPayloadCallInTransaction(t *testing.T, watch *connectionWatchPayloadStore) {
+	t.Helper()
+	if watch.puts == 0 {
+		t.Fatal("the run never wrote an externalised payload")
+	}
+	if n := watch.inTx.Load(); n != 0 {
+		t.Fatalf("%d object store calls ran while a database connection was checked out", n)
+	}
+}
+
+func TestPostgresHelmAndNuGetCommitsNeverCallThePayloadStoreInATransaction(t *testing.T) {
+	store := newPostgresNuGetStore(t)
+	watch := watchPayloadStore(t, store, 1)
+	ctx := t.Context()
+	for _, kind := range []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy} {
+		repo, published := seedHelmGovernance(t, store, kind)
+		// A replayed commit returns the stored publication, its chart.yaml read after the transaction.
+		replayed, replay, err := store.CommitHelmPublication(ctx, published.SessionID, "publisher")
+		if err != nil || !replay || !bytes.Equal(replayed.ChartYAML, []byte("original chart metadata")) {
+			t.Fatalf("%s replay: %q replay=%v %v", kind, replayed.ChartYAML, replay, err)
+		}
+		if _, err = store.TransitionHelmGovernance(ctx, HelmGovernanceChange{RepositoryID: repo.ID, Name: published.Name, Version: published.Version, ExpectedDigest: published.Digest, ExpectedVersion: "1", Action: "quarantine", Actor: "operator", Reason: "Confirmed fixture quarantine"}); err != nil {
+			t.Fatalf("%s transition: %v", kind, err)
+		}
+	}
+	repo, published := seedNuGetGovernance(t, store)
+	replayed, replay, err := store.CommitNuGetPublication(ctx, published.SessionID, "publisher")
+	if err != nil || !replay || !bytes.Equal(replayed.Nuspec, []byte("original nuspec")) {
+		t.Fatalf("nuget replay: %q replay=%v %v", replayed.Nuspec, replay, err)
+	}
+	if _, err = store.TransitionNuGetGovernance(ctx, NuGetGovernanceChange{RepositoryID: repo.ID, PackageID: published.PackageID, Version: published.Version, ExpectedDigest: published.Digest, ExpectedVersion: "1", Action: "quarantine", Actor: "operator", Reason: "Confirmed fixture decision"}); err != nil {
+		t.Fatalf("nuget transition: %v", err)
+	}
+	if watch.gets == 0 {
+		t.Fatal("the replayed commits never read an externalised payload")
+	}
+	requireNoPayloadCallInTransaction(t, watch)
+}
+
+func TestPostgresReplicationNeverCallsThePayloadStoreInATransaction(t *testing.T) {
+	t.Run("nuget", func(t *testing.T) {
+		store := newPostgresNuGetStore(t)
+		watch := watchPayloadStore(t, store, 1)
+		testNuGetReplicationStoreContract(t, store)
+		requireNoPayloadCallInTransaction(t, watch)
+	})
+	t.Run("helm", func(t *testing.T) {
+		store := newPostgresNuGetStore(t)
+		watch := watchPayloadStore(t, store, 1)
+		testHelmReplicationStoreContract(t, store)
+		requireNoPayloadCallInTransaction(t, watch)
+	})
+}
+
+func TestPostgresNPMNeverCallsThePayloadStoreInATransaction(t *testing.T) {
+	store, _, repo := openPostgresNPMDistTagStores(t)
+	watch := watchPayloadStore(t, store, 1)
+	exerciseNPMMetadataContract(t, store, repo.ID)
+	requireNoPayloadCallInTransaction(t, watch)
+}
+
+func TestPostgresNPMMetadataAndTombstoneSurviveAMissingManifestObject(t *testing.T) {
+	store, _, repo := openPostgresNPMDistTagStores(t)
+	payloads := externalizeEverything(t, store)
+	ctx := context.Background()
+	const name = "@scope/missing"
+	publishNPMDistTagFixture(t, store, repo.ID, name, "1.0.0", map[string]string{"latest": "1.0.0"})
+	publishNPMDistTagFixture(t, store, repo.ID, name, "1.1.0", map[string]string{"next": "1.1.0"})
+	var revision int64
+	if err := store.db.QueryRowContext(ctx, `SELECT revision FROM native_npm_packages WHERE repository_id=$1::uuid AND name=$2`, repo.ID, name).Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	payloads.mu.Lock()
+	clear(payloads.objects)
+	payloads.mu.Unlock()
+	if _, err := store.GetNPMPackage(ctx, repo.ID, name); err == nil {
+		t.Fatal("a read that needs the manifests must fail when their objects are gone")
+	}
+	mutation := NPMMetadataMutation{RepositoryID: repo.ID, PackageName: name, ExpectedRevision: revision,
+		Deprecations: map[string]string{"1.0.0": "use 1.1.0"}, Audit: npmDistTagMutation(repo.ID, name, "", "").Audit}
+	mutation.Audit.Operation = "npm.deprecate"
+	changed, err := store.UpdateNPMMetadata(ctx, mutation)
+	if err != nil || !changed.Changed {
+		t.Fatalf("deprecate without the manifest objects: %#v %v", changed, err)
+	}
+	mutation.ExpectedRevision, mutation.Deprecations = changed.Revision, nil
+	mutation.Unpublish, mutation.DistTags = []string{"1.0.0"}, map[string]string{"latest": "1.1.0", "next": "1.1.0"}
+	mutation.Audit.Operation = "npm.unpublish"
+	if changed, err = store.UpdateNPMMetadata(ctx, mutation); err != nil || !changed.Changed {
+		t.Fatalf("unpublish without the manifest objects: %#v %v", changed, err)
+	}
+	if _, err = store.TombstoneNPMVersion(ctx, repo.ID, name, "1.1.0"); err != nil {
+		t.Fatalf("tombstone without the manifest object: %v", err)
+	}
+	if _, err = store.RestoreNPMVersion(ctx, NPMRestoreRequest{RepositoryID: repo.ID, PackageName: name, Version: "1.1.0"}); err != nil {
+		t.Fatalf("restore without the manifest object: %v", err)
+	}
+	if _, err = store.GetNPMVersion(ctx, repo.ID, name, "1.1.0"); err == nil {
+		t.Fatal("only the caller that needs the manifest fails")
+	}
+}
+
+func TestPostgresCargoProxyWritesNeverCallThePayloadStoreInATransaction(t *testing.T) {
+	store, repo, now := newCargoProxyFixture(t)
+	ctx := context.Background()
+	watch := watchPayloadStore(t, store, 100)
+	checksum := strings.Repeat("a", 64)
+	body := []byte(`{"name":"demo","vers":"1.0.0","cksum":"` + checksum + `","yanked":false,"deps":[],"features":{},` + strings.Repeat(" ", 200) + `"v":2}` + "\n")
+	index := CargoProxyIndex{RepositoryID: repo.ID, SourceVersion: repo.Version, Name: "demo", Body: body, Status: 200, FetchedAt: now, ExpiresAt: now.Add(time.Hour)}
+	for _, step := range []string{"first write", "refresh against the stored body"} {
+		if err := store.PutCargoProxyIndex(ctx, index); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	crate := CargoProxyCrate{RepositoryID: repo.ID, SourceVersion: repo.Version, Name: "demo", Version: "1.0.0", Checksum: checksum,
+		ObjectKey: "native/cargo-proxy/sha256/" + checksum, Size: 23, CachedAt: now}
+	if err := store.PutCargoProxyCrate(ctx, crate); err != nil {
+		t.Fatal(err)
+	}
+	if watch.gets == 0 {
+		t.Fatal("the refresh and the crate write never validated against an externalised body")
+	}
+	requireNoPayloadCallInTransaction(t, watch)
+}
+
+func TestPostgresNPMProxyCacheAndImportNeverCallThePayloadStoreInATransaction(t *testing.T) {
+	store, _, repo := openPostgresNPMDistTagStores(t)
+	ctx := context.Background()
+	watch := watchPayloadStore(t, store, 1)
+	const name = "@scope/imported"
+	manifest := func(extra string) []byte {
+		return []byte(`{"name":"` + name + `","version":"1.0.0","dist":{"tarball":"https://registry.example/imported.tgz"}` + extra + `}`)
+	}
+	version := NPMVersion{RepositoryID: repo.ID, PackageName: name, Version: "1.0.0", Digest: uniqueDigest(), Integrity: "sha512-YQ==", Shasum: strings.Repeat("b", 40),
+		TarballName: "imported-1.0.0.tgz", ObjectKey: "native/npm/sha256/" + uuid.NewString(), Size: 8, Manifest: manifest(""), Publisher: "importer"}
+	closure := NPMImportClosure{RepositoryID: repo.ID, PackageName: name, Versions: []NPMVersion{version}, DistTags: map[string]string{"latest": "1.0.0"},
+		Audit: npmDistTagMutation(repo.ID, name, "", "").Audit}
+	// Importing the identical content again compares the stored manifest, which is read before the transaction.
+	for _, step := range []string{"first import", "identical re-import"} {
+		if err := store.PublishNPMImport(ctx, closure); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	changed := closure
+	changed.Versions = []NPMVersion{version}
+	changed.Versions[0].Manifest = manifest(`,"description":"changed"`)
+	if err := store.PublishNPMImport(ctx, changed); !errors.Is(err, ErrNameExists) {
+		t.Fatalf("a different manifest for a stored version must conflict: %v", err)
+	}
+	if watch.gets == 0 {
+		t.Fatal("the re-import never compared against an externalised manifest")
+	}
+
+	proxy, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "npm-proxy-external-" + uuid.NewString()[:8], Format: FormatNPM, Type: RepositoryTypeProxy, Endpoint: "https://proxy.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, proxy.ID) })
+	listed := NPMVersion{Version: "1.0.0", UpstreamTarball: "https://registry.example/widget.tgz", TarballName: "widget.tgz", Manifest: []byte(`{"name":"widget","version":"1.0.0"}`)}
+	if _, err = store.SyncNPMProxyPackage(ctx, NPMPackage{RepositoryID: proxy.ID, SourceVersion: proxy.Version, Name: "widget", SourceEndpoint: proxy.Endpoint, Versions: []NPMVersion{listed}, DistTags: map[string]string{"latest": "1.0.0"}}); err != nil {
+		t.Fatal(err)
+	}
+	cached, err := store.GetNPMVersion(ctx, proxy.ID, "widget", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached.Digest, cached.ObjectKey, cached.Size, cached.SourceVersion = uniqueDigest(), "npm/"+uuid.NewString(), 40, proxy.Version
+	// Caching the tarball needs the version's identity, not its manifest, so it works without the manifest object.
+	watch.mu.Lock()
+	clear(watch.objects)
+	watch.mu.Unlock()
+	if _, err = store.CacheNPMProxyTarball(ctx, cached); err != nil {
+		t.Fatalf("cache the tarball without the manifest object: %v", err)
+	}
+	requireNoPayloadCallInTransaction(t, watch)
 }

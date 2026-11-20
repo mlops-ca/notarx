@@ -25,6 +25,8 @@ type NPMMetadataStore interface {
 // original identity. A management handler does not need the native publisher.
 type NPMRestoreStore interface {
 	GetNPMPackage(context.Context, string, string) (NPMPackage, error)
+	// RestoreNPMVersion returns the restored version's identity and state; a store that keeps manifests in the
+	// object store does not read them, so the returned Manifest may be empty.
 	RestoreNPMVersion(context.Context, NPMRestoreRequest) (NPMVersion, error)
 }
 

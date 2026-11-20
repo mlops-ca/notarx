@@ -217,3 +217,114 @@ func TestInlineLimitIsClampedToWhatTheInlineColumnsAccept(t *testing.T) {
 		t.Fatalf("a payload above the limit must be externalised whatever the setting: %+v %v", ref, err)
 	}
 }
+
+func TestPayloadRefMatchesOnlyItsOwnBytes(t *testing.T) {
+	store := &PostgresStore{}
+	store.SetPayloadStore(newMemoryPayloadStore(), 1)
+	_, ref, err := store.externalize(t.Context(), []byte("chart metadata"))
+	if err != nil || !ref.external() {
+		t.Fatalf("payload not externalised: %v", err)
+	}
+	if !ref.matches([]byte("chart metadata")) || ref.matches([]byte("chart metadatA")) || ref.matches([]byte("short")) || (payloadRef{}).matches([]byte("chart metadata")) {
+		t.Fatal("a reference must match exactly the bytes it names")
+	}
+}
+
+func TestPayloadsEqualWithoutReadingTheStore(t *testing.T) {
+	payloads := newMemoryPayloadStore()
+	store := &PostgresStore{}
+	store.SetPayloadStore(payloads, 1)
+	externalRef := func(data string) payloadRef {
+		_, ref, err := store.externalize(t.Context(), []byte(data))
+		if err != nil || !ref.external() {
+			t.Fatalf("payload not externalised: %v", err)
+		}
+		return ref
+	}
+	cases := []struct {
+		name       string
+		a, b       string
+		aExt, bExt bool
+		aRef, bRef string
+		want       bool
+	}{
+		{name: "both inline equal", a: "same", b: "same", want: true},
+		{name: "both inline differ", a: "one", b: "two"},
+		{name: "external against equal inline", aExt: true, aRef: "same", b: "same", want: true},
+		{name: "external against different inline", aExt: true, aRef: "same", b: "other"},
+		{name: "external against empty inline", aExt: true, aRef: "same", b: ""},
+		{name: "inline against equal external", a: "same", bExt: true, bRef: "same", want: true},
+		{name: "inline against different external", a: "other", bExt: true, bRef: "same"},
+		{name: "equal externals", aExt: true, aRef: "same", bExt: true, bRef: "same", want: true},
+		{name: "different externals", aExt: true, aRef: "one", bExt: true, bRef: "two"},
+	}
+	for _, c := range cases {
+		a, b := []byte(c.a), []byte(c.b)
+		var aRef, bRef payloadRef
+		if c.aExt {
+			aRef, a = externalRef(c.aRef), nil
+		}
+		if c.bExt {
+			bRef, b = externalRef(c.bRef), nil
+		}
+		if got := payloadsEqual(a, aRef, b, bRef); got != c.want {
+			t.Errorf("%s: equal=%v want %v", c.name, got, c.want)
+		}
+	}
+	if payloads.gets != 0 {
+		t.Fatalf("comparison read the object store %d times", payloads.gets)
+	}
+}
+
+func TestStagedPayloadStoresOnceAndFallsBackOnChange(t *testing.T) {
+	payloads := newMemoryPayloadStore()
+	store := &PostgresStore{}
+	store.SetPayloadStore(payloads, 4)
+	large := []byte("a payload above the threshold")
+	staged, err := store.stagePayload(t.Context(), large)
+	if err != nil || !staged.ref.external() || payloads.puts != 1 {
+		t.Fatalf("staged=%+v puts=%d err=%v", staged, payloads.puts, err)
+	}
+	inline, ref, err := staged.externalizeIn(t.Context(), store, nil, large)
+	if err != nil || !ref.external() || len(inline) != 0 || payloads.puts != 1 {
+		t.Fatalf("unchanged payload must reuse the staged object: puts=%d err=%v", payloads.puts, err)
+	}
+	if _, ref, err = staged.externalizeIn(t.Context(), store, nil, []byte("a different payload above it")); err != nil || !ref.external() || payloads.puts != 2 {
+		t.Fatalf("changed payload must be stored now: puts=%d err=%v", payloads.puts, err)
+	}
+	if inline, ref, err = (stagedPayload{}).externalizeIn(t.Context(), store, nil, []byte("tiny")); err != nil || ref.external() || string(inline) != "tiny" {
+		t.Fatalf("a small payload stays inline: %q %v", inline, err)
+	}
+	store.SetPayloadStore(&failingPayloadStore{}, 1)
+	if _, err = store.stagePayload(t.Context(), large); err == nil {
+		t.Fatal("a failed object write must fail the staging")
+	}
+}
+
+func TestInternalizeWithPrefersThePrefetchedPayload(t *testing.T) {
+	payloads := newMemoryPayloadStore()
+	store := &PostgresStore{}
+	store.SetPayloadStore(payloads, 1)
+	data := []byte("prefetched payload")
+	_, ref, err := store.externalize(t.Context(), data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pre := payloadPrefetch{}
+	pre.add(ref, data)
+	pre.add(payloadRef{}, []byte("inline payloads are never prefetched"))
+	if len(pre) != 1 {
+		t.Fatalf("only an externalised payload is prefetched: %d", len(pre))
+	}
+	got, err := store.internalizeWith(t.Context(), nil, ref, pre)
+	if err != nil || !bytes.Equal(got, data) || payloads.gets != 0 {
+		t.Fatalf("the prefetched payload must be used: %q gets=%d err=%v", got, payloads.gets, err)
+	}
+	if got, err = store.internalizeWith(t.Context(), nil, ref, nil); err != nil || !bytes.Equal(got, data) || payloads.gets != 1 {
+		t.Fatalf("a payload that was not prefetched is read: %q gets=%d err=%v", got, payloads.gets, err)
+	}
+	pre[ref.digest.String] = []byte("stale")
+	if got, err = store.internalizeWith(t.Context(), nil, ref, pre); err != nil || !bytes.Equal(got, data) {
+		t.Fatalf("a prefetched payload of another size must not be trusted: %q %v", got, err)
+	}
+}

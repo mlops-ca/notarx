@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"strings"
@@ -292,7 +293,7 @@ func (s *MemoryStore) CompleteNuGetReplicationItem(ctx context.Context, lease di
 	}
 	target, exists := s.nugetPublications[nuGetPublicationKey(j.TargetRepositoryID, item.PackageID, item.Version)]
 	if exists {
-		if err = nuGetReplicationExisting(source, target); err != nil {
+		if err = nuGetReplicationExisting(source, target, bytes.Equal(source.Nuspec, target.Nuspec)); err != nil {
 			return dist.Job{}, err
 		}
 		if target.SessionID != session.ID {
@@ -300,7 +301,7 @@ func (s *MemoryStore) CompleteNuGetReplicationItem(ctx context.Context, lease di
 		}
 		item.Result = "already_present"
 	} else {
-		if err = nuGetReplicationSession(source, session, j.TargetRepositoryID); err != nil {
+		if err = nuGetReplicationSession(source, session, j.TargetRepositoryID, bytes.Equal(source.Nuspec, session.Nuspec)); err != nil {
 			return dist.Job{}, err
 		}
 		if session.Actor != j.Actor || session.State != "staged" || !session.ExpiresAt.After(time.Now()) || !validNuGetStaging(session) {
