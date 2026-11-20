@@ -6,9 +6,9 @@
       "perf-load",
       "core-integration-1"
     ],
-    "packed-checks-auth": [
+    "packed-checks-backup": [
       "core-checks",
-      "six-format-auth"
+      "core-backup"
     ],
     "packed-nuget-migrations": [
       "nuget",
@@ -19,9 +19,10 @@
       "maven-oci-auth",
       "migration-clients"
     ],
-    "packed-rubygems-discovery": [
+    "packed-rubygems-discovery-auth": [
       "rubygems",
-      "oci-discovery"
+      "oci-discovery",
+      "six-format-auth"
     ],
     "packed-inventory-helm-pypi": [
       "inventory",
@@ -38,7 +39,7 @@
         "node",
         "npm"
       ],
-      "images": true,
+      "images": false,
       "steps": [
         {
           "name": "CI lane control contracts",

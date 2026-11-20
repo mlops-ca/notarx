@@ -210,8 +210,8 @@ jobs:
   # from that one profile (make race-coverage). quality-arm64 runs vet and race on arm64
   # for every Go change and lint too for an architecture-sensitive one or in the release
   # gates (ADR 0016); make test runs on arm64 in the core lanes of the contract matrix.
-  # The release, packaging and SAML fuzz checks run in quality after the unit tests,
-  # so the lint verdict does not wait for them (docs/ci.md).
+  # The release, packaging and SAML fuzz checks run in release-checks, so neither
+  # verdict waits for them (docs/ci.md).
   lint:
     if: inputs.go
     runs-on: ubuntu-24.04
@@ -253,32 +253,46 @@ jobs:
           vet: "false"
           race: "false"
           race-coverage: "true"
-      # The architecture-independent release checks: they need Node (prune-ghcr and the
-      # release manifest tests) but no Go cache of their own. They run even when a unit
-      # test failed, so a run reports both kinds of failure.
+
+  # The architecture-independent release, packaging and SAML fuzz checks. They used to
+  # follow lint in the lint job and held its verdict back by about 2.5 minutes, and
+  # after the unit tests in quality they made that job the slowest of the suite; on
+  # their own they finish long before the contract lanes (docs/ci.md, issue #500).
+  release-checks:
+    if: inputs.go
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version-file: go.mod
+      # Node runs the prune-ghcr and release manifest tests; stamp-version-test needs
+      # the OpenAPI tools.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        if: ${{ !cancelled() }}
         with:
           node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: tools/openapi/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund --timing --loglevel=http
+        timeout-minutes: 10
+        working-directory: tools/openapi
       - name: Cache the pinned git-cliff
-        if: ${{ !cancelled() }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/notarx/git-cliff
           key: git-cliff-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/git-cliff.version', 'scripts/install-git-cliff.sh') }}
       - name: Verify release version and artifact builder
-        if: ${{ !cancelled() }}
         run: make release-version-check stamp-version-test release-pipeline-test release-workflow-check release-artifacts-test
       - name: Verify the release plan against the pinned git-cliff
-        if: ${{ !cancelled() }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: make release-plan-test
       - name: Verify package signing runbook and environment checks
-        if: ${{ !cancelled() }}
         run: make packages-signing-drill packages-environments-test
       - name: Fuzz the SAML response verifier (60s, committed corpus)
-        if: ${{ !cancelled() }}
         run: make saml-fuzz
 
   # vet and the race detector run natively on arm64 for every Go change; lint (whose
@@ -495,7 +509,7 @@ jobs:
   # any failure or cancellation.
   suite-ok:
     if: always()
-    needs: [docs, image-test-stages, build-images-amd64, build-images-arm64, object-store-contract, contract-plan, contract-early, contract-amd64, contract-arm64, lint, quality, quality-arm64, console, console-e2e, console-e2e-report]
+    needs: [docs, image-test-stages, build-images-amd64, build-images-arm64, object-store-contract, contract-plan, contract-early, contract-amd64, contract-arm64, lint, quality, release-checks, quality-arm64, console, console-e2e, console-e2e-report]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed or be skipped
@@ -527,7 +541,7 @@ jobs:
           group() { if [[ "$GO" == true && "${1:-0}" != 0 ]]; then echo true; else echo false; fi; }
           early=$(group "$EARLY_JOBS") amd64=$(group "$AMD64_JOBS") arm64=$(group "$ARM64_JOBS")
           status=0
-          for pair in lint:$GO quality:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract-early:$early contract-amd64:$amd64 contract-arm64:$arm64 console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images-amd64:$e2e build-images-arm64:$e2e docs:$DOCS image-test-stages:$IMAGES; do
+          for pair in lint:$GO quality:$GO release-checks:$GO quality-arm64:$GO object-store-contract:$GO contract-plan:$GO contract-early:$early contract-amd64:$amd64 contract-arm64:$arm64 console:$CONSOLE console-e2e:$e2e console-e2e-report:$report build-images-amd64:$e2e build-images-arm64:$e2e docs:$DOCS image-test-stages:$IMAGES; do
             job=${pair%%:*} class=${pair##*:}
             result=$(echo "$NEEDS" | jq -r --arg job "$job" '.[$job].result')
             if [[ "$class" == true && "$result" != success ]]; then

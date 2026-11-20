@@ -17,7 +17,7 @@ show as `tests / <job>`.
 
 | Class | Paths | Jobs it enables |
 | --- | --- | --- |
-| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `lint`, `quality`, `quality-arm64`, `object-store-contract`, `contract-plan`, the contract jobs (`contract-early`, `contract-amd64`, `contract-arm64`), and `console-e2e` (it runs the real gateway) |
+| `go` | `*.go`, `go.mod`, `go.sum`, `migrations/`, `internal/`, `cmd/`, `contracts/`, `examples/`, `api/`, plus the files `release-version-check` reads (`CHANGELOG*.md`, `docs/cli*.md`, `VERSION`) | `lint`, `quality`, `release-checks`, `quality-arm64`, `object-store-contract`, `contract-plan`, the contract jobs (`contract-early`, `contract-amd64`, `contract-arm64`), and `console-e2e` (it runs the real gateway) |
 | `console` | `console/`, `api/` (the generated client) | `console` (unit tests, build, visual) and `console-e2e` |
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
@@ -67,11 +67,12 @@ behaviour config ignores, and the contract lanes never run Playwright.
 
 The Go class runs three jobs. `lint` (amd64) is the fast signal: `make lint-checks`
 (`golangci-lint` and the repository lint tools), `make vet`, the native-build rules, the
-migration checks and the dependency audit. `quality` (amd64) runs the unit tests exactly once,
-then the architecture-independent release and packaging checks and the 60-second SAML
-fuzz run (these run also when a unit test failed, so one run reports both). Those used to follow lint in `lint` and held its verdict back by about
-2.5 minutes; `quality` ends later than `lint` anyway and stays off the critical path
-of the suite (issue #500). The unit-test pass of `quality`:
+migration checks and the dependency audit. `release-checks` (amd64) runs the
+architecture-independent release and packaging checks and the 60-second SAML fuzz run.
+Those used to follow lint in `lint` and held its verdict back by about 2.5 minutes. A
+first cut of issue #500 moved them behind the unit tests in `quality`, which made that
+job the slowest of the suite (13.4 minutes, run 44684290400), so they have a job of
+their own. `quality` (amd64) runs the unit tests exactly once:
 `make race-coverage` runs `go test -count=1 -race -coverprofile` over every package and
 `scripts/coverage-check.sh` reads that one profile for the repository-wide floor and
 for every per-package floor in `scripts/coverage-packages.txt` (covered statements
@@ -156,9 +157,9 @@ loads (`matrix --group`), so no job waits for an image it never loads:
 | `contract-amd64` | amd64 jobs with a lane that loads the prebuilt images | `build-images-amd64` |
 | `contract-arm64` | arm64 jobs with a lane that loads the prebuilt images | `build-images-arm64` |
 
-Every lane declares `images`. The integration shards, `core-backup` and `perf-load`
-declare `false`: they run `compose.integration.yml`, build their binaries from source
-or build their own per-project image. A job without images downloads and loads
+Every lane declares `images`. The integration shards, `core-backup`, `core-checks` and
+`perf-load` declare `false`: they run `compose.integration.yml`, build their binaries
+from source, stub Docker in their script tests or build their own per-project image. A job without images downloads and loads
 nothing, and Compose still runs with `--no-build`, so a lane that wrongly declares
 `false` fails on the missing image instead of building it. A group the plan leaves
 empty (`contract-arm64` on a pull request without the `arm64` class) is skipped, and
@@ -186,10 +187,10 @@ on arm64 in that scope.
 | Job | Lanes | Lane step minutes (run 44640058817 and the three before it) |
 | --- | --- | --- |
 | `packed-perf-integration` | `perf-load`, `core-integration-1` | 1.6 + about 4.5 (shard 1 alone, estimated from run 44675064060) |
-| `packed-checks-auth` | `core-checks`, `six-format-auth` | 1.9 + 1.7 |
+| `packed-checks-backup` | `core-checks`, `core-backup` | 1.9 + 5.2 |
 | `packed-nuget-migrations` | `nuget`, `oci-migration`, `npm-migration` | 5.0 + 1.0 + 1.1 |
 | `packed-maven-clients` | `maven-oci-auth`, `migration-clients` | 5.3 + 1.3 |
-| `packed-rubygems-discovery` | `rubygems`, `oci-discovery` | 3.0 + 3.1 |
+| `packed-rubygems-discovery-auth` | `rubygems`, `oci-discovery`, `six-format-auth` | 3.0 + 3.1 + 1.7 |
 | `packed-inventory-helm-pypi` | `inventory`, `helm`, `pypi-migration` | 2.6 + 1.7 + 1.4 |
 
 A job's timeout is the sum of its lanes' timeouts and it installs the union of their
@@ -270,23 +271,24 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | --- | --- | --- |
 | `no-chinese` | a step of `changes` that records its verdict without failing the job; `ci-ok` fails on a violation, and the rest of the suite still runs | not part of the gates (as before) |
 | `changes`, `packages`, `oci-free-tier`, `oci-free-tier-tofu` | unchanged | unchanged |
-| `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` (lint, vet, native-build rules, migration checks, dependency audit); the release and packaging checks and the SAML fuzz run in `quality` after the unit tests (issue #500) | the same |
+| `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` (lint, vet, native-build rules, migration checks, dependency audit); `release-checks` (release and packaging checks, SAML fuzz; issue #500) | the same |
 | `quality`: `make race`, `make coverage` and the per-package coverage reruns | `quality`: `make race-coverage`, one pass with the race detector and every floor | `quality` |
 | `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
 | `console`, `docs`, `image-test-stages`, `console-e2e-report` | unchanged | unchanged |
 | `build-images` (4: two images on two architectures) | `build-images-amd64` and `build-images-arm64`, each building both images of its architecture (issue #500) | the same |
 | `console-e2e` shards `1` to `3` and `cli` | shards `1` to `3`; shard `2` runs the CLI E2E after its specs (issue #500) | the same |
 | `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
-| `contract (core-backup)` | `core-backup`, `core-integration-1` (in `packed-perf-integration`), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
-| `contract (core-checks)`, `contract (six-format-auth)` | `packed-checks-auth` | `packed-checks-auth` on both architectures |
+| `contract (core-backup)` | `core-backup` (in `packed-checks-backup`), `core-integration-1` (in `packed-perf-integration`), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
+| `contract (core-checks)`, `contract (six-format-auth)` | `core-checks` in `packed-checks-backup` (`contract-early`), `six-format-auth` in `packed-rubygems-discovery-auth` (issue #500) | the same, both architectures |
 | `contract (nuget)`, `contract (oci-migration)`, `contract (npm-migration)` | `packed-nuget-migrations` | the same, both architectures |
 | `contract (maven-oci-auth)`, `contract (migration-clients)` | `packed-maven-clients` | the same, both architectures |
-| `contract (rubygems)`, `contract (oci-discovery)` | `packed-rubygems-discovery` | the same, both architectures |
+| `contract (rubygems)`, `contract (oci-discovery)` | `packed-rubygems-discovery-auth` | the same, both architectures |
 | `contract (inventory)`, `contract (helm)`, `contract (pypi-migration)` | `packed-inventory-helm-pypi` | the same, both architectures |
 | `contract (perf-load)` | `packed-perf-integration`, before `core-integration-1` (issue #500) | the same on both architectures |
 | `contract (core-email)`, `contract (core-native-e2e)`, and any lane not in `jobs` | unchanged: a job named after the lane | unchanged |
 | every contract job | `contract-early` (lanes that load no prebuilt image), `contract-amd64` or `contract-arm64` (issue #500) | the same three groups |
 | the seven arm64 contract legs | only with the `arm64` class (architecture-sensitive change) | always, every lane |
+| (new) | `release-checks` | `release-checks` |
 | `contract-plan`, `suite-ok`, `ci-ok` | unchanged (`suite-ok` also requires `lint`) | unchanged |
 
 ## The backup and integration lanes
@@ -298,7 +300,7 @@ loads a prebuilt image, so they run in `contract-early` and start right after th
 
 | Lane | Steps | Lane step minutes, run 44675064060 (two shards then) |
 | --- | --- | --- |
-| `core-backup` | `make backup-transfer-test` | 6.6 |
+| `core-backup` (packed after `core-checks`) | `make backup-transfer-test` | 6.6 |
 | `core-integration-1` (packed after `perf-load`) | `make integration-test INTEGRATION_SHARD=1` (`./internal/app` and the Cargo replay) | was 9.3 with `./internal/repository`, the small packages and the published backup test |
 | `core-integration-2` | `make integration-test INTEGRATION_SHARD=2`, `make published-native-backup-test` | new; `./internal/repository` took 2.4 minutes of tests, the published backup test 1.6 |
 | `core-integration-3` | `make integration-test INTEGRATION_SHARD=3`, `make conan-e2e` | was 7.3 as shard 2 with the small packages; Conan 2.1 |
