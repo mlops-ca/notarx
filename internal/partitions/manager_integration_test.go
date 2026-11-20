@@ -198,7 +198,7 @@ func TestManagerLeaseAllowsOneRunnerAndSurvivesTwoNodes(t *testing.T) {
 	b := newManager(t, db, "node-b", now, spec)
 
 	// While another node holds an unexpired lease, this node does nothing.
-	if _, err := db.ExecContext(t.Context(), `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until) VALUES ($1::uuid,$2,'','partition-manager',21600,false,now(),'node-held',now()+interval '1 hour') ON CONFLICT (id) DO UPDATE SET lease_owner='node-held',lease_until=now()+interval '1 hour'`, leaseTaskID, leaseTaskName); err != nil {
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until) VALUES ($1::uuid,$2,'','partition-manager',21600,false,now(),'node-held',now()+interval '1 hour') ON CONFLICT (id) DO UPDATE SET lease_owner='node-held',lease_until=now()+interval '1 hour'`, leaseTask.ID, leaseTask.Name); err != nil {
 		t.Fatal(err)
 	}
 	report, err := a.Maintain(t.Context())
@@ -209,7 +209,7 @@ func TestManagerLeaseAllowsOneRunnerAndSurvivesTwoNodes(t *testing.T) {
 		t.Fatalf("partitions created without the lease: %v", got)
 	}
 	// An expired lease is taken over.
-	if _, err = db.ExecContext(t.Context(), `UPDATE scheduled_tasks SET lease_until=now()-interval '1 second' WHERE id=$1::uuid`, leaseTaskID); err != nil {
+	if _, err = db.ExecContext(t.Context(), `UPDATE scheduled_tasks SET lease_until=now()-interval '1 second' WHERE id=$1::uuid`, leaseTask.ID); err != nil {
 		t.Fatal(err)
 	}
 
@@ -238,7 +238,7 @@ func TestManagerLeaseAllowsOneRunnerAndSurvivesTwoNodes(t *testing.T) {
 	}
 	var owner string
 	var until sql.NullTime
-	if err = db.QueryRowContext(t.Context(), `SELECT lease_owner,lease_until FROM scheduled_tasks WHERE id=$1::uuid`, leaseTaskID).Scan(&owner, &until); err != nil || owner != "" || until.Valid {
+	if err = db.QueryRowContext(t.Context(), `SELECT lease_owner,lease_until FROM scheduled_tasks WHERE id=$1::uuid`, leaseTask.ID).Scan(&owner, &until); err != nil || owner != "" || until.Valid {
 		t.Fatalf("lease must be released after a run: %q %v %v", owner, until, err)
 	}
 }
@@ -343,11 +343,11 @@ func TestRunObservesOnEveryNodeAndTakesOverWhenLeaseExpires(t *testing.T) {
 	spec := scratch(t, db, 0)
 	now := time.Date(2037, 4, 4, 0, 0, 0, 0, time.UTC)
 	// Another node holds the lease and rows sit in the DEFAULT partition.
-	if _, err := db.ExecContext(t.Context(), `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until) VALUES ($1::uuid,$2,'','partition-manager',21600,false,now(),'node-held',now()+interval '1 hour') ON CONFLICT (id) DO UPDATE SET lease_owner='node-held',lease_until=now()+interval '1 hour'`, leaseTaskID, leaseTaskName); err != nil {
+	if _, err := db.ExecContext(t.Context(), `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until) VALUES ($1::uuid,$2,'','partition-manager',21600,false,now(),'node-held',now()+interval '1 hour') ON CONFLICT (id) DO UPDATE SET lease_owner='node-held',lease_until=now()+interval '1 hour'`, leaseTask.ID, leaseTask.Name); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() {
-		_, _ = db.ExecContext(context.Background(), `UPDATE scheduled_tasks SET lease_owner='',lease_until=NULL WHERE id=$1::uuid`, leaseTaskID)
+		_, _ = db.ExecContext(context.Background(), `UPDATE scheduled_tasks SET lease_owner='',lease_until=NULL WHERE id=$1::uuid`, leaseTask.ID)
 	})
 	for i := 0; i < 2; i++ {
 		if _, err := db.ExecContext(t.Context(), `INSERT INTO `+spec.Table+`(occurred_at) VALUES ($1)`, now.Add(time.Duration(i)*time.Hour)); err != nil {
@@ -379,7 +379,7 @@ func TestRunObservesOnEveryNodeAndTakesOverWhenLeaseExpires(t *testing.T) {
 		t.Fatalf("a non-leader created partitions: %v", got)
 	}
 	// Once the other node's lease expires this node takes over and drains it.
-	if _, err = db.ExecContext(t.Context(), `UPDATE scheduled_tasks SET lease_until=now()-interval '1 second' WHERE id=$1::uuid`, leaseTaskID); err != nil {
+	if _, err = db.ExecContext(t.Context(), `UPDATE scheduled_tasks SET lease_until=now()-interval '1 second' WHERE id=$1::uuid`, leaseTask.ID); err != nil {
 		t.Fatal(err)
 	}
 	eventually("takeover and default partition drain", func() bool { s := m.Stats()[0]; return s.DefaultRows == 0 && s.Partitions == 4 })
