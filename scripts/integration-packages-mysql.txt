@@ -1,0 +1,9 @@
+# The tagged integration suites that run on MySQL 8.4 (scripts/integration-test-mysql.sh, the
+# core-integration-mysql lane of scripts/ci-contract-lanes.json). One package per line.
+#
+# A package joins this list when its suites are dialect-parametrised (internal/testsupport,
+# TEST_DATABASE_DRIVER) or MySQL-only. Store groups (ADR 0022 slices 6 to 9) add their packages
+# as their MySQL stores land. The lane may fail until slice 11 of ADR 0022 is merged: it is
+# reported in the job summary and does not fail the pull request (docs/ci.md).
+./internal/mysqlbaseline
+./internal/dialect/mysql

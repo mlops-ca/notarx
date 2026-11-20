@@ -241,6 +241,43 @@ class RunLaneTests(unittest.TestCase):
         self.assertIn('| cancelled | failure |', table)
         self.assertIn('| never | not run (cancelled) | - |', table)
 
+    def test_a_lane_allowed_to_fail_reports_but_does_not_fail_the_job(self):
+        work = tempfile.TemporaryDirectory()
+        self.addCleanup(work.cleanup)
+        output = Path(work.name) / 'out'
+        summary = Path(work.name) / 'summary.md'
+        plan = {'lanes': {
+            'tolerated': {'timeoutMinutes': 1, 'needs': [], 'rawDirectories': [], 'allowFailure': True,
+                          'steps': [self.step('only', 'raise SystemExit(3)')]},
+            'required': {'timeoutMinutes': 1, 'needs': [], 'rawDirectories': [], 'steps': [self.step('only', 'print(1)')]},
+        }}
+        args = argparse.Namespace(lanes=['tolerated', 'required'], output=output, local=False, keep_going=False)
+        with patch.object(ci, 'PLAN', plan), patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}):
+            self.assertEqual(ci.run_lanes(args), 0)
+        table = summary.read_text()
+        self.assertIn('| tolerated | failure (allowed to fail) |', table)
+        self.assertIn('| required | success |', table)
+        # A lane that is not allowed to fail still fails the job after it.
+        plan['lanes']['required']['steps'] = [self.step('only', 'raise SystemExit(4)')]
+        with patch.object(ci, 'PLAN', plan), patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}):
+            self.assertEqual(ci.run_lanes(args), 1)
+
+    def test_a_crash_of_a_lane_allowed_to_fail_does_not_fail_the_job(self):
+        work = tempfile.TemporaryDirectory()
+        self.addCleanup(work.cleanup)
+        summary = Path(work.name) / 'summary.md'
+        plan = {'lanes': {'tolerated': {'timeoutMinutes': 1, 'needs': [], 'rawDirectories': [], 'allowFailure': True,
+                                        'steps': [self.step('only', 'print(1)')]}}}
+
+        def crash(_):
+            raise RuntimeError('boom')
+
+        args = argparse.Namespace(lanes=['tolerated'], output=Path(work.name) / 'out', local=False, keep_going=False)
+        with patch.object(ci, 'PLAN', plan), patch.object(ci, 'run_lane', crash), \
+                patch.dict(os.environ, {'GITHUB_STEP_SUMMARY': str(summary)}):
+            self.assertEqual(ci.run_lanes(args), 0)
+        self.assertIn('| tolerated | error (allowed to fail) |', summary.read_text())
+
     def test_step_timeout_fails_the_lane(self):
         status, report, _ = self.run_lane([self.step('slow', 'import time; time.sleep(30)', 0.1)])
         self.assertEqual((status, report['steps'][0]['status']), (1, 'timed_out'))
@@ -284,6 +321,15 @@ class PlanTests(unittest.TestCase):
                     self.assertEqual('rust' in lane.get('needs', []), shard == app_shard,
                                      f'{name} runs shard {shard}; only the shard with ./internal/app needs rust')
 
+    def test_only_the_mysql_lane_may_fail(self):
+        # ADR 0022: the MySQL suites may fail until slice 11 (the support claim); no other lane may.
+        tolerated = sorted(name for name, lane in ci.PLAN['lanes'].items() if lane.get('allowFailure'))
+        self.assertEqual(tolerated, ['core-integration-mysql'])
+        steps = [s['command'] for s in ci.PLAN['lanes']['core-integration-mysql']['steps']]
+        self.assertEqual(steps, [['make', 'integration-test-mysql']])
+        listed = subprocess.check_output([str(ROOT / 'scripts/integration-test.sh'), '--driver', 'mysql', '--list'], text=True)
+        self.assertEqual(listed.split(), ['./internal/mysqlbaseline', './internal/dialect/mysql'])
+
     def test_every_lane_step_runs_once(self):
         # A lane split (core-native-e2e into two halves, issue #518) or a move between
         # lanes must not run a step twice.
@@ -317,6 +363,7 @@ class PlanTests(unittest.TestCase):
                 self.assertLessEqual(lane['timeoutMinutes'], 60)
                 self.assertLessEqual(set(lane['needs']), set(ci.TOOL_NEEDS))
                 self.assertIsInstance(lane['images'], bool)
+                self.assertIsInstance(lane.get('allowFailure', False), bool)
                 names = [s['name'] for s in lane['steps']]
                 self.assertEqual(len(names), len(set(names)))
                 for step in lane['steps']:
@@ -434,7 +481,7 @@ class PlanTests(unittest.TestCase):
                                         if ci.PLAN['lanes'][lane]['arm64'] == 'pull-request'])
         self.assertEqual(sorted(pull_request), sorted(['core-checks', 'core-email', 'core-native-e2e-1', 'core-native-e2e-2', 'core-backup',
                                                        'core-integration-1', 'core-integration-2',
-                                                       'core-integration-3',
+                                                       'core-integration-3', 'core-integration-mysql',
                                                        'six-format-auth', 'oci-discovery']))
         self.assertEqual({lane['arm64'] for lane in ci.PLAN['lanes'].values()}, {'pull-request', 'mainline'})
         # ADR 0016, amendment of 2026-11-19: a pull request that changes nothing

@@ -458,7 +458,7 @@ func (p *parser) unary() (node, error) {
 	for p.acceptOp("::") { // a cast: MySQL compares by the operand's own type, so the cast is dropped
 		name, ok := p.cast()
 		if !ok {
-			return node{}, fmt.Errorf("expected a type after ::")
+			return node{}, fmt.Errorf("expected a type name after the cast operator")
 		}
 		switch {
 		case (name == "jsonb" || name == "json") && n.str != nil:

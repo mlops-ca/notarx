@@ -298,6 +298,24 @@
       ],
       "rawDirectories": []
     },
+    "core-integration-mysql": {
+      "timeoutMinutes": 20,
+      "arm64": "pull-request",
+      "needs": [],
+      "images": false,
+      "allowFailure": true,
+      "steps": [
+        {
+          "name": "integration-test (MySQL)",
+          "command": [
+            "make",
+            "integration-test-mysql"
+          ],
+          "timeoutSeconds": null
+        }
+      ],
+      "rawDirectories": []
+    },
     "core-integration-3": {
       "timeoutMinutes": 20,
       "arm64": "pull-request",

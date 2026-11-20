@@ -11,7 +11,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if err := testsupport.ValidateIsolatedDatabaseURL(os.Getenv("TEST_DATABASE_URL")); err != nil {
+	if err := testsupport.ValidateIsolatedEnvironment(os.Getenv); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}

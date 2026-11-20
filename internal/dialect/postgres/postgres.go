@@ -10,7 +10,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"time"
 
@@ -28,11 +27,6 @@ const (
 	sessionPollInterval = 50 * time.Millisecond
 	unlistenTimeout     = 2 * time.Second
 )
-
-// claimForbidden matches clauses that conflict with the appended LIMIT and
-// FOR UPDATE SKIP LOCKED (PostgreSQL refuses FOR UPDATE with DISTINCT, GROUP BY,
-// UNION and aggregates), or that would be applied twice.
-var claimForbidden = regexp.MustCompile(`(?i)(;|--|/\*|\b(limit|offset|fetch|distinct|group\s+by|union|intersect|except|for\s+(update|share|no\s+key\s+update|key\s+share))\b)`)
 
 // Locker uses advisory locks keyed by hashtextextended(key, 0).
 type Locker struct{}
@@ -91,11 +85,8 @@ func (Locker) UnlockSession(ctx context.Context, conn *sql.Conn, key string) err
 type Claimer struct{}
 
 func (Claimer) ClaimRows(ctx context.Context, tx *sql.Tx, selectSQL string, limit int, args ...any) (*sql.Rows, error) {
-	if limit <= 0 {
-		return nil, errors.New("claim limit must be positive")
-	}
-	if claimForbidden.MatchString(selectSQL) {
-		return nil, errors.New("claim query must be a plain SELECT without LIMIT, locking, set or grouping clauses")
+	if err := dialect.ValidateClaimSelect(selectSQL, limit); err != nil {
+		return nil, err
 	}
 	query := fmt.Sprintf("%s LIMIT $%d FOR UPDATE SKIP LOCKED", selectSQL, len(args)+1)
 	return tx.QueryContext(ctx, query, append(slices.Clone(args), limit)...)

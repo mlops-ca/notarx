@@ -67,7 +67,7 @@ func (g *generator) doc() string {
 	for _, name := range slices.Sorted(mapKeys(g.decisions.KeyWidths)) {
 		widths = append(widths, fmt.Sprintf("| %s | %d |", name, g.decisions.KeyWidths[name]))
 	}
-	b.WriteString(fmt.Sprintf("\n## Key column widths\n\nAn indexed text column is `VARCHAR(%d)` unless its name is listed here or it has an exception below.\n", g.decisions.DefaultKeyWidth))
+	fmt.Fprintf(&b, "\n## Key column widths\n\nAn indexed text column is `VARCHAR(%d)` unless its name is listed here or it has an exception below.\n", g.decisions.DefaultKeyWidth)
 	if len(widths) > 0 {
 		b.WriteString("\n| Column name | VARCHAR width |\n| --- | --- |\n" + strings.Join(widths, "\n") + "\n")
 	}

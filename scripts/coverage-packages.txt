@@ -21,5 +21,7 @@
 ./tools/perfload 90.0
 ./internal/dialect/postgres 90.0
 ./internal/migrate 90.0
+./internal/mysqlbaseline 90.0
+./tools/mysqlbaseline 80.0
 ./internal/schemaparity 90.0
 ./internal/readcache 80.0

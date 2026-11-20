@@ -84,7 +84,7 @@ func TestTranslateRejects(t *testing.T) {
 		"ARRAY['x'::text]":                    "bare ARRAY",
 		"(a IS DISTINCT b)":                   "FROM",
 		"(a IS SOMETHING)":                    "unsupported IS",
-		"(a::)":                               "expected a type",
+		"(a::)":                               "expected a type name",
 		"(a =)":                               "unexpected",
 		"(,)":                                 "unexpected",
 		"":                                    "unexpected end",

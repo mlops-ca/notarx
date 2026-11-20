@@ -6,6 +6,11 @@
 #                                           (CI runs each shard as its own contract lane,
 #                                           docs/ci.md)
 #   scripts/integration-test.sh --list      print "<shard> <package>" for every package
+#   scripts/integration-test.sh --driver mysql
+#                                           the suites that run on MySQL 8.4 (ADR 0022): the packages of
+#                                           scripts/integration-packages-mysql.txt against a migrated
+#                                           mysql:8.4. TEST_DATABASE_DRIVER=mysql selects it too; PostgreSQL
+#                                           stays the default and its run below is unchanged.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -15,17 +20,33 @@ cd "$root"
 assignments=$(grep -Ev '^[[:space:]]*(#|$)' scripts/integration-packages.txt)
 
 shard=
+list=0
+driver=${TEST_DATABASE_DRIVER:-postgres}
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --list)
-      printf '%s\n' "$assignments"
-      exit 0 ;;
+    --list) list=1; shift ;;
+    --driver)
+      [[ $# -ge 2 ]] || { printf 'integration-test: --driver needs postgres or mysql\n' >&2; exit 2; }
+      driver=$2; shift 2 ;;
     --shard)
       [[ $# -ge 2 ]] || { printf 'integration-test: --shard needs a number\n' >&2; exit 2; }
       shard=$2; shift 2 ;;
     *) printf 'integration-test: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
+case "$driver" in
+  postgres | mysql) ;;
+  *) printf 'integration-test: the driver must be postgres or mysql, not %s\n' "$driver" >&2; exit 2 ;;
+esac
+if [[ "$driver" == mysql ]]; then
+  [[ -z "$shard" ]] || { printf 'integration-test: the MySQL suites run as one lane; --shard applies to PostgreSQL\n' >&2; exit 2; }
+  if [[ $list == 1 ]]; then exec ./scripts/integration-test-mysql.sh --list; fi
+  exec ./scripts/integration-test-mysql.sh
+fi
+if [[ $list == 1 ]]; then
+  printf '%s\n' "$assignments"
+  exit 0
+fi
 # Shards are compared as strings below, so only canonical numbers are accepted.
 if [[ -n "$shard" ]] && { [[ ! "$shard" =~ ^[1-9][0-9]*$ ]] ||
   ! awk -v shard="$shard" '$1 "" == shard "" { found = 1 } END { exit !found }' <<<"$assignments"; }; then

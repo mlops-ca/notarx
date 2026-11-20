@@ -378,8 +378,8 @@ func (g *generator) emit() {
 			}
 			constraint := shortName("fk_"+name, local.columns...)
 			g.claimName(constraint, name)
-			g.sql.WriteString(fmt.Sprintf("ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON DELETE %s ON UPDATE %s;\n",
-				quote(name), quote(constraint), quoteAll(localOrdered), quote(remote.table), quoteAll(remoteOrdered), onDelete, onUpdate))
+			fmt.Fprintf(&g.sql, "ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON DELETE %s ON UPDATE %s;\n",
+				quote(name), quote(constraint), quoteAll(localOrdered), quote(remote.table), quoteAll(remoteOrdered), onDelete, onUpdate)
 		}
 	}
 	g.emitSeeds()
@@ -393,7 +393,7 @@ func (g *generator) emitSeeds() {
 		digits[i] = "SELECT " + strconv.Itoa(i) + " AS n"
 	}
 	union := strings.Join(digits, " UNION ALL ")
-	g.sql.WriteString(fmt.Sprintf("INSERT INTO `notarx_lock_buckets` (`bucket`)\nSELECT a.n * 256 + b.n * 16 + c.n\nFROM (%s) a, (%s) b, (%s) c;\n", union, union, union))
+	fmt.Fprintf(&g.sql, "INSERT INTO `notarx_lock_buckets` (`bucket`)\nSELECT a.n * 256 + b.n * 16 + c.n\nFROM (%s) a, (%s) b, (%s) c;\n", union, union, union)
 	if LockBuckets != 16*16*16 {
 		g.problemf("the lock bucket generator is written for 4096 buckets")
 	}
@@ -417,7 +417,7 @@ func (g *generator) emitSeeds() {
 			for i, c := range columns {
 				expressions[i] = values[c]
 			}
-			g.sql.WriteString(fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);\n", quote(name), quoteAll(columns), strings.Join(expressions, ", ")))
+			fmt.Fprintf(&g.sql, "INSERT INTO %s (%s) VALUES (%s);\n", quote(name), quoteAll(columns), strings.Join(expressions, ", "))
 		}
 	}
 }

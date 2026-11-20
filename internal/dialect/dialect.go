@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"regexp"
 	"time"
 )
 
@@ -73,4 +74,21 @@ type Set struct {
 	Claimer    Claimer
 	Notifier   Notifier
 	Classifier ErrorClassifier
+}
+
+// claimForbidden matches clauses that conflict with the LIMIT and FOR UPDATE SKIP LOCKED a
+// Claimer appends (both engines refuse FOR UPDATE with DISTINCT, GROUP BY, UNION and
+// aggregates), or that would be applied twice.
+var claimForbidden = regexp.MustCompile(`(?i)(;|--|/\*|\b(limit|offset|fetch|distinct|group\s+by|union|intersect|except|for\s+(update|share|no\s+key\s+update|key\s+share))\b)`)
+
+// ValidateClaimSelect checks the arguments of Claimer.ClaimRows, so every implementation
+// rejects the same queries.
+func ValidateClaimSelect(selectSQL string, limit int) error {
+	if limit <= 0 {
+		return errors.New("claim limit must be positive")
+	}
+	if claimForbidden.MatchString(selectSQL) {
+		return errors.New("claim query must be a plain SELECT without LIMIT, locking, set or grouping clauses")
+	}
+	return nil
 }

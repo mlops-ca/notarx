@@ -46,6 +46,26 @@ func TestRequiredIntegrationCommandCoversIntegrationTaggedPackages(t *testing.T)
 			t.Errorf("shards must be numbered 1 to %d without gaps; %d is missing", len(shards), shard)
 		}
 	}
+	// scripts/integration-packages-mysql.txt lists the packages that run on MySQL 8.4 (ADR 0022):
+	// one package per line. A package that only runs there needs no PostgreSQL shard.
+	if !strings.Contains(string(script), "scripts/integration-test-mysql.sh") {
+		t.Fatal("scripts/integration-test.sh must hand the MySQL driver to scripts/integration-test-mysql.sh")
+	}
+	mysqlList, err := os.ReadFile(filepath.Join("..", "scripts", "integration-packages-mysql.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mysqlListed := map[string]int{}
+	for number, line := range strings.Split(string(mysqlList), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if !strings.HasPrefix(line, "./") || strings.ContainsAny(line, " \t") {
+			t.Fatalf("scripts/integration-packages-mysql.txt line %d is not a package: %q", number+1, line)
+		}
+		mysqlListed[line]++
+	}
 	baseline := build.Default
 	baseline.GOOS = "linux"
 	baseline.GOARCH = "amd64"
@@ -86,8 +106,14 @@ func TestRequiredIntegrationCommandCoversIntegrationTaggedPackages(t *testing.T)
 		t.Fatal("integration-tagged packages were not discovered")
 	}
 	for pkg := range required {
-		if listed[pkg] != 1 {
-			t.Errorf("%s has integration-tagged tests and must be listed exactly once in scripts/integration-packages.txt, not %d times", pkg, listed[pkg])
+		onlyMySQL := listed[pkg] == 0 && mysqlListed[pkg] == 1
+		if listed[pkg] != 1 && !onlyMySQL {
+			t.Errorf("%s has integration-tagged tests and must be listed exactly once in scripts/integration-packages.txt (or only in scripts/integration-packages-mysql.txt), not %d times", pkg, listed[pkg])
+		}
+	}
+	for pkg, count := range mysqlListed {
+		if count != 1 || !required[pkg] {
+			t.Errorf("scripts/integration-packages-mysql.txt lists %s %d times, or it has no integration-tagged tests", pkg, count)
 		}
 	}
 	for pkg := range listed {

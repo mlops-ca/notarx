@@ -9,7 +9,12 @@ import (
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/dialect"
+	dialectpostgres "github.com/mlops-ca/notarx/internal/dialect/postgres"
 )
+
+// cacheTaskChannel is the notification channel of the cache task queue.
+const cacheTaskChannel = "notarx_cache_tasks"
 
 const (
 	legacyCacheCollectionTask  = "cache_collect"
@@ -33,6 +38,9 @@ type PostgresCacheTaskQueue struct {
 	listenerDB     *sql.DB
 	ownsDB         bool
 	ownsListenerDB bool
+	// dialectNotifier wakes the worker; nil means the PostgreSQL Notifier. The MySQL polling Notifier
+	// replaces it when the queue gains a MySQL store (ADR 0022).
+	dialectNotifier dialect.Notifier
 }
 
 func NewPostgresCacheTaskQueue(databaseURL string) (*PostgresCacheTaskQueue, error) {
@@ -105,7 +113,7 @@ func (q *PostgresCacheTaskQueue) EnqueueCollectionForFormat(ctx context.Context,
 	if _, err := q.db.ExecContext(ctx, `INSERT INTO cache_tasks (id, task_type, dedupe_key) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`, uuid.NewString(), taskType, taskType); err != nil {
 		return err
 	}
-	_, err := q.db.ExecContext(ctx, `SELECT pg_notify('notarx_cache_tasks', $1)`, format)
+	_, err := q.db.ExecContext(ctx, `SELECT pg_notify($1, $2)`, cacheTaskChannel, format)
 	return err
 }
 
@@ -243,18 +251,15 @@ func supportedCacheCollectionFormats(formats []string) []string {
 	return result
 }
 
+// listenForTasks wakes the worker when a task is enqueued. The subscription comes from the dialect's
+// Notifier (LISTEN/NOTIFY on PostgreSQL); a failed subscription is retried every second, and the worker's
+// low-frequency poll covers the gaps.
 func (q *PostgresCacheTaskQueue) listenForTasks(ctx context.Context) <-chan struct{} {
 	wake := make(chan struct{}, 1)
 	background.Go(ctx, func() {
 		for ctx.Err() == nil {
-			conn, err := q.listenerDB.Conn(ctx)
-			if err == nil {
-				err = database.ListenChannels(ctx, conn, "notarx_cache_tasks")
-			}
+			subscription, err := q.notifier().Subscribe(ctx, q.listenerDB, cacheTaskChannel)
 			if err != nil {
-				if conn != nil {
-					_ = conn.Close()
-				}
 				select {
 				case <-ctx.Done():
 					return
@@ -263,7 +268,7 @@ func (q *PostgresCacheTaskQueue) listenForTasks(ctx context.Context) <-chan stru
 				continue
 			}
 			for ctx.Err() == nil {
-				if _, err := database.WaitForNotification(ctx, conn); err != nil {
+				if _, err := subscription.Wait(ctx); err != nil {
 					break
 				}
 				select {
@@ -271,8 +276,15 @@ func (q *PostgresCacheTaskQueue) listenForTasks(ctx context.Context) <-chan stru
 				default:
 				}
 			}
-			_ = conn.Close()
+			_ = subscription.Close()
 		}
 	})
 	return wake
+}
+
+func (q *PostgresCacheTaskQueue) notifier() dialect.Notifier {
+	if q.dialectNotifier != nil {
+		return q.dialectNotifier
+	}
+	return dialectpostgres.Notifier{}
 }
