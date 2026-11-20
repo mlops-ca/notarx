@@ -216,4 +216,20 @@ export const FORMAT_DESCRIPTORS: Record<Format, FormatDescriptor> = {
       "pool/main/g/notarx-widget/notarx-widget_1.2.3_amd64.deb",
     scannerSupport: false,
   },
+  // ADR 0027: Hugging Face repositories expose read and browse today; the commit
+  // coordinate is model/org/name@sha, so the page has no path or version view yet.
+  huggingface: {
+    ...base,
+    format: "huggingface",
+    repositoryFeatures: {},
+    artifactColumn: "formats.name",
+    searchPlaceholder: "formats.searchPaths",
+    upstreamHostAllowList: false,
+    securityColumn: "never",
+    searchDetail: false,
+    publicDetail: false,
+    scannerSupport: false,
+    coordinateExample:
+      "model/acme/widget@0123456789abcdef0123456789abcdef01234567",
+  },
 };

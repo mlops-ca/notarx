@@ -29,6 +29,8 @@ const LOADERS: Record<Format, () => Promise<FormatViews>> = {
   conan: () => import("./conan/views").then((module) => module.conanViews),
   raw: () => import("./raw/views").then((module) => module.rawViews),
   apt: () => import("./apt/views").then((module) => module.aptViews),
+  // Every slot is optional: Hugging Face has no format-specific page yet.
+  huggingface: async () => ({}),
 };
 
 const Nothing = () => null;

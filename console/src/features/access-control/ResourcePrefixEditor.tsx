@@ -15,6 +15,7 @@ export const RESOURCE_PREFIX_EXAMPLES: Record<Format, string[]> = {
   go: ["example.com/team/", "git.example.com/platform/"],
   cargo: ["team-", "demo-crate"],
   apt: ["dists/bookworm/", "pool/main/"],
+  huggingface: ["model/acme/", "dataset/acme/"],
 };
 
 export function buildResourcePrefix(format: Format, parts: string[]): string {
