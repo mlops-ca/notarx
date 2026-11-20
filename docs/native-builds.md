@@ -54,7 +54,8 @@ release builds all four, so a macOS runner capacity outage cannot turn `main` re
 
 ### Tests on both architectures
 
-`quality` (amd64) and `quality-arm64` run lint, vet and the race detector; the
+`lint` and `quality` (amd64) and `quality-arm64` run lint, vet and the race detector (on amd64,
+`quality` runs the race detector and the coverage floors in one pass); the
 coverage floor is enforced on amd64 only because coverage is architecture
 independent. Contract lanes take a `runner` input. Every lane runs on amd64. On
 arm64 the four core lanes and the native-format smoke subset (`six-format-auth`,

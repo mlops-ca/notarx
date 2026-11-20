@@ -480,3 +480,13 @@ Owner decision. CI runs no tests on pushes to `main`: every merge reran the full
 5. Consequences accepted by the owner: a push to `main` publishes the `main` archives and images without any test having run on that commit (consumers of the `main` tag take that risk; the nightly is the tested channel), and a failing gate on the tip of `main` blocks every nightly until the tip is fixed forward, because the plan no longer falls back to an older green commit. The liveness alert detects only an inactive schedule, so a run of red nights is noticed through the failed workflow runs of `release.yml`.
 
 The "required check runs" language in the Context, in the `verify-candidate` description of the old workflow and in slice 3 describes the design before this amendment. ADR 0016's list of check names for `verify-candidate` is likewise historical.
+
+## Amendment (2026-11-19): the Go checks of the test suite run in a lint job and one unit-test pass
+
+Status: accepted (2026-11-19)
+
+Issue #482 (pull request feedback took 26 to 35 minutes). The `quality` job of `test-suite.yml` ran the Go unit tests three times (`make race`, then `make coverage`, then each floored package again). It is now two jobs, and the list of gate jobs in item 2 of the amendment above gains `lint`:
+
+1. `lint` runs `make lint-checks`, `make vet`, the native-build rules (`make native-build-check`, which ADR 0016's Guard section places in "the `quality` CI job"), the migration checks, the release and packaging checks, the SAML fuzz run and the dependency audit.
+2. `quality` runs `make race-coverage`: the unit tests of every package once, with the race detector and `-coverprofile`, and every coverage floor computed from that profile.
+3. Pull request CI and the release gates call the same suite, so both run both jobs; `suite-ok` requires `lint` with the Go class. Nothing that `quality` checked before is dropped.

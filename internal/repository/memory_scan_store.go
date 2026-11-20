@@ -109,11 +109,21 @@ func (s *MemoryStore) InsertScanFindings(_ context.Context, findings []ScanFindi
 	if len(taken) != len(normalized) {
 		return scanInvalid("a batch repeats an ordinal")
 	}
+	// One pass over the stored findings of each vulnerability the batch touches, not
+	// one per finding: a large scan arrives in many batches under one vulnerability
+	// id, and a per-finding scan made inserting it quadratic.
+	existing := map[string]map[int]bool{}
 	for _, f := range normalized {
-		for _, existing := range s.scan.findings[f.VulnerabilityID] {
-			if existing.Ordinal == f.Ordinal {
-				return scanInvalid("finding %s/%d already exists", f.VulnerabilityID, f.Ordinal)
+		ordinals, seen := existing[f.VulnerabilityID]
+		if !seen {
+			ordinals = make(map[int]bool, len(s.scan.findings[f.VulnerabilityID]))
+			for _, stored := range s.scan.findings[f.VulnerabilityID] {
+				ordinals[stored.Ordinal] = true
 			}
+			existing[f.VulnerabilityID] = ordinals
+		}
+		if ordinals[f.Ordinal] {
+			return scanInvalid("finding %s/%d already exists", f.VulnerabilityID, f.Ordinal)
 		}
 	}
 	for _, f := range normalized {
