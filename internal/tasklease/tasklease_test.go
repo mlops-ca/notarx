@@ -70,7 +70,7 @@ func (r *recorderRows) Next(dest []driver.Value) error {
 
 type recorderDriver struct{ r *recorder }
 
-func (d recorderDriver) Open(string) (driver.Conn, error) { return recorderConn{d.r}, nil }
+func (d recorderDriver) Open(string) (driver.Conn, error) { return recorderConn(d), nil }
 
 var driverSeq int
 
