@@ -212,6 +212,13 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `GET /service-accounts/{serviceAccountId}/credentials`<br>`listServiceAccountCredentials` | `credential list --service-account <id>` | #133 | M1 implemented | A | Q |
 | `POST /service-accounts/{serviceAccountId}/credentials`<br>`createServiceAccountCredential` | `credential issue --service-account <id>` | #133 | M1 implemented | A | S |
 | `DELETE /service-accounts/{serviceAccountId}/credentials/{credentialId}`<br>`revokeServiceAccountCredential` | `credential revoke <id> --service-account <id>` | #133 | M1 implemented | A | W |
+| `POST /service-accounts/{serviceAccountId}/assertions`<br>`mintServiceAccountAssertion` | N: the service account mints its own assertions from workload tooling; no operator command (ADR 0020) | #72 | N/A | I | N: no CLI command is registered; call the API with the service account credential |
+| `GET /service-accounts/{serviceAccountId}/assertion-audiences`<br>`listServiceAccountAssertionAudiences` | `service-account assertion-audience list <id>` | #73 | M2 implemented | A | Q |
+| `POST /service-accounts/{serviceAccountId}/assertion-audiences`<br>`putServiceAccountAssertionAudience` | `service-account assertion-audience add <id>` | #73 | M2 implemented | A | W |
+| `DELETE /service-accounts/{serviceAccountId}/assertion-audiences`<br>`deleteServiceAccountAssertionAudience` | `service-account assertion-audience remove <id>` | #73 | M2 implemented | A | W |
+| `GET /issuer`<br>`getIssuerStatus` | `issuer status` | #73 | M2 implemented | A | Q |
+| `POST /issuer/rotation`<br>`rotateIssuerKeys` | `issuer rotate` | #73 | M2 implemented | A | W |
+| `POST /issuer/keys/{kid}/revoke`<br>`revokeIssuerKey` | `issuer revoke <kid>` | #73 | M2 implemented | A | W |
 | `GET /users`<br>`listUsers` | `user list` | #335 | M1 implemented | A | Q |
 | `POST /users`<br>`createUser` | `user create` | #335 | M1 implemented | A | W |
 | `GET /users/{userId}`<br>`getUser` | `user show <id>` | #335 | M1 implemented | A | Q |

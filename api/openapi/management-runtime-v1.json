@@ -7094,6 +7094,266 @@
         }
       }
     },
+    "/service-accounts/{serviceAccountId}/assertions": {
+      "parameters": [
+        {
+          "name": "serviceAccountId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "mintServiceAccountAssertion",
+        "tags": [
+          "service-accounts"
+        ],
+        "description": "Mints a short-lived JWT assertion signed by the notarx OIDC issuer (ADR 0020) for an audience on the allow-list of the service account. This is outbound minting, distinct from the inbound workload token exchange. The caller is the service account itself, authenticated with one of its API keys or as a federated workload principal (ADR 0019) that resolves to it; human users and the static administrator token are refused with 403. The response is never cached. An audience that is not on the allow-list is refused with the problem code assertion_audience_not_allowed; there is no wildcard and no default allow-list. The lifetime is bounded by the allow-list entry and by NOTARX_ISSUER_MAX_TOKEN_LIFETIME. Every mint is audited without the token.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintServiceAccountAssertion"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ServiceAccountAssertion"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/service-accounts/{serviceAccountId}/assertion-audiences": {
+      "parameters": [
+        {
+          "name": "serviceAccountId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "listServiceAccountAssertionAudiences",
+        "tags": [
+          "service-accounts"
+        ],
+        "description": "Lists the assertion audience allow-list of a service account. Administrator only.",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ServiceAccountAssertionAudienceList"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "putServiceAccountAssertionAudience",
+        "tags": [
+          "service-accounts"
+        ],
+        "description": "Allows an audience for assertions of a service account, or replaces the maximum lifetime of an audience that is already allowed (201 when added, 200 when replaced). Enabling issuance for an account is an explicit act that is recorded in the audit log, like every change of the allow-list. Administrator only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutServiceAccountAssertionAudience"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ServiceAccountAssertionAudience"
+          },
+          "201": {
+            "$ref": "#/components/responses/ServiceAccountAssertionAudience"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteServiceAccountAssertionAudience",
+        "tags": [
+          "service-accounts"
+        ],
+        "description": "Removes an audience from the allow-list. The audience is a query parameter because it is usually a URI. Administrator only.",
+        "parameters": [
+          {
+            "name": "audience",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The audience was removed"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/issuer": {
+      "get": {
+        "operationId": "getIssuerStatus",
+        "tags": [
+          "issuer"
+        ],
+        "description": "Reports the OIDC issuer of this deployment (ADR 0020): whether it is enabled, the issuer URL, the signing algorithm and the lifecycle of every signing key. Key material is never returned. Administrator only.",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/IssuerStatus"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/issuer/rotation": {
+      "post": {
+        "operationId": "rotateIssuerKeys",
+        "tags": [
+          "issuer"
+        ],
+        "description": "Rotates the signing key of an algorithm at once: the active key becomes retired, the next key becomes active and a fresh next key is created. The publish lead is a warning only, because verifiers may not trust a key that was published for less than the lead time yet. Administrator only; 404 while the issuer is disabled.",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RotateIssuerKeys"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/IssuerRotation"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/issuer/keys/{kid}/revoke": {
+      "parameters": [
+        {
+          "name": "kid",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      ],
+      "post": {
+        "operationId": "revokeIssuerKey",
+        "tags": [
+          "issuer"
+        ],
+        "description": "Emergency revocation of a compromised signing key: the key leaves the key set at once and a revoked active key is replaced by its next key. Tokens that Entra already exchanged stay valid until their own expiry. Administrator only; 404 while the issuer is disabled or for an unknown key.",
+        "responses": {
+          "204": {
+            "description": "The key was revoked"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/users": {
       "get": {
         "operationId": "listUsers",
@@ -16435,6 +16695,10 @@
           },
           "version": {
             "type": "string"
+          },
+          "assertionSubject": {
+            "type": "string",
+            "description": "The sub claim of the assertions the account mints (ADR 0020). It is stored when the account is created and never changes; a rename does not touch it. Absent for an account that has none."
           }
         }
       },
@@ -16472,6 +16736,12 @@
             "type": "string",
             "maxLength": 1024,
             "default": ""
+          },
+          "assertionSubject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Custom assertion subject, for migrating an existing Entra federated credential. Defaults to notarx:service-account:<name>. A subject that an account holds or once held is reserved and is refused with 409."
           }
         }
       },
@@ -16586,6 +16856,258 @@
             }
           }
         ]
+      },
+      "MintServiceAccountAssertion": {
+        "type": "object",
+        "required": [
+          "audience"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "lifetimeSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 600,
+            "default": 300
+          }
+        }
+      },
+      "ServiceAccountAssertion": {
+        "type": "object",
+        "required": [
+          "token",
+          "tokenType",
+          "audience",
+          "subject",
+          "expiresAt",
+          "jti",
+          "kid"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "The compact JWT. It is returned only by this response and is never logged or audited."
+          },
+          "tokenType": {
+            "type": "string",
+            "enum": [
+              "JWT"
+            ]
+          },
+          "audience": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "jti": {
+            "type": "string"
+          },
+          "kid": {
+            "type": "string"
+          }
+        }
+      },
+      "ServiceAccountAssertionAudience": {
+        "type": "object",
+        "required": [
+          "serviceAccountId",
+          "audience",
+          "maxLifetimeSeconds",
+          "createdAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "serviceAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "audience": {
+            "type": "string"
+          },
+          "maxLifetimeSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 600
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ServiceAccountAssertionAudienceList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceAccountAssertionAudience"
+            }
+          }
+        }
+      },
+      "PutServiceAccountAssertionAudience": {
+        "type": "object",
+        "required": [
+          "audience"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "audience": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "maxLifetimeSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 600,
+            "default": 600
+          }
+        }
+      },
+      "IssuerKey": {
+        "type": "object",
+        "required": [
+          "kid",
+          "alg",
+          "state",
+          "createdAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kid": {
+            "type": "string"
+          },
+          "alg": {
+            "type": "string",
+            "enum": [
+              "RS256",
+              "ES256"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "next",
+              "active",
+              "retired"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "publishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "activatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "retiredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "IssuerStatus": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "keys"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "issuerUrl": {
+            "type": "string"
+          },
+          "algorithm": {
+            "type": "string",
+            "enum": [
+              "RS256",
+              "ES256"
+            ]
+          },
+          "rotationInterval": {
+            "type": "string"
+          },
+          "publishLead": {
+            "type": "string"
+          },
+          "maxTokenLifetime": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IssuerKey"
+            }
+          }
+        }
+      },
+      "RotateIssuerKeys": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "enum": [
+              "RS256",
+              "ES256"
+            ],
+            "description": "Defaults to the configured signing algorithm."
+          }
+        }
+      },
+      "IssuerRotation": {
+        "type": "object",
+        "required": [
+          "algorithm",
+          "activated"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "algorithm": {
+            "type": "string",
+            "enum": [
+              "RS256",
+              "ES256"
+            ]
+          },
+          "retired": {
+            "type": "string"
+          },
+          "activated": {
+            "type": "string"
+          },
+          "warning": {
+            "type": "string"
+          }
+        }
       },
       "User": {
         "type": "object",
@@ -27615,6 +28137,56 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/CreatedServiceAccountCredential"
+            }
+          }
+        }
+      },
+      "ServiceAccountAssertion": {
+        "description": "A signed assertion. The token is returned only by this response and the response is never cached.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ServiceAccountAssertion"
+            }
+          }
+        }
+      },
+      "ServiceAccountAssertionAudience": {
+        "description": "Assertion audience of a service account",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ServiceAccountAssertionAudience"
+            }
+          }
+        }
+      },
+      "ServiceAccountAssertionAudienceList": {
+        "description": "Assertion audience allow-list of a service account",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ServiceAccountAssertionAudienceList"
+            }
+          }
+        }
+      },
+      "IssuerStatus": {
+        "description": "The OIDC issuer and its signing keys",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/IssuerStatus"
+            }
+          }
+        }
+      },
+      "IssuerRotation": {
+        "description": "The outcome of a manual key rotation",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/IssuerRotation"
             }
           }
         }

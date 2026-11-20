@@ -18,6 +18,9 @@ async function openServiceAccounts(page: Page) {
   await mockDefaultSiteSettings(page);
   await page.route("**/api/v2/service-accounts**", (route) => {
     const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith("/assertion-audiences")) {
+      return route.fulfill({ json: { items: [] } });
+    }
     if (pathname.endsWith("/credentials")) {
       return route.fulfill({
         json: {

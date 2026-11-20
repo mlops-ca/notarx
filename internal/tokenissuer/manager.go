@@ -297,6 +297,23 @@ func (m *Manager) promote(ctx context.Context, tx KeyTx, record *KeyRecord, now 
 	return tx.Update(ctx, *record)
 }
 
+// Option tunes a manual operation.
+type Option func(*callOptions)
+
+type callOptions struct{ actor string }
+
+// WithActor audits the operation as done by actor, in the transaction of the change. Without it nothing is audited:
+// the periodic worker is not an operator action.
+func WithActor(actor string) Option { return func(o *callOptions) { o.actor = actor } }
+
+func collect(options []Option) callOptions {
+	var out callOptions
+	for _, option := range options {
+		option(&out)
+	}
+	return out
+}
+
 // RotateResult describes a manual rotation.
 type RotateResult struct {
 	Retired, Activated string
@@ -307,10 +324,11 @@ type RotateResult struct {
 
 // RotateNow demotes the active key of alg to retired and promotes its next key at once,
 // then creates a fresh next key. The lead time is a warning only.
-func (m *Manager) RotateNow(ctx context.Context, alg string) (RotateResult, error) {
+func (m *Manager) RotateNow(ctx context.Context, alg string, options ...Option) (RotateResult, error) {
 	if err := m.Config.Validate(); err != nil {
 		return RotateResult{}, err
 	}
+	call := collect(options)
 	var result RotateResult
 	acquired, err := m.Store.WithRotationLock(ctx, func(ctx context.Context, tx KeyTx) error {
 		all, err := tx.List(ctx)
@@ -341,8 +359,15 @@ func (m *Manager) RotateNow(ctx context.Context, alg string) (RotateResult, erro
 			return err
 		}
 		result.Activated = next.KID
-		_, err = m.create(ctx, tx, alg, StateNext, now)
-		return err
+		if _, err = m.create(ctx, tx, alg, StateNext, now); err != nil {
+			return err
+		}
+		if call.actor == "" {
+			return nil
+		}
+		return tx.Audit(ctx, AuditEvent{Actor: call.actor, Operation: "issuer.rotate", Evidence: map[string]string{
+			"algorithm": alg, "retired": result.Retired, "activated": result.Activated,
+		}})
 	})
 	if err != nil {
 		return RotateResult{}, err
@@ -358,7 +383,8 @@ func (m *Manager) RotateNow(ctx context.Context, alg string) (RotateResult, erro
 
 // Revoke is the emergency path for a compromised key: it leaves the JWKS at once
 // (expires_at = now). A revoked active key is replaced by its next key immediately.
-func (m *Manager) Revoke(ctx context.Context, kid string) error {
+func (m *Manager) Revoke(ctx context.Context, kid string, options ...Option) error {
+	call := collect(options)
 	acquired, err := m.Store.WithRotationLock(ctx, func(ctx context.Context, tx KeyTx) error {
 		all, err := tx.List(ctx)
 		if err != nil {
@@ -384,6 +410,13 @@ func (m *Manager) Revoke(ctx context.Context, kid string) error {
 		}
 		if err := tx.Update(ctx, *target); err != nil {
 			return err
+		}
+		if call.actor != "" {
+			if err := tx.Audit(ctx, AuditEvent{Actor: call.actor, Operation: "issuer.revoke", Evidence: map[string]string{
+				"kid": kid, "algorithm": target.Alg, "state": string(target.State), "wasActive": fmt.Sprint(wasActive),
+			}}); err != nil {
+				return err
+			}
 		}
 		if !wasActive {
 			return nil

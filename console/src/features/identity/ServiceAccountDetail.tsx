@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ApiOutlined,
@@ -42,6 +43,7 @@ export function ServiceAccountDetail({
   onIssue,
   onRevoke,
   onToggleState,
+  children,
 }: {
   account: ServiceAccount;
   credentials: ServiceAccountCredential[] | null;
@@ -53,6 +55,8 @@ export function ServiceAccountDetail({
   onIssue: () => void;
   onRevoke: (credential: ServiceAccountCredential) => void;
   onToggleState: () => void;
+  /** More sections of the account card, below its credentials. */
+  children?: ReactNode;
 }) {
   const { locale, t } = usePreferences();
   const columns: ColumnsType<ServiceAccountCredential> = [
@@ -237,6 +241,7 @@ export function ServiceAccountDetail({
           />
         </>
       )}
+      {children}
     </Card>
   );
 }

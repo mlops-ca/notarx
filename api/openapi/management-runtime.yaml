@@ -219,6 +219,16 @@ paths:
     "$ref": "./management/service-accounts.yaml#/service_accounts_serviceAccountId_credentials"
   "/service-accounts/{serviceAccountId}/credentials/{credentialId}":
     "$ref": "./management/service-accounts.yaml#/service_accounts_serviceAccountId_credentials_credentialId"
+  "/service-accounts/{serviceAccountId}/assertions":
+    "$ref": "./management/service-accounts.yaml#/service_accounts_serviceAccountId_assertions"
+  "/service-accounts/{serviceAccountId}/assertion-audiences":
+    "$ref": "./management/service-accounts.yaml#/service_accounts_serviceAccountId_assertion_audiences"
+  "/issuer":
+    "$ref": "./management/issuer.yaml#/issuer"
+  "/issuer/rotation":
+    "$ref": "./management/issuer.yaml#/issuer_rotation"
+  "/issuer/keys/{kid}/revoke":
+    "$ref": "./management/issuer.yaml#/issuer_keys_kid_revoke"
   "/users":
     "$ref": "./management/users.yaml#/users"
   "/users/{userId}":
@@ -645,6 +655,24 @@ components:
       "$ref": "./components/schemas.yaml#/CreateServiceAccountCredential"
     CreatedServiceAccountCredential:
       "$ref": "./components/schemas.yaml#/CreatedServiceAccountCredential"
+    MintServiceAccountAssertion:
+      "$ref": "./components/schemas.yaml#/MintServiceAccountAssertion"
+    ServiceAccountAssertion:
+      "$ref": "./components/schemas.yaml#/ServiceAccountAssertion"
+    ServiceAccountAssertionAudience:
+      "$ref": "./components/schemas.yaml#/ServiceAccountAssertionAudience"
+    ServiceAccountAssertionAudienceList:
+      "$ref": "./components/schemas.yaml#/ServiceAccountAssertionAudienceList"
+    PutServiceAccountAssertionAudience:
+      "$ref": "./components/schemas.yaml#/PutServiceAccountAssertionAudience"
+    IssuerKey:
+      "$ref": "./components/schemas.yaml#/IssuerKey"
+    IssuerStatus:
+      "$ref": "./components/schemas.yaml#/IssuerStatus"
+    RotateIssuerKeys:
+      "$ref": "./components/schemas.yaml#/RotateIssuerKeys"
+    IssuerRotation:
+      "$ref": "./components/schemas.yaml#/IssuerRotation"
     User:
       "$ref": "./components/schemas.yaml#/User"
     ListTotal:
@@ -893,6 +921,16 @@ components:
       "$ref": "./components/responses.yaml#/ServiceAccountCredentialList"
     CreatedServiceAccountCredential:
       "$ref": "./components/responses.yaml#/CreatedServiceAccountCredential"
+    ServiceAccountAssertion:
+      "$ref": "./components/responses.yaml#/ServiceAccountAssertion"
+    ServiceAccountAssertionAudience:
+      "$ref": "./components/responses.yaml#/ServiceAccountAssertionAudience"
+    ServiceAccountAssertionAudienceList:
+      "$ref": "./components/responses.yaml#/ServiceAccountAssertionAudienceList"
+    IssuerStatus:
+      "$ref": "./components/responses.yaml#/IssuerStatus"
+    IssuerRotation:
+      "$ref": "./components/responses.yaml#/IssuerRotation"
     AuditList:
       "$ref": "./components/responses.yaml#/AuditList"
     AuditRetentionPolicy:

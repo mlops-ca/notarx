@@ -16,8 +16,19 @@ func (s *MemoryStore) CreateServiceAccount(ctx context.Context, account ServiceA
 			return ServiceAccount{}, ErrNameExists
 		}
 	}
+	if account.AssertionSubject != "" {
+		if _, taken := s.assertions.subjects[account.AssertionSubject]; taken {
+			return ServiceAccount{}, ErrAssertionSubjectReserved
+		}
+	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return ServiceAccount{}, err
+	}
+	if account.AssertionSubject != "" {
+		if s.assertions.subjects == nil {
+			s.assertions.subjects = map[string]string{}
+		}
+		s.assertions.subjects[account.AssertionSubject] = account.ID
 	}
 	now := time.Now().UTC()
 	account.State = ServiceAccountActive
@@ -143,4 +154,78 @@ func (s *MemoryStore) RevokeServiceAccountCredential(ctx context.Context, accoun
 		s.apiKeys[credentialID] = key
 	}
 	return key, nil
+}
+
+// memoryAssertionState holds the assertion allow-lists and the reserved subjects (ADR 0020).
+type memoryAssertionState struct {
+	// audiences maps an account id to its allow-list keyed by audience.
+	audiences map[string]map[string]AssertionAudience
+	// subjects maps a reserved subject to its account id; an empty id is a subject whose account was deleted.
+	subjects map[string]string
+}
+
+func (s *MemoryStore) ListAssertionAudiences(_ context.Context, accountID string) ([]AssertionAudience, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if _, ok := s.serviceAccounts[accountID]; !ok {
+		return nil, ErrNotFound
+	}
+	entries := make([]AssertionAudience, 0, len(s.assertions.audiences[accountID]))
+	for _, entry := range s.assertions.audiences[accountID] {
+		entries = append(entries, entry)
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Audience < entries[j].Audience })
+	return entries, nil
+}
+
+func (s *MemoryStore) GetAssertionAudience(_ context.Context, accountID, audience string) (AssertionAudience, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entry, ok := s.assertions.audiences[accountID][audience]
+	if !ok {
+		return AssertionAudience{}, ErrNotFound
+	}
+	return entry, nil
+}
+
+func (s *MemoryStore) PutAssertionAudience(ctx context.Context, entry AssertionAudience, audit ...AuditRecord) (AssertionAudience, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	account, ok := s.serviceAccounts[entry.ServiceAccountID]
+	if !ok {
+		return AssertionAudience{}, false, ErrNotFound
+	}
+	if account.AssertionSubject == "" {
+		return AssertionAudience{}, false, ErrAssertionSubjectMissing
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return AssertionAudience{}, false, err
+	}
+	if s.assertions.audiences == nil {
+		s.assertions.audiences = map[string]map[string]AssertionAudience{}
+	}
+	if s.assertions.audiences[entry.ServiceAccountID] == nil {
+		s.assertions.audiences[entry.ServiceAccountID] = map[string]AssertionAudience{}
+	}
+	existing, found := s.assertions.audiences[entry.ServiceAccountID][entry.Audience]
+	if found {
+		entry.CreatedAt = existing.CreatedAt
+	} else {
+		entry.CreatedAt = time.Now().UTC()
+	}
+	s.assertions.audiences[entry.ServiceAccountID][entry.Audience] = entry
+	return entry, !found, nil
+}
+
+func (s *MemoryStore) DeleteAssertionAudience(ctx context.Context, accountID, audience string, audit ...AuditRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.assertions.audiences[accountID][audience]; !ok {
+		return ErrNotFound
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
+	}
+	delete(s.assertions.audiences[accountID], audience)
+	return nil
 }

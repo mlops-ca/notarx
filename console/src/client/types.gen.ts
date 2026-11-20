@@ -1168,6 +1168,10 @@ export type ServiceAccount = {
   createdAt: string;
   updatedAt: string;
   version: string;
+  /**
+   * The sub claim of the assertions the account mints (ADR 0020). It is stored when the account is created and never changes; a rename does not touch it. Absent for an account that has none.
+   */
+  assertionSubject?: string;
 };
 
 export type ServiceAccountList = {
@@ -1178,6 +1182,10 @@ export type ServiceAccountList = {
 export type CreateServiceAccount = {
   name: string;
   description?: string;
+  /**
+   * Custom assertion subject, for migrating an existing Entra federated credential. Defaults to notarx:service-account:<name>. A subject that an account holds or once held is reserved and is refused with 409.
+   */
+  assertionSubject?: string;
 };
 
 export type UpdateServiceAccount = {
@@ -1210,6 +1218,75 @@ export type CreateServiceAccountCredential = {
 
 export type CreatedServiceAccountCredential = ServiceAccountCredential & {
   token: string;
+};
+
+export type MintServiceAccountAssertion = {
+  audience: string;
+  lifetimeSeconds?: number;
+};
+
+export type ServiceAccountAssertion = {
+  /**
+   * The compact JWT. It is returned only by this response and is never logged or audited.
+   */
+  token: string;
+  tokenType: "JWT";
+  audience: string;
+  subject: string;
+  expiresAt: string;
+  jti: string;
+  kid: string;
+};
+
+export type ServiceAccountAssertionAudience = {
+  serviceAccountId: string;
+  audience: string;
+  maxLifetimeSeconds: number;
+  createdAt: string;
+};
+
+export type ServiceAccountAssertionAudienceList = {
+  items: Array<ServiceAccountAssertionAudience>;
+};
+
+export type PutServiceAccountAssertionAudience = {
+  audience: string;
+  maxLifetimeSeconds?: number;
+};
+
+export type IssuerKey = {
+  kid: string;
+  alg: "RS256" | "ES256";
+  state: "next" | "active" | "retired";
+  createdAt: string;
+  publishedAt?: string;
+  activatedAt?: string;
+  retiredAt?: string;
+  expiresAt?: string;
+};
+
+export type IssuerStatus = {
+  enabled: boolean;
+  issuerUrl?: string;
+  algorithm?: "RS256" | "ES256";
+  rotationInterval?: string;
+  publishLead?: string;
+  maxTokenLifetime?: string;
+  keys: Array<IssuerKey>;
+};
+
+export type RotateIssuerKeys = {
+  /**
+   * Defaults to the configured signing algorithm.
+   */
+  algorithm?: "RS256" | "ES256";
+};
+
+export type IssuerRotation = {
+  algorithm: "RS256" | "ES256";
+  retired?: string;
+  activated: string;
+  warning?: string;
 };
 
 export type User = {
@@ -11544,6 +11621,299 @@ export type RevokeServiceAccountCredentialResponses = {
 
 export type RevokeServiceAccountCredentialResponse =
   RevokeServiceAccountCredentialResponses[keyof RevokeServiceAccountCredentialResponses];
+
+export type MintServiceAccountAssertionData = {
+  body: MintServiceAccountAssertion;
+  path: {
+    serviceAccountId: string;
+  };
+  query?: never;
+  url: "/service-accounts/{serviceAccountId}/assertions";
+};
+
+export type MintServiceAccountAssertionErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type MintServiceAccountAssertionError =
+  MintServiceAccountAssertionErrors[keyof MintServiceAccountAssertionErrors];
+
+export type MintServiceAccountAssertionResponses = {
+  /**
+   * A signed assertion. The token is returned only by this response and the response is never cached.
+   */
+  200: ServiceAccountAssertion;
+};
+
+export type MintServiceAccountAssertionResponse =
+  MintServiceAccountAssertionResponses[keyof MintServiceAccountAssertionResponses];
+
+export type DeleteServiceAccountAssertionAudienceData = {
+  body?: never;
+  path: {
+    serviceAccountId: string;
+  };
+  query: {
+    audience: string;
+  };
+  url: "/service-accounts/{serviceAccountId}/assertion-audiences";
+};
+
+export type DeleteServiceAccountAssertionAudienceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type DeleteServiceAccountAssertionAudienceError =
+  DeleteServiceAccountAssertionAudienceErrors[keyof DeleteServiceAccountAssertionAudienceErrors];
+
+export type DeleteServiceAccountAssertionAudienceResponses = {
+  /**
+   * The audience was removed
+   */
+  204: void;
+};
+
+export type DeleteServiceAccountAssertionAudienceResponse =
+  DeleteServiceAccountAssertionAudienceResponses[keyof DeleteServiceAccountAssertionAudienceResponses];
+
+export type ListServiceAccountAssertionAudiencesData = {
+  body?: never;
+  path: {
+    serviceAccountId: string;
+  };
+  query?: never;
+  url: "/service-accounts/{serviceAccountId}/assertion-audiences";
+};
+
+export type ListServiceAccountAssertionAudiencesErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type ListServiceAccountAssertionAudiencesError =
+  ListServiceAccountAssertionAudiencesErrors[keyof ListServiceAccountAssertionAudiencesErrors];
+
+export type ListServiceAccountAssertionAudiencesResponses = {
+  /**
+   * Assertion audience allow-list of a service account
+   */
+  200: ServiceAccountAssertionAudienceList;
+};
+
+export type ListServiceAccountAssertionAudiencesResponse =
+  ListServiceAccountAssertionAudiencesResponses[keyof ListServiceAccountAssertionAudiencesResponses];
+
+export type PutServiceAccountAssertionAudienceData = {
+  body: PutServiceAccountAssertionAudience;
+  path: {
+    serviceAccountId: string;
+  };
+  query?: never;
+  url: "/service-accounts/{serviceAccountId}/assertion-audiences";
+};
+
+export type PutServiceAccountAssertionAudienceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type PutServiceAccountAssertionAudienceError =
+  PutServiceAccountAssertionAudienceErrors[keyof PutServiceAccountAssertionAudienceErrors];
+
+export type PutServiceAccountAssertionAudienceResponses = {
+  /**
+   * Assertion audience of a service account
+   */
+  200: ServiceAccountAssertionAudience;
+  /**
+   * Assertion audience of a service account
+   */
+  201: ServiceAccountAssertionAudience;
+};
+
+export type PutServiceAccountAssertionAudienceResponse =
+  PutServiceAccountAssertionAudienceResponses[keyof PutServiceAccountAssertionAudienceResponses];
+
+export type GetIssuerStatusData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/issuer";
+};
+
+export type GetIssuerStatusErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type GetIssuerStatusError =
+  GetIssuerStatusErrors[keyof GetIssuerStatusErrors];
+
+export type GetIssuerStatusResponses = {
+  /**
+   * The OIDC issuer and its signing keys
+   */
+  200: IssuerStatus;
+};
+
+export type GetIssuerStatusResponse =
+  GetIssuerStatusResponses[keyof GetIssuerStatusResponses];
+
+export type RotateIssuerKeysData = {
+  body?: RotateIssuerKeys;
+  path?: never;
+  query?: never;
+  url: "/issuer/rotation";
+};
+
+export type RotateIssuerKeysErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type RotateIssuerKeysError =
+  RotateIssuerKeysErrors[keyof RotateIssuerKeysErrors];
+
+export type RotateIssuerKeysResponses = {
+  /**
+   * The outcome of a manual key rotation
+   */
+  200: IssuerRotation;
+};
+
+export type RotateIssuerKeysResponse =
+  RotateIssuerKeysResponses[keyof RotateIssuerKeysResponses];
+
+export type RevokeIssuerKeyData = {
+  body?: never;
+  path: {
+    kid: string;
+  };
+  query?: never;
+  url: "/issuer/keys/{kid}/revoke";
+};
+
+export type RevokeIssuerKeyErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type RevokeIssuerKeyError =
+  RevokeIssuerKeyErrors[keyof RevokeIssuerKeyErrors];
+
+export type RevokeIssuerKeyResponses = {
+  /**
+   * The key was revoked
+   */
+  204: void;
+};
+
+export type RevokeIssuerKeyResponse =
+  RevokeIssuerKeyResponses[keyof RevokeIssuerKeyResponses];
 
 export type ListUsersData = {
   body?: never;

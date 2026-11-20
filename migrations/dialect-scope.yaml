@@ -51,3 +51,6 @@ migrations:
   000015_user_groups.sql:
     dialect: postgres
     reason: creates user_groups and user_group_members with partial and expression unique indexes and statement-level NOTIFY triggers; the catalogue carries the tables into the MySQL baseline, which polls cache_epochs instead
+  000016_service_account_assertions.sql:
+    dialect: postgres
+    reason: creates the assertion audience and subject tables, adds service_accounts.assertion_subject and backfills subjects with a regular expression; the catalogue carries the schema into the MySQL baseline

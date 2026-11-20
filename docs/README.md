@@ -124,6 +124,7 @@ agree with executable tests and the
 - [Repository Grant authorization](repository-grant-authorization-plan.md) — scoped runtime decisions and rollout.
 - [Service Account operations](service-account-operations.md) — stable machine principals and zero-downtime rotation.
 - [Workload identity federation](workload-identity.md) — sign in with GitHub Actions, GitLab CI and Kubernetes tokens instead of stored secrets.
+- [notarx as an OIDC issuer and Microsoft Entra setup](oidc-issuer.md) — assertion minting, audience allow-lists, the Entra procedure, key rotation, root of trust and backups.
 - [notarxctl CLI](cli.md) — client contract for CI, platform management, and agents: configuration precedence, exit codes, JSON envelope, and the current introspection commands.
 - [notarxctl command map](cli-command-map.md) — every management and native protocol operation classified as first-release, later, or explicitly not applicable, with permissions and acceptance codes; guarded by `make cli-contract-check`.
 - [Security admission policy](security-admission-policy.md) — promotion evidence, Quarantine, and optional read enforcement.

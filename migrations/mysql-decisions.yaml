@@ -81,6 +81,9 @@ columns:
   hf_refs.ref_kind:
     width: 8
     reason: "branch or tag"
+  service_account_assertion_subjects.subject:
+    width: 255
+    reason: "an assertion subject is at most 255 characters: the default is notarx:service-account: plus a service account name of up to 128 characters, so the shared 144 width for subject is too narrow (ADR 0020)"
   native_go_versions.version:
     width: 512
     reason: "the schema allows Go versions up to 512 characters"

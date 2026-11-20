@@ -32,6 +32,11 @@ type identityAPIKeyStore interface {
 }
 
 type identityServiceAccountStore interface {
+	GetServiceAccount(context.Context, string) (repository.ServiceAccount, error)
+	ListAssertionAudiences(ctx context.Context, accountID string) ([]repository.AssertionAudience, error)
+	GetAssertionAudience(ctx context.Context, accountID, audience string) (repository.AssertionAudience, error)
+	PutAssertionAudience(ctx context.Context, entry repository.AssertionAudience, audit ...repository.AuditRecord) (repository.AssertionAudience, bool, error)
+	DeleteAssertionAudience(ctx context.Context, accountID, audience string, audit ...repository.AuditRecord) error
 	CreateServiceAccount(context.Context, repository.ServiceAccount, ...repository.AuditRecord) (repository.ServiceAccount, error)
 	ListServiceAccounts(context.Context, int, string) ([]repository.ServiceAccount, error)
 	UpdateServiceAccount(context.Context, repository.ServiceAccountUpdate, string, ...repository.AuditRecord) (repository.ServiceAccount, error)
@@ -66,6 +71,8 @@ type identityManagementOptions struct {
 	APIKeys           identityAPIKeyStore
 	ServiceAccounts   identityServiceAccountStore
 	IdentityProviders identityProviderRuntime
+	// Issuer is the OIDC issuer of ADR 0020; nil, or a disabled one, refuses assertion minting with 404.
+	Issuer *IssuerRuntime
 }
 
 // identityManagementHandler owns identity administration; repository content,
@@ -77,6 +84,7 @@ type identityManagementHandler struct {
 	serviceAccounts   identityServiceAccountStore
 	identityProviders identityProviderRuntime
 	workloadIssuers   workloadIssuerLookup
+	issuer            *IssuerRuntime
 }
 
 func newIdentityManagementHandler(options identityManagementOptions) identityManagementHandler {
@@ -87,6 +95,7 @@ func newIdentityManagementHandler(options identityManagementOptions) identityMan
 		serviceAccounts:   options.ServiceAccounts,
 		identityProviders: options.IdentityProviders,
 		workloadIssuers:   options.WorkloadIssuers,
+		issuer:            options.Issuer,
 	}
 }
 

@@ -1,5 +1,6 @@
 import type { MessageKey } from ".";
 import { accessFrCA } from "./access.fr-CA";
+import { assertionsFrCA } from "./assertions.fr-CA";
 import { artifactDetailFrCA } from "./artifact-detail.fr-CA";
 import { auditFrCA } from "./audit.fr-CA";
 import { dashboardFrCA } from "./dashboard.fr-CA";
@@ -25,6 +26,7 @@ import { workloadFrCA } from "./workload.fr-CA";
 const frCAMessages = {
   ...accessFrCA,
   ...artifactDetailFrCA,
+  ...assertionsFrCA,
   ...auditFrCA,
   ...dashboardFrCA,
   ...formatsFrCA,

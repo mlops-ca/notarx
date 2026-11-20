@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -40,7 +41,7 @@ func renderServiceAccounts(w io.Writer, accounts []adminopenapi.ServiceAccount) 
 }
 
 func renderServiceAccount(w io.Writer, account adminopenapi.ServiceAccount) error {
-	return keyValues(w, [][2]string{
+	rows := [][2]string{
 		{"id", account.Id.String()},
 		{"principal", "service-account:" + account.Id.String()},
 		{"name", account.Name},
@@ -49,7 +50,11 @@ func renderServiceAccount(w io.Writer, account adminopenapi.ServiceAccount) erro
 		{"version", account.Version},
 		{"created", account.CreatedAt.UTC().Format(time.RFC3339)},
 		{"updated", account.UpdatedAt.UTC().Format(time.RFC3339)},
-	})
+	}
+	if account.AssertionSubject != nil {
+		rows = append(rows, [2]string{"assertion subject", *account.AssertionSubject})
+	}
+	return keyValues(w, rows)
 }
 
 func serviceAccountListCommand() command {
@@ -166,15 +171,16 @@ func completeServiceAccount(account adminopenapi.ServiceAccount) bool {
 }
 
 func serviceAccountCreateCommand() command {
-	var description string
+	var description, assertionSubject string
 	return command{
 		name:        "service-account create",
 		synopsis:    "create a service account; grant it access with notarxctl grant upsert",
-		usage:       "notarxctl service-account create NAME [--description TEXT] [--dry-run] [--json]",
+		usage:       "notarxctl service-account create NAME [--description TEXT] [--assertion-subject SUBJECT] [--dry-run] [--json]",
 		positionals: 1,
 		argsUsage:   "NAME",
 		setFlags: func(fs *flag.FlagSet) {
 			fs.StringVar(&description, "description", "", "what the account is for (at most 1024 characters)")
+			fs.StringVar(&assertionSubject, "assertion-subject", "", "custom sub claim of the account's OIDC assertions, for an existing Entra federated credential (default notarx:service-account:NAME; it never changes)")
 		},
 		meta: commandMeta{
 			Resource: "service-account", Scenarios: []string{"ci", "admin"}, Stage: "m1",
@@ -193,6 +199,12 @@ func serviceAccountCreateCommand() command {
 			if description != "" {
 				trimmed := strings.TrimSpace(description)
 				body.Description = &trimmed
+			}
+			if env.flagSet["assertion-subject"] {
+				if !repository.ValidAssertionText(assertionSubject) {
+					return &UsageError{Message: "--assertion-subject must be 1 to 255 printable characters without surrounding spaces", Hint: "the subject is matched byte for byte by Entra and cannot be changed later"}
+				}
+				body.AssertionSubject = &assertionSubject
 			}
 			if env.globals.dryRun {
 				plan := writePlan{Mode: "client-plan", Method: http.MethodPost, Path: serviceAccountsPath, Headers: map[string]string{}, Body: body,

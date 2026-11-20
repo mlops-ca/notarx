@@ -31,6 +31,16 @@ export function CreateServiceAccountDialog({
   const [createError, setCreateError] = useState<unknown>(null);
   const [accountName, setAccountName] = useState("");
   const [accountDescription, setAccountDescription] = useState("");
+  const [assertionSubject, setAssertionSubject] = useState("");
+
+  // Closing discards the draft: a custom subject is permanent, so it must not wait in the form for the next account.
+  const close = () => {
+    setCreateError(null);
+    setAccountName("");
+    setAccountDescription("");
+    setAssertionSubject("");
+    onClose();
+  };
 
   const submitAccount = async () => {
     setBusy(true);
@@ -40,6 +50,7 @@ export function CreateServiceAccountDialog({
         body: {
           name: accountName.trim(),
           description: accountDescription.trim() || undefined,
+          assertionSubject: assertionSubject.trim() || undefined,
         },
       });
       if (createError || !data) {
@@ -48,6 +59,7 @@ export function CreateServiceAccountDialog({
       }
       setAccountName("");
       setAccountDescription("");
+      setAssertionSubject("");
       await onCreated(data);
     } catch (nextError) {
       setCreateError(nextError);
@@ -60,11 +72,11 @@ export function CreateServiceAccountDialog({
     <Modal
       open={open}
       title={t("identity.newServiceAccount")}
-      onClose={onClose}
+      onClose={close}
       busy={busy}
       footer={
         <Space>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={close} disabled={busy}>
             {t("identity.cancel")}
           </Button>
           <Button
@@ -96,6 +108,16 @@ export function CreateServiceAccountDialog({
             maxLength={1024}
             rows={3}
             onChange={(event) => setAccountDescription(event.target.value)}
+          />
+        </Field>
+        <Field
+          label={t("assertions.customSubject")}
+          hint={t("assertions.customSubjectHint")}
+        >
+          <Input
+            value={assertionSubject}
+            maxLength={255}
+            onChange={(event) => setAssertionSubject(event.target.value)}
           />
         </Field>
       </div>

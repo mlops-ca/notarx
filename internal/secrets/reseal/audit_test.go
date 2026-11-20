@@ -42,3 +42,33 @@ func TestAuditRecordHoldsKeyIDsAndCountsNeverKeyMaterial(t *testing.T) {
 		t.Fatalf("%v", aborted.Evidence)
 	}
 }
+
+func TestSigningKeyScopeNamesItsColumnsAndItsAuditRecord(t *testing.T) {
+	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
+	t.Setenv(secrets.KeyPreviousEnv, "")
+	for name, want := range map[string]bool{
+		"token_signing_keys.private_sealed":        true,
+		macTargetName:                              true,
+		"identity_providers.secrets_sealed":        false,
+		"hosted_repositories.upstream_auth.secret": false,
+	} {
+		if SigningKeys.Includes(name) != want {
+			t.Errorf("SigningKeys.Includes(%q) = %v, want %v", name, !want, want)
+		}
+		if !Everything.Includes(name) {
+			t.Errorf("Everything must include %q", name)
+		}
+	}
+	record, err := scopedAuditRecord(SigningKeys, []Result{{Target: "token_signing_keys.private_sealed", Resealed: 1}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Actor != "cli:issuer-reseal" || record.Operation != "issuer.reseal" || record.Resource != "issuer" || record.Evidence["status"] != "complete" {
+		t.Fatalf("%+v", record)
+	}
+	for _, target := range Targets() {
+		if SigningKeys.Includes(target.Name) != strings.HasPrefix(target.Name, "token_signing_keys.") {
+			t.Fatalf("scope disagrees about %s", target.Name)
+		}
+	}
+}

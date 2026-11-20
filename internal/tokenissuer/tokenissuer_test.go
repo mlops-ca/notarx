@@ -934,3 +934,78 @@ func TestRevokeInvalidatesTheSigningKeyCacheThroughChanged(t *testing.T) {
 		t.Fatalf("a revoked key must stop signing at once: kid=%s err=%v", kid, err)
 	}
 }
+
+func TestOperatorActionsAreAuditedInTheTransactionOfTheChange(t *testing.T) {
+	setRing(t)
+	clock := newClock()
+	store := NewMemoryStore()
+	manager := newManager(store, clock, jose.ES256)
+	if _, _, err := manager.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(store.Audits()) != 0 {
+		t.Fatalf("the periodic worker is not an operator action: %v", store.Audits())
+	}
+	before := states(t, store, jose.ES256)
+	if _, err := manager.RotateNow(t.Context(), jose.ES256, WithActor("admin")); err != nil {
+		t.Fatal(err)
+	}
+	audits := store.Audits()
+	if len(audits) != 1 || audits[0].Actor != "admin" || audits[0].Operation != "issuer.rotate" ||
+		audits[0].Evidence["retired"] != before[StateActive].KID || audits[0].Evidence["activated"] != before[StateNext].KID || audits[0].Evidence["algorithm"] != jose.ES256 {
+		t.Fatalf("rotate audit = %+v", audits)
+	}
+	// The evidence reports what the revoke did to the key, not a fixed state: a next key stays next.
+	next := states(t, store, jose.ES256)[StateNext].KID
+	if err := manager.Revoke(t.Context(), next, WithActor("admin")); err != nil {
+		t.Fatal(err)
+	}
+	audits = store.Audits()
+	if got := audits[len(audits)-1]; got.Operation != "issuer.revoke" || got.Evidence["kid"] != next || got.Evidence["state"] != string(StateNext) || got.Evidence["wasActive"] != "false" {
+		t.Fatalf("revoke of a next key = %+v", got)
+	}
+	active := states(t, store, jose.ES256)[StateActive].KID
+	if err := manager.Revoke(t.Context(), active, WithActor("admin")); err != nil {
+		t.Fatal(err)
+	}
+	audits = store.Audits()
+	if len(audits) != 3 || audits[2].Operation != "issuer.revoke" || audits[2].Evidence["kid"] != active || audits[2].Evidence["wasActive"] != "true" || audits[2].Evidence["state"] != string(StateRetired) {
+		t.Fatalf("revoke audit = %+v", audits)
+	}
+	audits = store.Audits()
+	// An unknown key changes nothing and audits nothing.
+	if err := manager.Revoke(t.Context(), "missing", WithActor("admin")); !errors.Is(err, ErrKeyNotFound) || len(store.Audits()) != len(audits) {
+		t.Fatalf("revoke unknown: %v %d", err, len(store.Audits()))
+	}
+	// An audit that cannot be written rolls the change back. The worker first replaces the revoked keys.
+	if _, _, err := manager.Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	other := newManager(&auditFailingStore{MemoryStore: store}, clock, jose.ES256)
+	target := states(t, store, jose.ES256)[StateActive].KID
+	if target == "" {
+		t.Fatal("the worker must have bootstrapped an active key")
+	}
+	if err := other.Revoke(t.Context(), target, WithActor("admin")); err == nil {
+		t.Fatal("the revoke must fail with its audit")
+	}
+	for _, record := range mustList(t, store) {
+		if record.KID == target && (record.Expired(clock.Now()) || record.State != StateActive) {
+			t.Fatal("a revoke whose audit failed must not have taken effect")
+		}
+	}
+}
+
+type auditFailingStore struct{ *MemoryStore }
+
+func (s *auditFailingStore) WithRotationLock(ctx context.Context, fn func(context.Context, KeyTx) error) (bool, error) {
+	return s.MemoryStore.WithRotationLock(ctx, func(ctx context.Context, tx KeyTx) error {
+		return fn(ctx, failingAuditTx{KeyTx: tx})
+	})
+}
+
+type failingAuditTx struct{ KeyTx }
+
+func (failingAuditTx) Audit(context.Context, AuditEvent) error {
+	return errors.New("audit table is down")
+}

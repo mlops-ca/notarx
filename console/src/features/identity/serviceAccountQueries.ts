@@ -1,12 +1,15 @@
 import {
   useInfiniteQuery,
+  useQuery,
   useQueryClient,
   type InfiniteData,
 } from "@tanstack/react-query";
 import { useCallback } from "react";
 import {
+  listServiceAccountAssertionAudiences,
   listServiceAccountCredentials,
   listServiceAccounts,
+  type ServiceAccountAssertionAudienceList,
   type ServiceAccountCredentialList,
 } from "../../client";
 import { unwrap } from "../../lib/query/client";
@@ -71,6 +74,48 @@ export function useCredentialPages(serviceAccountId: string) {
     getNextPageParam: (page) => page.nextPageToken || undefined,
     enabled: Boolean(serviceAccountId),
   });
+}
+
+function validateAudienceList(list: ServiceAccountAssertionAudienceList) {
+  if (
+    !list ||
+    !Array.isArray(list.items) ||
+    list.items.some(
+      (entry) =>
+        !entry ||
+        typeof entry.audience !== "string" ||
+        typeof entry.maxLifetimeSeconds !== "number",
+    )
+  ) {
+    throw new Error("Invalid assertion audiences response");
+  }
+  return list;
+}
+
+/** The assertion audience allow-list of one account (ADR 0020); never paged, it is small. */
+export function useAssertionAudiences(serviceAccountId: string) {
+  return useQuery({
+    queryKey: identityKeys.assertionAudiences(serviceAccountId),
+    queryFn: ({ signal }) =>
+      unwrap(
+        listServiceAccountAssertionAudiences({
+          path: { serviceAccountId },
+          signal,
+        }),
+      ).then(validateAudienceList),
+    enabled: Boolean(serviceAccountId),
+  });
+}
+
+export function useInvalidateAssertionAudiences() {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (serviceAccountId: string) =>
+      queryClient.invalidateQueries({
+        queryKey: identityKeys.assertionAudiences(serviceAccountId),
+      }),
+    [queryClient],
+  );
 }
 
 export function useInvalidateServiceAccounts() {

@@ -28,6 +28,7 @@ import {
   CreateServiceAccountDialog,
   IssueCredentialDialog,
 } from "./ServiceAccountDialogs";
+import { AssertionAudiences } from "./AssertionAudiences";
 import { ServiceAccountDetail, credentialState } from "./ServiceAccountDetail";
 import {
   flattenPages,
@@ -262,7 +263,13 @@ export function ServiceAccountsPage() {
                 onIssue={credentialDialog.show}
                 onRevoke={setCredentialToRevoke}
                 onToggleState={() => setAccountStateChange(selectedAccount)}
-              />
+              >
+                {/* Keyed by account: a removal prompt or an error of one account never carries over to another. */}
+                <AssertionAudiences
+                  key={selectedAccount.id}
+                  account={selectedAccount}
+                />
+              </ServiceAccountDetail>
             </SectionBoundary>
           )}
         </div>
