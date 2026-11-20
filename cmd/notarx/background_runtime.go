@@ -32,6 +32,7 @@ type backgroundRuntime struct {
 	migrationSchedules  *nexusmigration.ScheduleService
 	store               *brokeredStore
 	objects             app.ObjectStore
+	metaObjects         app.MetaObjects
 	taskQueue           *app.PostgresCacheTaskQueue
 	maintenance         *app.CacheMaintenance
 	metrics             *app.Metrics
@@ -148,6 +149,8 @@ func (r backgroundRuntime) startSchedulers(ctx context.Context, cfg config.Confi
 	app.LifecycleJobRecovery{Store: r.store, Replications: r.store}.Start(ctx, app.LifecycleLeaseRecoveryInterval)
 	app.UserSessionJanitor{Store: r.store}.Start(ctx, time.Hour)
 	r.taskQueue.StartCacheScheduler(ctx, 5*time.Minute)
+	// One scheduler at a time deletes the meta objects no row references (ADR 0023 section 9).
+	app.NewMetaSweeper(r.store, r.metaObjects, r.metrics, cfg).Start(ctx)
 	app.NativeMavenMaintenance{Store: r.store, Objects: r.objects, Metrics: r.metrics}.StartScheduler(ctx, time.Hour)
 	app.NativeOCIMaintenance{Store: r.store, Objects: r.objects, Metrics: r.metrics}.StartScheduler(ctx, time.Hour)
 	modules := r.formatModules()

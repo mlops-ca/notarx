@@ -24,6 +24,7 @@ func RunMetaContract(t *testing.T, factory Factory) {
 		{"DigestMismatchOnReadIsRejected", metaMismatch},
 		{"InvalidDigest", metaInvalidDigest},
 		{"DeleteRemovesObject", metaDelete},
+		{"ListReturnsEveryMetaObject", metaList},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,5 +123,44 @@ func metaDelete(t *testing.T, store objectstore.Store) {
 	}
 	if _, err := meta.Get(ctx(t), digest); !errors.Is(err, objectstore.ErrNotFound) {
 		t.Fatalf("err = %v, want ErrNotFound after delete", err)
+	}
+}
+
+func metaList(t *testing.T, store objectstore.Store) {
+	meta := objectstore.NewMetaStore(store, 0)
+	empty, err := meta.List(ctx(t))
+	if err != nil || len(empty) != 0 {
+		t.Fatalf("an empty namespace listed %v, %v", empty, err)
+	}
+	want := map[string]bool{}
+	for _, payload := range []string{"first", "second", "third"} {
+		digest, _, err := meta.Put(ctx(t), []byte(payload))
+		if err != nil {
+			t.Fatal(err)
+		}
+		want[digest] = true
+	}
+	// Objects outside the namespace, and a stray key under the prefix that is not a digest, are not listed.
+	if err := store.Put(ctx(t), "data/other", []byte("other")); err != nil {
+		t.Fatal(err)
+	}
+	// The filesystem driver refuses such a key, which is as good: it cannot be listed either.
+	_ = store.Put(ctx(t), objectstore.MetaPrefix+"not-a-digest", []byte("stray"))
+	got, err := meta.List(ctx(t))
+	if err != nil || len(got) != len(want) {
+		t.Fatalf("listed %v, %v; want %d digests", got, err, len(want))
+	}
+	for _, digest := range got {
+		if !want[digest] {
+			t.Fatalf("listed unexpected %q", digest)
+		}
+	}
+	for digest := range want {
+		if err := meta.Delete(ctx(t), digest); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got, err = meta.List(ctx(t)); err != nil || len(got) != 0 {
+		t.Fatalf("after deleting everything listed %v, %v", got, err)
 	}
 }

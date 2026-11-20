@@ -75,6 +75,11 @@ func (s *PostgresStore) externalize(ctx context.Context, data []byte) ([]byte, p
 	if settings == nil || len(data) <= settings.inlineMax {
 		return data, payloadRef{}, nil
 	}
+	// The pin is committed before the put: the sweep of unreferenced objects (meta_sweep.go) treats an object
+	// pinned within its grace period as in use and waits for the pin while it deletes one.
+	if err := s.pinMetaObject(ctx, data); err != nil {
+		return nil, payloadRef{}, err
+	}
 	digest, key, err := settings.store.Put(ctx, data)
 	if err != nil {
 		return nil, payloadRef{}, fmt.Errorf("externalise payload: %w", err)

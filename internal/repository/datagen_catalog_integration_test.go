@@ -18,6 +18,9 @@ import (
 // artifact_search_projection (catalogExpectedSQL, the statement the backfill and the equality tests use): the same
 // rows in both directions, so latest_*, publisher, version_count and size_bytes are exact. Formats outside the
 // projection get no rows. Everything rolls back.
+// seededRepositories selects the repositories of the seed: the test database holds the rows other tests leave behind.
+const seededRepositories = `SELECT id FROM hosted_repositories WHERE name LIKE 'perf-%'`
+
 func TestDatagenSeedsTheCatalogueTheStoreWouldCompute(t *testing.T) {
 	db := integrationDB(t)
 	profile := datagen.Profiles["tiny"].Scaled(20)
@@ -46,7 +49,7 @@ func TestDatagenSeedsTheCatalogueTheStoreWouldCompute(t *testing.T) {
 		expected, err := catalogExpectedSQL(entry.Format)
 		if !entry.Covered {
 			var rows int
-			if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM artifact_catalog WHERE format=$1`, string(entry.Format)).Scan(&rows); err != nil || rows != 0 {
+			if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM artifact_catalog WHERE format=$1 AND repository_id IN (`+seededRepositories+`)`, string(entry.Format)).Scan(&rows); err != nil || rows != 0 {
 				t.Errorf("%s is not covered by the catalogue but has %d rows (%v)", entry.Format, rows, err)
 			}
 			continue
@@ -56,15 +59,15 @@ func TestDatagenSeedsTheCatalogueTheStoreWouldCompute(t *testing.T) {
 		}
 		t.Run(string(entry.Format), func(t *testing.T) {
 			var seeded int
-			if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM artifact_catalog WHERE format=$1`, string(entry.Format)).Scan(&seeded); err != nil {
+			if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM artifact_catalog WHERE format=$1 AND repository_id IN (`+seededRepositories+`)`, string(entry.Format)).Scan(&seeded); err != nil {
 				t.Fatal(err)
 			}
 			if seeded == 0 {
 				t.Fatalf("a seeded database has no catalogue rows for %s", entry.Format)
 			}
 			stored := fmt.Sprintf(`SELECT repository_id, coordinate, latest_version, latest_digest, latest_published_at, publisher, version_count, size_bytes
-				FROM artifact_catalog WHERE format='%s'`, entry.Format)
-			computed := `SELECT repository_id, coordinate, latest_version, latest_digest, latest_published_at, publisher, version_count, size_bytes FROM (` + expected + `) e`
+				FROM artifact_catalog WHERE format='%s' AND repository_id IN (%s)`, entry.Format, seededRepositories)
+			computed := `SELECT repository_id, coordinate, latest_version, latest_digest, latest_published_at, publisher, version_count, size_bytes FROM (` + expected + `) e WHERE repository_id IN (` + seededRepositories + `)`
 			for _, direction := range [][2]string{{stored, computed}, {computed, stored}} {
 				var differing int
 				if err := conn.QueryRowContext(ctx, `SELECT count(*) FROM ((`+direction[0]+`) EXCEPT (`+direction[1]+`)) d`).Scan(&differing); err != nil {

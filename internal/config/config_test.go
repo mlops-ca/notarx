@@ -170,6 +170,34 @@ func TestLoadInlineMaxBytes(t *testing.T) {
 	}
 }
 
+func TestLoadMetaSweepSettings(t *testing.T) {
+	setCompleteConfiguration(t)
+	cfg, err := Load()
+	if err != nil || cfg.MetaSweepGrace != 24*time.Hour || cfg.MetaSweepBatchSize != 500 || cfg.MetaSweepInterval != time.Hour {
+		t.Fatalf("defaults = %v %d %v, %v", cfg.MetaSweepGrace, cfg.MetaSweepBatchSize, cfg.MetaSweepInterval, err)
+	}
+	t.Setenv("NOTARX_META_SWEEP_GRACE", "36h")
+	t.Setenv("NOTARX_META_SWEEP_BATCH_SIZE", "50")
+	t.Setenv("NOTARX_META_SWEEP_INTERVAL", "900")
+	if cfg, err = Load(); err != nil || cfg.MetaSweepGrace != 36*time.Hour || cfg.MetaSweepBatchSize != 50 || cfg.MetaSweepInterval != 15*time.Minute {
+		t.Fatalf("overrides = %v %d %v, %v", cfg.MetaSweepGrace, cfg.MetaSweepBatchSize, cfg.MetaSweepInterval, err)
+	}
+	for name, bad := range map[string][]string{
+		"NOTARX_META_SWEEP_GRACE":      {"0", "-1h", "soon", "30s"},
+		"NOTARX_META_SWEEP_BATCH_SIZE": {"0", "-1", "many"},
+		"NOTARX_META_SWEEP_INTERVAL":   {"0", "-1h", "often"},
+	} {
+		for _, value := range bad {
+			t.Run(name+"="+value, func(t *testing.T) {
+				t.Setenv(name, value)
+				if _, err := Load(); err == nil {
+					t.Errorf("%s=%q accepted", name, value)
+				}
+			})
+		}
+	}
+}
+
 func TestLoadAuditWriterSettings(t *testing.T) {
 	setCompleteConfiguration(t)
 	cfg, err := Load()

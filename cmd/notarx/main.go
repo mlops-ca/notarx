@@ -225,7 +225,8 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	defer func() { _ = store.Close() }()
 	// Payloads above NOTARX_INLINE_MAX_BYTES (cached proxy documents, npm manifests, nuspec, chart.yaml,
 	// vulnerability findings, large SBOMs) go to the object store meta namespace (ADR 0023 section 9).
-	store.SetPayloadStore(objectstore.NewMetaStore(objectStore, 0), cfg.InlineMaxBytes)
+	metaObjects := objectstore.NewMetaStore(objectStore, 0)
+	store.SetPayloadStore(metaObjects, cfg.InlineMaxBytes)
 	auditWriter := startAuditWriter(cfg, store)
 	defer func() {
 		if err := stopAuditWriter(auditWriter, store, cfg.ShutdownFlushTimeout); err != nil {
@@ -502,7 +503,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		rubyGemsReplication = &worker
 	}
 	waitBackground := (backgroundRuntime{
-		store: newBrokeredStore(store), objects: objectStore, taskQueue: taskQueue, maintenance: maintenance, metrics: metrics,
+		store: newBrokeredStore(store), objects: objectStore, metaObjects: metaObjects, taskQueue: taskQueue, maintenance: maintenance, metrics: metrics,
 		scanner: dependencies.ArtifactScanner, scanResolver: dependencies.ArtifactScanResolver,
 		scannerFormats:      dependencies.ArtifactScannerFormats,
 		workerSessionID:     runtimeSessionID,

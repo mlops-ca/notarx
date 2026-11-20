@@ -410,6 +410,25 @@ of the object store, and a database restored without them cannot serve those row
 NOTARX_INLINE_MAX_BYTES=16384
 ```
 
+A scheduler node deletes the `meta/` objects that no row references any more (a row deleted, a
+payload replaced, a transaction rolled back after its object was written). The sweep runs under a
+database lease, so one node sweeps at a time, and once per interval for the whole fleet. It lists the
+namespace, asks the database object by object whether any row references it, and deletes an object only
+after it has gone unreferenced for the grace period. A writer records the object in `meta_object_pins`
+before it writes it, and the sweep holds that row while it checks and deletes, so a publish of the same
+bytes at the same moment never loses its object. An object written by a node that predates the pin is
+pinned when the sweep first sees it, so it too waits out one grace period. Keep the grace period longer
+than the longest transaction that writes a row referencing a payload; the default is a day.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `NOTARX_META_SWEEP_GRACE` | `24h` | How long an object is kept after it was last written, or first seen by the sweep, while nothing references it. At least one minute. |
+| `NOTARX_META_SWEEP_BATCH_SIZE` | `500` | Objects examined between two renewals of the sweep lease. |
+| `NOTARX_META_SWEEP_INTERVAL` | `1h` | Time between two completed sweeps of the fleet. |
+
+The sweep exposes `notarx_meta_sweep_objects_total{outcome}` (`deleted`, `referenced`, `young`,
+`failed`) and `notarx_meta_sweep_runs_total{outcome}` (`completed`, `failed`).
+
 ## Instance Identity, Public URL and Legacy Names
 
 Settings are read only under the `NOTARX_` prefix. There are no aliases and no
