@@ -18,6 +18,7 @@ var gatewayStorePorts = map[string]reflect.Type{
 	"APIKeyStore":                         reflect.TypeFor[APIKeyStore](),
 	"APTArtifactStore":                    reflect.TypeFor[APTArtifactStore](),
 	"ArtifactBrowseStore":                 reflect.TypeFor[ArtifactBrowseStore](),
+	"ArtifactCatalogStore":                reflect.TypeFor[ArtifactCatalogStore](),
 	"ArtifactIntelligenceStore":           reflect.TypeFor[ArtifactIntelligenceStore](),
 	"ArtifactQuarantineStore":             reflect.TypeFor[ArtifactQuarantineStore](),
 	"ArtifactTombstoneStore":              reflect.TypeFor[ArtifactTombstoneStore](),

@@ -241,7 +241,7 @@ shared network filesystems.
   atomic.
 - Keys are validated by the existing rules in `internal/objectstore/validation.go`
   plus: no `..`, no empty or `.`-leading segments, no segment `tmp` or `meta` at
-  the top level, no symlink traversal (open with `O_NOFOLLOW`, verify the resolved
+  the top level (except the `meta/sha256/` namespace of ADR 0023 section 9, which lives under `data/` and cannot collide), no symlink traversal (open with `O_NOFOLLOW`, verify the resolved
   path stays under root).
 - Put: stream into `tmp/<uuid>`, hash while writing, compare size and (if given)
   expected SHA-256, `fsync` file, `rename` into `data/`, `fsync` parent directory,

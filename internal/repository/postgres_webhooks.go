@@ -187,7 +187,7 @@ WHERE ($1='' OR d.subscription_id=$1::uuid) AND ($2='' OR d.state=$2) ORDER BY d
 }
 
 func (s *PostgresStore) GetWebhookDelivery(ctx context.Context, id string) (WebhookDelivery, error) {
-	value, err := scanWebhookDelivery(s.db.QueryRowContext(ctx, `SELECT `+webhookDeliveryColumns+` FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id WHERE d.id=$1::uuid`, id))
+	value, err := scanWebhookDelivery(s.db.QueryRowContext(ctx, getWebhookDeliveryQuery, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return WebhookDelivery{}, ErrNotFound
 	}
@@ -198,23 +198,7 @@ func (s *PostgresStore) ClaimWebhookDeliveries(ctx context.Context, owner string
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	rows, err := s.db.QueryContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), exhausted AS (
-    UPDATE webhook_deliveries SET state='dead',next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now
-    FROM clock WHERE state='delivering' AND lease_expires_at<=clock.now AND attempts>=8
-), candidates AS (
-    SELECT delivery.id FROM webhook_deliveries AS delivery CROSS JOIN clock
-    WHERE ((state IN ('pending','retrying') AND next_attempt_at<=clock.now) OR (state='delivering' AND lease_expires_at<=clock.now))
-      AND attempts<8 ORDER BY COALESCE(next_attempt_at,lease_expires_at),created_at,id FOR UPDATE OF delivery SKIP LOCKED LIMIT $3
-), claimed AS (
-    UPDATE webhook_deliveries AS delivery SET state='delivering',attempts=delivery.attempts+1,next_attempt_at=NULL,
-        lease_owner=$1,lease_token=gen_random_uuid(),lease_expires_at=clock.now+$2::interval,updated_at=clock.now
-    FROM candidates,clock WHERE delivery.id=candidates.id RETURNING delivery.*
-)
-SELECT d.id::text,d.event_id::text,e.event_type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at,
-       e.id::text,e.event_type,e.occurred_at,e.payload,
-       s.id::text,s.name,s.endpoint_url,s.secret_ciphertext,s.event_types,s.enabled,s.version::text,s.created_at,s.updated_at
-FROM claimed d JOIN webhook_events e ON e.id=d.event_id JOIN webhook_subscriptions s ON s.id=d.subscription_id
-ORDER BY d.created_at,d.id`, owner, lease.String(), limit)
+	rows, err := s.db.QueryContext(ctx, claimWebhookDeliveriesQuery, owner, lease.String(), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -310,3 +294,25 @@ FROM replayed d JOIN webhook_events e ON e.id=d.event_id`, id))
 
 var _ WebhookStore = (*PostgresStore)(nil)
 var _ WebhookStore = (*MemoryStore)(nil)
+
+// getWebhookDeliveryQuery loads one delivery with its event.
+const getWebhookDeliveryQuery = `SELECT ` + webhookDeliveryColumns + ` FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id WHERE d.id=$1::uuid`
+
+// claimWebhookDeliveriesQuery takes due deliveries (owner, lease interval, limit); the hot-query registry plans it.
+const claimWebhookDeliveriesQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), exhausted AS (
+    UPDATE webhook_deliveries SET state='dead',next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now
+    FROM clock WHERE state='delivering' AND lease_expires_at<=clock.now AND attempts>=8
+), candidates AS (
+    SELECT delivery.id FROM webhook_deliveries AS delivery CROSS JOIN clock
+    WHERE ((state IN ('pending','retrying') AND next_attempt_at<=clock.now) OR (state='delivering' AND lease_expires_at<=clock.now))
+      AND attempts<8 ORDER BY COALESCE(next_attempt_at,lease_expires_at),created_at,id FOR UPDATE OF delivery SKIP LOCKED LIMIT $3
+), claimed AS (
+    UPDATE webhook_deliveries AS delivery SET state='delivering',attempts=delivery.attempts+1,next_attempt_at=NULL,
+        lease_owner=$1,lease_token=gen_random_uuid(),lease_expires_at=clock.now+$2::interval,updated_at=clock.now
+    FROM candidates,clock WHERE delivery.id=candidates.id RETURNING delivery.*
+)
+SELECT d.id::text,d.event_id::text,e.event_type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at,
+       e.id::text,e.event_type,e.occurred_at,e.payload,
+       s.id::text,s.name,s.endpoint_url,s.secret_ciphertext,s.event_types,s.enabled,s.version::text,s.created_at,s.updated_at
+FROM claimed d JOIN webhook_events e ON e.id=d.event_id JOIN webhook_subscriptions s ON s.id=d.subscription_id
+ORDER BY d.created_at,d.id`

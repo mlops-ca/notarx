@@ -29,5 +29,10 @@ WHERE a.repository_id=$1::uuid AND left(a.path,length($2))=$2
 // openMavenUsageBracket starts the measurement of the coordinate's prefix; call it after
 // lockMavenCapacityTx and before the first change of the transaction.
 func openMavenUsageBracket(ctx context.Context, tx *sql.Tx, repositoryID, coordinate string) (*usageBracket, error) {
-	return openUsageBracket(ctx, tx, repositoryID, mavenPrefixUsage(repositoryID, mavenArtifactPathPrefix(coordinate)))
+	bracket, err := openUsageBracket(ctx, tx, repositoryID, mavenPrefixUsage(repositoryID, mavenArtifactPathPrefix(coordinate)))
+	if err != nil {
+		return nil, err
+	}
+	bracket.catalogFormat, bracket.catalogCoordinate = FormatMaven, coordinate
+	return bracket, nil
 }

@@ -105,6 +105,9 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 			return err
 		}
 	}
+	if err = refreshArtifactCatalog(ctx, tx, c.RepositoryID, FormatNPM, c.PackageName); err != nil {
+		return err
+	}
 	if err = delta.reserve(ctx, tx); err != nil {
 		return err
 	}

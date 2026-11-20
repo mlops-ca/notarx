@@ -104,7 +104,7 @@ func (s *PostgresStore) ListArtifactUsage(ctx context.Context, repository string
 }
 
 func (s *PostgresStore) WalkArtifactUsage(ctx context.Context, repository string, visit func(ArtifactUsageStat) error) error {
-	rows, err := s.db.QueryContext(ctx, usageSelect+` FROM artifact_usage_stats s JOIN (`+repositoryNames+`) n ON n.id = s.repository_id WHERE n.name = $1`, repository)
+	rows, err := s.db.QueryContext(ctx, walkArtifactUsageQuery, repository)
 	if err != nil {
 		return err
 	}
@@ -129,3 +129,6 @@ func (s *PostgresStore) ArtifactUsageTotals(ctx context.Context, repository stri
 		Scan(&totals.DownloadCount, &totals.TotalBytes, &totals.Resources)
 	return totals, err
 }
+
+// walkArtifactUsageQuery reads every usage row of one repository or group.
+const walkArtifactUsageQuery = usageSelect + ` FROM artifact_usage_stats s JOIN (` + repositoryNames + `) n ON n.id = s.repository_id WHERE n.name = $1`

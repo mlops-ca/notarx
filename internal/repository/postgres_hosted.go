@@ -670,7 +670,7 @@ func (s *PostgresStore) DeleteHostedGroup(ctx context.Context, id string) error 
 func loadRepositoryGrants(ctx context.Context, query interface {
 	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
 }, repositoryID, version string) (RepositoryGrantSet, error) {
-	rows, err := query.QueryContext(ctx, `SELECT principal, array_to_json(scopes), resource_prefix FROM repository_grants WHERE repository_id=$1::uuid ORDER BY principal, resource_prefix`, repositoryID)
+	rows, err := query.QueryContext(ctx, listRepositoryGrantsQuery, repositoryID)
 	if err != nil {
 		return RepositoryGrantSet{}, err
 	}
@@ -925,3 +925,6 @@ func (s *PostgresStore) ReplaceRepositoryRetentionPolicy(ctx context.Context, re
 	}
 	return policy, nil
 }
+
+// listRepositoryGrantsQuery reads the grants of one repository for the authorization decision.
+const listRepositoryGrantsQuery = `SELECT principal, array_to_json(scopes), resource_prefix FROM repository_grants WHERE repository_id=$1::uuid ORDER BY principal, resource_prefix`

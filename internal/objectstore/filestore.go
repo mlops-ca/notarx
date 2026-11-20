@@ -369,7 +369,9 @@ func validateFileKey(key string) error {
 			return fmt.Errorf("%w: segments must not start with a dot", ErrInvalidKey)
 		case len(segment) > fsMaxSegmentBytes:
 			return fmt.Errorf("%w: path segment is too long", ErrInvalidKey)
-		case index == 0 && (segment == fsTmpDir || segment == fsMetaDir):
+		case index == 0 && (segment == fsTmpDir || segment == fsMetaDir && !IsMetaObjectKey(key)):
+			// Keys live under data/, so only a content-addressed meta object key
+			// (ADR 0023 section 9) may use the name of the digest-sidecar tree.
 			return fmt.Errorf("%w: %q is a reserved top-level name", ErrInvalidKey, segment)
 		}
 		for _, r := range segment {

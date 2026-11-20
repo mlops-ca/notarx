@@ -264,6 +264,9 @@ func replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset RawAsset, conditio
 	if err != nil {
 		return current, rawUsageDelta{}, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, asset.RepositoryID, FormatRaw, asset.Path); err != nil {
+		return RawAsset{}, rawUsageDelta{}, err
+	}
 	return current, delta, nil
 }
 
@@ -307,7 +310,7 @@ func (s *PostgresStore) LockRawObject(ctx context.Context, digest string) (func(
 }
 func (s *PostgresStore) GetRawAsset(ctx context.Context, repositoryID, path string) (RawAsset, error) {
 	var v RawAsset
-	err := s.db.QueryRowContext(ctx, `SELECT a.repository_id::text,a.path,a.digest,o.object_key,o.size,a.content_type,a.updated_at FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2`, repositoryID, path).Scan(&v.RepositoryID, &v.Path, &v.Digest, &v.ObjectKey, &v.Size, &v.ContentType, &v.UpdatedAt)
+	err := s.db.QueryRowContext(ctx, getRawAssetQuery, repositoryID, path).Scan(&v.RepositoryID, &v.Path, &v.Digest, &v.ObjectKey, &v.Size, &v.ContentType, &v.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return v, ErrNotFound
 	}
@@ -361,6 +364,9 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 	if _, err = tx.ExecContext(ctx, `DELETE FROM native_raw_assets WHERE repository_id=$1::uuid AND path=$2`, repositoryID, path); err != nil {
 		return err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatRaw, path); err != nil {
+		return err
+	}
 	if err = capacity.Reserve(ctx, tx, repositoryID, -asset.Size, -1); err != nil {
 		return err
 	}
@@ -404,6 +410,9 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 		return RawAsset{}, err
 	}
 	asset.UpdatedAt = time.Now().UTC()
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatRaw, path); err != nil {
+		return RawAsset{}, err
+	}
 	if err = capacity.Reserve(ctx, tx, repositoryID, asset.Size, 1); err != nil {
 		return RawAsset{}, err
 	}
@@ -443,3 +452,6 @@ func (s *PostgresStore) MarkRawObjectCollected(ctx context.Context, digest strin
 	}
 	return nil
 }
+
+// getRawAssetQuery resolves a raw path to its object for a download.
+const getRawAssetQuery = `SELECT a.repository_id::text,a.path,a.digest,o.object_key,o.size,a.content_type,a.updated_at FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2`

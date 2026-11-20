@@ -19,3 +19,13 @@ func TestS3StoreContract(t *testing.T) {
 	}
 	storetest.RunContract(t, storetest.S3Factory(cfg))
 }
+
+// TestS3StoreMetaContract runs the meta/sha256 namespace cases of ADR 0023 section 9
+// against the same service.
+func TestS3StoreMetaContract(t *testing.T) {
+	cfg, ok := storetest.ConfigFromEnv("TEST_OBJECT_STORE_")
+	if !ok {
+		t.Skip("TEST_OBJECT_STORE_ENDPOINT and credentials are required")
+	}
+	storetest.RunMetaContract(t, storetest.S3Factory(cfg))
+}

@@ -264,10 +264,65 @@ runs in one transaction, so a failed run leaves nothing behind and can be repeat
 | `freetier` | 1,000,000 | 20,000,000 | OCI free-tier sizing |
 | `target` | 10,000,000 | 100,000,000 | on-demand capacity runs (8 vCPU, 32 GB, NVMe) |
 
-The seed format is npm. The 20 million webhook deliveries of the `target` profile,
-the other formats and the mixed read/publish load profile are tracked as follow-up
-slices of ADR 0023 slice 17; the figures of ADR 0023 section 11 stay estimates until a
+The seed format is npm. The 20 million webhook deliveries of the `target` profile
+and the other formats are tracked as follow-up slices of ADR 0023 slice 17; the figures of ADR 0023 section 11 stay estimates until a
 `target` run replaces them.
+
+## Mixed load profile
+
+`make perf-load PROFILE=tiny|freetier|target` extends `scripts/performance-baseline.sh`
+(`--load PROFILE`). It starts the isolated Compose stack, seeds the profile with
+`tools/datagen`, creates a hosted raw repository for the publishes and runs
+`tools/perfload` against the gateway while sampling the CPU of the PostgreSQL
+container. It needs Docker Compose, Go, `curl`, `jq`, `openssl` and `python3`, not
+ApacheBench. The report is written to `docs/perf/<profile>.json`; CI runs the `tiny`
+profile in the `perf-load` lane and keeps the file as an artifact.
+
+Scenarios, each with the request budget of its profile (`tiny`: 4,000 / 2,000 / 400
+requests on 16 workers):
+
+| Scenario | What it does |
+| --- | --- |
+| `mixed.read`, `mixed.publish` | one shared stream of requests, 95 percent npm packument reads (Zipf popularity over the seeded packages) and 5 percent 4 KiB raw publishes; reported as two rows |
+| `hot-artifact-stampede` | every worker reads the single hottest packument |
+| `hot-repository-burst` | every worker publishes into one repository |
+
+The document has this schema (`schemaVersion` 1); latencies are client-observed
+milliseconds, nearest-rank percentiles:
+
+```json
+{
+  "schemaVersion": 1,
+  "profile": "tiny",
+  "generatedAt": "2026-11-19T12:00:00Z",
+  "gitCommit": "<commit>",
+  "scenarios": [
+    {
+      "name": "mixed.read",
+      "requests": 3800,
+      "errors": 0,
+      "requestsPerSecond": 1204.5,
+      "durationSeconds": 3.3,
+      "latencyMs": { "p50": 4.1, "p95": 11.8, "p99": 20.2, "max": 41.0 }
+    }
+  ],
+  "auditFlush": { "p99Seconds": 0.05, "flushes": 12, "bufferDepthAfter": 0, "dropped": 0 },
+  "databaseCpu": { "samples": 9, "averagePercentOfHost": 14.2, "maxPercentOfHost": 31.0, "hostCpuCount": 8 }
+}
+```
+
+- `errors` counts non-2xx responses and transport failures; the target fails when any
+  scenario has one.
+- `auditFlush.p99Seconds` is the upper bound of the histogram bucket that holds the 99th
+  percentile of `notarx_audit_flush_seconds` observed during the run (twice the largest
+  bound when it falls above them); `bufferDepthAfter` is `notarx_audit_buffer_depth`
+  after the last scenario and `dropped` the audit records dropped during the run.
+- `databaseCpu` is `docker stats` for the PostgreSQL container, divided by the host
+  CPU count, sampled about once a second during the scenarios.
+
+The numbers of a `tiny` run on a shared CI runner are a smoke signal, not an SLO
+measurement; the SLOs of ADR 0023 section 11 are ratified on `target` and
+`freetier` hardware.
 
 `make explain-check` is the plan-regression gate. It seeds the whole `tiny` profile
 inside a rolled-back transaction, runs `ANALYZE` and asserts, for every query in the
@@ -275,5 +330,11 @@ registry `internal/repository/hotqueries.go`, that the plan uses the named index
 (where one is registered) and contains no `Seq Scan` on the listed tables. Sequential
 scans are discouraged while planning, so a failure means no index can serve the
 statement at all. `make integration-test` runs the same test at a tenth of the size.
-To register a query, add an entry to the registry; the unit test rejects duplicates,
+The registry holds the top 30 statements (hosted repositories, sessions, API keys, grants,
+quota counters, the lifecycle, webhook and replication claims, usage, and the hot reads of
+the npm, Maven, OCI, PyPI, raw, Go, Conan and APT stores); a unit test pins the count. An entry
+on a seeded table names its index (listing every equivalent one the planner may pick); an entry
+on a table the seed leaves empty only asserts that the plan scans some index and never reads
+the table sequentially, because the planner's choice among equivalent indexes there depends on
+the rows other tests leave behind. To register a query, add an entry to the registry; the unit test rejects duplicates,
 `OFFSET`, `COUNT(*)` and a placeholder count that does not match the arguments.

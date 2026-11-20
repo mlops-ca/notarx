@@ -303,7 +303,7 @@ func (s *PostgresStore) PublishMavenProtocolAssets(ctx context.Context, id strin
 	var artifact MavenArtifact
 	err = tx.QueryRowContext(ctx, `SELECT id::text,repository_id::text,coordinate,digest,state,created_at,build_number,source_timestamp,source_build_number FROM native_maven_artifacts WHERE id=$1`, id).Scan(&artifact.ID, &artifact.RepositoryID, &artifact.Coordinate, &artifact.Digest, &artifact.State, &artifact.CreatedAt, &artifact.BuildNumber, &artifact.SourceTimestamp, &artifact.SourceBuildNumber)
 	if errors.Is(err, sql.ErrNoRows) && !IsMavenSnapshotCoordinate(session.Coordinate) {
-		err = tx.QueryRowContext(ctx, `SELECT id::text,repository_id::text,coordinate,digest,state,created_at,build_number,source_timestamp,source_build_number FROM native_maven_artifacts WHERE repository_id=$1 AND coordinate=$2 ORDER BY build_number DESC LIMIT 1 FOR UPDATE`, session.RepositoryID, session.Coordinate).Scan(&artifact.ID, &artifact.RepositoryID, &artifact.Coordinate, &artifact.Digest, &artifact.State, &artifact.CreatedAt, &artifact.BuildNumber, &artifact.SourceTimestamp, &artifact.SourceBuildNumber)
+		err = tx.QueryRowContext(ctx, latestMavenArtifactByCoordinateQuery, session.RepositoryID, session.Coordinate).Scan(&artifact.ID, &artifact.RepositoryID, &artifact.Coordinate, &artifact.Digest, &artifact.State, &artifact.CreatedAt, &artifact.BuildNumber, &artifact.SourceTimestamp, &artifact.SourceBuildNumber)
 	}
 	if err == nil && artifact.State != "visible" {
 		return MavenArtifact{}, ErrNameExists
@@ -1097,3 +1097,6 @@ func (s *PostgresStore) DeleteClaimedMavenObjectIntent(ctx context.Context, key,
 	}
 	return nil
 }
+
+// latestMavenArtifactByCoordinateQuery finds the newest build of a coordinate when a publish session commits.
+const latestMavenArtifactByCoordinateQuery = `SELECT id::text,repository_id::text,coordinate,digest,state,created_at,build_number,source_timestamp,source_build_number FROM native_maven_artifacts WHERE repository_id=$1 AND coordinate=$2 ORDER BY build_number DESC LIMIT 1 FOR UPDATE`

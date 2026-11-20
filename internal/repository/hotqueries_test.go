@@ -9,6 +9,12 @@ import (
 
 var placeholder = regexp.MustCompile(`\$([0-9]+)`)
 
+func TestHotQueryRegistryCoversTheTopThirtyQueries(t *testing.T) {
+	if len(hotQueries) != hotQueryCount || hotQueryCount != 30 {
+		t.Fatalf("registry has %d queries, want the top 30 of ADR 0023 section 11", len(hotQueries))
+	}
+}
+
 func TestHotQueryRegistryIsWellFormed(t *testing.T) {
 	fixture := hotQueryFixture{repositoryID: "r", repositoryName: "n", packageName: "p", version: "1.0.0", actor: "a"}
 	seen := map[string]bool{}

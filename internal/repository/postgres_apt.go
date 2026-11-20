@@ -14,7 +14,7 @@ func (s *PostgresStore) LockAPTObject(ctx context.Context, objectKey string) (fu
 
 func (s *PostgresStore) GetAPTAsset(ctx context.Context, repositoryID, path string) (APTAsset, error) {
 	var asset APTAsset
-	err := scanAPTAsset(s.db.QueryRowContext(ctx, `SELECT `+aptAssetColumns+` FROM native_apt_assets WHERE repository_id=$1::uuid AND path=$2`, repositoryID, path), &asset)
+	err := scanAPTAsset(s.db.QueryRowContext(ctx, getAPTAssetQuery, repositoryID, path), &asset)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APTAsset{}, ErrNotFound
 	}
@@ -67,6 +67,9 @@ func (s *PostgresStore) CacheAPTAsset(ctx context.Context, incoming APTAsset) (A
 	if stored.Digest != incoming.Digest || stored.ObjectKey != incoming.ObjectKey || stored.Size != incoming.Size || stored.SourceURL != incoming.SourceURL {
 		return APTAsset{}, ErrUpstreamChanged
 	}
+	if err = refreshArtifactCatalog(ctx, tx, stored.RepositoryID, FormatAPT, stored.Path); err != nil {
+		return APTAsset{}, err
+	}
 	delta := measuredUsage{bytes: stored.Size - previousSize}
 	if !previousExisted {
 		delta.objects = 1
@@ -107,3 +110,6 @@ const aptAssetColumns = `repository_id::text,path,digest,object_key,size,content
 func scanAPTAsset(row interface{ Scan(...any) error }, asset *APTAsset) error {
 	return row.Scan(&asset.RepositoryID, &asset.Path, &asset.Digest, &asset.ObjectKey, &asset.Size, &asset.ContentType, &asset.SourceURL, &asset.UpstreamETag, &asset.UpstreamModified, &asset.CachedAt, &asset.CreatedAt, &asset.SourceVersion)
 }
+
+// getAPTAssetQuery reads one pool or metadata file of a hosted APT repository.
+const getAPTAssetQuery = `SELECT ` + aptAssetColumns + ` FROM native_apt_assets WHERE repository_id=$1::uuid AND path=$2`

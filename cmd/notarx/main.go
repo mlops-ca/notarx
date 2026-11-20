@@ -356,6 +356,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		slog.Error("partition observation at start-up failed", "error", err)
 	}
 	go partitionManager.Run(runtimeContext, partitions.DefaultInterval)
+	// The catalogue backfill resumes from its cursor and finishes in the background; the
+	// publish transactions already keep the rows they touch exact.
+	go runArtifactCatalogBackfill(runtimeContext, store, artifactCatalogBackfillRetry)
 	go identityRuntime.RunSAMLMetadataRefresh(runtimeContext, cfg.SAML.MetadataRefreshInterval)
 	// The retention janitor prunes every other append-only or churning table in
 	// throttled batches; one node at a time runs a pass (lease row).

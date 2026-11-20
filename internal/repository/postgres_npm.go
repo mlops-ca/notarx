@@ -59,6 +59,9 @@ func (s *PostgresStore) PublishNPMVersion(ctx context.Context, version NPMVersio
 		WHERE repository_id=$1::uuid AND name=$2`, version.RepositoryID, version.PackageName, tagsJSON); err != nil {
 		return NPMVersion{}, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, version.RepositoryID, FormatNPM, version.PackageName); err != nil {
+		return NPMVersion{}, err
+	}
 	if version.ObjectKey != "" {
 		if err = capacity.Reserve(ctx, tx, version.RepositoryID, version.Size, 1); err != nil {
 			return NPMVersion{}, err
@@ -286,6 +289,9 @@ func (s *PostgresStore) SyncNPMProxyPackage(ctx context.Context, incoming NPMPac
 		incoming.SourceEndpoint, incoming.UpstreamETag, incoming.UpstreamModified, incoming.MetadataExpiresAt, incoming.SourceVersion); err != nil {
 		return NPMPackage{}, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, incoming.RepositoryID, FormatNPM, incoming.Name); err != nil {
+		return NPMPackage{}, err
+	}
 	if err = tx.Commit(); err != nil {
 		return NPMPackage{}, err
 	}
@@ -325,6 +331,9 @@ func (s *PostgresStore) StoreNPMProxyNegative(ctx context.Context, incoming NPMP
 			WHERE repository_id=$1::uuid AND name=$2`, incoming.RepositoryID, incoming.Name, incoming.SourceEndpoint, incoming.NegativeExpiresAt, incoming.SourceVersion)
 	}
 	if err != nil {
+		return err
+	}
+	if err = refreshArtifactCatalog(ctx, tx, incoming.RepositoryID, FormatNPM, incoming.Name); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -391,6 +400,9 @@ func (s *PostgresStore) CacheNPMProxyTarball(ctx context.Context, incoming NPMVe
 		incoming.RepositoryID, incoming.PackageName, incoming.Version, incoming.Digest,
 		incoming.ObjectKey, incoming.Size, incoming.CachedAt), &stored)
 	if err != nil {
+		return NPMVersion{}, err
+	}
+	if err = refreshArtifactCatalog(ctx, tx, stored.RepositoryID, FormatNPM, stored.PackageName); err != nil {
 		return NPMVersion{}, err
 	}
 	// The version had no tarball before (a metadata-only proxy row), so its bytes join the usage now.
@@ -570,6 +582,9 @@ func tombstoneNPMVersionTx(ctx context.Context, tx *sql.Tx, repositoryID, name, 
 		DO UPDATE SET digest=EXCLUDED.digest,tombstoned_at=now()`, repositoryID, name+"@"+version, item.Digest); err != nil {
 		return NPMVersion{}, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatNPM, name); err != nil {
+		return NPMVersion{}, err
+	}
 	return item, nil
 }
 
@@ -622,6 +637,9 @@ func (s *PostgresStore) RestoreNPMVersion(ctx context.Context, request NPMRestor
 	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='npm' AND coordinate=$2`, repositoryID, name+"@"+version); err != nil {
 		return NPMVersion{}, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatNPM, name); err != nil {
+		return NPMVersion{}, err
+	}
 	if err = insertAudit(ctx, tx, request.auditRecord(item)); err != nil {
 		return NPMVersion{}, err
 	}
@@ -658,7 +676,7 @@ func (s *PostgresStore) ListReclaimableNPMObjects(ctx context.Context, before ti
 
 func (s *PostgresStore) NPMObjectHasVisibleReference(ctx context.Context, objectKey string) (bool, error) {
 	var referenced bool
-	err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_npm_versions WHERE object_key=$1 AND state='visible')`, objectKey).Scan(&referenced)
+	err := s.db.QueryRowContext(ctx, npmObjectHasVisibleReferenceQuery, objectKey).Scan(&referenced)
 	return referenced, err
 }
 
@@ -753,3 +771,6 @@ func scanNPMVersion(row interface{ Scan(...any) error }, version *NPMVersion) er
 	}
 	return err
 }
+
+// npmObjectHasVisibleReferenceQuery is the reference check the object collector runs; native_npm_versions_object_key_idx serves it.
+const npmObjectHasVisibleReferenceQuery = `SELECT EXISTS(SELECT 1 FROM native_npm_versions WHERE object_key=$1 AND state='visible')`

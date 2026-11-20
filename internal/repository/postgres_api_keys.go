@@ -43,7 +43,7 @@ func (s *PostgresStore) ListAPIKeys(ctx context.Context) ([]APIKey, error) {
 func (s *PostgresStore) FindActiveAPIKeyByHash(ctx context.Context, hash string) (APIKey, error) {
 	var key APIKey
 	var roles []byte
-	err := s.db.QueryRowContext(ctx, `SELECT id::text,COALESCE(service_account_id::text,''),name,secret_hash,array_to_json(roles),created_at,expires_at,last_used_at FROM api_keys WHERE secret_hash=$1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now()) AND (service_account_id IS NULL OR EXISTS (SELECT 1 FROM service_accounts WHERE id=api_keys.service_account_id AND state='active'))`, hash).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &key.SecretHash, &roles, &key.CreatedAt, &key.ExpiresAt, &key.LastUsedAt)
+	err := s.db.QueryRowContext(ctx, getActiveAPIKeyBySecretHashQuery, hash).Scan(&key.ID, &key.ServiceAccountID, &key.Name, &key.SecretHash, &roles, &key.CreatedAt, &key.ExpiresAt, &key.LastUsedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return APIKey{}, ErrNotFound
 	}
@@ -99,3 +99,6 @@ func (s *PostgresStore) TouchAPIKeys(ctx context.Context, uses []APIKeyUse, notB
 func scanAPIKeyRoles(encoded []byte, key *APIKey) error {
 	return json.Unmarshal(encoded, &key.Roles)
 }
+
+// getActiveAPIKeyBySecretHashQuery is the credential lookup of every API-key request, planned by the hot-query registry.
+const getActiveAPIKeyBySecretHashQuery = `SELECT id::text,COALESCE(service_account_id::text,''),name,secret_hash,array_to_json(roles),created_at,expires_at,last_used_at FROM api_keys WHERE secret_hash=$1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>now()) AND (service_account_id IS NULL OR EXISTS (SELECT 1 FROM service_accounts WHERE id=api_keys.service_account_id AND state='active'))`

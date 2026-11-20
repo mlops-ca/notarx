@@ -640,7 +640,8 @@ func publishAPTRepositorySnapshotTx(ctx context.Context, tx *sql.Tx, snapshot AP
 		return APTRepositorySnapshot{}, ErrVersionConflict
 	}
 	var visibleSequence int64
-	err = tx.QueryRowContext(ctx, `SELECT sequence FROM native_apt_repository_snapshots WHERE repository_id=$1 AND suite=$2 AND state='visible' FOR UPDATE`, snapshot.RepositoryID, snapshot.Suite).Scan(&visibleSequence)
+	var previousVisibleID string
+	err = tx.QueryRowContext(ctx, `SELECT sequence,id::text FROM native_apt_repository_snapshots WHERE repository_id=$1 AND suite=$2 AND state='visible' FOR UPDATE`, snapshot.RepositoryID, snapshot.Suite).Scan(&visibleSequence, &previousVisibleID)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return APTRepositorySnapshot{}, err
 	}
@@ -737,6 +738,10 @@ func publishAPTRepositorySnapshotTx(ctx context.Context, tx *sql.Tx, snapshot AP
 		SET state='visible',release_digest=$2,inrelease_digest=$3,signer_identity=$4,key_fingerprint=$5,signature_algorithm=$6,published_at=clock_timestamp()
 		WHERE id=$1 AND state='building' RETURNING `+aptRepositorySnapshotColumns,
 		snapshot.ID, snapshot.ReleaseDigest, snapshot.InReleaseDigest, snapshot.SignerIdentity, snapshot.KeyFingerprint, snapshot.SignatureAlgorithm), &snapshot); err != nil {
+		return APTRepositorySnapshot{}, err
+	}
+	// The new snapshot's paths become visible and the retired one's leave: both change catalogue rows.
+	if err = refreshAPTSnapshotCatalog(ctx, tx, snapshot.RepositoryID, snapshot.ID, previousVisibleID); err != nil {
 		return APTRepositorySnapshot{}, err
 	}
 	if err = insertAudit(ctx, tx, audit); err != nil {

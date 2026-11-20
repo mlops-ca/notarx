@@ -148,6 +148,28 @@ func TestLoadRejectsInvalidRawSpoolLimit(t *testing.T) {
 	}
 }
 
+func TestLoadInlineMaxBytes(t *testing.T) {
+	setCompleteConfiguration(t)
+	cfg, err := Load()
+	if err != nil || cfg.InlineMaxBytes != 16384 {
+		t.Fatalf("default = %d, %v", cfg.InlineMaxBytes, err)
+	}
+	t.Setenv("NOTARX_INLINE_MAX_BYTES", "0")
+	if cfg, err = Load(); err != nil || cfg.InlineMaxBytes != 0 {
+		t.Fatalf("zero = %d, %v", cfg.InlineMaxBytes, err)
+	}
+	t.Setenv("NOTARX_INLINE_MAX_BYTES", "4096")
+	if cfg, err = Load(); err != nil || cfg.InlineMaxBytes != 4096 {
+		t.Fatalf("override = %d, %v", cfg.InlineMaxBytes, err)
+	}
+	for _, bad := range []string{"-1", "big", "1.5"} {
+		t.Setenv("NOTARX_INLINE_MAX_BYTES", bad)
+		if _, err := Load(); err == nil {
+			t.Errorf("NOTARX_INLINE_MAX_BYTES=%q accepted", bad)
+		}
+	}
+}
+
 func TestLoadAuditWriterSettings(t *testing.T) {
 	setCompleteConfiguration(t)
 	cfg, err := Load()

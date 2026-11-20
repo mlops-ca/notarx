@@ -97,6 +97,9 @@ func (s *PostgresStore) PublishPyPIFile(ctx context.Context, file PyPIFile) (PyP
 	if err != nil {
 		return stored, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, stored.RepositoryID, FormatPyPI, stored.Project); err != nil {
+		return PyPIFile{}, err
+	}
 	// A cached or published file with bytes counts; a metadata-only row does not.
 	if stored.State == "visible" && stored.ObjectKey != "" {
 		if err = capacity.Reserve(ctx, tx, stored.RepositoryID, stored.Size, 1); err != nil {
@@ -167,6 +170,9 @@ func (s *PostgresStore) PublishPyPIVersion(ctx context.Context, files []PyPIFile
 		delta.add(stored.RepositoryID, stored.Size, 1)
 		result = append(result, stored)
 	}
+	if err = refreshArtifactCatalog(ctx, tx, files[0].RepositoryID, FormatPyPI, files[0].Project); err != nil {
+		return nil, err
+	}
 	if err = delta.reserve(ctx, tx); err != nil {
 		return nil, err
 	}
@@ -224,6 +230,9 @@ func (s *PostgresStore) SyncPyPIProxyFiles(ctx context.Context, repositoryID, pr
 			return err
 		}
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatPyPI, project); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -258,6 +267,9 @@ func (s *PostgresStore) CachePyPIProxyFile(ctx context.Context, incoming PyPIFil
 	if err != nil {
 		return PyPIFile{}, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, stored.RepositoryID, FormatPyPI, stored.Project); err != nil {
+		return PyPIFile{}, err
+	}
 	// The row had no bytes before (a metadata-only proxy row), so its object joins the usage now.
 	if err = capacity.Reserve(ctx, tx, stored.RepositoryID, stored.Size, 1); err != nil {
 		return PyPIFile{}, err
@@ -270,7 +282,7 @@ func (s *PostgresStore) CachePyPIProxyFile(ctx context.Context, incoming PyPIFil
 
 func (s *PostgresStore) getPyPIFileAnyState(ctx context.Context, repositoryID, filename string) (PyPIFile, error) {
 	var file PyPIFile
-	err := scanPyPIFile(s.db.QueryRowContext(ctx, `SELECT `+pypiFileColumns+` FROM native_pypi_files WHERE repository_id=$1::uuid AND filename=$2`, repositoryID, filename), &file)
+	err := scanPyPIFile(s.db.QueryRowContext(ctx, getPyPIFileQuery, repositoryID, filename), &file)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PyPIFile{}, ErrNotFound
 	}
@@ -395,6 +407,9 @@ func (s *PostgresStore) TombstonePyPIVersion(ctx context.Context, repositoryID, 
 	if _, err = tx.ExecContext(ctx, `INSERT INTO artifact_tombstones (repository_id,format,coordinate)
 		VALUES ($1,'pypi',$2) ON CONFLICT (repository_id,format,coordinate)
 		DO UPDATE SET tombstoned_at=now()`, repositoryID, project+"@"+version); err != nil {
+		return nil, err
+	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatPyPI, project); err != nil {
 		return nil, err
 	}
 	// Deleted files leave the usage; only files with bytes were counted.
@@ -537,6 +552,9 @@ func (s *PostgresStore) restorePyPIVersionLocked(ctx context.Context, repository
 	if _, err = tx.ExecContext(ctx, `DELETE FROM artifact_tombstones WHERE repository_id=$1::uuid AND format='pypi' AND coordinate=$2`, repositoryID, project+"@"+version); err != nil {
 		return nil, false, err
 	}
+	if err = refreshArtifactCatalog(ctx, tx, repositoryID, FormatPyPI, project); err != nil {
+		return nil, false, err
+	}
 	var delta usageDelta
 	for _, file := range files {
 		if file.ObjectKey != "" {
@@ -597,3 +615,6 @@ func (s *PostgresStore) MarkPyPIObjectCollected(ctx context.Context, objectKey s
 	}
 	return nil
 }
+
+// getPyPIFileQuery reads one distribution file by name in any state.
+const getPyPIFileQuery = `SELECT ` + pypiFileColumns + ` FROM native_pypi_files WHERE repository_id=$1::uuid AND filename=$2`
