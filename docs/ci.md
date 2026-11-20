@@ -222,10 +222,11 @@ tags the loaded image with that name and removes the tag when it cleans up (issu
 The six image jobs keep the job count of #500.
 
 A job's timeout is the sum of its lanes' timeouts and it installs the union of their
-tool needs. A packed job takes the sum of its lanes plus about 0.7 minutes of setup.
-The image jobs start when the amd64 images are ready, about 3 minutes into the run, so
-each is packed to about 6 minutes of lane steps and ends by about 10 minutes, under
-the 12-minute verdict of issue #500; lane times vary by a minute or more between runs
+tool needs. A packed job takes the sum of its lanes plus about 0.7 minutes of setup
+(0.15 more when a lane needs Rust: `six-format-auth` makes `packed-native-auth-oci`
+install it). The image jobs start when the amd64 images are ready, about 3 minutes into
+the run, so each is packed to 5.5 to 7 minutes of lane steps and ends by about 10 to 11
+minutes, under the 12-minute verdict of issue #500; lane times vary by a minute or more between runs
 (`oci-discovery` took 2.0 and 3.2 minutes in two runs). The lanes of
 a job share one runner and Docker daemon: each lane's scripts own their Compose
 projects and tear them down on exit, and a cancelled job stops after the lane that

@@ -94,8 +94,7 @@ def check():
 
         try:
             run(["go", "build", "-o", str(cli), "./cmd/notarxctl"])
-            # Only CI's explicit --no-build (the loaded prebuilt image) skips the build.
-            if os.environ.get("NOTARX_COMPOSE_BUILD_FLAG") != "--no-build":
+            if os.environ.get("NOTARX_COMPOSE_BUILD_FLAG", "--build") == "--build":
                 run(compose + ["build", "notarx"])
             started = True
             notarx()

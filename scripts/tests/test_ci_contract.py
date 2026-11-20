@@ -286,14 +286,10 @@ class PlanTests(unittest.TestCase):
 
     def test_every_lane_step_runs_once(self):
         # A lane split (core-native-e2e into two halves, issue #518) or a move between
-        # lanes must not run a step twice or leave it behind in both lanes.
+        # lanes must not run a step twice.
         commands = [tuple(s['command']) for lane in ci.PLAN['lanes'].values() for s in lane['steps']]
+        # A step left out of every lane fails test_every_notarx_gate_stays_planned.
         self.assertEqual(sorted(c for c in set(commands) if commands.count(c) > 1), [])
-        native = [s['command'][1] for name in ('core-native-e2e-1', 'core-native-e2e-2')
-                  for s in ci.PLAN['lanes'][name]['steps']]
-        self.assertEqual(sorted(native), sorted([
-            'cli-runtime-e2e', 'native-oci-e2e', 'native-raw-e2e', 'native-maven-e2e', 'native-npm-e2e',
-            'native-pypi-e2e', 'native-go-e2e', 'native-apt-e2e', 'apt-signer-rotation-e2e']))
 
     def test_every_notarx_gate_stays_planned(self):
         targets = {s['command'][1] for lane in ci.PLAN['lanes'].values()
