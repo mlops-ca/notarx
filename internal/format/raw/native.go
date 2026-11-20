@@ -120,7 +120,7 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		}
 		h.serveAsset(w, r, path, asset)
 	case http.MethodPut:
-		condition, ok := h.checkRawWriteCondition(w, r, repo, path)
+		condition, ok := h.checkRawWriteCondition(w, r, repo, path, principal.Actor, true)
 		if !ok {
 			return true
 		}
@@ -257,7 +257,7 @@ func (h *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		condition, ok := h.checkRawWriteCondition(w, r, repo, path)
+		condition, ok := h.checkRawWriteCondition(w, r, repo, path, actor, false)
 		if !ok {
 			return
 		}
@@ -307,6 +307,15 @@ func (h *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 			return
 		}
 		h.auditRefusedOverwrite(r, repo, path, actor, err)
+		if versionedRefusal(err) {
+			// The refusal is final for these bytes. Closing the upload frees its staged bytes and stops it from
+			// holding the version open against the idle sweep until it expires.
+			if cancelled, cancelErr := h.store.CancelRawUpload(r.Context(), id); cancelErr == nil {
+				if deleteErr := uploadspool.DeleteUpload(r.Context(), h.objects, cancelled.ObjectKey); deleteErr == nil {
+					_ = h.store.MarkRawUploadCollected(r.Context(), cancelled.ID)
+				}
+			}
+		}
 		if writeVersionedProblem(w, err) {
 			return
 		}

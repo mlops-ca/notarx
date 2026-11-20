@@ -39,6 +39,15 @@ type openAPIServeMux struct {
 
 const managementJSONBodyLimit = 1 << 20
 
+// rawVersionSealBodyLimit bounds a seal request, whose expected file list has one entry per file of the version: up to
+// rawversion.MaxFilesPerVersion entries, which exceed the general management body limit.
+const rawVersionSealBodyLimit = 32 << 20
+
+// isRawVersionSeal reports whether r is POST /api/v2/repositories/{id}/packages/{name}/versions/{version}:seal.
+func isRawVersionSeal(r *http.Request) bool {
+	return r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, ":seal") && strings.Contains(r.URL.Path, "/packages/") && strings.Contains(r.URL.Path, "/versions/")
+}
+
 func (m openAPIServeMux) guarded(handler func(http.ResponseWriter, *http.Request)) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Query().Get("match") == "contains" && (r.URL.Path == "/api/v2/artifact-search" || strings.HasPrefix(r.URL.Path, "/api/v2/repositories/") && strings.HasSuffix(r.URL.Path, "/artifact-search")) {
@@ -55,7 +64,11 @@ func (m openAPIServeMux) guarded(handler func(http.ResponseWriter, *http.Request
 			}
 		}
 		if r.Body != nil && !isManagementObjectUpload(r) {
-			r.Body = http.MaxBytesReader(w, r.Body, managementJSONBodyLimit)
+			limit := int64(managementJSONBodyLimit)
+			if isRawVersionSeal(r) {
+				limit = rawVersionSealBodyLimit
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
 		}
 		handler(w, r)
 	}

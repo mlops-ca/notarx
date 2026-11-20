@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -132,7 +133,7 @@ func TestVersionedRawStrictRepositoryRefusesFileDelete(t *testing.T) {
 }
 
 func TestVersionedRawResumableCompletionObeysCreateOnly(t *testing.T) {
-	_, mux := versionedFixture(t, false)
+	store, mux := versionedFixture(t, false)
 	const path = "/raw/releases/tool/1.0.0/big"
 	upload := func(content string) *httptest.ResponseRecorder {
 		started := request(mux, http.MethodPost, path+"?resumable=1", "", nil)
@@ -154,8 +155,64 @@ func TestVersionedRawResumableCompletionObeysCreateOnly(t *testing.T) {
 	if conflict.Code != http.StatusConflict || problemCode(t, conflict.Body.String()) != "version_file_exists" {
 		t.Fatalf("conflicting completion=%d %s", conflict.Code, conflict.Body.String())
 	}
+	// The refusal is final, so the upload is closed and no longer holds the version open against the idle sweep.
+	if uploads, err := store.ListUncollectedRawUploads(context.Background(), 100); err != nil {
+		t.Fatal(err)
+	} else {
+		for _, upload := range uploads {
+			if upload.State == "open" {
+				t.Errorf("an upload refused at completion is still open: %#v", upload)
+			}
+		}
+	}
 	if read := request(mux, http.MethodGet, path, "", nil); read.Body.String() != "payload" {
 		t.Fatalf("a refused completion mutated the file: %q", read.Body.String())
+	}
+}
+
+// trackedBody records whether the handler read the request body.
+type trackedBody struct {
+	reads int
+}
+
+func (b *trackedBody) Read([]byte) (int, error) {
+	b.reads++
+	return 0, io.EOF
+}
+
+func TestVersionedRawRefusesBeforeReadingTheBodyWhenTheOutcomeIsKnown(t *testing.T) {
+	store, mux := versionedFixture(t, false)
+	request(mux, http.MethodPut, "/raw/releases/tool/1.0.0/a", "stored", nil)
+	if _, err := store.SealRawVersion(context.Background(), repository.SealRawVersionInput{RepositoryID: "releases", Name: "tool", Version: "1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	other := sha256.Sum256([]byte("other bytes"))
+	cases := []struct {
+		name, path, digest, code string
+	}{
+		{"a new file in a sealed version", "tool/1.0.0/late", "", "version_sealed"},
+		{"another digest than the stored file", "tool/1.0.0/a", "sha-256=" + base64.StdEncoding.EncodeToString(other[:]), "version_file_exists"},
+	}
+	for _, tc := range cases {
+		body := &trackedBody{}
+		req := httptest.NewRequest(http.MethodPut, "/raw/releases/"+tc.path, body)
+		req.Header.Set("Authorization", "Bearer fixture-admin")
+		if tc.digest != "" {
+			req.Header.Set("Digest", tc.digest)
+		}
+		response := httptest.NewRecorder()
+		mux.ServeHTTP(response, req)
+		if response.Code != http.StatusConflict || problemCode(t, response.Body.String()) != tc.code {
+			t.Errorf("%s: %d %s", tc.name, response.Code, response.Body.String())
+		}
+		if body.reads != 0 {
+			t.Errorf("%s: the body was read %d times before the refusal", tc.name, body.reads)
+		}
+	}
+	// A declared digest that matches the stored file is not refused early: the replay is answered after the read.
+	same := sha256.Sum256([]byte("stored"))
+	if replay := request(mux, http.MethodPut, "/raw/releases/tool/1.0.0/a", "stored", map[string]string{"Digest": "sha-256=" + base64.StdEncoding.EncodeToString(same[:])}); replay.Code != http.StatusOK {
+		t.Fatalf("replay=%d %s", replay.Code, replay.Body.String())
 	}
 }
 

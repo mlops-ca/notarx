@@ -20,10 +20,9 @@ import (
 
 // rawVersionPort is the slice of repository.NativeRawVersionStore the management API uses.
 type rawVersionPort interface {
-	GetRawVersion(ctx context.Context, repositoryID, name, version string) (repository.RawVersion, error)
+	GetRawVersionWithFiles(ctx context.Context, repositoryID, name, version string) (repository.RawVersion, []repository.RawAsset, error)
 	ListRawPackages(ctx context.Context, repositoryID, after string, limit int) ([]repository.RawPackage, error)
 	ListRawVersions(ctx context.Context, query repository.RawVersionQuery) ([]repository.RawVersion, error)
-	ListRawVersionFiles(ctx context.Context, repositoryID, name, version string) ([]repository.RawAsset, error)
 	CreateRawVersion(ctx context.Context, version repository.RawVersion, audit ...repository.AuditRecord) (repository.RawVersion, bool, error)
 	SetRawVersionProperties(ctx context.Context, repositoryID, name, version string, properties map[string]string, audit ...repository.AuditRecord) (repository.RawVersion, error)
 	SealRawVersion(ctx context.Context, input repository.SealRawVersionInput) (repository.RawVersion, error)
@@ -311,12 +310,7 @@ func (h rawVersionManagementHandler) GetRawVersion(w http.ResponseWriter, r *htt
 }
 
 func (h rawVersionManagementHandler) versionWithFiles(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, name, version string) (repository.RawVersion, []repository.RawAsset, bool) {
-	found, err := h.versions.GetRawVersion(r.Context(), repo.ID, name, version)
-	if err != nil {
-		writeRawVersionError(w, err)
-		return repository.RawVersion{}, nil, false
-	}
-	files, err := h.versions.ListRawVersionFiles(r.Context(), repo.ID, name, version)
+	found, files, err := h.versions.GetRawVersionWithFiles(r.Context(), repo.ID, name, version)
 	if err != nil {
 		writeRawVersionError(w, err)
 		return repository.RawVersion{}, nil, false
@@ -431,18 +425,18 @@ func (h rawVersionManagementHandler) SealRawVersion(w http.ResponseWriter, r *ht
 			}
 		}
 		if body.ChecksumsFile != "" {
-			if !h.readChecksums(w, r, repo, &input, body.ChecksumsFile) {
+			// The version is looked up first, so an unknown version is a 404 and not a checksum mismatch.
+			_, files, ok := h.versionWithFiles(w, r, repo, name, version)
+			if !ok || !h.readChecksums(w, r, &input, body.ChecksumsFile, files) {
 				return
 			}
 		}
-		sealed, err := h.versions.SealRawVersion(r.Context(), input)
-		if err != nil {
+		if _, err := h.versions.SealRawVersion(r.Context(), input); err != nil {
 			writeRawVersionError(w, err)
 			return
 		}
-		files, err := h.versions.ListRawVersionFiles(r.Context(), repo.ID, name, version)
-		if err != nil {
-			writeRawVersionError(w, err)
+		sealed, files, ok := h.versionWithFiles(w, r, repo, name, version)
+		if !ok {
 			return
 		}
 		writeNativeMavenJSON(w, http.StatusOK, rawVersionResponse(sealed, files))
@@ -452,14 +446,9 @@ func (h rawVersionManagementHandler) SealRawVersion(w http.ResponseWriter, r *ht
 // readChecksums reads the stored checksums file named at seal and parses it as sha256sum output. The read happens
 // before the seal takes the version lock; the store re-checks under the lock that the file still has the digest
 // read here.
-func (h rawVersionManagementHandler) readChecksums(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, input *repository.SealRawVersionInput, file string) bool {
+func (h rawVersionManagementHandler) readChecksums(w http.ResponseWriter, r *http.Request, input *repository.SealRawVersionInput, file string, files []repository.RawAsset) bool {
 	if h.objects == nil {
 		writeHostedProblem(w, http.StatusNotImplemented, "not_supported", "checksums files cannot be read")
-		return false
-	}
-	files, err := h.versions.ListRawVersionFiles(r.Context(), repo.ID, input.Name, input.Version)
-	if err != nil {
-		writeRawVersionError(w, err)
 		return false
 	}
 	prefix, _ := repository.RawVersionPathRange(input.Name, input.Version)

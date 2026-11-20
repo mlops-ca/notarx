@@ -9617,7 +9617,7 @@ type UpdateRepository struct {
 	// SealMode Hosted Raw with the versioned layout only. `explicit` seals only on request. `idle` also seals an open version that saw no write for the idle period, for publishers that never call seal. Chosen at creation and immutable.
 	SealMode *RawSealMode `json:"sealMode,omitempty"`
 
-	// Strict The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value; any other value answers 409 layout_immutable.
+	// Strict The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value, which changes nothing; any other value answers 409 layout_immutable. Other repositories answer 400.
 	Strict *bool `json:"strict,omitempty"`
 
 	// UpstreamAuth Protected upstream credentials for Go, Maven, OCI, npm, PyPI, Cargo, APT, Raw and Conan Proxy repositories. Basic or Bearer authentication targets the bound upstream. Conan exchanges Basic credentials through its users/authenticate endpoint before reading protected metadata or files. When OCI ociBearer is configured, these credentials are sent only to its bound issuer and content requests use the exchanged pull token. Cross-origin redirects strip credentials. Rotation or clear invalidates credential-bound content and token caches. Changing the upstream URL or OCI issuer binding requires a fresh secret or scheme none; stored credentials are never implicitly rebound to a new destination. Hosted repositories and unsupported formats reject this field. `secret` is accepted on write over TLS and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.

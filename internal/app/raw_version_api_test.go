@@ -149,9 +149,17 @@ func TestRawRepositoryLayoutIsChosenAtCreationAndImmutable(t *testing.T) {
 			t.Errorf("%s: %d %s", name, response.Code, response.Body.String())
 		}
 	}
-	// The same value is accepted; a different one is layout_immutable.
-	if response := call(http.MethodPatch, "/api/v2/repositories/"+pathRepo.Id, `{"layout":"path","sealMode":"explicit","strict":false}`, ""); response.Code != http.StatusOK {
-		t.Fatalf("PATCH with the current layout=%d %s", response.Code, response.Body.String())
+	// The current value is accepted next to a real change and alone it changes nothing, so it is not an editable
+	// setting; a different value is layout_immutable; other repositories have no layout to repeat.
+	if response := call(http.MethodPatch, "/api/v2/repositories/"+pathRepo.Id, `{"layout":"path","sealMode":"explicit","strict":false,"visibility":"authenticated"}`, ""); response.Code != http.StatusOK {
+		t.Fatalf("PATCH with the current layout next to a change=%d %s", response.Code, response.Body.String())
+	}
+	if response := call(http.MethodPatch, "/api/v2/repositories/"+pathRepo.Id, `{"layout":"path"}`, ""); response.Code != http.StatusBadRequest {
+		t.Fatalf("a layout-only PATCH that changes nothing=%d %s", response.Code, response.Body.String())
+	}
+	npm := decodeJSON[adminopenapi.Repository](t, call(http.MethodPost, "/api/v2/repositories", `{"name":"plain-npm","format":"npm"}`, "k3"))
+	if response := call(http.MethodPatch, "/api/v2/repositories/"+npm.Id, `{"layout":"path"}`, ""); response.Code != http.StatusBadRequest {
+		t.Fatalf("PATCH of a layout on an npm repository=%d %s", response.Code, response.Body.String())
 	}
 	for _, body := range []string{`{"layout":"versioned"}`, `{"sealMode":"idle"}`, `{"strict":true}`} {
 		response := call(http.MethodPatch, "/api/v2/repositories/"+pathRepo.Id, body, "")
@@ -445,6 +453,35 @@ func TestVersionedRepositoriesAreOutsidePathRetentionAndPathTombstones(t *testin
 	candidates, err := retention.PlanRepositoryDetailed(context.Background(), h.repoID, repository.FormatRaw)
 	if err != nil || len(candidates) != 0 {
 		t.Fatalf("path retention must not plan files of a versioned repository: %#v %v", candidates, err)
+	}
+}
+
+func TestSealOfAnUnknownVersionWithAChecksumsFileIsNotFound(t *testing.T) {
+	h := newRawVersionHarness(t, nil)
+	if response := h.api(http.MethodPost, "/packages/tool/versions/9.9.9:seal", h.writer, `{"checksumsFile":"SHA256SUMS"}`); response.Code != http.StatusNotFound {
+		t.Fatalf("seal=%d %s", response.Code, response.Body.String())
+	}
+}
+
+func TestSealAcceptsAnExpectedListLargerThanTheGeneralBodyLimit(t *testing.T) {
+	h := newRawVersionHarness(t, nil)
+	h.upload("tool/1.0.0/a", "alpha")
+	var files strings.Builder
+	files.WriteString(`{"files":[`)
+	// Far beyond the 1 MiB of other management bodies: an expected list has one entry per file of the version.
+	for index := 0; index < 12000; index++ {
+		if index > 0 {
+			files.WriteByte(',')
+		}
+		fmt.Fprintf(&files, `{"path":"some/deep/directory/with/a/long/name/file-%05d.bin","sha256":"%s"}`, index, sha256Hex("x"))
+	}
+	files.WriteString(`]}`)
+	if files.Len() < 1<<20 {
+		t.Fatalf("the fixture is only %d bytes", files.Len())
+	}
+	response := h.api(http.MethodPost, "/packages/tool/versions/1.0.0:seal", h.writer, files.String())
+	if response.Code != http.StatusUnprocessableEntity || problemCodeOf(t, response) != "checksum_mismatch" {
+		t.Fatalf("a large expected list must be read and compared, not cut off: %d %s", response.Code, response.Body.String())
 	}
 }
 

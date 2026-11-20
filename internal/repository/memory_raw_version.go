@@ -147,6 +147,17 @@ func (s *MemoryStore) GetRawVersion(_ context.Context, repositoryID, name, versi
 	return found, nil
 }
 
+func (s *MemoryStore) GetRawVersionWithFiles(_ context.Context, repositoryID, name, version string) (RawVersion, []RawAsset, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	found, ok := s.rawVersions[rawVersionKey(repositoryID, name, version)]
+	if !ok || found.State == RawVersionTombstoned {
+		return RawVersion{}, nil, ErrNotFound
+	}
+	found.Properties = cloneRawVersionProperties(found.Properties)
+	return found, s.rawVersionFilesLocked(repositoryID, name, version), nil
+}
+
 func (s *MemoryStore) ListRawPackages(_ context.Context, repositoryID, after string, limit int) ([]RawPackage, error) {
 	if limit <= 0 {
 		limit = 100
@@ -424,8 +435,13 @@ func (s *MemoryStore) SealIdleRawVersions(ctx context.Context, idleBefore time.T
 		version := s.rawVersions[key]
 		result, err := s.sealRawVersionLocked(ctx, key, version, SealRawVersionInput{Actor: rawVersionSweepActor, Audit: rawVersionIdleSealAudit(s.hostedRepositories[version.RepositoryID].Name)}, now)
 		if err != nil {
-			// One version that cannot be sealed must not keep the younger ones from being sealed.
-			failures = errors.Join(failures, err)
+			// One version that cannot be sealed must not keep the younger ones from being sealed; its idle clock
+			// restarts, as in the PostgreSQL sweep.
+			if !errors.Is(err, ErrVersionEmpty) {
+				failures = errors.Join(failures, err)
+			}
+			version.UpdatedAt = now
+			s.rawVersions[key] = version
 			continue
 		}
 		sealed = append(sealed, result)

@@ -184,7 +184,7 @@ func TestLoadGenericPackagesSettings(t *testing.T) {
 		t.Fatalf("overrides = %d %v %v %v, %v", cfg.GenericMaxFilesPerVersion, cfg.GenericAutosealIdle, cfg.GenericAutosealInterval, cfg.GenericStaleOpenAfter, err)
 	}
 	for name, bad := range map[string][]string{
-		"NOTARX_GENERIC_MAX_FILES_PER_VERSION": {"0", "-1", "many", "100001"},
+		"NOTARX_GENERIC_MAX_FILES_PER_VERSION": {"0", "-1", "many", "20001"},
 		// The idle period has a floor of 60s so a slow upload is not sealed in the middle of its transfer.
 		"NOTARX_GENERIC_AUTOSEAL_IDLE":     {"59s", "1", "soon"},
 		"NOTARX_GENERIC_AUTOSEAL_INTERVAL": {"5s", "0", "often"},

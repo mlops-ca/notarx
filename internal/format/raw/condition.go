@@ -121,9 +121,9 @@ func rawEntityTagDigest(tag string) string {
 
 // checkRawWriteCondition fails fast before the body is read. The store
 // re-evaluates the same condition atomically when it replaces the reference.
-func (h *Module) checkRawWriteCondition(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, path string) (repository.RawWriteCondition, bool) {
+func (h *Module) checkRawWriteCondition(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, path, actor string, plainWrite bool) (repository.RawWriteCondition, bool) {
 	if versioned(repo) {
-		return versionedWriteCondition(w, r, repo, path)
+		return h.versionedWriteCondition(w, r, repo, path, actor, plainWrite)
 	}
 	condition, err := rawWriteCondition(r.Header)
 	if err != nil {

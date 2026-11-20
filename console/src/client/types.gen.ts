@@ -3428,7 +3428,7 @@ export type UpdateRepository = {
   layout?: RawLayout;
   sealMode?: RawSealMode;
   /**
-   * The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value; any other value answers 409 layout_immutable.
+   * The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value, which changes nothing; any other value answers 409 layout_immutable. Other repositories answer 400.
    */
   strict?: boolean;
   egressProxy?: EgressProxy;
@@ -4382,7 +4382,7 @@ export type UpdateRepositoryWritable = {
   layout?: RawLayout;
   sealMode?: RawSealMode;
   /**
-   * The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value; any other value answers 409 layout_immutable.
+   * The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value, which changes nothing; any other value answers 409 layout_immutable. Other repositories answer 400.
    */
   strict?: boolean;
   egressProxy?: EgressProxyWritable;

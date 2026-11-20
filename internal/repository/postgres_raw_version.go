@@ -292,6 +292,27 @@ func (s *PostgresStore) GetRawVersion(ctx context.Context, repositoryID, name, v
 	return found, loadRawVersionProperties(ctx, s.db, &found)
 }
 
+func (s *PostgresStore) GetRawVersionWithFiles(ctx context.Context, repositoryID, name, version string) (RawVersion, []RawAsset, error) {
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelRepeatableRead, ReadOnly: true})
+	if err != nil {
+		return RawVersion{}, nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var found RawVersion
+	err = scanRawVersion(tx.QueryRowContext(ctx, `SELECT `+rawVersionColumns+` FROM native_raw_versions v WHERE v.repository_id=$1::uuid AND v.name=$2 AND v.version=$3`, repositoryID, name, version), &found)
+	if errors.Is(err, sql.ErrNoRows) || err == nil && found.State == RawVersionTombstoned {
+		return RawVersion{}, nil, ErrNotFound
+	}
+	if err != nil {
+		return RawVersion{}, nil, err
+	}
+	if err = loadRawVersionProperties(ctx, tx, &found); err != nil {
+		return RawVersion{}, nil, err
+	}
+	files, err := listRawVersionFiles(ctx, tx, repositoryID, name, version)
+	return found, files, err
+}
+
 func (s *PostgresStore) ListRawPackages(ctx context.Context, repositoryID, after string, limit int) ([]RawPackage, error) {
 	if limit <= 0 {
 		limit = 100
@@ -629,12 +650,17 @@ func (s *PostgresStore) SealIdleRawVersions(ctx context.Context, idleBefore time
 			switch {
 			case sealErr == nil:
 				sealed = append(sealed, version)
-			case errors.Is(sealErr, errRawSealSkipped) || errors.Is(sealErr, ErrVersionEmpty) || errors.Is(sealErr, ErrNotFound):
+			case errors.Is(sealErr, errRawSealSkipped) || errors.Is(sealErr, ErrNotFound):
 			case ctx.Err() != nil:
 				return sealed, errors.Join(failures, ctx.Err())
 			default:
-				// One version that cannot be sealed must not keep the younger ones from being sealed: report it and go on.
-				failures = errors.Join(failures, fmt.Errorf("seal %s@%s of repository %s: %w", c.name, c.version, c.repositoryName, sealErr))
+				// One version that cannot be sealed must not keep the younger ones from being sealed: report it and go
+				// on. Its idle clock restarts (updated_at is the last write), so it moves behind every younger
+				// candidate and is retried one idle period later instead of heading the next scan again.
+				if !errors.Is(sealErr, ErrVersionEmpty) {
+					failures = errors.Join(failures, fmt.Errorf("seal %s@%s of repository %s: %w", c.name, c.version, c.repositoryName, sealErr))
+				}
+				_, _ = s.db.ExecContext(ctx, `UPDATE native_raw_versions SET updated_at=now() WHERE id=$1::uuid AND state='open'`, c.id)
 			}
 			cursorAt, cursorID = c.updatedAt, c.id
 		}

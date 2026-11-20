@@ -7,12 +7,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 	"unicode/utf8"
+
+	"github.com/mlops-ca/notarx/internal/rawversion"
 )
 
 // RawLayout selects how a hosted Raw repository interprets its paths (ADR 0028).
@@ -51,21 +51,18 @@ const (
 	RawVersionTombstoned RawVersionState = "tombstoned"
 )
 
-// MaxRawFilesPerVersion is the largest files-per-version cap a deployment can configure; the file read of a version is
-// bounded by it.
-const MaxRawFilesPerVersion = 100000
+// MaxRawFilesPerVersion is the largest files-per-version cap a deployment can configure; the file read of a version, and
+// the size of a seal request, are bounded by it.
+const MaxRawFilesPerVersion = rawversion.MaxFilesPerVersion
 
 // DefaultRawMaxFilesPerVersion is the files-per-version cap when the store is not configured (ADR 0028 configuration).
 const DefaultRawMaxFilesPerVersion = 1000
 
 // Limits of the per-version property map (ADR 0028, Properties).
 const (
-	RawVersionMaxProperties     = 32
+	RawVersionMaxProperties     = rawversion.MaxProperties
 	RawVersionMaxPropertyBytes  = 8 << 10
 	rawVersionMaxPropertyValue  = 256
-	rawVersionMaxFileSegments   = 8
-	rawVersionReservedSegment   = ".notarx"
-	rawVersionMinPathSegments   = 3
 	rawVersionManifestDigestTag = "sha256:"
 )
 
@@ -96,12 +93,6 @@ var (
 	ErrLayoutImmutable = errors.New("repository layout is immutable")
 	// ErrRawLayoutMismatch reports an operation that needs the other Raw layout.
 	ErrRawLayoutMismatch = errors.New("operation does not apply to this Raw layout")
-)
-
-var (
-	rawVersionNamePattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
-	rawVersionVersionPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~-]{0,127}$`)
-	rawVersionPropertyKeyExpr = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,63}$`)
 )
 
 // isHostedRaw reports whether repo is a hosted Raw repository; an empty type is hosted, as at creation.
@@ -153,10 +144,10 @@ func rawLayoutColumns(repo HostedRepository) (layout, sealMode string, strict bo
 }
 
 // ValidRawVersionName reports whether name is a valid package name of a versioned repository.
-func ValidRawVersionName(name string) bool { return rawVersionNamePattern.MatchString(name) }
+func ValidRawVersionName(name string) bool { return rawversion.ValidName(name) }
 
 // ValidRawVersionString reports whether version is a valid version identifier; semver is not required.
-func ValidRawVersionString(version string) bool { return rawVersionVersionPattern.MatchString(version) }
+func ValidRawVersionString(version string) bool { return rawversion.ValidVersion(version) }
 
 type rawWriteActorKey struct{}
 
@@ -181,13 +172,23 @@ func (p RawVersionPath) Prefix() string { return p.Name + "/" + p.Version + "/" 
 // ParseRawVersionPath splits and validates a Raw path of a versioned repository. The caller has already applied
 // v2contract.CanonicalRawPath, so the segments are canonical; this adds the ASCII rules of ADR 0028.
 func ParseRawVersionPath(path string) (RawVersionPath, error) {
+	if len(path) > rawversion.MaxPathBytes {
+		return RawVersionPath{}, ErrInvalidGenericPath
+	}
 	segments := strings.Split(path, "/")
-	if len(segments) < rawVersionMinPathSegments || len(segments) > 2+rawVersionMaxFileSegments {
+	if len(segments) < rawversion.MinPathSegments || len(segments) > 2+rawversion.MaxFileSegments {
 		return RawVersionPath{}, ErrInvalidGenericPath
 	}
 	parsed := RawVersionPath{Name: segments[0], Version: segments[1], File: strings.Join(segments[2:], "/")}
-	if !ValidRawVersionName(parsed.Name) || !ValidRawVersionString(parsed.Version) || segments[2] == rawVersionReservedSegment {
+	if !ValidRawVersionName(parsed.Name) || !ValidRawVersionString(parsed.Version) || segments[2] == rawversion.ReservedSegment {
 		return RawVersionPath{}, ErrInvalidGenericPath
+	}
+	// The guard also serves writers that never passed the HTTP path canonicalisation (replication, promotion,
+	// migration), so the file segments are checked here too.
+	for _, segment := range segments[2:] {
+		if !rawversion.ValidFileSegment(segment) {
+			return RawVersionPath{}, ErrInvalidGenericPath
+		}
 	}
 	return parsed, nil
 }
@@ -286,6 +287,9 @@ type RawOpenVersionStats struct {
 // consistent; these methods read versions and change their state.
 type NativeRawVersionStore interface {
 	GetRawVersion(ctx context.Context, repositoryID, name, version string) (RawVersion, error)
+	// GetRawVersionWithFiles reads a version and its files from one consistent snapshot, so state, counters and the
+	// file list always agree.
+	GetRawVersionWithFiles(ctx context.Context, repositoryID, name, version string) (RawVersion, []RawAsset, error)
 	ListRawPackages(ctx context.Context, repositoryID, after string, limit int) ([]RawPackage, error)
 	ListRawVersions(ctx context.Context, query RawVersionQuery) ([]RawVersion, error)
 	ListRawVersionFiles(ctx context.Context, repositoryID, name, version string) ([]RawAsset, error)
@@ -307,7 +311,7 @@ func ValidateRawVersionProperties(properties map[string]string) error {
 	}
 	total := 0
 	for key, value := range properties {
-		if !rawVersionPropertyKeyExpr.MatchString(key) || len(value) > rawVersionMaxPropertyValue || !utf8.ValidString(value) || strings.IndexFunc(value, invalidRawVersionRune) >= 0 {
+		if !rawversion.ValidPropertyKey(key) || len(value) > rawVersionMaxPropertyValue || !utf8.ValidString(value) || strings.IndexFunc(value, rawversion.InvalidRune) >= 0 {
 			return ErrInvalidVersionProperties
 		}
 		total += len(key) + len(value)
@@ -316,11 +320,6 @@ func ValidateRawVersionProperties(properties map[string]string) error {
 		return ErrInvalidVersionProperties
 	}
 	return nil
-}
-
-// invalidRawVersionRune is the set of control and bidirectional characters v2contract.CanonicalRawPath rejects in paths.
-func invalidRawVersionRune(value rune) bool {
-	return unicode.IsControl(value) || value == '\u061c' || value == '\u200e' || value == '\u200f' || value >= '\u202a' && value <= '\u202e' || value >= '\u2066' && value <= '\u2069'
 }
 
 // RawVersionManifest builds the canonical manifest of a version and its digest (ADR 0028, Manifest). files are the

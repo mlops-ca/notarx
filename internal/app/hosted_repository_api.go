@@ -463,10 +463,17 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	updatedRepo.OCIBearer = ociBearer
-	layoutRequested := request.Layout != nil || request.SealMode != nil || request.Strict != nil
-	if layoutRequested && (request.Layout != nil && *request.Layout != repo.RawLayout || request.SealMode != nil && *request.SealMode != repo.SealMode || request.Strict != nil && *request.Strict != repo.RawStrict) {
-		writeHostedProblem(w, http.StatusConflict, "layout_immutable", "the layout, seal mode and strict flag of a repository are fixed at creation")
-		return
+	// The layout, seal mode and strict flag of a Raw repository are fixed at creation: the current value is accepted
+	// and changes nothing, any other value is layout_immutable. Other repositories have none to repeat.
+	if request.Layout != nil || request.SealMode != nil || request.Strict != nil {
+		if repo.Format != repository.FormatRaw || repo.Type != repository.RepositoryTypeHosted {
+			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "layout, sealMode and strict apply to Raw Hosted repositories only")
+			return
+		}
+		if request.Layout != nil && *request.Layout != repo.RawLayout || request.SealMode != nil && *request.SealMode != repo.SealMode || request.Strict != nil && *request.Strict != repo.RawStrict {
+			writeHostedProblem(w, http.StatusConflict, "layout_immutable", "the layout, seal mode and strict flag of a repository are fixed at creation")
+			return
+		}
 	}
 	if request.Visibility != nil {
 		if !request.Visibility.Valid() {
@@ -547,7 +554,7 @@ func (h hostedRepositoryAPIHandler) update(w http.ResponseWriter, r *http.Reques
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "hosted repositories only support visibility and Maven publication policy updates")
 			return
 		}
-		if request.Visibility == nil && request.MavenStrictPublication == nil && !layoutRequested {
+		if request.Visibility == nil && request.MavenStrictPublication == nil {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an editable hosted repository setting is required")
 			return
 		}

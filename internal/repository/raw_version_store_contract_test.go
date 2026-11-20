@@ -150,6 +150,8 @@ func runRawVersionStoreContract(t *testing.T, newStore rawVersionContractFactory
 			"tool", "tool/1.0.0", "Tool/1.0.0/file", "-tool/1.0.0/file", "to ol/1.0.0/file", "tool/-1.0.0/file", "tool/1 0/file",
 			"tool/1.0.0/.notarx/x", "tool/1.0.0/.notarx", strings.Repeat("a", 129) + "/1.0.0/f", "tool/" + strings.Repeat("1", 129) + "/f",
 			"tool/1.0.0/a/b/c/d/e/f/g/h/i", "t\u00e9st/1.0.0/f", "tool/1.0.0\u00e9/f",
+			// The guard also serves writers that never canonicalised the path.
+			"tool/1.0.0/a//b", "tool/1.0.0/./x", "tool/1.0.0/../x", "tool/1.0.0/a\x00b", "tool/1.0.0/a\\b", "tool/1.0.0/a\u202eb", "tool/1.0.0/" + strings.Repeat("a", 4100),
 		} {
 			if _, err := put(t, store, repo.ID, path, path); !errors.Is(err, repository.ErrInvalidGenericPath) {
 				t.Errorf("%q: got %v, want ErrInvalidGenericPath", path, err)
@@ -466,6 +468,13 @@ func runRawVersionStoreContract(t *testing.T, newStore rawVersionContractFactory
 		files, err := store.ListRawVersionFiles(ctx, repo.ID, "tool", "1.0.0")
 		if err != nil || len(files) != 2 || files[0].Path != "tool/1.0.0/a.txt" || files[1].Path != "tool/1.0.0/bin/b.txt" {
 			t.Fatalf("files: %#v %v", files, err)
+		}
+		snapshot, snapshotFiles, err := store.GetRawVersionWithFiles(ctx, repo.ID, "tool", "1.0.0")
+		if err != nil || snapshot.State != repository.RawVersionSealed || snapshot.FileCount != len(snapshotFiles) || len(snapshotFiles) != 2 || snapshot.ManifestDigest != want {
+			t.Fatalf("version and files from one snapshot: %#v %#v %v", snapshot, snapshotFiles, err)
+		}
+		if _, _, err = store.GetRawVersionWithFiles(ctx, repo.ID, "tool", "9.9.9"); !errors.Is(err, repository.ErrNotFound) {
+			t.Fatalf("snapshot of an unknown version: %v", err)
 		}
 	})
 	t.Run("seal_verifies_expected_files_and_checksums", func(t *testing.T) {

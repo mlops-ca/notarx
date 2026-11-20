@@ -1331,7 +1331,7 @@ UpdateRepository:
       "$ref": "#/RawSealMode"
     strict:
       type: boolean
-      description: The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value; any other value answers 409 layout_immutable.
+      description: The layout, seal mode and strict flag of a Raw repository are fixed at creation. They are accepted here only with their current value, which changes nothing; any other value answers 409 layout_immutable. Other repositories answer 400.
     egressProxy:
       "$ref": "#/EgressProxy"
     upstreamAuth:
@@ -4698,7 +4698,7 @@ RawVersionSeal:
   properties:
     files:
       type: array
-      maxItems: 1000
+      maxItems: 20000
       items:
         "$ref": "#/RawVersionSealFile"
       description: The expected file list. The stored file set must equal it exactly.

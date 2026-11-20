@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/rawversion"
 )
 
 // The commands of versioned Raw repositories (ADR 0028): a package is name, a version is a sealable set of files,
@@ -29,17 +30,10 @@ import (
 
 const (
 	genericChecksumsFile  = "SHA256SUMS"
-	genericMaxFileDepth   = 8
-	genericMaxProperties  = 32
 	genericVersionsPrefix = "packages/"
 )
 
-var (
-	genericNamePattern     = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{0,127}$`)
-	genericVersionPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._+~-]{0,127}$`)
-	genericPropertyKeyExpr = regexp.MustCompile(`^[a-z][a-z0-9._-]{0,63}$`)
-	genericSHA256Pattern   = regexp.MustCompile(`^[A-Fa-f0-9]{64}$`)
-)
+var genericSHA256Pattern = regexp.MustCompile(`^[A-Fa-f0-9]{64}$`)
 
 // VerificationError marks bytes or documents that do not match the digest the server published for them. It exits
 // with code 1 and the stable envelope code verification_failed; nothing that failed verification is left in place.
@@ -68,7 +62,7 @@ func (g genericIdentity) validate(needVersion bool) error {
 	if err := requireFlag("name", g.name, "pass the package name, for example --name tool"); err != nil {
 		return err
 	}
-	if !genericNamePattern.MatchString(g.name) {
+	if !rawversion.ValidName(g.name) {
 		return &UsageError{Message: fmt.Sprintf("invalid package name %q", g.name), Hint: "use 1-128 lower case letters, digits, dot, underscore or dash, starting with a letter or digit"}
 	}
 	if !needVersion {
@@ -77,7 +71,7 @@ func (g genericIdentity) validate(needVersion bool) error {
 	if err := requireFlag("version", g.version, "pass the version, for example --version 1.4.2"); err != nil {
 		return err
 	}
-	if !genericVersionPattern.MatchString(g.version) {
+	if !rawversion.ValidVersion(g.version) {
 		return &UsageError{Message: fmt.Sprintf("invalid version %q", g.version), Hint: "use 1-128 letters, digits, dot, underscore, plus, tilde or dash, starting with a letter or digit"}
 	}
 	return nil
@@ -94,7 +88,7 @@ func parseGenericProperties(values stringList) (map[string]string, error) {
 	properties := map[string]string{}
 	for _, raw := range values {
 		key, value, ok := strings.Cut(raw, "=")
-		if !ok || !genericPropertyKeyExpr.MatchString(key) {
+		if !ok || !rawversion.ValidPropertyKey(key) {
 			return nil, &UsageError{Message: fmt.Sprintf("invalid property %q", raw), Hint: "use --property key=value with a key of lower case letters, digits, dot, underscore and dash"}
 		}
 		if _, duplicate := properties[key]; duplicate {
@@ -102,8 +96,8 @@ func parseGenericProperties(values stringList) (map[string]string, error) {
 		}
 		properties[key] = value
 	}
-	if len(properties) > genericMaxProperties {
-		return nil, &UsageError{Message: fmt.Sprintf("%d properties exceed the limit of %d", len(properties), genericMaxProperties), Hint: "a version carries at most 32 properties"}
+	if len(properties) > rawversion.MaxProperties {
+		return nil, &UsageError{Message: fmt.Sprintf("%d properties exceed the limit of %d", len(properties), rawversion.MaxProperties), Hint: "a version carries at most 32 properties"}
 	}
 	return properties, nil
 }
@@ -146,7 +140,7 @@ func genericObjects(id genericIdentity, sources []string) ([]localObject, error)
 		for _, object := range collected {
 			relative := strings.TrimPrefix(object.remote, id.prefix()+"/")
 			segments := strings.Split(relative, "/")
-			if len(segments) > genericMaxFileDepth || segments[0] == ".notarx" {
+			if len(segments) > rawversion.MaxFileSegments || segments[0] == rawversion.ReservedSegment || slices.ContainsFunc(segments, func(segment string) bool { return !rawversion.ValidFileSegment(segment) }) {
 				return nil, &UsageError{Message: fmt.Sprintf("%s maps to %q, which a versioned repository does not accept", object.file, relative), Hint: "files sit at most eight directories deep and .notarx is reserved"}
 			}
 			if previous, duplicate := seen[object.remote]; duplicate {
@@ -813,7 +807,7 @@ func genericListCommand() command {
 			values.Set("state", state)
 		}
 		for _, raw := range properties {
-			if key, _, ok := strings.Cut(raw, "="); !ok || !genericPropertyKeyExpr.MatchString(key) {
+			if key, _, ok := strings.Cut(raw, "="); !ok || !rawversion.ValidPropertyKey(key) {
 				return "", nil, &UsageError{Message: fmt.Sprintf("invalid property filter %q", raw), Hint: "use --property key=value"}
 			}
 			key, value, _ := strings.Cut(raw, "=")

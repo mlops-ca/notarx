@@ -10,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -57,7 +58,9 @@ type RawVersionSweeper struct {
 
 // NewRawVersionSweeper builds the sweeper of a node from its configuration.
 func NewRawVersionSweeper(store RawVersionSweepStore, metrics RawVersionSweepMetrics, cfg config.Config) RawVersionSweeper {
-	return RawVersionSweeper{Store: store, Metrics: metrics, Owner: cfg.InstanceID, Idle: cfg.GenericAutosealIdle, Interval: cfg.GenericAutosealInterval, StaleAfter: cfg.GenericStaleOpenAfter}
+	// The owner carries a per-process session id: replicas that share an instance id would otherwise all match the
+	// owner of the lease and every one of them would sweep.
+	return RawVersionSweeper{Store: store, Metrics: metrics, Owner: cfg.InstanceID + "/" + ids.New(), Idle: cfg.GenericAutosealIdle, Interval: cfg.GenericAutosealInterval, StaleAfter: cfg.GenericStaleOpenAfter}
 }
 
 func (s RawVersionSweeper) now() time.Time {

@@ -452,7 +452,7 @@ file. Nothing ever tombstones or deletes an open version: an abandoned one is on
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `NOTARX_GENERIC_MAX_FILES_PER_VERSION` | `1000` | Files one version may hold; a larger upload is refused with `422 version_file_limit`. Keeps the manifest under 256 KiB. |
+| `NOTARX_GENERIC_MAX_FILES_PER_VERSION` | `1000` | Files one version may hold, at most 20000; a larger upload is refused with `422 version_file_limit`. The default keeps the manifest under 256 KiB. |
 | `NOTARX_GENERIC_AUTOSEAL_IDLE` | `300s` | Time without a write after which the sweep seals an open version of an idle-mode repository. At least 60 seconds. |
 | `NOTARX_GENERIC_AUTOSEAL_INTERVAL` | `60s` | Time between two completed sweeps of the fleet. At least 10 seconds. |
 | `NOTARX_GENERIC_STALE_OPEN_AFTER` | `7d` | Age after which an open version counts as stale in the metrics below. Report only. |

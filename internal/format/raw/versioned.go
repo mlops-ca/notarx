@@ -1,9 +1,14 @@
 package raw
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -12,6 +17,9 @@ import (
 // writeVersionedProblem answers a refusal of the versioned layout (ADR 0028) in the problem format with the
 // documented code, and reports whether err was one. Anything else is left to the caller.
 func writeVersionedProblem(w http.ResponseWriter, err error) bool {
+	if !versionedRefusal(err) {
+		return false
+	}
 	status, code := http.StatusConflict, ""
 	switch {
 	case errors.Is(err, repository.ErrInvalidGenericPath):
@@ -26,11 +34,16 @@ func writeVersionedProblem(w http.ResponseWriter, err error) bool {
 		code = "version_file_immutable"
 	case errors.Is(err, repository.ErrVersionFileLimit):
 		status, code = http.StatusUnprocessableEntity, "version_file_limit"
-	default:
-		return false
 	}
 	writeRawProblem(w, status, code, err.Error())
 	return true
+}
+
+// versionedRefusal reports whether err is a refusal of a write by the versioned layout. Such a refusal is final for the
+// bytes that were sent: the same write is refused again until the version or the path changes.
+func versionedRefusal(err error) bool {
+	return errors.Is(err, repository.ErrInvalidGenericPath) || errors.Is(err, repository.ErrVersionFileExists) || errors.Is(err, repository.ErrVersionSealed) ||
+		errors.Is(err, repository.ErrVersionTombstoned) || errors.Is(err, repository.ErrVersionFileImmutable) || errors.Is(err, repository.ErrVersionFileLimit)
 }
 
 func writeRawProblem(w http.ResponseWriter, status int, code, message string) {
@@ -58,7 +71,7 @@ func rejectInvalidVersionedPath(w http.ResponseWriter, repo repository.HostedRep
 // versionedWriteCondition is the precondition of a write to a versioned repository. Files are create-only, so the
 // store enforces the rule itself and If-None-Match is not needed; If-Match can never be satisfied by a create-only
 // write and is rejected rather than ignored.
-func versionedWriteCondition(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, path string) (repository.RawWriteCondition, bool) {
+func (h *Module) versionedWriteCondition(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, path, actor string, preflight bool) (repository.RawWriteCondition, bool) {
 	if rejectInvalidVersionedPath(w, repo, path) {
 		return repository.RawWriteCondition{}, false
 	}
@@ -66,7 +79,49 @@ func versionedWriteCondition(w http.ResponseWriter, r *http.Request, repo reposi
 		writeRawProblem(w, http.StatusBadRequest, "invalid_request", "If-Match is not supported in a versioned repository: files are create-only")
 		return repository.RawWriteCondition{}, false
 	}
-	return repository.RawWriteCondition{}, true
+	// The completion of a resumable upload has transferred its bytes already, so only a plain write has a transfer to save.
+	return repository.RawWriteCondition{}, !preflight || h.versionedWritePreflight(w, r, repo, path, actor)
+}
+
+// versionedWritePreflight refuses before the body is read what the store would refuse after the bytes were spooled,
+// staged and stored: a new file in a sealed version, and a different digest than the one the client declares for a
+// path that already holds a file. The store re-evaluates the same rules atomically; this only saves the transfer.
+func (h *Module) versionedWritePreflight(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, path, actor string) bool {
+	reader, ok := h.store.(interface {
+		GetRawVersion(context.Context, string, string, string) (repository.RawVersion, error)
+	})
+	parsed, parseErr := repository.ParseRawVersionPath(path)
+	if !ok || parseErr != nil {
+		return true
+	}
+	existing, err := h.store.GetRawAsset(r.Context(), repo.ID, path)
+	exists := err == nil
+	if declared := declaredRawDigest(r.Header.Get("Digest")); exists && declared != "" && declared != existing.Digest {
+		h.auditRefusedOverwrite(r, repo, path, actor, repository.ErrVersionFileExists)
+		writeVersionedProblem(w, repository.ErrVersionFileExists)
+		return false
+	}
+	if !exists {
+		if version, err := reader.GetRawVersion(r.Context(), repo.ID, parsed.Name, parsed.Version); err == nil && version.State == repository.RawVersionSealed {
+			writeVersionedProblem(w, repository.ErrVersionSealed)
+			return false
+		}
+	}
+	return true
+}
+
+// declaredRawDigest reads the digest a client declares in its Digest header ("sha-256=<base64>") as sha256:<hex>; it is
+// empty when the header is absent or names another algorithm.
+func declaredRawDigest(header string) string {
+	encoded, ok := strings.CutPrefix(strings.TrimSpace(header), "sha-256=")
+	if !ok {
+		return ""
+	}
+	raw, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(raw) != sha256.Size {
+		return ""
+	}
+	return "sha256:" + hex.EncodeToString(raw)
 }
 
 // auditRefusedOverwrite records an attempt to replace a file of a versioned repository, with actor and path
