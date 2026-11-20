@@ -560,7 +560,7 @@ dropped. Queries select only the columns they need so TOAST values are not
 detoasted. On the free tier this also keeps cached proxy bodies out of the 50 GB.
 
 A writer never calls the object store from inside a transaction, and a handler that knows the payload before it
-takes a publication advisory lock stages it first (`repository.StagePayload`), so the lock and its dedicated
+takes a publication advisory lock stages it first (`repository.StageHelmChart`, `repository.StageNuGetNuspec`), so the lock and its dedicated
 connection do not wait on the store: Helm and NuGet uploads, NuGet preview session commits and Helm replication
 items do. Three paths hold the lock without staging, each by design. Proxy caching (`nuget/source.go`,
 `helm/source.go`) learns the nuspec or chart.yaml only from the upstream package it fetches under the lock, which

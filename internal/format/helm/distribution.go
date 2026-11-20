@@ -242,7 +242,7 @@ func (m *Module) ReplicateHelmItem(ctx context.Context, job dist.Job, item dist.
 	}()
 	// A large chart.yaml goes to the object store before the publication lock is taken, so the lock and its
 	// connection never wait on the store while the fenced commit runs.
-	if ctx, err = repository.StagePayload(ctx, m.store, source.ChartYAML); err != nil {
+	if ctx, err = repository.StageHelmChart(ctx, m.store, job.TargetRepositoryID, item.Name, item.Version, source.ChartYAML); err != nil {
 		return err
 	}
 	// The same publication lock is held by ordinary uploads and maintenance.

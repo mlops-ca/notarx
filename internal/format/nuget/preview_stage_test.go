@@ -22,9 +22,9 @@ type stagingOrderStore struct {
 
 type stagedMarker struct{}
 
-func (s *stagingOrderStore) StagePayload(ctx context.Context, data []byte) (context.Context, error) {
+func (s *stagingOrderStore) StageNuGetNuspec(ctx context.Context, repo, id, version string, nuspec []byte) (context.Context, error) {
 	s.events = append(s.events, "stage")
-	s.staged = append(s.staged, append([]byte(nil), data...))
+	s.staged = append(s.staged, append([]byte(nil), nuspec...))
 	return context.WithValue(ctx, stagedMarker{}, true), nil
 }
 

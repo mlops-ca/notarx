@@ -17,9 +17,9 @@ type stagingOrderStore struct {
 
 type stagedMarker struct{}
 
-func (s *stagingOrderStore) StagePayload(ctx context.Context, data []byte) (context.Context, error) {
+func (s *stagingOrderStore) StageHelmChart(ctx context.Context, repo, name, version string, chartYAML []byte) (context.Context, error) {
 	s.events = append(s.events, "stage")
-	s.staged = append(s.staged, append([]byte(nil), data...))
+	s.staged = append(s.staged, append([]byte(nil), chartYAML...))
 	return context.WithValue(ctx, stagedMarker{}, true), nil
 }
 
