@@ -83,9 +83,11 @@ func (t *Table) addUnique(columns []string) {
 func (t *Table) finish() {
 	slices.SortFunc(t.Unique, func(a, b []string) int { return strings.Compare(strings.Join(a, ","), strings.Join(b, ",")) })
 	slices.Sort(t.ForeignKeys)
+	slices.Sort(t.Indexes)
+	t.Indexes = slices.Compact(t.Indexes)
 }
 
-func foreignKey(referencedTable string, referenced, local []string) string {
+func foreignKey(referencedTable string, referenced, local []string, onDelete, onUpdate string) string {
 	// Pair the columns, sort the pairs by the local column, so the text does not depend on constraint order.
 	type pair struct{ local, referenced string }
 	pairs := make([]pair, len(local))
@@ -98,10 +100,50 @@ func foreignKey(referencedTable string, referenced, local []string) string {
 		localNames = append(localNames, p.local)
 		referencedNames = append(referencedNames, p.referenced)
 	}
-	return strings.Join(localNames, ",") + " -> " + referencedTable + "(" + strings.Join(referencedNames, ",") + ")"
+	text := strings.Join(localNames, ",") + " -> " + referencedTable + "(" + strings.Join(referencedNames, ",") + ")"
+	if onDelete != "" {
+		text += " on delete " + onDelete
+	}
+	if onUpdate != "" {
+		text += " on update " + onUpdate
+	}
+	return text
 }
 
-const postgresTablesSQL = `SELECT c.relname
+// postgresAction maps pg_constraint.confdeltype and confupdtype to the catalogue word;
+// the default, NO ACTION, is the empty string.
+func postgresAction(code string) string {
+	switch code {
+	case "r":
+		return "restrict"
+	case "c":
+		return "cascade"
+	case "n":
+		return "set null"
+	case "d":
+		return "set default"
+	default:
+		return ""
+	}
+}
+
+// mysqlAction maps referential_constraints.delete_rule and update_rule the same way.
+func mysqlAction(rule string) string {
+	switch rule {
+	case "RESTRICT":
+		return "restrict"
+	case "CASCADE":
+		return "cascade"
+	case "SET NULL":
+		return "set null"
+	case "SET DEFAULT":
+		return "set default"
+	default:
+		return ""
+	}
+}
+
+const postgresTablesSQL = `SELECT c.relname, c.relkind = 'p'
 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
 WHERE n.nspname = 'public' AND c.relkind IN ('r', 'p') AND NOT c.relispartition
   AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = c.oid AND d.deptype = 'e')`
@@ -122,7 +164,8 @@ GROUP BY c.relname, i.indexrelid, i.indisprimary`
 
 const postgresForeignKeysSQL = `SELECT c.relname, rc.relname,
   (SELECT string_agg(a.attname, ',' ORDER BY k.ord) FROM unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord) JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = k.attnum),
-  (SELECT string_agg(a.attname, ',' ORDER BY k.ord) FROM unnest(con.confkey) WITH ORDINALITY AS k(attnum, ord) JOIN pg_attribute a ON a.attrelid = con.confrelid AND a.attnum = k.attnum)
+  (SELECT string_agg(a.attname, ',' ORDER BY k.ord) FROM unnest(con.confkey) WITH ORDINALITY AS k(attnum, ord) JOIN pg_attribute a ON a.attrelid = con.confrelid AND a.attnum = k.attnum),
+  con.confdeltype::text, con.confupdtype::text
 FROM pg_constraint con
 JOIN pg_class c ON c.oid = con.conrelid
 JOIN pg_class rc ON rc.oid = con.confrelid
@@ -133,11 +176,14 @@ func introspectPostgres(ctx context.Context, db *sql.DB) (Catalogue, error) {
 	catalogue := newCatalogue()
 	if err := rows(ctx, db, postgresTablesSQL, func(r *sql.Rows) error {
 		var name string
-		if err := r.Scan(&name); err != nil {
+		var partitioned bool
+		if err := r.Scan(&name, &partitioned); err != nil {
 			return err
 		}
 		if !ignoredTables[name] {
-			catalogue.Tables[name] = catalogue.table(name)
+			t := catalogue.table(name)
+			t.Partitioned = partitioned
+			catalogue.Tables[name] = t
 		}
 		return nil
 	}); err != nil {
@@ -182,19 +228,22 @@ func introspectPostgres(ctx context.Context, db *sql.DB) (Catalogue, error) {
 		return Catalogue{}, fmt.Errorf("list keys: %w", err)
 	}
 	if err := rows(ctx, db, postgresForeignKeysSQL, func(r *sql.Rows) error {
-		var table, referenced, local, remote string
-		if err := r.Scan(&table, &referenced, &local, &remote); err != nil {
+		var table, referenced, local, remote, onDelete, onUpdate string
+		if err := r.Scan(&table, &referenced, &local, &remote, &onDelete, &onUpdate); err != nil {
 			return err
 		}
 		t, ok := catalogue.Tables[table]
 		if !ok {
 			return nil
 		}
-		t.ForeignKeys = append(t.ForeignKeys, foreignKey(referenced, splitList(remote), splitList(local)))
+		t.ForeignKeys = append(t.ForeignKeys, foreignKey(referenced, splitList(remote), splitList(local), postgresAction(onDelete), postgresAction(onUpdate)))
 		catalogue.Tables[table] = t
 		return nil
 	}); err != nil {
 		return Catalogue{}, fmt.Errorf("list foreign keys: %w", err)
+	}
+	if err := introspectPostgresDDL(ctx, db, catalogue); err != nil {
+		return Catalogue{}, err
 	}
 	return finishCatalogue(catalogue), nil
 }
@@ -218,15 +267,18 @@ FROM information_schema.statistics
 WHERE table_schema = DATABASE() AND non_unique = 0
 ORDER BY table_name, index_name, seq_in_index`
 
-const mysqlForeignKeysSQL = `SELECT table_name, constraint_name, column_name, referenced_table_name, referenced_column_name
-FROM information_schema.key_column_usage
-WHERE table_schema = DATABASE() AND referenced_table_name IS NOT NULL
-ORDER BY table_name, constraint_name, ordinal_position`
+const mysqlForeignKeysSQL = `SELECT k.table_name, k.constraint_name, k.column_name, k.referenced_table_name, k.referenced_column_name, r.delete_rule, r.update_rule
+FROM information_schema.key_column_usage k
+JOIN information_schema.referential_constraints r
+  ON r.constraint_schema = k.constraint_schema AND r.constraint_name = k.constraint_name AND r.table_name = k.table_name
+WHERE k.table_schema = DATABASE() AND k.referenced_table_name IS NOT NULL
+ORDER BY k.table_name, k.constraint_name, k.ordinal_position`
 
 // foreignParts collects the columns of one MySQL foreign key, which information_schema lists a row per column.
 type foreignParts struct {
-	local, remote []string
-	table         string
+	local, remote      []string
+	table              string
+	onDelete, onUpdate string
 }
 
 func introspectMySQL(ctx context.Context, db *sql.DB) (Catalogue, error) {
@@ -267,10 +319,13 @@ func introspectMySQL(ctx context.Context, db *sql.DB) (Catalogue, error) {
 	if err := mysqlKeys(ctx, db, catalogue); err != nil {
 		return Catalogue{}, err
 	}
+	if err := introspectMySQLIndexes(ctx, db, catalogue); err != nil {
+		return Catalogue{}, err
+	}
 	foreign := map[string]map[string]*foreignParts{}
 	if err := rows(ctx, db, mysqlForeignKeysSQL, func(r *sql.Rows) error {
-		var table, constraint, column, referencedTable, referencedColumn string
-		if err := r.Scan(&table, &constraint, &column, &referencedTable, &referencedColumn); err != nil {
+		var table, constraint, column, referencedTable, referencedColumn, deleteRule, updateRule string
+		if err := r.Scan(&table, &constraint, &column, &referencedTable, &referencedColumn, &deleteRule, &updateRule); err != nil {
 			return err
 		}
 		if foreign[table] == nil {
@@ -278,7 +333,7 @@ func introspectMySQL(ctx context.Context, db *sql.DB) (Catalogue, error) {
 		}
 		fk := foreign[table][constraint]
 		if fk == nil {
-			fk = &foreignParts{table: referencedTable}
+			fk = &foreignParts{table: referencedTable, onDelete: mysqlAction(deleteRule), onUpdate: mysqlAction(updateRule)}
 			foreign[table][constraint] = fk
 		}
 		fk.local = append(fk.local, column)
@@ -293,7 +348,7 @@ func introspectMySQL(ctx context.Context, db *sql.DB) (Catalogue, error) {
 			continue
 		}
 		for _, fk := range constraints {
-			t.ForeignKeys = append(t.ForeignKeys, foreignKey(fk.table, fk.remote, fk.local))
+			t.ForeignKeys = append(t.ForeignKeys, foreignKey(fk.table, fk.remote, fk.local, fk.onDelete, fk.onUpdate))
 		}
 		catalogue.Tables[table] = t
 	}
@@ -320,7 +375,7 @@ func mysqlKeys(ctx context.Context, db *sql.DB, catalogue Catalogue) error {
 		if !column.Valid {
 			functional[k] = true
 		}
-		parts[k] = append(parts[k], column.String)
+		parts[k] = append(parts[k], baseColumn(catalogue.Tables[table], column.String))
 		return nil
 	}); err != nil {
 		return fmt.Errorf("list keys: %w", err)

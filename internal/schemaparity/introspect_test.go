@@ -20,7 +20,7 @@ type row = []driver.Value
 
 func postgresServer(overrides map[string]error) *fakesql.Server {
 	answers := map[string]fakesql.Result{
-		postgresTablesSQL: result("t", row{"widgets"}, row{"owners"}, row{"notarx_schema_migrations"}),
+		postgresTablesSQL: result("t,p", row{"widgets", false}, row{"owners", false}, row{"notarx_schema_migrations", false}),
 		postgresColumnsSQL: result("t,c,d,u,n,g",
 			row{"widgets", "id", "uuid", "uuid", "NO", "NEVER"}, row{"widgets", "name", "text", "text", "NO", "NEVER"},
 			row{"widgets", "tags", "ARRAY", "_text", "YES", "NEVER"}, row{"widgets", "slug", "text", "text", "NO", "ALWAYS"},
@@ -28,7 +28,7 @@ func postgresServer(overrides map[string]error) *fakesql.Server {
 			row{"a_view", "x", "text", "text", "NO", "NEVER"}),
 		postgresUniqueSQL: result("t,p,c", row{"widgets", true, "id"}, row{"widgets", false, "name"}, row{"widgets", false, "slug,owner"},
 			row{"owners", true, "id"}, row{"a_view", false, "x"}),
-		postgresForeignKeysSQL: result("t,r,l,f", row{"widgets", "owners", "owner", "id"}, row{"a_view", "owners", "x", "id"}),
+		postgresForeignKeysSQL: result("t,r,l,f,d,u", row{"widgets", "owners", "owner", "id", "a", "a"}, row{"a_view", "owners", "x", "id", "a", "a"}),
 	}
 	return &fakesql.Server{Handler: func(query string, _ []driver.NamedValue) (fakesql.Result, error) {
 		for fragment, err := range overrides {
@@ -97,7 +97,7 @@ func mysqlServer(overrides map[string]error) *fakesql.Server {
 		mysqlIndexesSQL: result("t,i,s,c",
 			row{"widgets", "PRIMARY", int64(1), "id"}, row{"widgets", "name", int64(1), "name"}, row{"widgets", "owner_slug", int64(1), "slug"},
 			row{"widgets", "owner_slug", int64(2), "owner"}, row{"widgets", "lower_name", int64(1), nil}, row{"owners", "PRIMARY", int64(1), "id"}, row{"ghost", "PRIMARY", int64(1), "x"}),
-		mysqlForeignKeysSQL: result("t,n,c,rt,rc", row{"widgets", "fk_owner", "owner", "owners", "id"}, row{"ghost", "fk", "x", "owners", "id"}),
+		mysqlForeignKeysSQL: result("t,n,c,rt,rc,d,u", row{"widgets", "fk_owner", "owner", "owners", "id", "NO ACTION", "NO ACTION"}, row{"ghost", "fk", "x", "owners", "id", "NO ACTION", "NO ACTION"}),
 	}
 	return &fakesql.Server{Handler: func(query string, _ []driver.NamedValue) (fakesql.Result, error) {
 		for fragment, err := range overrides {
