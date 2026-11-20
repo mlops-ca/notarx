@@ -52,7 +52,8 @@ common reason the free tier does not work out. The home region of the tenancy ca
 
 `deploy/oci-free-tier/` is what `scripts/render-compose-bundle.sh` (ADR 0025
 slice 3) consumes to build the digest-pinned `notarx-compose-<version>.tar.gz`
-release asset. Its test checks that this section matches the directory.
+release asset. Its test (`scripts/render-compose-bundle-test.sh`) checks that this section
+names every entry of the directory and of the bundle.
 
 | Path | Purpose |
 | --- | --- |
@@ -112,10 +113,12 @@ repository ships no state, no `.tfvars` with values and no keys.
 
 ### From the release bundle
 
-The bundle `notarx-compose-<version>.tar.gz` is a release asset (ADR 0025 slice 3). It
-contains `compose.yml`, `Caddyfile`, `.env.example`, `cloud-init.yaml`, the migrations
-and their runner, with every image pinned by digest for both architectures. Verify
-it before you unpack it:
+The bundle `notarx-compose-<version>.tar.gz` is attached to every stable release (not to
+nightlies; ADR 0025 slice 3). It unpacks into one directory holding `compose.yml`, `Caddyfile`,
+`.env.example`, `cloud-init.yaml`, `migrations/`, `run-migrations.sh` and a README, with every
+image pinned by the digest of the multi-architecture index (amd64 and arm64) built by that
+release run. Verify it before you unpack it (the [install guide](../install.md) lists every
+channel):
 
 ```sh
 version=<release version>
@@ -129,15 +132,16 @@ sudo tar -xzf "notarx-compose-$version.tar.gz" -C /opt/notarx --strip-components
 ```
 
 Package signing is deferred (ADR 0025), so the checksums and the build attestation
-are the verification. The `.deb` packages of ADR 0025 are the alternative for a host
-that already runs PostgreSQL; they run notarx directly against it instead of through Compose.
+are the verification. The `.deb` and `.rpm` packages of ADR 0025 are the alternative for a host
+that already runs PostgreSQL and a reverse proxy: they run notarx directly against that
+database instead of through Compose, and the migration is a manual `notarx-migrate` step
+(see the [install guide](../install.md#debian-ubuntu-and-fedora-rhel-packages)).
 
-### Pre-release: from a clone
+### From a clone (unreleased code)
 
-Until the bundle asset is published (ADR 0025 slice 3; slice 8 finalizes this
-section), install from a clone. This path is marked pre-release: it uses the
-reference tags in `compose.yml` (`:main` for the project images) instead of
-digests.
+Before the first stable release, or to run a commit that is not released, install from a clone.
+This path uses the reference tags in `compose.yml` (`:main` for the project images) instead of
+digests, so it is not reproducible: use the bundle for anything that matters.
 
 ```sh
 sudo git clone https://github.com/mlops-ca/notarx /opt/notarx-src

@@ -22,6 +22,8 @@ name: Release
 #             of every attestation, then one call that makes tag and release together
 #             (nightly: "gh release create --prerelease"; stable: promote-release.sh create)
 #   promote   stable only, after the tag: notes of the nightly, then :latest
+#   homebrew  stable only: renders Formula/notarxctl.rb from the release's SHA256SUMS and pushes it
+#             to mlops-ca/homebrew-tap with a token of the tap App (that repository only)
 #   changelog stable only: opens the docs(changelog) pull request with the App token
 #   prune     retention of releases, tags and GHCR versions (dry run unless a real run)
 #
@@ -369,8 +371,15 @@ jobs:
             digest=$(docker buildx imagetools inspect "ghcr.io/$GITHUB_REPOSITORY_OWNER/$image:$VERSION" --format '{{ json .Manifest }}' | jq -r .digest)
             args+=(--image "$image=$digest")
           done
-          # A stable manifest also records the nightly whose commit was rebuilt.
-          if [ "$CHANNEL" = stable ]; then args+=(--verified-nightly "$NIGHTLY_TAG"); fi
+          if [ "$CHANNEL" = stable ]; then
+            # The compose bundle (ADR 0025 slice 3) pins the index digests of this very run, so it is
+            # rendered before SHA256SUMS: it is checksummed, attested and attached like an archive.
+            # Stable only; a nightly publishes no bundle.
+            ./scripts/render-compose-bundle.sh --version "$VERSION" --output dist \
+              --registry "ghcr.io/$GITHUB_REPOSITORY_OWNER" "${args[@]}"
+            # A stable manifest also records the nightly whose commit was rebuilt.
+            args+=(--verified-nightly "$NIGHTLY_TAG")
+          fi
           ./scripts/release-manifest.sh --version "$VERSION" --core "$CORE" --sha "$SHA" \
             --built-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --assets dist --images-json "$IMAGES" "${args[@]}"
           cat dist/release-manifest.json
@@ -479,6 +488,65 @@ jobs:
         run: |
           ./scripts/promote-release.sh latest --repo "$GITHUB_REPOSITORY" --version "$VERSION" \
             --registry "ghcr.io/$GITHUB_REPOSITORY_OWNER" --images-json "$IMAGES"
+
+  # --- homebrew: stable only; the tap formula of notarxctl (ADR 0025 slice 7), rendered from the
+  # SHA256SUMS of the release this run published. The tap is another repository, so its token is
+  # a separate GitHub App installed on that repository alone and scoped to it here. ---------------
+  homebrew:
+    needs: [plan, publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.plan.outputs.channel == 'stable' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - name: Require the tap App
+        env:
+          APP_ID: ${{ vars.TAP_APP_ID }}
+        run: |
+          if [ -z "$APP_ID" ]; then
+            echo "::error::TAP_APP_ID is not set: register the Homebrew tap App (docs/releasing.md); once it is, re-run this job"
+            exit 1
+          fi
+      - name: Mint the tap App token (the tap repository only)
+        id: app
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3.4.0
+        with:
+          app-id: ${{ vars.TAP_APP_ID }}
+          private-key: ${{ secrets.TAP_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: homebrew-tap
+          permission-contents: write
+      # The tooling of this workflow's commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.repository_owner }}/homebrew-tap
+          token: ${{ steps.app.outputs.token }}
+          path: tap
+      - name: Download the checksums of the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "v$VERSION" --repo "$GITHUB_REPOSITORY" --pattern SHA256SUMS --dir "$RUNNER_TEMP/release"
+      - name: Render the formula and push it to the tap
+        env:
+          APP_SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          ./scripts/render-homebrew-formula.sh --version "$VERSION" --sums "$RUNNER_TEMP/release/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" --output tap/Formula/notarxctl.rb --keep-newer
+          cd tap
+          git add Formula/notarxctl.rb
+          if git diff --cached --quiet; then
+            echo "the tap already carries notarxctl $VERSION: nothing to push"
+            exit 0
+          fi
+          git -c "user.name=${APP_SLUG}[bot]" -c "user.email=${APP_SLUG}[bot]@users.noreply.github.com" \
+            commit -m "notarxctl $VERSION"
+          # The tap's default branch, as checked out: a re-run of an older release never gets here
+          # with a changed file (--keep-newer), so it cannot downgrade the formula.
+          git push origin HEAD
 
   # --- changelog: stable only; the PR needs the App token, because a PR opened with the workflow
   # token starts no CI. The tag stays on the tested commit; the changelog lands afterwards. ---------

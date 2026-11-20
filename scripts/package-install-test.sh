@@ -5,12 +5,17 @@
 #
 #   scripts/package-install-test.sh --packages DIR [--images debian:12@<digest>,rockylinux:9@<digest>]
 #
-# For every image: install notarx and notarxctl (and notarx-console when present) from the local files,
+# For every image: install notarx and notarxctl (and notarx-console when present) with the commands of
+# the install snippets of docs/install.md (scripts/lib/install-snippet.sh) on the local files,
 # check the service account, that the unit is installed but not enabled, the config
 # file mode, systemd-analyze verify on the unit, then run notarx-migrate against a
 # PostgreSQL 16 container: --check fails before, apply succeeds, --check passes after,
 # a second run is a no-op and a modified packaged migration is refused.
 set -euo pipefail
+
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+# shellcheck source=lib/install-snippet.sh
+source "$root/scripts/lib/install-snippet.sh"
 
 packages=
 # Pinned by multi-arch index digest like every other external input of the release pipeline;
@@ -62,16 +67,18 @@ read -r -d '' guest <<'GUEST' || true
 set -eu
 kind=$1
 cd /packages
+# The commands are those of docs/install.md, extracted by the host.
 case "$kind" in
   deb)
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq ./*.deb systemd >/dev/null
+    apt-get install -y -qq systemd >/dev/null
     ;;
   rpm)
-    dnf install -y -q ./*.rpm systemd >/dev/null
+    dnf install -y -q systemd >/dev/null
     ;;
 esac
+bash -eu /install.sh >/dev/null
 
 id notarx >/dev/null
 getent group notarx >/dev/null
@@ -123,8 +130,22 @@ for image in "${image_list[@]}"; do
     cp "$packages"/notarx-[0-9]*."$rpm_arch".rpm "$packages"/notarxctl-[0-9]*."$rpm_arch".rpm "$staging"/
     cp "$packages"/notarx-console-[0-9]*.noarch.rpm "$staging"/ 2>/dev/null || true
   fi
-  printf 'install test on %s\n' "$image"
-  if ! docker run --rm --network "$network" -v "$staging:/packages:ro" \
+  if [[ "$kind" == deb ]]; then snippet_arch=$deb_arch; else snippet_arch=$rpm_arch; fi
+  # The version is the one in the file names of the packages under test.
+  if [[ "$kind" == deb ]]; then
+    server=$(cd "$staging" && ls notarx_*_"$deb_arch".deb)
+    package_version=${server#notarx_}
+    package_version=${package_version%_"$deb_arch".deb}
+  else
+    server=$(cd "$staging" && ls notarx-[0-9]*."$rpm_arch".rpm)
+    package_version=${server#notarx-}
+    package_version=${package_version%."$rpm_arch".rpm}
+  fi
+  install_commands "$root/docs/install.md" "$kind" "$staging" "$package_version" "$snippet_arch" >"$staging/install.sh"
+  [[ -s "$staging/install.sh" ]] || { printf 'FAIL: no install command for %s\n' "$image" >&2; status=1; rm -rf "$staging"; continue; }
+  printf 'install test on %s with:\n' "$image"
+  sed 's/^/  /' "$staging/install.sh"
+  if ! docker run --rm --network "$network" -v "$staging:/packages:ro" -v "$staging/install.sh:/install.sh:ro" \
     -e DATABASE_URL="postgres://notarx:$password@$database:5432/notarx?sslmode=disable" \
     "$image" bash -c "$guest" _ "$kind"; then
     printf 'FAIL: install test on %s\n' "$image" >&2
