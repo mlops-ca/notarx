@@ -437,7 +437,8 @@ func TestProxyRedirectEveryModeCancellationAndTimeout(t *testing.T) {
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 					if stop == "timeout" {
-						fixture.client.HTTPClient.Timeout = 100 * time.Millisecond
+						// The deadline must outlast the hop being reached on a loaded (race-instrumented) runner; the test then waits for it.
+						fixture.client.HTTPClient.Timeout = time.Second
 					}
 					result := make(chan error, 1)
 					go func() {
@@ -452,7 +453,7 @@ func TestProxyRedirectEveryModeCancellationAndTimeout(t *testing.T) {
 						}
 					case err := <-result:
 						t.Fatalf("approved hop was not reached before %s: %v", stop, err)
-					case <-time.After(time.Second):
+					case <-time.After(10 * time.Second):
 						t.Fatal("redirected fixture hop was not reached")
 					}
 					select {
@@ -464,7 +465,7 @@ func TestProxyRedirectEveryModeCancellationAndTimeout(t *testing.T) {
 						if !errors.Is(err, want) || len(fixture.snapshot()) != 2 {
 							t.Fatalf("%s=%v, want %v after reaching approved current hop; requests=%+v", stop, err, want, fixture.snapshot())
 						}
-					case <-time.After(time.Second):
+					case <-time.After(10 * time.Second):
 						t.Fatalf("%s did not stop the current hop", stop)
 					}
 				})

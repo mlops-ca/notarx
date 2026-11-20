@@ -33,8 +33,12 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 			return err
 		}
 		err = s.publishNPMImportLocked(ctx, c, keys, manifests, prefetched)
-		if !errors.Is(err, errPayloadNotPrefetched) || attempt == npmImportPrefetchAttempts {
+		if !errors.Is(err, errPayloadNotPrefetched) {
 			return err
+		}
+		if attempt == npmImportPrefetchAttempts {
+			// Concurrent imports kept storing versions of this closure: it no longer matches what is stored.
+			return ErrNameExists
 		}
 	}
 }

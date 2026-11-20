@@ -46,25 +46,44 @@ func checkPostgresOCIGuards(ctx context.Context, tx *sql.Tx, guards []discovery.
 }
 
 func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot discovery.Snapshot) error {
-	return s.saveOCIDiscoverySnapshot(ctx, snapshot, nil)
-}
-
-// saveOCIDiscoverySnapshot saves the snapshot. A snapshot id that is already stored with different bytes needs the
-// stored payload to decide whether it is the same snapshot; the transaction never reads the object store for it, so
-// it returns errPayloadNotPrefetched, the payload is read outside the transaction (prefetchOCIDiscoveryPayload) and the
-// save starts over with it.
-func (s *PostgresStore) saveOCIDiscoverySnapshot(ctx context.Context, snapshot discovery.Snapshot, prefetched payloadPrefetch) error {
-	err := s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, prefetched)
-	if !errors.Is(err, errPayloadNotPrefetched) || prefetched != nil {
+	if err := discovery.ValidateSnapshot(snapshot, time.Now().UTC()); err != nil {
 		return err
 	}
-	prefetched, err = s.prefetchOCIDiscoveryPayload(ctx, snapshot.ID)
+	data, err := discovery.Payload(snapshot)
 	if err != nil {
 		return err
 	}
-	return s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, prefetched)
+	// A payload above the inline threshold goes to the object store once, however often the save restarts; the row then holds JSON null.
+	inline, ref, err := s.externalizeJSON(ctx, data, "null")
+	if err != nil {
+		return err
+	}
+	staged := stagedOCISnapshot{data: data, inline: inline, ref: ref}
+	err = s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, staged, nil)
+	if !errors.Is(err, errPayloadNotPrefetched) {
+		return err
+	}
+	prefetched, err := s.prefetchOCIDiscoveryPayload(ctx, snapshot.ID)
+	if err != nil {
+		return err
+	}
+	if err = s.saveOCIDiscoverySnapshotOnce(ctx, snapshot, staged, prefetched); errors.Is(err, errPayloadNotPrefetched) {
+		// The stored snapshot changed again while its payload was read: it is not the snapshot being saved.
+		return discovery.ErrChanged
+	}
+	return err
 }
 
+// stagedOCISnapshot is a snapshot payload externalised before the save transaction opens.
+type stagedOCISnapshot struct {
+	data   []byte
+	inline string
+	ref    payloadRef
+}
+
+// A snapshot id that is already stored with different bytes needs the stored payload to decide whether it is the same
+// snapshot; the transaction never reads the object store for it, so it returns errPayloadNotPrefetched, the payload is
+// read outside the transaction (prefetchOCIDiscoveryPayload) and the save starts over with it.
 // prefetchOCIDiscoveryPayload reads the externalised payload of the stored snapshot id, outside any transaction.
 func (s *PostgresStore) prefetchOCIDiscoveryPayload(ctx context.Context, id string) (payloadPrefetch, error) {
 	var ref payloadRef
@@ -85,19 +104,8 @@ func (s *PostgresStore) prefetchOCIDiscoveryPayload(ctx context.Context, id stri
 	return prefetched, nil
 }
 
-func (s *PostgresStore) saveOCIDiscoverySnapshotOnce(ctx context.Context, snapshot discovery.Snapshot, prefetched payloadPrefetch) error {
-	if err := discovery.ValidateSnapshot(snapshot, time.Now().UTC()); err != nil {
-		return err
-	}
-	data, err := discovery.Payload(snapshot)
-	if err != nil {
-		return err
-	}
-	// A payload above the inline threshold goes to the object store; the row then holds JSON null.
-	inline, ref, err := s.externalizeJSON(ctx, data, "null")
-	if err != nil {
-		return err
-	}
+func (s *PostgresStore) saveOCIDiscoverySnapshotOnce(ctx context.Context, snapshot discovery.Snapshot, staged stagedOCISnapshot, prefetched payloadPrefetch) error {
+	data, inline, ref := staged.data, staged.inline, staged.ref
 	bodyDigest, bodySize, bodyKey := ref.columns()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -188,15 +196,19 @@ func (s *PostgresStore) GetOCIDiscoverySnapshot(ctx context.Context, id, owner s
 		return discovery.Snapshot{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	// The row was selected before the object read: a snapshot that expired or was purged meanwhile is gone (database clock).
+	var live bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM oci_discovery_snapshots WHERE id=$1::uuid AND owner=$2 AND expires_at>clock_timestamp())`, id, owner).Scan(&live); err != nil {
+		return discovery.Snapshot{}, err
+	}
+	if !live {
+		return discovery.Snapshot{}, discovery.ErrNotFound
+	}
 	if err := checkPostgresOCIGuards(ctx, tx, snapshot.Guards); err != nil {
 		return discovery.Snapshot{}, err
 	}
 	if err := tx.Commit(); err != nil {
 		return discovery.Snapshot{}, err
-	}
-	// The row was selected before the object read: a snapshot that expired meanwhile is gone.
-	if !snapshot.ExpiresAt.After(time.Now()) {
-		return discovery.Snapshot{}, discovery.ErrNotFound
 	}
 	return snapshot, nil
 }
