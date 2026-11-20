@@ -89,10 +89,11 @@ RETURNING lease_owner`, task.ID, owner, ttl.Milliseconds(), minInterval.Millisec
 		return false, err
 	}
 	// Either another node holds the lease or the row does not exist yet. Creating it makes the creator the holder; a
-	// concurrent creator loses on the primary key and is not the holder.
+	// concurrent creator loses on the primary key or on the unique name, whichever of the two indexes it meets first
+	// (so the conflict target is not named), and is not the holder.
 	result, err := l.DB.ExecContext(ctx, `INSERT INTO scheduled_tasks (id,name,description,kind,interval_seconds,enabled,next_run_at,lease_owner,lease_until)
 VALUES ($1::uuid,$2,$3,$4,$5,false,now(),$6,now()+$7::bigint*interval '1 millisecond')
-ON CONFLICT (id) DO NOTHING`, task.ID, task.Name, task.Description, task.Kind, task.interval(), owner, ttl.Milliseconds())
+ON CONFLICT DO NOTHING`, task.ID, task.Name, task.Description, task.Kind, task.interval(), owner, ttl.Milliseconds())
 	if err != nil {
 		return false, err
 	}

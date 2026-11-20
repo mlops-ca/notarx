@@ -328,7 +328,7 @@ class PlanTests(unittest.TestCase):
         steps = [s['command'] for s in ci.PLAN['lanes']['core-integration-mysql']['steps']]
         self.assertEqual(steps, [['make', 'integration-test-mysql']])
         listed = subprocess.check_output([str(ROOT / 'scripts/integration-test.sh'), '--driver', 'mysql', '--list'], text=True)
-        self.assertEqual(listed.split(), ['./internal/mysqlbaseline', './internal/dialect/mysql'])
+        self.assertEqual(listed.split(), ['./internal/mysqlbaseline', './internal/dialect/mysql', './internal/tasklease'])
 
     def test_every_lane_step_runs_once(self):
         # A lane split (core-native-e2e into two halves, issue #518) or a move between
