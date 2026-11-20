@@ -583,11 +583,13 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			OCIDiscoveryStore: store,
 			Storage:           app.SharedObjectStores(objectStore),
 			// Load validated the mode; an unreadable value stays strict.
-			GroupVisibilityMode: access.GroupMode(cfg.GroupVisibilityMode),
-			OverviewCacheTTL:    cfg.OverviewCacheTTL,
-			ReadCache:           caches.registry,
-			AuthzCacheTTL:       cfg.AuthzCacheTTL,
-			Adapter:             app.TestAdapter{},
+			GroupVisibilityMode:         access.GroupMode(cfg.GroupVisibilityMode),
+			OverviewCacheTTL:            cfg.OverviewCacheTTL,
+			ReadCache:                   caches.registry,
+			AuthzCacheTTL:               cfg.AuthzCacheTTL,
+			WorkloadAllowPrivateNetwork: cfg.Workload.AllowPrivateNetwork,
+			WorkloadExchange:            app.WorkloadExchangeOptions{MaxTTL: cfg.Workload.ExchangeMaxTTL, Rate: cfg.Workload.ExchangeRate},
+			Adapter:                     app.TestAdapter{},
 			Authenticator: app.Authenticator{
 				AdminToken:           cfg.AdminToken,
 				ResolverToken:        cfg.ResolverToken,

@@ -75,6 +75,10 @@ type GatewayOptions struct {
 	// (NOTARX_AUTHZ_CACHE_TTL), reported by the security settings API; zero means
 	// the caches are disabled.
 	AuthzCacheTTL time.Duration
+	// WorkloadAllowPrivateNetwork is NOTARX_WORKLOAD_ALLOW_PRIVATE_NETWORK (ADR 0019); WorkloadExchange configures
+	// POST /auth/token-exchange.
+	WorkloadAllowPrivateNetwork bool
+	WorkloadExchange            WorkloadExchangeOptions
 	// Preview formats stay outside the admitted format catalog. Their persistent
 	// ports are supplied explicitly, never inferred from Store.
 	HelmPreviewEnabled     bool

@@ -1,0 +1,56 @@
+---
+x-gateway-protocol-overlay:
+  officialSpecification: https://www.rfc-editor.org/rfc/rfc8693
+  gatewayDecision: >
+    notarx exchanges a workload JWT (GitHub Actions, GitLab CI, Kubernetes or any registered
+    issuer) for a short-lived notarx principal token (ADR 0019). The route is mounted at the
+    server root and is anonymous: the subject token is the credential. It deliberately does not
+    reuse the OCI token endpoint /auth/token, which is left untouched, and answers 404 while
+    NOTARX_WORKLOAD_ENABLED is false. Every verification or policy failure is the same
+    invalid_grant answer; the failed condition goes to the audit log only.
+token_exchange:
+  servers:
+  - url: https://gateway.example.com
+  post:
+    operationId: exchangeWorkloadToken
+    summary: Exchange a workload JWT for a notarx access token
+    description: >
+      RFC 8693 token exchange. The returned access token is a principal token that carries the
+      matched policy id and is revalidated against the policy and service account on every use. Its
+      lifetime is min(policy max_token_ttl_seconds, NOTARX_WORKLOAD_EXCHANGE_MAX_TTL); scope and
+      audience are informational, and an exchanged token cannot be exchanged again.
+    security:
+    - {}
+    requestBody:
+      required: true
+      content:
+        application/x-www-form-urlencoded:
+          schema:
+            "$ref": "../components/workload-identity.yaml#/TokenExchangeRequest"
+    responses:
+      '200':
+        description: Access token
+        headers:
+          Cache-Control:
+            schema: {type: string, const: no-store}
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/workload-identity.yaml#/TokenExchangeResponse"
+      '400':
+        description: invalid_request, invalid_grant, invalid_target or unsupported_grant_type
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/workload-identity.yaml#/TokenExchangeError"
+      '404':
+        description: Workload federation is disabled (NOTARX_WORKLOAD_ENABLED=false)
+      '429':
+        description: Per-source-address or per-issuer rate limit exceeded (NOTARX_WORKLOAD_EXCHANGE_RATE)
+        headers:
+          Retry-After:
+            schema: {type: string}
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/workload-identity.yaml#/TokenExchangeError"

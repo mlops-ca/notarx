@@ -169,6 +169,18 @@ paths:
     "$ref": "./management/console-themes.yaml#/console_themes_themeId"
   "/security-settings":
     "$ref": "./management/authentication.yaml#/security_settings"
+  "/workload-identity/issuers":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_issuers"
+  "/workload-identity/issuers/{issuerId}":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_issuers_issuerId"
+  "/workload-identity/issuers:probe":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_issuers_probe"
+  "/workload-identity/policies":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_policies"
+  "/workload-identity/policies/{policyId}":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_policies_policyId"
+  "/workload-identity/policies:test":
+    "$ref": "./management/workload-identity.yaml#/workload_identity_policies_test"
   "/authentication/providers":
     "$ref": "./management/authentication.yaml#/identity_providers"
   "/authentication/providers/{providerId}":

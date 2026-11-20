@@ -371,6 +371,52 @@ func (w *WorkloadAuthenticator) decide(ctx context.Context, token, pin string, i
 	}, nil
 }
 
+// VerifyForIssuer verifies token against a registered issuer with the verifier and network policy
+// of the authenticator. The dry-run policy tester uses it; it consumes no single-use marker.
+func (w *WorkloadAuthenticator) VerifyForIssuer(ctx context.Context, token string, issuer repository.WorkloadIssuer) (*jose.Verified, error) {
+	if w == nil {
+		return nil, errors.New("workload federation is disabled")
+	}
+	trusted := joseIssuer(issuer)
+	trusted.AllowPrivateNetwork = trusted.AllowPrivateNetwork || w.opts.AllowPrivateNetwork
+	return w.opts.Verifier.Verify(ctx, token, trusted)
+}
+
+// LookupIssuer returns the registered issuer a workload token names, active or not. The token
+// is not verified. It reports false for anything that is not a workload JWT of a registered issuer.
+func (w *WorkloadAuthenticator) LookupIssuer(ctx context.Context, token string) (repository.WorkloadIssuer, bool) {
+	if w == nil || !LooksLikeJWT(token) {
+		return repository.WorkloadIssuer{}, false
+	}
+	issuerURL := exactUnverifiedIssuer(token)
+	if issuerURL == "" {
+		return repository.WorkloadIssuer{}, false
+	}
+	issuer, err := w.opts.Store.GetWorkloadIssuerByIssuer(ctx, issuerURL)
+	return issuer, err == nil
+}
+
+// UnverifiedClaims decodes the payload of a JWT without verifying it, keeping numbers exact. It is
+// for tooling that shows or tests claims (the policy tester), never for authentication.
+func UnverifiedClaims(token string) (map[string]any, error) {
+	if !LooksLikeJWT(token) {
+		return nil, errors.New("the value is not a JWT")
+	}
+	_, rest, _ := strings.Cut(token, ".")
+	payload, _, _ := strings.Cut(rest, ".")
+	raw, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		return nil, errors.New("the JWT payload is not base64url")
+	}
+	decoder := json.NewDecoder(strings.NewReader(string(raw)))
+	decoder.UseNumber()
+	var claims map[string]any
+	if err := decoder.Decode(&claims); err != nil || claims == nil {
+		return nil, errors.New("the JWT payload is not a JSON object")
+	}
+	return claims, nil
+}
+
 func pinnedDetail(pin string) string {
 	if pin == "" {
 		return ""

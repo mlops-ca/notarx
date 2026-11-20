@@ -7562,6 +7562,440 @@
         }
       }
     },
+    "/workload-identity/issuers": {
+      "get": {
+        "operationId": "listWorkloadIssuers",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workload issuers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIssuerList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWorkloadIssuer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkloadIssuer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Workload issuer created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIssuer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/workload-identity/issuers/{issuerId}": {
+      "parameters": [
+        {
+          "name": "issuerId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getWorkloadIssuer",
+        "responses": {
+          "200": {
+            "description": "Workload issuer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIssuer"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateWorkloadIssuer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkloadIssuer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Workload issuer updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIssuer"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWorkloadIssuer",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Workload issuer deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/workload-identity/issuers:probe": {
+      "post": {
+        "operationId": "probeWorkloadIssuer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbeWorkloadIssuerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Probe result; reachable is false with the error when the issuer could not be read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadIssuerProbe"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/workload-identity/policies": {
+      "get": {
+        "operationId": "listWorkloadTrustPolicies",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Workload trust policies",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadTrustPolicyList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createWorkloadTrustPolicy",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateWorkloadTrustPolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Workload trust policy created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadTrustPolicy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/workload-identity/policies/{policyId}": {
+      "parameters": [
+        {
+          "name": "policyId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getWorkloadTrustPolicy",
+        "responses": {
+          "200": {
+            "description": "Workload trust policy",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadTrustPolicy"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateWorkloadTrustPolicy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateWorkloadTrustPolicy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Workload trust policy updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadTrustPolicy"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteWorkloadTrustPolicy",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Workload trust policy deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/workload-identity/policies:test": {
+      "post": {
+        "operationId": "testWorkloadTrustPolicy",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TestWorkloadPolicyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Dry-run result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkloadPolicyTest"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/authentication/providers": {
       "get": {
         "operationId": "listIdentityProviders",
@@ -12679,6 +13113,81 @@
           },
           "503": {
             "description": "Signing keys are temporarily unavailable"
+          }
+        }
+      }
+    },
+    "/auth/token-exchange": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "post": {
+        "operationId": "exchangeWorkloadToken",
+        "summary": "Exchange a workload JWT for a notarx access token",
+        "description": "RFC 8693 token exchange. The returned access token is a principal token that carries the matched policy id and is revalidated against the policy and service account on every use. Its lifetime is min(policy max_token_ttl_seconds, NOTARX_WORKLOAD_EXCHANGE_MAX_TTL); scope and audience are informational, and an exchanged token cannot be exchanged again.\n",
+        "security": [
+          {}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenExchangeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid_request, invalid_grant, invalid_target or unsupported_grant_type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Workload federation is disabled (NOTARX_WORKLOAD_ENABLED=false)"
+          },
+          "429": {
+            "description": "Per-source-address or per-issuer rate limit exceeded (NOTARX_WORKLOAD_EXCHANGE_RATE)",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenExchangeError"
+                }
+              }
+            }
           }
         }
       }
@@ -19591,6 +20100,674 @@
           }
         }
       },
+      "WorkloadIssuerKind": {
+        "type": "string",
+        "enum": [
+          "github_actions",
+          "gitlab_ci",
+          "kubernetes",
+          "generic"
+        ]
+      },
+      "WorkloadAlgorithm": {
+        "type": "string",
+        "enum": [
+          "RS256",
+          "ES256",
+          "EdDSA"
+        ]
+      },
+      "WorkloadJWKSMode": {
+        "type": "string",
+        "enum": [
+          "discovery",
+          "static"
+        ]
+      },
+      "WorkloadState": {
+        "type": "string",
+        "enum": [
+          "active",
+          "disabled"
+        ]
+      },
+      "WorkloadIssuer": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "issuer",
+          "audiences",
+          "allowedAlgs",
+          "jwksMode",
+          "allowPrivateNetwork",
+          "state",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Slug used by the CLI and the console."
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WorkloadIssuerKind"
+          },
+          "issuer": {
+            "type": "string",
+            "description": "The exact iss value of the tokens."
+          },
+          "audiences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowedAlgs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadAlgorithm"
+            }
+          },
+          "jwksMode": {
+            "$ref": "#/components/schemas/WorkloadJWKSMode"
+          },
+          "jwksUri": {
+            "type": "string"
+          },
+          "staticJwks": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The stored JWKS of a static issuer."
+          },
+          "caBundlePem": {
+            "type": "string"
+          },
+          "allowPrivateNetwork": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkloadState"
+          },
+          "version": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkloadIssuerList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadIssuer"
+            }
+          },
+          "nextPageToken": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateWorkloadIssuer": {
+        "type": "object",
+        "required": [
+          "name",
+          "kind",
+          "issuer",
+          "audiences",
+          "jwksMode"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/WorkloadIssuerKind"
+          },
+          "issuer": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "audiences": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "allowedAlgs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadAlgorithm"
+            }
+          },
+          "jwksMode": {
+            "$ref": "#/components/schemas/WorkloadJWKSMode"
+          },
+          "jwksUri": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "staticJwks": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "caBundlePem": {
+            "type": "string"
+          },
+          "allowPrivateNetwork": {
+            "type": "boolean",
+            "default": false
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkloadState"
+          }
+        }
+      },
+      "UpdateWorkloadIssuer": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": false,
+        "description": "The name, kind and issuer URL are fixed at creation.",
+        "properties": {
+          "audiences": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "allowedAlgs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadAlgorithm"
+            }
+          },
+          "jwksMode": {
+            "$ref": "#/components/schemas/WorkloadJWKSMode"
+          },
+          "jwksUri": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "staticJwks": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "caBundlePem": {
+            "type": "string"
+          },
+          "allowPrivateNetwork": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkloadState"
+          }
+        }
+      },
+      "ProbeWorkloadIssuerRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Probe a registered issuer by id, or an unsaved configuration.",
+        "properties": {
+          "issuerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuer": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "jwksMode": {
+            "$ref": "#/components/schemas/WorkloadJWKSMode"
+          },
+          "jwksUri": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "staticJwks": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "caBundlePem": {
+            "type": "string"
+          },
+          "allowPrivateNetwork": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "WorkloadIssuerProbeKey": {
+        "type": "object",
+        "required": [
+          "keyType"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "keyId": {
+            "type": "string"
+          },
+          "keyType": {
+            "type": "string"
+          },
+          "algorithm": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkloadIssuerProbe": {
+        "type": "object",
+        "required": [
+          "reachable",
+          "keys",
+          "algorithms"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "reachable": {
+            "type": "boolean"
+          },
+          "jwksUri": {
+            "type": "string"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadIssuerProbeKey"
+            }
+          },
+          "algorithms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkloadConditionOp": {
+        "type": "string",
+        "enum": [
+          "eq",
+          "in",
+          "glob",
+          "prefix"
+        ]
+      },
+      "WorkloadCondition": {
+        "type": "object",
+        "required": [
+          "claim",
+          "op",
+          "values"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "description": "A claim path: a JSON array of keys, a slash-delimited pointer, or a dotted shorthand. Responses always use the canonical array form.\n",
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ]
+          },
+          "op": {
+            "$ref": "#/components/schemas/WorkloadConditionOp"
+          },
+          "values": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "items": {
+              "type": "string",
+              "maxLength": 256
+            }
+          }
+        }
+      },
+      "WorkloadTrustPolicy": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "issuerId",
+          "serviceAccountId",
+          "conditions",
+          "maxTokenTtlSeconds",
+          "singleUse",
+          "state",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "description": "Also the Basic username alias that pins this policy."
+          },
+          "issuerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "serviceAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadCondition"
+            }
+          },
+          "maxTokenTtlSeconds": {
+            "type": "integer"
+          },
+          "singleUse": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkloadState"
+          },
+          "version": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkloadTrustPolicyList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadTrustPolicy"
+            }
+          },
+          "nextPageToken": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateWorkloadTrustPolicy": {
+        "type": "object",
+        "required": [
+          "name",
+          "issuerId",
+          "serviceAccountId",
+          "conditions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,62}$"
+          },
+          "issuerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "serviceAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "conditions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/WorkloadCondition"
+            }
+          },
+          "maxTokenTtlSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400,
+            "default": 900
+          },
+          "singleUse": {
+            "type": "boolean",
+            "default": false
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkloadState"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "allowAnyRef": {
+            "type": "boolean",
+            "default": false,
+            "description": "Acknowledges that no ref, environment or workflow restriction is wanted (github_actions, gitlab_ci)."
+          },
+          "allowAdmin": {
+            "type": "boolean",
+            "default": false,
+            "description": "Required to map onto a service account that holds an administrator grant."
+          },
+          "sampleToken": {
+            "type": "string",
+            "description": "A token of the issuer, used only to check that it carries a jti before single_use is saved. It is never stored. Required for single_use on a generic issuer.\n"
+          }
+        }
+      },
+      "UpdateWorkloadTrustPolicy": {
+        "type": "object",
+        "minProperties": 1,
+        "additionalProperties": false,
+        "properties": {
+          "serviceAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "conditions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/WorkloadCondition"
+            }
+          },
+          "maxTokenTtlSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 86400
+          },
+          "singleUse": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkloadState"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "clearExpiresAt": {
+            "type": "boolean",
+            "description": "Removes the expiry."
+          },
+          "allowAnyRef": {
+            "type": "boolean"
+          },
+          "allowAdmin": {
+            "type": "boolean"
+          },
+          "sampleToken": {
+            "type": "string"
+          }
+        }
+      },
+      "TestWorkloadPolicyRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "description": "Dry run: a pasted token or a claim set is evaluated against one policy or against every active policy of an issuer. Nothing is stored and no single-use marker is consumed.\n",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "claims": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "issuerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "policyId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "WorkloadPolicyTestFailure": {
+        "type": "object",
+        "required": [
+          "conditionIndex",
+          "claim",
+          "reason"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "conditionIndex": {
+            "type": "integer",
+            "description": "-1 when the subject claim itself is missing."
+          },
+          "claim": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
+      "WorkloadPolicyTestResult": {
+        "type": "object",
+        "required": [
+          "policyId",
+          "policyName",
+          "matched"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "policyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "policyName": {
+            "type": "string"
+          },
+          "matched": {
+            "type": "boolean"
+          },
+          "failure": {
+            "$ref": "#/components/schemas/WorkloadPolicyTestFailure"
+          }
+        }
+      },
+      "WorkloadPolicyTest": {
+        "type": "object",
+        "required": [
+          "signatureVerified",
+          "results",
+          "warnings"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "signatureVerified": {
+            "type": "boolean",
+            "description": "True when a pasted token verified against its issuer. A claim set is never verified."
+          },
+          "verificationError": {
+            "type": "string"
+          },
+          "issuerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "matchedPolicyId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ambiguous": {
+            "type": "boolean",
+            "description": "True when policies of different service accounts matched, which real authentication refuses."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkloadPolicyTestResult"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "IdentityProviderKind": {
         "type": "string",
         "enum": [
@@ -22247,6 +23424,88 @@
             "items": {
               "$ref": "#/components/schemas/IssuerJWK"
             }
+          }
+        }
+      },
+      "TokenExchangeRequest": {
+        "type": "object",
+        "required": [
+          "grant_type",
+          "subject_token",
+          "subject_token_type"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "grant_type": {
+            "type": "string",
+            "const": "urn:ietf:params:oauth:grant-type:token-exchange"
+          },
+          "subject_token": {
+            "type": "string"
+          },
+          "subject_token_type": {
+            "type": "string",
+            "const": "urn:ietf:params:oauth:token-type:jwt"
+          },
+          "audience": {
+            "type": "string",
+            "description": "Informational; a value the issuer does not accept is invalid_target."
+          },
+          "scope": {
+            "type": "string",
+            "description": "Ignored; grants are never widened or narrowed by scope."
+          },
+          "policy": {
+            "type": "string",
+            "description": "Optional policy name; the match must succeed against that policy only."
+          }
+        }
+      },
+      "TokenExchangeResponse": {
+        "type": "object",
+        "required": [
+          "access_token",
+          "issued_token_type",
+          "token_type",
+          "expires_in"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "issued_token_type": {
+            "type": "string",
+            "const": "urn:ietf:params:oauth:token-type:access_token"
+          },
+          "token_type": {
+            "type": "string",
+            "const": "Bearer"
+          },
+          "expires_in": {
+            "type": "integer"
+          }
+        }
+      },
+      "TokenExchangeError": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "string",
+            "enum": [
+              "invalid_request",
+              "invalid_grant",
+              "invalid_target",
+              "unsupported_grant_type",
+              "temporarily_unavailable"
+            ]
+          },
+          "error_description": {
+            "type": "string"
           }
         }
       },

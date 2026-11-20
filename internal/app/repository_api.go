@@ -451,8 +451,14 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		identityProviders = dependencies.IdentityRuntime
 	}
 	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, IdentityProviders: identityProviders})
+	workloadStore, _ := any(store).(workloadIdentityStore)
+	var humanProviders workloadHumanProviders
+	if dependencies.IdentityRuntime != nil {
+		humanProviders = dependencies.IdentityRuntime
+	}
+	workloadAPI := newWorkloadIdentityHandler(workloadIdentityOptions{Scope: scope, Store: workloadStore, Providers: humanProviders, AllowPrivateNetwork: options.WorkloadAllowPrivateNetwork})
 	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, overview: newOverviewCache(options.ReadCache, options.OverviewCacheTTL), authzCacheTTL: options.AuthzCacheTTL, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
-	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
+	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, workloadIdentityHandler: workloadAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
 		BaseURL:    "/api/v2",
 		BaseRouter: openAPIServeMux{mux: mux, authorize: hostedRepositories.authenticateManagementRequest},
 		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
@@ -546,6 +552,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.Handle("/conan/", conanGroupRouter)
 	mux.Handle("/repository/maven/", nativeMaven)
 	mux.HandleFunc("GET /auth/token", oci.Token)
+	if workloadStore != nil {
+		mux.Handle("POST "+workloadExchangePath, newWorkloadExchangeHandler(authenticator, workloadStore, options.WorkloadExchange))
+	}
 	mux.HandleFunc("POST /auth/login", userLoginHandler(store, store, authenticator))
 	mux.HandleFunc("POST /auth/change-password", userChangePasswordHandler(store, store, authenticator))
 	oidcLogin := oidcLoginHandler{runtime: dependencies.IdentityRuntime, authenticator: authenticator, identities: store, sessions: store}

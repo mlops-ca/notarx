@@ -2497,19 +2497,19 @@ func (e LifecycleJobState) Valid() bool {
 
 // Defines values for ListTotalRelation.
 const (
-	Eq       ListTotalRelation = "eq"
-	Estimate ListTotalRelation = "estimate"
-	Gte      ListTotalRelation = "gte"
+	ListTotalRelationEq       ListTotalRelation = "eq"
+	ListTotalRelationEstimate ListTotalRelation = "estimate"
+	ListTotalRelationGte      ListTotalRelation = "gte"
 )
 
 // Valid indicates whether the value is a known member of the ListTotalRelation enum.
 func (e ListTotalRelation) Valid() bool {
 	switch e {
-	case Eq:
+	case ListTotalRelationEq:
 		return true
-	case Estimate:
+	case ListTotalRelationEstimate:
 		return true
-	case Gte:
+	case ListTotalRelationGte:
 		return true
 	default:
 		return false
@@ -5087,6 +5087,111 @@ func (e WebhookEventType) Valid() bool {
 	}
 }
 
+// Defines values for WorkloadAlgorithm.
+const (
+	WorkloadAlgorithmES256 WorkloadAlgorithm = "ES256"
+	WorkloadAlgorithmEdDSA WorkloadAlgorithm = "EdDSA"
+	WorkloadAlgorithmRS256 WorkloadAlgorithm = "RS256"
+)
+
+// Valid indicates whether the value is a known member of the WorkloadAlgorithm enum.
+func (e WorkloadAlgorithm) Valid() bool {
+	switch e {
+	case WorkloadAlgorithmES256:
+		return true
+	case WorkloadAlgorithmEdDSA:
+		return true
+	case WorkloadAlgorithmRS256:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkloadConditionOp.
+const (
+	WorkloadConditionOpEq     WorkloadConditionOp = "eq"
+	WorkloadConditionOpGlob   WorkloadConditionOp = "glob"
+	WorkloadConditionOpIn     WorkloadConditionOp = "in"
+	WorkloadConditionOpPrefix WorkloadConditionOp = "prefix"
+)
+
+// Valid indicates whether the value is a known member of the WorkloadConditionOp enum.
+func (e WorkloadConditionOp) Valid() bool {
+	switch e {
+	case WorkloadConditionOpEq:
+		return true
+	case WorkloadConditionOpGlob:
+		return true
+	case WorkloadConditionOpIn:
+		return true
+	case WorkloadConditionOpPrefix:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkloadIssuerKind.
+const (
+	Generic       WorkloadIssuerKind = "generic"
+	GithubActions WorkloadIssuerKind = "github_actions"
+	GitlabCi      WorkloadIssuerKind = "gitlab_ci"
+	Kubernetes    WorkloadIssuerKind = "kubernetes"
+)
+
+// Valid indicates whether the value is a known member of the WorkloadIssuerKind enum.
+func (e WorkloadIssuerKind) Valid() bool {
+	switch e {
+	case Generic:
+		return true
+	case GithubActions:
+		return true
+	case GitlabCi:
+		return true
+	case Kubernetes:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkloadJWKSMode.
+const (
+	Discovery WorkloadJWKSMode = "discovery"
+	Static    WorkloadJWKSMode = "static"
+)
+
+// Valid indicates whether the value is a known member of the WorkloadJWKSMode enum.
+func (e WorkloadJWKSMode) Valid() bool {
+	switch e {
+	case Discovery:
+		return true
+	case Static:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for WorkloadState.
+const (
+	WorkloadStateActive   WorkloadState = "active"
+	WorkloadStateDisabled WorkloadState = "disabled"
+)
+
+// Valid indicates whether the value is a known member of the WorkloadState enum.
+func (e WorkloadState) Valid() bool {
+	switch e {
+	case WorkloadStateActive:
+		return true
+	case WorkloadStateDisabled:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ArtifactSearchMatch.
 const (
 	ArtifactSearchMatchContains ArtifactSearchMatch = "contains"
@@ -6280,6 +6385,41 @@ type CreateWebhookSubscription struct {
 	EventTypes  []WebhookEventType `json:"eventTypes"`
 	Name        string             `json:"name"`
 	Secret      *string            `json:"secret,omitempty"`
+}
+
+// CreateWorkloadIssuer defines model for CreateWorkloadIssuer.
+type CreateWorkloadIssuer struct {
+	AllowPrivateNetwork *bool                   `json:"allowPrivateNetwork,omitempty"`
+	AllowedAlgs         *[]WorkloadAlgorithm    `json:"allowedAlgs,omitempty"`
+	Audiences           []string                `json:"audiences"`
+	CaBundlePem         *string                 `json:"caBundlePem,omitempty"`
+	Issuer              string                  `json:"issuer"`
+	JwksMode            WorkloadJWKSMode        `json:"jwksMode"`
+	JwksUri             *string                 `json:"jwksUri,omitempty"`
+	Kind                WorkloadIssuerKind      `json:"kind"`
+	Name                string                  `json:"name"`
+	State               *WorkloadState          `json:"state,omitempty"`
+	StaticJwks          *map[string]interface{} `json:"staticJwks,omitempty"`
+}
+
+// CreateWorkloadTrustPolicy defines model for CreateWorkloadTrustPolicy.
+type CreateWorkloadTrustPolicy struct {
+	// AllowAdmin Required to map onto a service account that holds an administrator grant.
+	AllowAdmin *bool `json:"allowAdmin,omitempty"`
+
+	// AllowAnyRef Acknowledges that no ref, environment or workflow restriction is wanted (github_actions, gitlab_ci).
+	AllowAnyRef        *bool               `json:"allowAnyRef,omitempty"`
+	Conditions         []WorkloadCondition `json:"conditions"`
+	ExpiresAt          *time.Time          `json:"expiresAt,omitempty"`
+	IssuerId           openapi_types.UUID  `json:"issuerId"`
+	MaxTokenTtlSeconds *int                `json:"maxTokenTtlSeconds,omitempty"`
+	Name               string              `json:"name"`
+
+	// SampleToken A token of the issuer, used only to check that it carries a jti before single_use is saved. It is never stored. Required for single_use on a generic issuer.
+	SampleToken      *string            `json:"sampleToken,omitempty"`
+	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
+	SingleUse        *bool              `json:"singleUse,omitempty"`
+	State            *WorkloadState     `json:"state,omitempty"`
 }
 
 // CreatedAPIKey defines model for CreatedAPIKey.
@@ -8392,6 +8532,17 @@ type OverviewWindowCounts struct {
 // PreviewWorkerFormat Opt-in preview worker formats outside the formal format catalog.
 type PreviewWorkerFormat string
 
+// ProbeWorkloadIssuerRequest Probe a registered issuer by id, or an unsaved configuration.
+type ProbeWorkloadIssuerRequest struct {
+	AllowPrivateNetwork *bool                   `json:"allowPrivateNetwork,omitempty"`
+	CaBundlePem         *string                 `json:"caBundlePem,omitempty"`
+	Issuer              *string                 `json:"issuer,omitempty"`
+	IssuerId            *openapi_types.UUID     `json:"issuerId,omitempty"`
+	JwksMode            *WorkloadJWKSMode       `json:"jwksMode,omitempty"`
+	JwksUri             *string                 `json:"jwksUri,omitempty"`
+	StaticJwks          *map[string]interface{} `json:"staticJwks,omitempty"`
+}
+
 // Problem defines model for Problem.
 type Problem struct {
 	Code ProblemCode `json:"code"`
@@ -9597,6 +9748,14 @@ type SiteSettingsUpdate struct {
 	SiteName string `json:"siteName"`
 }
 
+// TestWorkloadPolicyRequest Dry run: a pasted token or a claim set is evaluated against one policy or against every active policy of an issuer. Nothing is stored and no single-use marker is consumed.
+type TestWorkloadPolicyRequest struct {
+	Claims   *map[string]interface{} `json:"claims,omitempty"`
+	IssuerId *openapi_types.UUID     `json:"issuerId,omitempty"`
+	PolicyId *openapi_types.UUID     `json:"policyId,omitempty"`
+	Token    *string                 `json:"token,omitempty"`
+}
+
 // UpdateRepository Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, type, and the layout of a Raw repository are immutable after creation.
 type UpdateRepository struct {
 	// AllowedHosts Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
@@ -9667,6 +9826,34 @@ type UpdateWebhookSubscription struct {
 	EventTypes  []WebhookEventType `json:"eventTypes"`
 	Name        string             `json:"name"`
 	Secret      *string            `json:"secret,omitempty"`
+}
+
+// UpdateWorkloadIssuer The name, kind and issuer URL are fixed at creation.
+type UpdateWorkloadIssuer struct {
+	AllowPrivateNetwork *bool                   `json:"allowPrivateNetwork,omitempty"`
+	AllowedAlgs         *[]WorkloadAlgorithm    `json:"allowedAlgs,omitempty"`
+	Audiences           *[]string               `json:"audiences,omitempty"`
+	CaBundlePem         *string                 `json:"caBundlePem,omitempty"`
+	JwksMode            *WorkloadJWKSMode       `json:"jwksMode,omitempty"`
+	JwksUri             *string                 `json:"jwksUri,omitempty"`
+	State               *WorkloadState          `json:"state,omitempty"`
+	StaticJwks          *map[string]interface{} `json:"staticJwks,omitempty"`
+}
+
+// UpdateWorkloadTrustPolicy defines model for UpdateWorkloadTrustPolicy.
+type UpdateWorkloadTrustPolicy struct {
+	AllowAdmin  *bool `json:"allowAdmin,omitempty"`
+	AllowAnyRef *bool `json:"allowAnyRef,omitempty"`
+
+	// ClearExpiresAt Removes the expiry.
+	ClearExpiresAt     *bool                `json:"clearExpiresAt,omitempty"`
+	Conditions         *[]WorkloadCondition `json:"conditions,omitempty"`
+	ExpiresAt          *time.Time           `json:"expiresAt,omitempty"`
+	MaxTokenTtlSeconds *int                 `json:"maxTokenTtlSeconds,omitempty"`
+	SampleToken        *string              `json:"sampleToken,omitempty"`
+	ServiceAccountId   *openapi_types.UUID  `json:"serviceAccountId,omitempty"`
+	SingleUse          *bool                `json:"singleUse,omitempty"`
+	State              *WorkloadState       `json:"state,omitempty"`
 }
 
 // UpstreamAuth Protected upstream credentials for Go, Maven, OCI, npm, PyPI, Cargo, APT, Raw and Conan Proxy repositories. Basic or Bearer authentication targets the bound upstream. Conan exchanges Basic credentials through its users/authenticate endpoint before reading protected metadata or files. When OCI ociBearer is configured, these credentials are sent only to its bound issuer and content requests use the exchanged pull token. Cross-origin redirects strip credentials. Rotation or clear invalidates credential-bound content and token caches. Changing the upstream URL or OCI issuer binding requires a fresh secret or scheme none; stored credentials are never implicitly rebound to a new destination. Hosted repositories and unsupported formats reject this field. `secret` is accepted on write over TLS and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
@@ -9863,6 +10050,142 @@ type WebhookSubscriptionPage struct {
 
 	// NextPageToken Present while older subscriptions follow; pass it as pageToken for the next page.
 	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// WorkloadAlgorithm defines model for WorkloadAlgorithm.
+type WorkloadAlgorithm string
+
+// WorkloadCondition defines model for WorkloadCondition.
+type WorkloadCondition struct {
+	// Claim A claim path: a JSON array of keys, a slash-delimited pointer, or a dotted shorthand. Responses always use the canonical array form.
+	Claim  WorkloadCondition_Claim `json:"claim"`
+	Op     WorkloadConditionOp     `json:"op"`
+	Values []string                `json:"values"`
+}
+
+// WorkloadConditionClaim0 defines model for WorkloadCondition.Claim.0.
+type WorkloadConditionClaim0 = string
+
+// WorkloadConditionClaim1 defines model for WorkloadCondition.Claim.1.
+type WorkloadConditionClaim1 = []string
+
+// WorkloadCondition_Claim A claim path: a JSON array of keys, a slash-delimited pointer, or a dotted shorthand. Responses always use the canonical array form.
+type WorkloadCondition_Claim struct {
+	union json.RawMessage
+}
+
+// WorkloadConditionOp defines model for WorkloadConditionOp.
+type WorkloadConditionOp string
+
+// WorkloadIssuer defines model for WorkloadIssuer.
+type WorkloadIssuer struct {
+	AllowPrivateNetwork bool                `json:"allowPrivateNetwork"`
+	AllowedAlgs         []WorkloadAlgorithm `json:"allowedAlgs"`
+	Audiences           []string            `json:"audiences"`
+	CaBundlePem         *string             `json:"caBundlePem,omitempty"`
+	CreatedAt           time.Time           `json:"createdAt"`
+	Id                  openapi_types.UUID  `json:"id"`
+
+	// Issuer The exact iss value of the tokens.
+	Issuer   string             `json:"issuer"`
+	JwksMode WorkloadJWKSMode   `json:"jwksMode"`
+	JwksUri  *string            `json:"jwksUri,omitempty"`
+	Kind     WorkloadIssuerKind `json:"kind"`
+
+	// Name Slug used by the CLI and the console.
+	Name  string        `json:"name"`
+	State WorkloadState `json:"state"`
+
+	// StaticJwks The stored JWKS of a static issuer.
+	StaticJwks *map[string]interface{} `json:"staticJwks,omitempty"`
+	UpdatedAt  time.Time               `json:"updatedAt"`
+	Version    string                  `json:"version"`
+}
+
+// WorkloadIssuerKind defines model for WorkloadIssuerKind.
+type WorkloadIssuerKind string
+
+// WorkloadIssuerList defines model for WorkloadIssuerList.
+type WorkloadIssuerList struct {
+	Items         []WorkloadIssuer `json:"items"`
+	NextPageToken *string          `json:"nextPageToken,omitempty"`
+}
+
+// WorkloadIssuerProbe defines model for WorkloadIssuerProbe.
+type WorkloadIssuerProbe struct {
+	Algorithms []string                 `json:"algorithms"`
+	Error      *string                  `json:"error,omitempty"`
+	JwksUri    *string                  `json:"jwksUri,omitempty"`
+	Keys       []WorkloadIssuerProbeKey `json:"keys"`
+	Reachable  bool                     `json:"reachable"`
+}
+
+// WorkloadIssuerProbeKey defines model for WorkloadIssuerProbeKey.
+type WorkloadIssuerProbeKey struct {
+	Algorithm *string `json:"algorithm,omitempty"`
+	KeyId     *string `json:"keyId,omitempty"`
+	KeyType   string  `json:"keyType"`
+}
+
+// WorkloadJWKSMode defines model for WorkloadJWKSMode.
+type WorkloadJWKSMode string
+
+// WorkloadPolicyTest defines model for WorkloadPolicyTest.
+type WorkloadPolicyTest struct {
+	// Ambiguous True when policies of different service accounts matched, which real authentication refuses.
+	Ambiguous       *bool                      `json:"ambiguous,omitempty"`
+	IssuerId        *openapi_types.UUID        `json:"issuerId,omitempty"`
+	MatchedPolicyId *openapi_types.UUID        `json:"matchedPolicyId,omitempty"`
+	Results         []WorkloadPolicyTestResult `json:"results"`
+
+	// SignatureVerified True when a pasted token verified against its issuer. A claim set is never verified.
+	SignatureVerified bool     `json:"signatureVerified"`
+	VerificationError *string  `json:"verificationError,omitempty"`
+	Warnings          []string `json:"warnings"`
+}
+
+// WorkloadPolicyTestFailure defines model for WorkloadPolicyTestFailure.
+type WorkloadPolicyTestFailure struct {
+	Claim []string `json:"claim"`
+
+	// ConditionIndex -1 when the subject claim itself is missing.
+	ConditionIndex int    `json:"conditionIndex"`
+	Reason         string `json:"reason"`
+}
+
+// WorkloadPolicyTestResult defines model for WorkloadPolicyTestResult.
+type WorkloadPolicyTestResult struct {
+	Failure    *WorkloadPolicyTestFailure `json:"failure,omitempty"`
+	Matched    bool                       `json:"matched"`
+	PolicyId   openapi_types.UUID         `json:"policyId"`
+	PolicyName string                     `json:"policyName"`
+}
+
+// WorkloadState defines model for WorkloadState.
+type WorkloadState string
+
+// WorkloadTrustPolicy defines model for WorkloadTrustPolicy.
+type WorkloadTrustPolicy struct {
+	Conditions         []WorkloadCondition `json:"conditions"`
+	CreatedAt          time.Time           `json:"createdAt"`
+	ExpiresAt          *time.Time          `json:"expiresAt,omitempty"`
+	Id                 openapi_types.UUID  `json:"id"`
+	IssuerId           openapi_types.UUID  `json:"issuerId"`
+	MaxTokenTtlSeconds int                 `json:"maxTokenTtlSeconds"`
+
+	// Name Also the Basic username alias that pins this policy.
+	Name             string             `json:"name"`
+	ServiceAccountId openapi_types.UUID `json:"serviceAccountId"`
+	SingleUse        bool               `json:"singleUse"`
+	State            WorkloadState      `json:"state"`
+	UpdatedAt        time.Time          `json:"updatedAt"`
+	Version          string             `json:"version"`
+}
+
+// WorkloadTrustPolicyList defines model for WorkloadTrustPolicyList.
+type WorkloadTrustPolicyList struct {
+	Items         []WorkloadTrustPolicy `json:"items"`
+	NextPageToken *string               `json:"nextPageToken,omitempty"`
 }
 
 // ArtifactSearchMatch defines model for ArtifactSearchMatch.
@@ -10763,6 +11086,38 @@ type UpdateWebhookSubscriptionParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
+// ListWorkloadIssuersParams defines parameters for ListWorkloadIssuers.
+type ListWorkloadIssuersParams struct {
+	PageSize  *PageSize  `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// DeleteWorkloadIssuerParams defines parameters for DeleteWorkloadIssuer.
+type DeleteWorkloadIssuerParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// UpdateWorkloadIssuerParams defines parameters for UpdateWorkloadIssuer.
+type UpdateWorkloadIssuerParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ListWorkloadTrustPoliciesParams defines parameters for ListWorkloadTrustPolicies.
+type ListWorkloadTrustPoliciesParams struct {
+	PageSize  *PageSize  `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// DeleteWorkloadTrustPolicyParams defines parameters for DeleteWorkloadTrustPolicy.
+type DeleteWorkloadTrustPolicyParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// UpdateWorkloadTrustPolicyParams defines parameters for UpdateWorkloadTrustPolicy.
+type UpdateWorkloadTrustPolicyParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
 // CreateApiKeyJSONRequestBody defines body for CreateApiKey for application/json ContentType.
 type CreateApiKeyJSONRequestBody = CreateAPIKey
 
@@ -11068,6 +11423,24 @@ type CreateWebhookSubscriptionJSONRequestBody = CreateWebhookSubscription
 
 // UpdateWebhookSubscriptionJSONRequestBody defines body for UpdateWebhookSubscription for application/json ContentType.
 type UpdateWebhookSubscriptionJSONRequestBody = UpdateWebhookSubscription
+
+// CreateWorkloadIssuerJSONRequestBody defines body for CreateWorkloadIssuer for application/json ContentType.
+type CreateWorkloadIssuerJSONRequestBody = CreateWorkloadIssuer
+
+// UpdateWorkloadIssuerJSONRequestBody defines body for UpdateWorkloadIssuer for application/json ContentType.
+type UpdateWorkloadIssuerJSONRequestBody = UpdateWorkloadIssuer
+
+// ProbeWorkloadIssuerJSONRequestBody defines body for ProbeWorkloadIssuer for application/json ContentType.
+type ProbeWorkloadIssuerJSONRequestBody = ProbeWorkloadIssuerRequest
+
+// CreateWorkloadTrustPolicyJSONRequestBody defines body for CreateWorkloadTrustPolicy for application/json ContentType.
+type CreateWorkloadTrustPolicyJSONRequestBody = CreateWorkloadTrustPolicy
+
+// UpdateWorkloadTrustPolicyJSONRequestBody defines body for UpdateWorkloadTrustPolicy for application/json ContentType.
+type UpdateWorkloadTrustPolicyJSONRequestBody = UpdateWorkloadTrustPolicy
+
+// TestWorkloadTrustPolicyJSONRequestBody defines body for TestWorkloadTrustPolicy for application/json ContentType.
+type TestWorkloadTrustPolicyJSONRequestBody = TestWorkloadPolicyRequest
 
 // AsCreateMavenPublishSession returns the union data inside the CreatePublishSession as a CreateMavenPublishSession
 func (t CreatePublishSession) AsCreateMavenPublishSession() (CreateMavenPublishSession, error) {
@@ -11769,6 +12142,68 @@ func (t *HelmPreviewReplicationItem) UnmarshalJSON(b []byte) error {
 		}
 	}
 
+	return err
+}
+
+// AsWorkloadConditionClaim0 returns the union data inside the WorkloadCondition_Claim as a WorkloadConditionClaim0
+func (t WorkloadCondition_Claim) AsWorkloadConditionClaim0() (WorkloadConditionClaim0, error) {
+	var body WorkloadConditionClaim0
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkloadConditionClaim0 overwrites any union data inside the WorkloadCondition_Claim as the provided WorkloadConditionClaim0
+func (t *WorkloadCondition_Claim) FromWorkloadConditionClaim0(v WorkloadConditionClaim0) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkloadConditionClaim0 performs a merge with any union data inside the WorkloadCondition_Claim, using the provided WorkloadConditionClaim0
+func (t *WorkloadCondition_Claim) MergeWorkloadConditionClaim0(v WorkloadConditionClaim0) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsWorkloadConditionClaim1 returns the union data inside the WorkloadCondition_Claim as a WorkloadConditionClaim1
+func (t WorkloadCondition_Claim) AsWorkloadConditionClaim1() (WorkloadConditionClaim1, error) {
+	var body WorkloadConditionClaim1
+	err := json.Unmarshal(t.union, &body)
+	return body, err
+}
+
+// FromWorkloadConditionClaim1 overwrites any union data inside the WorkloadCondition_Claim as the provided WorkloadConditionClaim1
+func (t *WorkloadCondition_Claim) FromWorkloadConditionClaim1(v WorkloadConditionClaim1) error {
+	b, err := json.Marshal(v)
+	t.union = b
+	return err
+}
+
+// MergeWorkloadConditionClaim1 performs a merge with any union data inside the WorkloadCondition_Claim, using the provided WorkloadConditionClaim1
+func (t *WorkloadCondition_Claim) MergeWorkloadConditionClaim1(v WorkloadConditionClaim1) error {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t WorkloadCondition_Claim) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	return b, err
+}
+
+func (t *WorkloadCondition_Claim) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
 	return err
 }
 
@@ -12602,6 +13037,42 @@ type ServerInterface interface {
 
 	// (PUT /webhook-subscriptions/{subscriptionId})
 	UpdateWebhookSubscription(w http.ResponseWriter, r *http.Request, subscriptionId openapi_types.UUID, params UpdateWebhookSubscriptionParams)
+
+	// (GET /workload-identity/issuers)
+	ListWorkloadIssuers(w http.ResponseWriter, r *http.Request, params ListWorkloadIssuersParams)
+
+	// (POST /workload-identity/issuers)
+	CreateWorkloadIssuer(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /workload-identity/issuers/{issuerId})
+	DeleteWorkloadIssuer(w http.ResponseWriter, r *http.Request, issuerId openapi_types.UUID, params DeleteWorkloadIssuerParams)
+
+	// (GET /workload-identity/issuers/{issuerId})
+	GetWorkloadIssuer(w http.ResponseWriter, r *http.Request, issuerId openapi_types.UUID)
+
+	// (PATCH /workload-identity/issuers/{issuerId})
+	UpdateWorkloadIssuer(w http.ResponseWriter, r *http.Request, issuerId openapi_types.UUID, params UpdateWorkloadIssuerParams)
+
+	// (POST /workload-identity/issuers:probe)
+	ProbeWorkloadIssuer(w http.ResponseWriter, r *http.Request)
+
+	// (GET /workload-identity/policies)
+	ListWorkloadTrustPolicies(w http.ResponseWriter, r *http.Request, params ListWorkloadTrustPoliciesParams)
+
+	// (POST /workload-identity/policies)
+	CreateWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /workload-identity/policies/{policyId})
+	DeleteWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request, policyId openapi_types.UUID, params DeleteWorkloadTrustPolicyParams)
+
+	// (GET /workload-identity/policies/{policyId})
+	GetWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request, policyId openapi_types.UUID)
+
+	// (PATCH /workload-identity/policies/{policyId})
+	UpdateWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request, policyId openapi_types.UUID, params UpdateWorkloadTrustPolicyParams)
+
+	// (POST /workload-identity/policies:test)
+	TestWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request)
 }
 
 // ServerInterfaceWrapper converts contexts to parameters.
@@ -23756,6 +24227,422 @@ func (siw *ServerInterfaceWrapper) UpdateWebhookSubscription(w http.ResponseWrit
 	handler.ServeHTTP(w, r)
 }
 
+// ListWorkloadIssuers operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkloadIssuers(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkloadIssuersParams
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkloadIssuers(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWorkloadIssuer operation middleware
+func (siw *ServerInterfaceWrapper) CreateWorkloadIssuer(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWorkloadIssuer(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWorkloadIssuer operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWorkloadIssuer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "issuerId" -------------
+	var issuerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "issuerId", r.PathValue("issuerId"), &issuerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issuerId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteWorkloadIssuerParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWorkloadIssuer(w, r, issuerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWorkloadIssuer operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkloadIssuer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "issuerId" -------------
+	var issuerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "issuerId", r.PathValue("issuerId"), &issuerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issuerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkloadIssuer(w, r, issuerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateWorkloadIssuer operation middleware
+func (siw *ServerInterfaceWrapper) UpdateWorkloadIssuer(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "issuerId" -------------
+	var issuerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "issuerId", r.PathValue("issuerId"), &issuerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "issuerId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateWorkloadIssuerParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateWorkloadIssuer(w, r, issuerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ProbeWorkloadIssuer operation middleware
+func (siw *ServerInterfaceWrapper) ProbeWorkloadIssuer(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ProbeWorkloadIssuer(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListWorkloadTrustPolicies operation middleware
+func (siw *ServerInterfaceWrapper) ListWorkloadTrustPolicies(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListWorkloadTrustPoliciesParams
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListWorkloadTrustPolicies(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateWorkloadTrustPolicy operation middleware
+func (siw *ServerInterfaceWrapper) CreateWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateWorkloadTrustPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteWorkloadTrustPolicy operation middleware
+func (siw *ServerInterfaceWrapper) DeleteWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policyId" -------------
+	var policyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policyId", r.PathValue("policyId"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policyId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DeleteWorkloadTrustPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteWorkloadTrustPolicy(w, r, policyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetWorkloadTrustPolicy operation middleware
+func (siw *ServerInterfaceWrapper) GetWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policyId" -------------
+	var policyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policyId", r.PathValue("policyId"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policyId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetWorkloadTrustPolicy(w, r, policyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateWorkloadTrustPolicy operation middleware
+func (siw *ServerInterfaceWrapper) UpdateWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "policyId" -------------
+	var policyId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "policyId", r.PathValue("policyId"), &policyId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "policyId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateWorkloadTrustPolicyParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateWorkloadTrustPolicy(w, r, policyId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestWorkloadTrustPolicy operation middleware
+func (siw *ServerInterfaceWrapper) TestWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestWorkloadTrustPolicy(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -23983,6 +24870,18 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/console-themes/{themeId}", wrapper.DeleteConsoleThemePackage)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/console-themes/{themeId}", wrapper.ReplaceConsoleThemePackage)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/security-settings", wrapper.GetSecuritySettings)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workload-identity/issuers", wrapper.ListWorkloadIssuers)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workload-identity/issuers", wrapper.CreateWorkloadIssuer)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workload-identity/issuers/{issuerId}", wrapper.DeleteWorkloadIssuer)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workload-identity/issuers/{issuerId}", wrapper.GetWorkloadIssuer)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/workload-identity/issuers/{issuerId}", wrapper.UpdateWorkloadIssuer)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workload-identity/issuers:probe", wrapper.ProbeWorkloadIssuer)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workload-identity/policies", wrapper.ListWorkloadTrustPolicies)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workload-identity/policies", wrapper.CreateWorkloadTrustPolicy)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/workload-identity/policies/{policyId}", wrapper.DeleteWorkloadTrustPolicy)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/workload-identity/policies/{policyId}", wrapper.GetWorkloadTrustPolicy)
+	m.HandleFunc(http.MethodPatch+" "+options.BaseURL+"/workload-identity/policies/{policyId}", wrapper.UpdateWorkloadTrustPolicy)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/workload-identity/policies:test", wrapper.TestWorkloadTrustPolicy)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/authentication/providers", wrapper.ListIdentityProviders)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers", wrapper.CreateIdentityProvider)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/authentication/providers/{providerId}", wrapper.DeleteIdentityProvider)
@@ -46262,6 +47161,932 @@ func (response UpdateWebhookSubscription503ApplicationProblemPlusJSONResponse) V
 	return err
 }
 
+type ListWorkloadIssuersRequestObject struct {
+	Params ListWorkloadIssuersParams
+}
+
+type ListWorkloadIssuersResponseObject interface {
+	VisitListWorkloadIssuersResponse(w http.ResponseWriter) error
+}
+
+type ListWorkloadIssuers200JSONResponse WorkloadIssuerList
+
+func (response ListWorkloadIssuers200JSONResponse) VisitListWorkloadIssuersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkloadIssuers401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListWorkloadIssuers401ApplicationProblemPlusJSONResponse) VisitListWorkloadIssuersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkloadIssuers403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListWorkloadIssuers403ApplicationProblemPlusJSONResponse) VisitListWorkloadIssuersResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadIssuerRequestObject struct {
+	Body *CreateWorkloadIssuerJSONRequestBody
+}
+
+type CreateWorkloadIssuerResponseObject interface {
+	VisitCreateWorkloadIssuerResponse(w http.ResponseWriter) error
+}
+
+type CreateWorkloadIssuer201JSONResponse WorkloadIssuer
+
+func (response CreateWorkloadIssuer201JSONResponse) VisitCreateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadIssuer400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreateWorkloadIssuer400ApplicationProblemPlusJSONResponse) VisitCreateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadIssuer401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateWorkloadIssuer401ApplicationProblemPlusJSONResponse) VisitCreateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadIssuer403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateWorkloadIssuer403ApplicationProblemPlusJSONResponse) VisitCreateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadIssuer409ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateWorkloadIssuer409ApplicationProblemPlusJSONResponse) VisitCreateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadIssuerRequestObject struct {
+	IssuerId openapi_types.UUID `json:"issuerId"`
+	Params   DeleteWorkloadIssuerParams
+}
+
+type DeleteWorkloadIssuerResponseObject interface {
+	VisitDeleteWorkloadIssuerResponse(w http.ResponseWriter) error
+}
+
+type DeleteWorkloadIssuer204Response struct {
+}
+
+func (response DeleteWorkloadIssuer204Response) VisitDeleteWorkloadIssuerResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteWorkloadIssuer401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteWorkloadIssuer401ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadIssuer403ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteWorkloadIssuer403ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadIssuer404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteWorkloadIssuer404ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadIssuer409ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteWorkloadIssuer409ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadIssuer412ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteWorkloadIssuer412ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkloadIssuerRequestObject struct {
+	IssuerId openapi_types.UUID `json:"issuerId"`
+}
+
+type GetWorkloadIssuerResponseObject interface {
+	VisitGetWorkloadIssuerResponse(w http.ResponseWriter) error
+}
+
+type GetWorkloadIssuer200JSONResponse WorkloadIssuer
+
+func (response GetWorkloadIssuer200JSONResponse) VisitGetWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkloadIssuer401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetWorkloadIssuer401ApplicationProblemPlusJSONResponse) VisitGetWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkloadIssuer403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetWorkloadIssuer403ApplicationProblemPlusJSONResponse) VisitGetWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkloadIssuer404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetWorkloadIssuer404ApplicationProblemPlusJSONResponse) VisitGetWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadIssuerRequestObject struct {
+	IssuerId openapi_types.UUID `json:"issuerId"`
+	Params   UpdateWorkloadIssuerParams
+	Body     *UpdateWorkloadIssuerJSONRequestBody
+}
+
+type UpdateWorkloadIssuerResponseObject interface {
+	VisitUpdateWorkloadIssuerResponse(w http.ResponseWriter) error
+}
+
+type UpdateWorkloadIssuer200JSONResponse WorkloadIssuer
+
+func (response UpdateWorkloadIssuer200JSONResponse) VisitUpdateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadIssuer400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateWorkloadIssuer400ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadIssuer401ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateWorkloadIssuer401ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadIssuer403ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateWorkloadIssuer403ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadIssuer404ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateWorkloadIssuer404ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadIssuer412ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateWorkloadIssuer412ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProbeWorkloadIssuerRequestObject struct {
+	Body *ProbeWorkloadIssuerJSONRequestBody
+}
+
+type ProbeWorkloadIssuerResponseObject interface {
+	VisitProbeWorkloadIssuerResponse(w http.ResponseWriter) error
+}
+
+type ProbeWorkloadIssuer200JSONResponse WorkloadIssuerProbe
+
+func (response ProbeWorkloadIssuer200JSONResponse) VisitProbeWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProbeWorkloadIssuer400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ProbeWorkloadIssuer400ApplicationProblemPlusJSONResponse) VisitProbeWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProbeWorkloadIssuer401ApplicationProblemPlusJSONResponse Problem
+
+func (response ProbeWorkloadIssuer401ApplicationProblemPlusJSONResponse) VisitProbeWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProbeWorkloadIssuer403ApplicationProblemPlusJSONResponse Problem
+
+func (response ProbeWorkloadIssuer403ApplicationProblemPlusJSONResponse) VisitProbeWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ProbeWorkloadIssuer404ApplicationProblemPlusJSONResponse Problem
+
+func (response ProbeWorkloadIssuer404ApplicationProblemPlusJSONResponse) VisitProbeWorkloadIssuerResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkloadTrustPoliciesRequestObject struct {
+	Params ListWorkloadTrustPoliciesParams
+}
+
+type ListWorkloadTrustPoliciesResponseObject interface {
+	VisitListWorkloadTrustPoliciesResponse(w http.ResponseWriter) error
+}
+
+type ListWorkloadTrustPolicies200JSONResponse WorkloadTrustPolicyList
+
+func (response ListWorkloadTrustPolicies200JSONResponse) VisitListWorkloadTrustPoliciesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkloadTrustPolicies401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListWorkloadTrustPolicies401ApplicationProblemPlusJSONResponse) VisitListWorkloadTrustPoliciesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListWorkloadTrustPolicies403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListWorkloadTrustPolicies403ApplicationProblemPlusJSONResponse) VisitListWorkloadTrustPoliciesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadTrustPolicyRequestObject struct {
+	Body *CreateWorkloadTrustPolicyJSONRequestBody
+}
+
+type CreateWorkloadTrustPolicyResponseObject interface {
+	VisitCreateWorkloadTrustPolicyResponse(w http.ResponseWriter) error
+}
+
+type CreateWorkloadTrustPolicy201JSONResponse WorkloadTrustPolicy
+
+func (response CreateWorkloadTrustPolicy201JSONResponse) VisitCreateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadTrustPolicy400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreateWorkloadTrustPolicy400ApplicationProblemPlusJSONResponse) VisitCreateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse) VisitCreateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse) VisitCreateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse) VisitCreateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateWorkloadTrustPolicy409ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateWorkloadTrustPolicy409ApplicationProblemPlusJSONResponse) VisitCreateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadTrustPolicyRequestObject struct {
+	PolicyId openapi_types.UUID `json:"policyId"`
+	Params   DeleteWorkloadTrustPolicyParams
+}
+
+type DeleteWorkloadTrustPolicyResponseObject interface {
+	VisitDeleteWorkloadTrustPolicyResponse(w http.ResponseWriter) error
+}
+
+type DeleteWorkloadTrustPolicy204Response struct {
+}
+
+func (response DeleteWorkloadTrustPolicy204Response) VisitDeleteWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteWorkloadTrustPolicy412ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteWorkloadTrustPolicy412ApplicationProblemPlusJSONResponse) VisitDeleteWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkloadTrustPolicyRequestObject struct {
+	PolicyId openapi_types.UUID `json:"policyId"`
+}
+
+type GetWorkloadTrustPolicyResponseObject interface {
+	VisitGetWorkloadTrustPolicyResponse(w http.ResponseWriter) error
+}
+
+type GetWorkloadTrustPolicy200JSONResponse WorkloadTrustPolicy
+
+func (response GetWorkloadTrustPolicy200JSONResponse) VisitGetWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse) VisitGetWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse) VisitGetWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse) VisitGetWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadTrustPolicyRequestObject struct {
+	PolicyId openapi_types.UUID `json:"policyId"`
+	Params   UpdateWorkloadTrustPolicyParams
+	Body     *UpdateWorkloadTrustPolicyJSONRequestBody
+}
+
+type UpdateWorkloadTrustPolicyResponseObject interface {
+	VisitUpdateWorkloadTrustPolicyResponse(w http.ResponseWriter) error
+}
+
+type UpdateWorkloadTrustPolicy200JSONResponse WorkloadTrustPolicy
+
+func (response UpdateWorkloadTrustPolicy200JSONResponse) VisitUpdateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadTrustPolicy400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateWorkloadTrustPolicy400ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateWorkloadTrustPolicy412ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateWorkloadTrustPolicy412ApplicationProblemPlusJSONResponse) VisitUpdateWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestWorkloadTrustPolicyRequestObject struct {
+	Body *TestWorkloadTrustPolicyJSONRequestBody
+}
+
+type TestWorkloadTrustPolicyResponseObject interface {
+	VisitTestWorkloadTrustPolicyResponse(w http.ResponseWriter) error
+}
+
+type TestWorkloadTrustPolicy200JSONResponse WorkloadPolicyTest
+
+func (response TestWorkloadTrustPolicy200JSONResponse) VisitTestWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestWorkloadTrustPolicy400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response TestWorkloadTrustPolicy400ApplicationProblemPlusJSONResponse) VisitTestWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse Problem
+
+func (response TestWorkloadTrustPolicy401ApplicationProblemPlusJSONResponse) VisitTestWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse Problem
+
+func (response TestWorkloadTrustPolicy403ApplicationProblemPlusJSONResponse) VisitTestWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse Problem
+
+func (response TestWorkloadTrustPolicy404ApplicationProblemPlusJSONResponse) VisitTestWorkloadTrustPolicyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 
@@ -47092,6 +48917,42 @@ type StrictServerInterface interface {
 
 	// (PUT /webhook-subscriptions/{subscriptionId})
 	UpdateWebhookSubscription(ctx context.Context, request UpdateWebhookSubscriptionRequestObject) (UpdateWebhookSubscriptionResponseObject, error)
+
+	// (GET /workload-identity/issuers)
+	ListWorkloadIssuers(ctx context.Context, request ListWorkloadIssuersRequestObject) (ListWorkloadIssuersResponseObject, error)
+
+	// (POST /workload-identity/issuers)
+	CreateWorkloadIssuer(ctx context.Context, request CreateWorkloadIssuerRequestObject) (CreateWorkloadIssuerResponseObject, error)
+
+	// (DELETE /workload-identity/issuers/{issuerId})
+	DeleteWorkloadIssuer(ctx context.Context, request DeleteWorkloadIssuerRequestObject) (DeleteWorkloadIssuerResponseObject, error)
+
+	// (GET /workload-identity/issuers/{issuerId})
+	GetWorkloadIssuer(ctx context.Context, request GetWorkloadIssuerRequestObject) (GetWorkloadIssuerResponseObject, error)
+
+	// (PATCH /workload-identity/issuers/{issuerId})
+	UpdateWorkloadIssuer(ctx context.Context, request UpdateWorkloadIssuerRequestObject) (UpdateWorkloadIssuerResponseObject, error)
+
+	// (POST /workload-identity/issuers:probe)
+	ProbeWorkloadIssuer(ctx context.Context, request ProbeWorkloadIssuerRequestObject) (ProbeWorkloadIssuerResponseObject, error)
+
+	// (GET /workload-identity/policies)
+	ListWorkloadTrustPolicies(ctx context.Context, request ListWorkloadTrustPoliciesRequestObject) (ListWorkloadTrustPoliciesResponseObject, error)
+
+	// (POST /workload-identity/policies)
+	CreateWorkloadTrustPolicy(ctx context.Context, request CreateWorkloadTrustPolicyRequestObject) (CreateWorkloadTrustPolicyResponseObject, error)
+
+	// (DELETE /workload-identity/policies/{policyId})
+	DeleteWorkloadTrustPolicy(ctx context.Context, request DeleteWorkloadTrustPolicyRequestObject) (DeleteWorkloadTrustPolicyResponseObject, error)
+
+	// (GET /workload-identity/policies/{policyId})
+	GetWorkloadTrustPolicy(ctx context.Context, request GetWorkloadTrustPolicyRequestObject) (GetWorkloadTrustPolicyResponseObject, error)
+
+	// (PATCH /workload-identity/policies/{policyId})
+	UpdateWorkloadTrustPolicy(ctx context.Context, request UpdateWorkloadTrustPolicyRequestObject) (UpdateWorkloadTrustPolicyResponseObject, error)
+
+	// (POST /workload-identity/policies:test)
+	TestWorkloadTrustPolicy(ctx context.Context, request TestWorkloadTrustPolicyRequestObject) (TestWorkloadTrustPolicyResponseObject, error)
 }
 
 type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
@@ -55106,6 +56967,356 @@ func (sh *strictHandler) UpdateWebhookSubscription(w http.ResponseWriter, r *htt
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateWebhookSubscriptionResponseObject); ok {
 		if err := validResponse.VisitUpdateWebhookSubscriptionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWorkloadIssuers operation middleware
+func (sh *strictHandler) ListWorkloadIssuers(w http.ResponseWriter, r *http.Request, params ListWorkloadIssuersParams) {
+	var request ListWorkloadIssuersRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkloadIssuers(ctx, request.(ListWorkloadIssuersRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkloadIssuers")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkloadIssuersResponseObject); ok {
+		if err := validResponse.VisitListWorkloadIssuersResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWorkloadIssuer operation middleware
+func (sh *strictHandler) CreateWorkloadIssuer(w http.ResponseWriter, r *http.Request) {
+	var request CreateWorkloadIssuerRequestObject
+
+	var body CreateWorkloadIssuerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWorkloadIssuer(ctx, request.(CreateWorkloadIssuerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWorkloadIssuer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWorkloadIssuerResponseObject); ok {
+		if err := validResponse.VisitCreateWorkloadIssuerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteWorkloadIssuer operation middleware
+func (sh *strictHandler) DeleteWorkloadIssuer(w http.ResponseWriter, r *http.Request, issuerId openapi_types.UUID, params DeleteWorkloadIssuerParams) {
+	var request DeleteWorkloadIssuerRequestObject
+
+	request.IssuerId = issuerId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteWorkloadIssuer(ctx, request.(DeleteWorkloadIssuerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteWorkloadIssuer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteWorkloadIssuerResponseObject); ok {
+		if err := validResponse.VisitDeleteWorkloadIssuerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetWorkloadIssuer operation middleware
+func (sh *strictHandler) GetWorkloadIssuer(w http.ResponseWriter, r *http.Request, issuerId openapi_types.UUID) {
+	var request GetWorkloadIssuerRequestObject
+
+	request.IssuerId = issuerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetWorkloadIssuer(ctx, request.(GetWorkloadIssuerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetWorkloadIssuer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetWorkloadIssuerResponseObject); ok {
+		if err := validResponse.VisitGetWorkloadIssuerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateWorkloadIssuer operation middleware
+func (sh *strictHandler) UpdateWorkloadIssuer(w http.ResponseWriter, r *http.Request, issuerId openapi_types.UUID, params UpdateWorkloadIssuerParams) {
+	var request UpdateWorkloadIssuerRequestObject
+
+	request.IssuerId = issuerId
+	request.Params = params
+
+	var body UpdateWorkloadIssuerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateWorkloadIssuer(ctx, request.(UpdateWorkloadIssuerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateWorkloadIssuer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateWorkloadIssuerResponseObject); ok {
+		if err := validResponse.VisitUpdateWorkloadIssuerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ProbeWorkloadIssuer operation middleware
+func (sh *strictHandler) ProbeWorkloadIssuer(w http.ResponseWriter, r *http.Request) {
+	var request ProbeWorkloadIssuerRequestObject
+
+	var body ProbeWorkloadIssuerJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ProbeWorkloadIssuer(ctx, request.(ProbeWorkloadIssuerRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ProbeWorkloadIssuer")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ProbeWorkloadIssuerResponseObject); ok {
+		if err := validResponse.VisitProbeWorkloadIssuerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListWorkloadTrustPolicies operation middleware
+func (sh *strictHandler) ListWorkloadTrustPolicies(w http.ResponseWriter, r *http.Request, params ListWorkloadTrustPoliciesParams) {
+	var request ListWorkloadTrustPoliciesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListWorkloadTrustPolicies(ctx, request.(ListWorkloadTrustPoliciesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListWorkloadTrustPolicies")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListWorkloadTrustPoliciesResponseObject); ok {
+		if err := validResponse.VisitListWorkloadTrustPoliciesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateWorkloadTrustPolicy operation middleware
+func (sh *strictHandler) CreateWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request) {
+	var request CreateWorkloadTrustPolicyRequestObject
+
+	var body CreateWorkloadTrustPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateWorkloadTrustPolicy(ctx, request.(CreateWorkloadTrustPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateWorkloadTrustPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateWorkloadTrustPolicyResponseObject); ok {
+		if err := validResponse.VisitCreateWorkloadTrustPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteWorkloadTrustPolicy operation middleware
+func (sh *strictHandler) DeleteWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request, policyId openapi_types.UUID, params DeleteWorkloadTrustPolicyParams) {
+	var request DeleteWorkloadTrustPolicyRequestObject
+
+	request.PolicyId = policyId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteWorkloadTrustPolicy(ctx, request.(DeleteWorkloadTrustPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteWorkloadTrustPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteWorkloadTrustPolicyResponseObject); ok {
+		if err := validResponse.VisitDeleteWorkloadTrustPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetWorkloadTrustPolicy operation middleware
+func (sh *strictHandler) GetWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request, policyId openapi_types.UUID) {
+	var request GetWorkloadTrustPolicyRequestObject
+
+	request.PolicyId = policyId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetWorkloadTrustPolicy(ctx, request.(GetWorkloadTrustPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetWorkloadTrustPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetWorkloadTrustPolicyResponseObject); ok {
+		if err := validResponse.VisitGetWorkloadTrustPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateWorkloadTrustPolicy operation middleware
+func (sh *strictHandler) UpdateWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request, policyId openapi_types.UUID, params UpdateWorkloadTrustPolicyParams) {
+	var request UpdateWorkloadTrustPolicyRequestObject
+
+	request.PolicyId = policyId
+	request.Params = params
+
+	var body UpdateWorkloadTrustPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateWorkloadTrustPolicy(ctx, request.(UpdateWorkloadTrustPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateWorkloadTrustPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateWorkloadTrustPolicyResponseObject); ok {
+		if err := validResponse.VisitUpdateWorkloadTrustPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestWorkloadTrustPolicy operation middleware
+func (sh *strictHandler) TestWorkloadTrustPolicy(w http.ResponseWriter, r *http.Request) {
+	var request TestWorkloadTrustPolicyRequestObject
+
+	var body TestWorkloadTrustPolicyJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestWorkloadTrustPolicy(ctx, request.(TestWorkloadTrustPolicyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestWorkloadTrustPolicy")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestWorkloadTrustPolicyResponseObject); ok {
+		if err := validResponse.VisitTestWorkloadTrustPolicyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
