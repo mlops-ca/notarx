@@ -47,8 +47,9 @@ func auditPage(query func(hotQueryFixture) AuditQuery) func(hotQueryFixture) (st
 	}
 }
 
-// hotQueryCount is the size of the registry: the top 30 statements of ADR 0023 section 11.
-const hotQueryCount = 30
+// hotQueryCount is the size of the registry: the top 30 statements of ADR 0023 section 11 and the two catalogue
+// search plans of section 8.
+const hotQueryCount = 32
 
 // hotQueries is the registry. Add or swap a query when a hot statement appears in
 // pg_stat_statements; the registry test pins the count at hotQueryCount and rejects
@@ -227,6 +228,20 @@ var hotQueries = []hotQuery{
 		name:      "apt.asset.get",
 		build:     fixed(getAPTAssetQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "pool/main/p/perf/perf_1.0_amd64.deb"} }),
 		noSeqScan: []string{"native_apt_assets"},
+	},
+	{
+		name:          "catalog.search.page",
+		build:         fixed(catalogPageQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID, "npm", "", 51} }),
+		indexContains: []string{"artifact_catalog_pkey"},
+		noSeqScan:     []string{"artifact_catalog"},
+	},
+	{
+		name: "catalog.search.contains",
+		build: fixed(catalogContainsQuery, func(f hotQueryFixture) []any {
+			return []any{f.repositoryID, "npm", "%" + escapeLikePrefix(f.packageName) + "%", "", 51}
+		}),
+		indexContains: []string{"artifact_catalog_pkey", "artifact_catalog_coordinate_trgm_idx"},
+		noSeqScan:     []string{"artifact_catalog"},
 	},
 	{
 		name:          "npm.reference.byObjectKey",

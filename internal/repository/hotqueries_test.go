@@ -9,9 +9,9 @@ import (
 
 var placeholder = regexp.MustCompile(`\$([0-9]+)`)
 
-func TestHotQueryRegistryCoversTheTopThirtyQueries(t *testing.T) {
-	if len(hotQueries) != hotQueryCount || hotQueryCount != 30 {
-		t.Fatalf("registry has %d queries, want the top 30 of ADR 0023 section 11", len(hotQueries))
+func TestHotQueryRegistryCoversTheTopThirtyQueriesAndTheCatalogueSearch(t *testing.T) {
+	if len(hotQueries) != hotQueryCount || hotQueryCount != 32 {
+		t.Fatalf("registry has %d queries, want the top 30 of ADR 0023 section 11 and the 2 catalogue search plans of section 8", len(hotQueries))
 	}
 }
 

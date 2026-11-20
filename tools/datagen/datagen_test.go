@@ -28,6 +28,7 @@ func (f *fakeCopier) CopyFrom(_ context.Context, table pgx.Identifier, columns [
 	if f.rows == nil {
 		f.rows = map[string][][]any{}
 	}
+	var copied int64
 	for src.Next() {
 		values, err := src.Values()
 		if err != nil {
@@ -37,8 +38,9 @@ func (f *fakeCopier) CopyFrom(_ context.Context, table pgx.Identifier, columns [
 			return 0, errors.New("column count mismatch for " + name)
 		}
 		f.rows[name] = append(f.rows[name], values)
+		copied++
 	}
-	return int64(len(f.rows[name])), src.Err()
+	return copied, src.Err()
 }
 
 func TestParseProfile(t *testing.T) {
@@ -401,5 +403,65 @@ func TestSeedFormatErrors(t *testing.T) {
 		if !Profiles[name].AllFormats {
 			t.Errorf("profile %s does not seed every format", name)
 		}
+	}
+}
+
+func TestSeedWritesACatalogueRowPerCoordinateOfTheProjectedFormats(t *testing.T) {
+	p := Profile{Name: "unit", AllFormats: true, Versions: 2000, AuditRows: 10, Repositories: 20, AuditWindow: time.Hour}
+	copier := &fakeCopier{}
+	counts, err := Seed(context.Background(), copier, p, 9, time.Unix(1_700_000_000, 0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := copier.rows["artifact_catalog"]
+	if int64(len(rows)) != counts.CatalogRows || len(rows) == 0 {
+		t.Fatalf("catalogue rows %d, counts %+v", len(rows), counts)
+	}
+	perFormat := map[string]int{}
+	seen := map[string]bool{}
+	for _, row := range rows {
+		format := row[1].(string)
+		perFormat[format]++
+		key := fmt.Sprintf("%v|%s|%s", row[0], format, row[2])
+		if seen[key] {
+			t.Fatalf("the catalogue repeats %s", key)
+		}
+		seen[key] = true
+		if row[7].(int32) < 1 {
+			t.Fatalf("%s has version_count %v", key, row[7])
+		}
+	}
+	for _, format := range []string{"npm", "oci", "maven", "pypi", "go", "raw", "conan", "apt"} {
+		if perFormat[format] == 0 {
+			t.Errorf("no catalogue rows for %s", format)
+		}
+	}
+	for _, format := range []string{"cargo", "nuget", "helm", "rubygems"} {
+		if perFormat[format] != 0 {
+			t.Errorf("%s is not part of the search projection but has %d catalogue rows", format, perFormat[format])
+		}
+	}
+	// A coordinate that groups versions counts them; npm keeps one row per package.
+	if got, want := perFormat["npm"], len(copier.rows["native_npm_packages"]); got != want {
+		t.Errorf("npm has %d catalogue rows for %d packages", got, want)
+	}
+	versions := 0
+	for _, row := range rows {
+		if row[1] == "npm" {
+			versions += int(row[7].(int32))
+		}
+	}
+	if versions != len(copier.rows["native_npm_versions"]) {
+		t.Errorf("npm version counts add up to %d, want %d", versions, len(copier.rows["native_npm_versions"]))
+	}
+}
+
+func TestSeedWithoutFormatsStillSeedsTheNPMCatalogue(t *testing.T) {
+	copier := &fakeCopier{}
+	if _, err := Seed(context.Background(), copier, Profile{Name: "npm", Versions: 50, Repositories: 3}, 3, time.Unix(1_700_000_000, 0)); err != nil {
+		t.Fatal(err)
+	}
+	if len(copier.rows["artifact_catalog"]) != len(copier.rows["native_npm_packages"]) {
+		t.Fatalf("catalogue rows %d, packages %d", len(copier.rows["artifact_catalog"]), len(copier.rows["native_npm_packages"]))
 	}
 }

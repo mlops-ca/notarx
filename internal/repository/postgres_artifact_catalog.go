@@ -72,6 +72,26 @@ func refreshArtifactCatalogPairs(ctx context.Context, tx catalogExecer, format F
 	return nil
 }
 
+// The statements the catalogue search of ADR 0023 section 8 plans on: the keyset page of a repository and format
+// in coordinate order, one row per coordinate, and the same page filtered by a substring of the coordinate, which
+// the trigram index of artifact_catalog_coordinate_trgm_idx serves. The plan registry (hotQueries) pins both so the
+// search rewrite cannot regress to a scan of the table.
+const (
+	catalogPageQuery = `
+	SELECT coordinate, latest_version, latest_digest, latest_published_at, publisher, version_count, size_bytes
+	FROM artifact_catalog
+	WHERE repository_id=$1::uuid AND format=$2 AND coordinate>$3
+	ORDER BY coordinate
+	LIMIT $4`
+	catalogContainsQuery = `
+	SELECT coordinate, latest_version, latest_digest, latest_published_at, publisher, version_count, size_bytes
+	FROM artifact_catalog
+	WHERE repository_id=$1::uuid AND format=$2 AND coordinate ILIKE $3 ESCAPE '\'
+	  AND coordinate>$4
+	ORDER BY coordinate
+	LIMIT $5`
+)
+
 // BackfillArtifactCatalog implements ArtifactCatalogStore.
 func (s *PostgresStore) BackfillArtifactCatalog(ctx context.Context, batchSize int) ([]ArtifactCatalogBackfillProgress, error) {
 	if batchSize <= 0 {
