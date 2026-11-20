@@ -409,10 +409,10 @@ and hands over to `scripts/integration-test-mysql.sh`, which owns the stack, the
 - the stack is the `mysql` service of `compose.integration.yml` and nothing else: no PostgreSQL and no RustFS;
 - the Go runner migrates `migrations/mysql`, as a deployment would (`notarx migrate --dir migrations/mysql`);
 - the packages are the ones of `scripts/integration-packages-mysql.txt`, one package per line. A package joins it
-  when its suites are dialect-parametrised or MySQL-only; the store groups of ADR 0022 add theirs as they land.
+  when its suites run on either engine or on MySQL only; the store groups of ADR 0022 add theirs as they land.
   `TestRequiredIntegrationCommandCoversIntegrationTaggedPackages` fails when a package in the list has no
   integration-tagged files, and when a package with such files is in neither list;
-- `TEST_DATABASE_DRIVER=mysql` selects the engine for the dialect-parametrised suites (`internal/testsupport`:
+- `TEST_DATABASE_DRIVER=mysql` selects the engine for the suites that run on either engine (`internal/testsupport`:
   `Database`, `RunPerDriver`). PostgreSQL is the default and keeps its variables. `TEST_DATABASE_URL` is left empty for this
   lane, so the PostgreSQL-only suites skip themselves, and `TEST_DATABASE_REQUIRED=1` turns a suite that finds no
   database into a failure, so a skipped suite cannot pass for green;
