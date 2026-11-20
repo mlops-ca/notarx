@@ -135,7 +135,7 @@ indexes:
     generated:
       - {name: name_lower, type: "VARCHAR(255)", expression: "IF(`source` = 'local', LOWER(`display_name`), NULL)", nullable: true}
     columns: [name_lower]
-    reason: "case-insensitive unique name of a local group: a virtual column that is LOWER(display_name) for a local group and NULL otherwise, under the bin collation (ADR 0022); it keys on source, not provider_id, because MySQL refuses a foreign key on the base column of an indexed virtual column and provider_id carries one; a local group is exactly the one without a provider"
+    reason: "case-insensitive unique name of a local group: a virtual column that is LOWER(display_name) for a local group and NULL otherwise, under the bin collation (ADR 0022); the PostgreSQL index and this one both key on source, never on provider_id, because deleting a provider sets provider_id to NULL on its groups and MySQL refuses a foreign key on the base column of an indexed virtual column"
   users_name_case_insensitive_idx:
     action: generated
     generated:

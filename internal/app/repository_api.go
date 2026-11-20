@@ -16,6 +16,7 @@ import (
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
 	rubygemsapi "github.com/mlops-ca/notarx/internal/admin/rubygems"
 	"github.com/mlops-ca/notarx/internal/aptpublication"
+	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/egress"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
@@ -271,6 +272,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	authenticator.Users = store
 	authenticator.UserIdentities = store
 	authenticator.UserGroups = store
+	authenticator.ClaimsGroups = authorization.NewClaimsGroupRefresher(store, store, authorization.DefaultClaimsGroupRefreshInterval)
 	authenticator.UserSessions = store
 	if authenticator.ServiceAccounts == nil {
 		authenticator.ServiceAccounts = store

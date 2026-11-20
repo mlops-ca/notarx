@@ -248,6 +248,117 @@ func TestClaimsGroupsMatchOnlyClaimsGroupsOfTheLoginProviderByExternalID(t *test
 	}
 }
 
+func TestDeletingAGroupRemovesTheGrantsThatNameIt(t *testing.T) {
+	store, user := newGroupFixture(t)
+	ctx := context.Background()
+	repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "releases", Format: FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	group, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "team", Source: UserGroupSourceLocal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddUserGroupMember(ctx, group.ID, user.ID, UserGroupSourceLocal); err != nil {
+		t.Fatal(err)
+	}
+	principal := "group:" + group.ID
+	before, err := store.ReplaceRepositoryGrants(ctx, repo.ID, []RepositoryGrant{
+		{Principal: principal, Scopes: []string{"repositories:write"}},
+		{Principal: principal, Scopes: []string{"repositories:read"}, ResourcePrefix: "releases/"},
+		{Principal: "user:ada", Scopes: []string{"repositories:read"}},
+	}, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.DeleteUserGroup(ctx, group.ID); err != nil {
+		t.Fatal(err)
+	}
+	after, err := store.GetRepositoryGrants(ctx, repo.ID)
+	if err != nil || len(after.Grants) != 1 || after.Grants[0].Principal != "user:ada" || after.Version == before.Version {
+		t.Fatalf("grants after the group was deleted = %#v (was version %s), %v", after, before.Version, err)
+	}
+}
+
+func TestProvisionedGroupsMayShareANameAndOrphansStayEditable(t *testing.T) {
+	store, _ := newGroupFixture(t)
+	ctx := context.Background()
+	if _, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "Admins", Source: UserGroupSourceLocal}); err != nil {
+		t.Fatal(err)
+	}
+	// Provisioned groups do not compete with local names, in one provider or across providers.
+	first, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "Admins", Source: UserGroupSourceSCIM, ProviderID: groupProviderA, ExternalID: "1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "admins", Source: UserGroupSourceSCIM, ProviderID: groupProviderA, ExternalID: "2"}); err != nil {
+		t.Fatal(err)
+	}
+	// A group of a deleted provider has no provider id any more; it stays a provisioned group and can be renamed.
+	store.userGroupState.groups[first.ID] = func() UserGroup { g := store.userGroupState.groups[first.ID]; g.ProviderID = ""; return g }()
+	if _, err := store.RenameUserGroup(ctx, first.ID, "Former admins", first.Version); err != nil {
+		t.Fatalf("renaming an orphaned provisioned group: %v", err)
+	}
+	// Renaming a local group onto another local name is refused.
+	other, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "Ops", Source: UserGroupSourceLocal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.RenameUserGroup(ctx, other.ID, "ADMINS", other.Version); !errors.Is(err, ErrUserGroupNameExists) {
+		t.Fatalf("rename onto a taken local name err=%v", err)
+	}
+}
+
+func TestPageSizesAreClamped(t *testing.T) {
+	for in, want := range map[int]int{-1: 50, 0: 50, 1: 1, 200: 200, 201: 200, 5000: 200} {
+		if got := ClampUserGroupPageSize(in); got != want {
+			t.Errorf("ClampUserGroupPageSize(%d) = %d, want %d", in, got, want)
+		}
+	}
+	store, _ := newGroupFixture(t)
+	for i := range 205 {
+		if _, err := store.CreateUserGroup(context.Background(), UserGroup{DisplayName: fmt.Sprintf("g-%03d", i), Source: UserGroupSourceLocal}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	items, next, err := store.ListUserGroups(context.Background(), 500, "")
+	if err != nil || len(items) != 200 || next == "" {
+		t.Fatalf("an oversized limit returned %d items next=%q err=%v, want the clamp of 200", len(items), next, err)
+	}
+}
+
+func TestGrantIndexListsRepositoriesOfAnyOfSeveralPrincipalsOnce(t *testing.T) {
+	store := NewMemoryStore()
+	ctx := context.Background()
+	var repos []HostedRepository
+	for _, name := range []string{"a", "b", "c"} {
+		repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: name, Format: FormatRaw})
+		if err != nil {
+			t.Fatal(err)
+		}
+		repos = append(repos, repo)
+	}
+	grant := func(repo HostedRepository, principals ...string) {
+		var grants []RepositoryGrant
+		for _, principal := range principals {
+			grants = append(grants, RepositoryGrant{Principal: principal, Scopes: []string{"repositories:admin"}})
+		}
+		if _, err := store.ReplaceRepositoryGrants(ctx, repo.ID, grants, "1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	grant(repos[0], "user:ada", "group:g1") // both name the caller: listed once
+	grant(repos[1], "group:g2")
+	grant(repos[2], "user:other")
+	got, err := store.ListRepositoriesGrantedToPrincipals(ctx, []string{"user:ada", "group:g1", "group:g2"}, "repositories:admin")
+	if err != nil || len(got) != 2 {
+		t.Fatalf("got %d repositories, %v, want 2", len(got), err)
+	}
+	if none, err := store.ListRepositoriesGrantedToPrincipals(ctx, nil, "repositories:admin"); err != nil || len(none) != 0 {
+		t.Fatalf("no principals = %d, %v", len(none), err)
+	}
+}
+
 func TestClaimsMembershipNeverContributesAGlobalRole(t *testing.T) {
 	for _, source := range []UserGroupSource{UserGroupSourceLocal, UserGroupSourceSCIM} {
 		membership := UserGroupMembership{GroupSource: source, GlobalRole: UserGroupRoleAdmin}

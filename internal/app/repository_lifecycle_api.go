@@ -127,23 +127,15 @@ func (h generatedRepositoryAPIAdapter) administeredRepositoryIDs(r *http.Request
 	if !ok {
 		return nil, false, errGrantIndexUnavailable
 	}
-	// One indexed query per grant principal that names the caller: the actor and each of its groups (at most
-	// 513 lookups, one per group, none when the account is in none).
-	seen := map[string]bool{}
-	ids = make([]string, 0)
-	for _, name := range principal.GrantPrincipals() {
-		candidates, listErr := index.ListRepositoriesGrantedToPrincipal(r.Context(), name, authorization.GrantScopeAdmin)
-		if listErr != nil {
-			return nil, false, listErr
-		}
-		for _, repo := range candidates {
-			if seen[repo.ID] {
-				continue
-			}
-			seen[repo.ID] = true
-			if h.authorizer.Authorize(r.Context(), principal, repo, RepositoryAdmin).Allowed {
-				ids = append(ids, repo.ID)
-			}
+	// One query for every grant principal that names the caller: the actor and each of its groups.
+	candidates, err := index.ListRepositoriesGrantedToPrincipals(r.Context(), principal.GrantPrincipals(), authorization.GrantScopeAdmin)
+	if err != nil {
+		return nil, false, err
+	}
+	ids = make([]string, 0, len(candidates))
+	for _, repo := range candidates {
+		if h.authorizer.Authorize(r.Context(), principal, repo, RepositoryAdmin).Allowed {
+			ids = append(ids, repo.ID)
 		}
 	}
 	return ids, false, nil

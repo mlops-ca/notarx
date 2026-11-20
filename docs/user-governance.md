@@ -80,19 +80,19 @@ notarx is a repository group.
 | --- | --- |
 | `local` | An administrator creates the group and edits its members. |
 | `scim` | The identity provider's SCIM server writes it (ADR 0018). |
-| `claims` | An administrator registers the group with its provider and external id; the groups claim of an OIDC sign-in, or the groups attribute of a SAML assertion, adds and removes the membership. |
+| `claims` | An administrator registers the group with its provider and external id; the groups claim of an OIDC sign-in or bearer token (at most every 15 seconds per account while unchanged), or the groups attribute of a SAML assertion, adds and removes the membership. |
 
 A claim only ever matches a `claims` group of the signing-in provider by its external id,
 never by display name, and never a group that has a global role. Microsoft Entra ID drops
 the `groups` claim for a user in too many groups (`_claim_names` or `hasgroups`);
-notarx does not chase it through Microsoft Graph, so such a sign-in carries no groups (never
-a partial list), an `auth.oidc.groups_overage` audit event is written, and large
+notarx does not chase it through Microsoft Graph, so such a token carries no groups (never
+a partial list; a SAML assertion with more than 512 groups the same, as `auth.saml.groups_overage`), an `auth.oidc.groups_overage` audit event is written, and large
 directories should provision groups through SCIM or use app roles instead.
 
 A group may carry a global role (`none`, `member` or `admin`). An account's level is the
 highest of its own role and the roles of its groups, evaluated on every request and never
 copied into a credential, so removing a membership, clearing the role or deleting the
-group takes effect on the next request (within `NOTARX_AUTHZ_CACHE_TTL` on other nodes). A
+group takes effect on the next request (within `NOTARX_AUTHZ_CACHE_TTL` on other nodes). Deleting a group also removes the repository grants that name it. A
 disabled account stays blocked whatever its groups say, a pending account is not lifted by a
 grant, and OCI and Conan protocol tokens carry no group ids. New groups start at `none`;
 SCIM can never create a group with, or set, `admin`, an administrator may flag an existing

@@ -121,6 +121,9 @@ type Authenticator struct {
 	// UserGroups supplies the groups of a named account. A nil source means no groups, so every principal
 	// keeps exactly the authority of its own account.
 	UserGroups UserGroupSource
+	// ClaimsGroups applies the groups an OIDC bearer token asserts to a linked account (throttled); nil leaves the
+	// claims-sourced memberships to browser sign-ins.
+	ClaimsGroups *ClaimsGroupRefresher
 }
 
 // Authenticate reads credentials from the database, never from the read caches
@@ -252,6 +255,7 @@ func (a Authenticator) oidcPrincipal(ctx context.Context, identity OIDCIdentity)
 					AuthenticationKind: AuthenticationOIDC, MustChangePassword: true, UserID: user.ID,
 				}, true
 			}
+			a.ClaimsGroups.Refresh(ctx, identity, user.ID)
 			return Principal{
 				Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role,
 				RepositoryPatterns: a.RepositoryReaders["user:"+user.Name], AuthenticationKind: AuthenticationOIDC,

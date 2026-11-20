@@ -11036,7 +11036,10 @@ type ListConanReferencesParams struct {
 
 // GetRepositoryEffectiveAccessParams defines parameters for GetRepositoryEffectiveAccess.
 type GetRepositoryEffectiveAccessParams struct {
-	Actor    *string                                 `form:"actor,omitempty" json:"actor,omitempty"`
+	// Actor The principal to simulate. A user:<name> actor includes the user groups of that account, and a group:<id> actor previews what the members of that user group are allowed.
+	Actor *string `form:"actor,omitempty" json:"actor,omitempty"`
+
+	// Role The account level to simulate. The global roles of the account's user groups still apply, so the level is the highest of this role and those roles, as it is for the real account.
 	Role     *GetRepositoryEffectiveAccessParamsRole `form:"role,omitempty" json:"role,omitempty"`
 	Resource *string                                 `form:"resource,omitempty" json:"resource,omitempty"`
 }

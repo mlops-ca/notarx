@@ -50,7 +50,8 @@ func (s *PostgresStore) CreateUserGroup(ctx context.Context, group UserGroup, au
 		created, err := scanUserGroup(q.QueryRowContext(ctx, `INSERT INTO user_groups (id,provider_id,external_id,display_name,source,global_role) VALUES ($1::uuid,NULLIF($2,'')::uuid,$3,$4,$5,$6) RETURNING `+userGroupColumns,
 			group.ID, group.ProviderID, group.ExternalID, group.DisplayName, string(group.Source), group.GlobalRole))
 		if isForeignKeyViolation(err) {
-			return UserGroup{}, ErrNotFound
+			// The only reference is the provider.
+			return UserGroup{}, ErrUserGroupProviderNotFound
 		}
 		return created, userGroupUniqueError(err)
 	})
@@ -61,9 +62,7 @@ func (s *PostgresStore) CreateUserGroup(ctx context.Context, group UserGroup, au
 }
 
 func (s *PostgresStore) ListUserGroups(ctx context.Context, limit int, cursor string) ([]UserGroup, string, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
+	limit = ClampUserGroupPageSize(limit)
 	after, afterID := time.Unix(0, 0).UTC(), nilUUID
 	if cursor != "" {
 		at, id, ok := decodeUserGroupCursor(cursor)
@@ -133,16 +132,12 @@ func groupVersionUpdate(ctx context.Context, q sqlRunner, id, expectedVersion, q
 
 func (s *PostgresStore) RenameUserGroup(ctx context.Context, id, displayName, expectedVersion string, audit ...AuditRecord) (UserGroup, error) {
 	updated, err := runAudited(ctx, s, audit, func(q sqlRunner) (UserGroup, error) {
-		current, err := getUserGroupOn(ctx, q, id)
-		if err != nil {
-			return UserGroup{}, err
-		}
-		renamed, err := NormalizeUserGroup(UserGroup{ProviderID: current.ProviderID, ExternalID: current.ExternalID, DisplayName: displayName, Source: current.Source, GlobalRole: current.GlobalRole})
+		name, err := NormalizeUserGroupName(displayName)
 		if err != nil {
 			return UserGroup{}, err
 		}
 		return groupVersionUpdate(ctx, q, id, expectedVersion,
-			`UPDATE user_groups SET display_name=$1,version=version+1,updated_at=now() WHERE id=$2::uuid AND version=$3::bigint RETURNING `+userGroupColumns, renamed.DisplayName)
+			`UPDATE user_groups SET display_name=$1,version=version+1,updated_at=now() WHERE id=$2::uuid AND version=$3::bigint RETURNING `+userGroupColumns, name)
 	})
 	if err == nil {
 		s.invalidateLocalScope(CacheScopeUserGroup)
@@ -168,22 +163,44 @@ func (s *PostgresStore) SetUserGroupGlobalRole(ctx context.Context, id, role, ex
 	return updated, err
 }
 
+// DeleteUserGroup deletes the group with its memberships and the repository grants that name group:<id>, so no
+// grant is left naming a principal that can never match again; the grant sets of the affected repositories are
+// versioned like any grant change.
 func (s *PostgresStore) DeleteUserGroup(ctx context.Context, id string, audit ...AuditRecord) error {
-	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
+	repositoryIDs, err := runAudited(ctx, s, audit, func(q sqlRunner) ([]string, error) {
 		if !isUUID(id) {
-			return struct{}{}, ErrNotFound
+			return nil, ErrNotFound
 		}
 		result, err := q.ExecContext(ctx, `DELETE FROM user_groups WHERE id=$1::uuid`, id)
 		if err != nil {
-			return struct{}{}, err
+			return nil, err
 		}
 		if affected, _ := result.RowsAffected(); affected == 0 {
-			return struct{}{}, ErrNotFound
+			return nil, ErrNotFound
 		}
-		return struct{}{}, nil
+		rows, err := q.QueryContext(ctx, `WITH removed AS (DELETE FROM repository_grants WHERE principal=$1 RETURNING repository_id),
+touched AS (SELECT DISTINCT repository_id FROM removed),
+sets AS (UPDATE repository_grant_sets s SET version=s.version+1 FROM touched t WHERE s.repository_id=t.repository_id RETURNING s.repository_id)
+UPDATE hosted_repositories r SET grants_version=r.grants_version+1 FROM touched t WHERE r.id=t.repository_id RETURNING r.id::text`, groupPrincipal(id))
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = rows.Close() }()
+		var touched []string
+		for rows.Next() {
+			var repositoryID string
+			if err := rows.Scan(&repositoryID); err != nil {
+				return nil, err
+			}
+			touched = append(touched, repositoryID)
+		}
+		return touched, rows.Err()
 	})
 	if err == nil {
 		s.invalidateLocalScope(CacheScopeUserGroup)
+		for _, repositoryID := range repositoryIDs {
+			s.invalidateGrants(repositoryID)
+		}
 	}
 	return err
 }
@@ -232,9 +249,7 @@ func (s *PostgresStore) RemoveUserGroupMember(ctx context.Context, groupID, user
 }
 
 func (s *PostgresStore) ListUserGroupMembers(ctx context.Context, groupID string, limit int, cursor string) ([]UserGroupMember, string, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
+	limit = ClampUserGroupPageSize(limit)
 	if _, err := s.GetUserGroup(ctx, groupID); err != nil {
 		return nil, "", err
 	}
@@ -308,7 +323,7 @@ func (s *PostgresStore) SyncClaimsUserGroups(ctx context.Context, sync ClaimsGro
 	}
 	external := make([]string, 0, len(sync.ExternalIDs))
 	for _, value := range sync.ExternalIDs {
-		if trimmed := trimClaimsGroup(value); trimmed != "" {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
 			external = append(external, trimmed)
 		}
 	}
@@ -338,7 +353,7 @@ WHERE g.source='claims' AND g.provider_id=$1::uuid AND g.global_role='none' AND 
 			return 0, err
 		}
 		if len(groupIDs) > 0 {
-			if _, err := q.ExecContext(ctx, `INSERT INTO user_group_members (group_id,user_id,source) SELECT g,$1::uuid,'claims' FROM unnest($2::text[]::uuid[]) AS g ON CONFLICT (group_id,user_id) DO NOTHING`, sync.UserID, groupIDs); err != nil {
+			if _, err := q.ExecContext(ctx, `INSERT INTO user_group_members (group_id,user_id,source) SELECT g.id,$1::uuid,'claims' FROM user_groups g WHERE g.id = ANY($2::text[]::uuid[]) ON CONFLICT (group_id,user_id) DO NOTHING`, sync.UserID, groupIDs); err != nil {
 				return 0, err
 			}
 		}
@@ -353,9 +368,10 @@ WHERE g.source='claims' AND g.provider_id=$1::uuid AND g.global_role='none' AND 
 	return matched, err
 }
 
+// groupPrincipal is the grant principal of a user group (authorization.GroupPrincipal; the repository package cannot import it).
+func groupPrincipal(groupID string) string { return "group:" + groupID }
+
 func isUUID(value string) bool {
 	_, err := uuid.Parse(value)
 	return err == nil
 }
-
-func trimClaimsGroup(value string) string { return strings.TrimSpace(value) }

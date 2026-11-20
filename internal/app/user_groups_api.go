@@ -37,18 +37,27 @@ func writeUserGroup(w http.ResponseWriter, status int, group repository.UserGrou
 	writeNativeMavenJSON(w, status, userGroupResponse(group))
 }
 
-// userGroupLimit applies the page size of the contract.
+// userGroupLimit applies the page size of the contract, the same clamp the stores use, so the limit a response
+// reports is the one that was applied.
 func userGroupLimit(limit *int) int {
 	if limit == nil {
-		return 50
+		return repository.ClampUserGroupPageSize(0)
 	}
-	return *limit
+	return repository.ClampUserGroupPageSize(*limit)
 }
 
-func (h accessManagementHandler) writeUserGroupError(w http.ResponseWriter, err error, action string) {
+// writeUserGroupError answers a store error. notFound names what a not-found answer means for the operation: the
+// store reports a missing group, a missing user and a missing provider through the same sentinels.
+func (h accessManagementHandler) writeUserGroupError(w http.ResponseWriter, err error, action string, notFound ...string) {
+	message := "user group not found"
+	if len(notFound) > 0 {
+		message = notFound[0]
+	}
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
-		writeHostedProblem(w, http.StatusNotFound, "not_found", "user group not found")
+		writeHostedProblem(w, http.StatusNotFound, "not_found", message)
+	case errors.Is(err, repository.ErrUserGroupProviderNotFound):
+		writeHostedProblem(w, http.StatusBadRequest, "provider_not_found", "the identity provider of the group does not exist")
 	case errors.Is(err, repository.ErrVersionConflict):
 		writeHostedProblem(w, http.StatusPreconditionFailed, "version_conflict", "If-Match does not match current user group version")
 	case errors.Is(err, repository.ErrUserGroupNameExists):
@@ -227,9 +236,14 @@ func (h accessManagementHandler) AddUserGroupMember(w http.ResponseWriter, r *ht
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "invalid member body")
 		return
 	}
+	// The store reports a missing group and a missing user alike, so the group is checked first.
+	if _, err := h.userGroups.GetUserGroup(r.Context(), groupID.String()); err != nil {
+		h.writeUserGroupError(w, err, "add user group member")
+		return
+	}
 	resource := "user-groups/" + groupID.String() + "/members/" + body.UserId.String()
 	if err := h.userGroups.AddUserGroupMember(r.Context(), groupID.String(), body.UserId.String(), repository.UserGroupSourceLocal, h.authorizationAudit(r, "", resource, "user_group.member_add", http.StatusNoContent)...); err != nil {
-		h.writeUserGroupError(w, err, "add user group member")
+		h.writeUserGroupError(w, err, "add user group member", "user not found")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -241,7 +255,7 @@ func (h accessManagementHandler) RemoveUserGroupMember(w http.ResponseWriter, r 
 	}
 	resource := "user-groups/" + groupID.String() + "/members/" + userID.String()
 	if err := h.userGroups.RemoveUserGroupMember(r.Context(), groupID.String(), userID.String(), h.authorizationAudit(r, "", resource, "user_group.member_remove", http.StatusNoContent)...); err != nil {
-		h.writeUserGroupError(w, err, "remove user group member")
+		h.writeUserGroupError(w, err, "remove user group member", "the user is not a member of the group")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

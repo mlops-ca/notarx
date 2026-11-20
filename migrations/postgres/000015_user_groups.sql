@@ -25,8 +25,11 @@ CREATE TABLE public.user_groups (
     CONSTRAINT user_groups_version_check CHECK ((version > 0))
 );
 
--- A local group is found by its case-insensitive name; a provisioned group by its provider and external id.
-CREATE UNIQUE INDEX user_groups_name_local_idx ON public.user_groups USING btree (lower(display_name)) WHERE (provider_id IS NULL);
+-- A local group is found by its case-insensitive name; a provisioned group by its provider and external id. The name
+-- index keys on source, not on provider_id IS NULL: deleting a provider sets provider_id to NULL on its groups, and
+-- those groups must not fall into the namespace of local groups (they would collide with a local group of the same
+-- name and make the provider delete fail).
+CREATE UNIQUE INDEX user_groups_name_local_idx ON public.user_groups USING btree (lower(display_name)) WHERE (source = 'local'::text);
 CREATE UNIQUE INDEX user_groups_provider_external_id_idx ON public.user_groups USING btree (provider_id, external_id) WHERE (external_id <> ''::text);
 
 CREATE TABLE public.user_group_members (

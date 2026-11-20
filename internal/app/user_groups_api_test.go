@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -103,8 +104,11 @@ func TestUserGroupManagementHTTP(t *testing.T) {
 	if got := request(http.MethodPost, members, `{"userId":"`+user.ID+`"}`, "admin-secret", ""); got.Code != http.StatusConflict {
 		t.Fatalf("duplicate member = %d %s", got.Code, got.Body.String())
 	}
-	if got := request(http.MethodPost, members, `{"userId":"`+uuid.NewString()+`"}`, "admin-secret", ""); got.Code != http.StatusNotFound {
+	if got := request(http.MethodPost, members, `{"userId":"`+uuid.NewString()+`"}`, "admin-secret", ""); got.Code != http.StatusNotFound || !strings.Contains(got.Body.String(), "user not found") {
 		t.Fatalf("unknown user = %d %s", got.Code, got.Body.String())
+	}
+	if got := request(http.MethodPost, "/api/v2/user-groups/"+uuid.NewString()+"/members", `{"userId":"`+user.ID+`"}`, "admin-secret", ""); got.Code != http.StatusNotFound || !strings.Contains(got.Body.String(), "user group not found") {
+		t.Fatalf("unknown group = %d %s", got.Code, got.Body.String())
 	}
 	listed := request(http.MethodGet, members, "", "admin-secret", "")
 	if listed.Code != http.StatusOK || !strings.Contains(listed.Body.String(), `"userName":"ada"`) || !strings.Contains(listed.Body.String(), `"source":"local"`) {
@@ -112,6 +116,9 @@ func TestUserGroupManagementHTTP(t *testing.T) {
 	}
 	if got := request(http.MethodGet, "/api/v2/user-groups?limit=1", "", "admin-secret", ""); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), "Platform Team") {
 		t.Fatalf("list = %d %s", got.Code, got.Body.String())
+	}
+	if got := request(http.MethodGet, "/api/v2/user-groups?limit=500", "", "admin-secret", ""); got.Code != http.StatusOK || !strings.Contains(got.Body.String(), `"limit":200`) {
+		t.Fatalf("an oversized limit = %d %s, want the applied limit reported", got.Code, got.Body.String())
 	}
 	if got := request(http.MethodGet, "/api/v2/user-groups?pageToken=garbage", "", "admin-secret", ""); got.Code != http.StatusBadRequest {
 		t.Fatalf("bad page token = %d %s", got.Code, got.Body.String())
@@ -175,7 +182,11 @@ func TestGroupPrincipalGrantsAreValidatedAndSimulatedWithGroups(t *testing.T) {
 	}
 
 	simulate := func(actor string) string {
-		got := request(http.MethodGet, "/api/v2/repositories/"+repo.ID+"/effective-access?actor="+url.QueryEscape(actor), "", "admin-secret", "")
+		query := "actor=" + url.QueryEscape(actor)
+		if before, role, found := strings.Cut(actor, "&role="); found {
+			query = "actor=" + url.QueryEscape(before) + "&role=" + role
+		}
+		got := request(http.MethodGet, "/api/v2/repositories/"+repo.ID+"/effective-access?"+query, "", "admin-secret", "")
 		if got.Code != http.StatusOK {
 			t.Fatalf("simulate %s = %d %s", actor, got.Code, got.Body.String())
 		}
@@ -190,9 +201,24 @@ func TestGroupPrincipalGrantsAreValidatedAndSimulatedWithGroups(t *testing.T) {
 	if body := simulate("user:ada"); !strings.Contains(body, `"write":{"allowed":true,"reason":"scope_granted","source":"repository_grants"}`) || !strings.Contains(body, group.ID) {
 		t.Fatalf("the simulation does not include the group: %s", body)
 	}
-	// An actor that merely spells the group principal gets nothing from it.
-	if body := simulate("group:" + group.ID); !strings.Contains(body, `"write":{"allowed":false`) {
-		t.Fatalf("a spoofed actor was granted through the group: %s", body)
+	if listed := request(http.MethodGet, grants, "", "admin-secret", ""); !strings.Contains(listed.Body.String(), "group:"+group.ID) {
+		t.Fatalf("grants = %s", listed.Body.String())
+	}
+	// A group actor previews what the members of the group are allowed.
+	if body := simulate("group:" + group.ID); !strings.Contains(body, `"write":{"allowed":true,"reason":"scope_granted","source":"repository_grants"}`) {
+		t.Fatalf("the group preview does not show the group's grants: %s", body)
+	}
+	if body := simulate("group:" + uuid.NewString()); !strings.Contains(body, `"write":{"allowed":false`) {
+		t.Fatalf("an unrelated group preview was granted: %s", body)
+	}
+	// The simulated role and the groups' global roles combine: a member simulated as role member is lifted by an
+	// admin group exactly as the real account would be.
+	flagged, err := store.SetUserGroupGlobalRole(ctx, group.ID, repository.UserGroupRoleAdmin, group.Version)
+	if err != nil || flagged.GlobalRole != repository.UserGroupRoleAdmin {
+		t.Fatal(err)
+	}
+	if body := simulate("user:ada&role=member"); !strings.Contains(body, `"admin":{"allowed":true`) {
+		t.Fatalf("an admin group did not lift the simulated member: %s", body)
 	}
 }
 
@@ -291,5 +317,51 @@ func TestOIDCLoginPopulatesClaimsGroupsAndTreatsEntraOverageAsNoGroups(t *testin
 	}
 	if overage != 1 {
 		t.Fatalf("overage audit events = %d, want 1", overage)
+	}
+}
+
+func TestSAMLGroupsOverTheBoundAssertNoneAndAreAudited(t *testing.T) {
+	few, overage := boundedSAMLGroups([]string{"a", "b"})
+	if overage || len(few) != 2 {
+		t.Fatalf("few = %v overage=%t", few, overage)
+	}
+	many := make([]string, repository.MaxClaimsGroups+1)
+	if got, overage := boundedSAMLGroups(many); !overage || got != nil {
+		t.Fatalf("many = %d groups overage=%t, want none and an overage", len(got), overage)
+	}
+	audit := &capturedAudit{}
+	handler := samlLoginHandler{audit: audit}
+	handler.recordGroupsOverage(httptest.NewRequest(http.MethodPost, "/auth/saml/corp/acs", nil), "Corp")
+	if len(audit.records) != 1 || audit.records[0].Operation != "auth.saml.groups_overage" || audit.records[0].Resource != "auth/saml/corp" || audit.records[0].AuthorizationReason != "groups_overage" {
+		t.Fatalf("overage audit = %#v", audit.records)
+	}
+}
+
+func TestUserGroupStoreErrorsMapToDistinctAnswers(t *testing.T) {
+	cases := []struct {
+		err    error
+		status int
+		body   string
+	}{
+		{repository.ErrNotFound, http.StatusNotFound, "user group not found"},
+		{repository.ErrUserGroupProviderNotFound, http.StatusBadRequest, "provider"},
+		{repository.ErrVersionConflict, http.StatusPreconditionFailed, "version"},
+		{repository.ErrUserGroupNameExists, http.StatusConflict, "name already exists"},
+		{repository.ErrUserGroupExternalID, http.StatusConflict, "external id"},
+		{repository.ErrUserGroupMemberExists, http.StatusConflict, "already a member"},
+		{repository.ErrUserGroupInvalid, http.StatusBadRequest, "invalid"},
+		{errors.New("boom"), http.StatusInternalServerError, "failed"},
+	}
+	for _, tc := range cases {
+		recorder := httptest.NewRecorder()
+		accessManagementHandler{}.writeUserGroupError(recorder, tc.err, "do it")
+		if recorder.Code != tc.status || !strings.Contains(recorder.Body.String(), tc.body) {
+			t.Errorf("%v = %d %s, want %d containing %q", tc.err, recorder.Code, recorder.Body.String(), tc.status, tc.body)
+		}
+	}
+	recorder := httptest.NewRecorder()
+	accessManagementHandler{}.writeUserGroupError(recorder, repository.ErrNotFound, "add", "user not found")
+	if recorder.Code != http.StatusNotFound || !strings.Contains(recorder.Body.String(), "user not found") {
+		t.Errorf("custom not-found message = %d %s", recorder.Code, recorder.Body.String())
 	}
 }

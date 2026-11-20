@@ -80,11 +80,20 @@ func (h accessManagementHandler) GetRepositoryEffectiveAccess(w http.ResponseWri
 
 // simulatedPrincipal builds the principal an administrator asks to evaluate. A named account is looked up so its
 // user groups count: the simulation then answers what the account would really be allowed, groups included
-// (ADR 0018 Decision 5). An actor that is no account has no groups.
+// (ADR 0018 Decision 5), which means the level is the highest of the simulated role and the global roles of the
+// account's groups, as it is for the real account. An actor that is no account has no groups.
 func (h accessManagementHandler) simulatedPrincipal(ctx context.Context, actor string, role Role) Principal {
 	principal := Principal{
 		Actor: actor, Role: role, Admin: role == RoleAdmin,
 		AuthenticationKind: simulatedAuthenticationKind(actor),
+	}
+	// "group:<id>" previews what the members of a group are allowed: the simulated principal is a member of that
+	// group and of nothing else. Only an administrator can ask, so this is not a way to impersonate a group.
+	if id, isGroup := strings.CutPrefix(actor, authorization.GroupPrincipalPrefix); isGroup {
+		if _, err := uuid.Parse(id); err == nil {
+			principal.GroupIDs = []string{id}
+		}
+		return principal
 	}
 	name, isUser := strings.CutPrefix(actor, "user:")
 	if !isUser || h.authenticator.Users == nil {

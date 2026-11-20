@@ -371,8 +371,10 @@ func TestClaimGroupsReadsTheGroupsClaimAndTreatsOverageAsNoGroups(t *testing.T) 
 		{"no claim", map[string]any{}, "", nil, false},
 		{"entra overage via claim names", map[string]any{"_claim_names": map[string]any{"groups": "src1"}, "groups": []any{"partial"}}, "", nil, true},
 		{"entra overage via hasgroups", map[string]any{"hasgroups": true}, "", nil, true},
-		{"non-list claim", map[string]any{"groups": "eng"}, "", nil, true},
-		{"non-string member", map[string]any{"groups": []any{"eng", 7}}, "", nil, true},
+		{"single string claim", map[string]any{"groups": "eng"}, "", []string{"eng"}, false},
+		{"non-list claim", map[string]any{"groups": 7}, "", nil, false},
+		{"object claim", map[string]any{"groups": map[string]any{"a": "b"}}, "", nil, false},
+		{"non-string member", map[string]any{"groups": []any{"eng", 7}}, "", nil, false},
 		{"over the bound", map[string]any{"groups": make([]any, repository.MaxClaimsGroups+1)}, "", nil, true},
 		{"unrelated claim names", map[string]any{"_claim_names": map[string]any{"other": "src1"}, "groups": []any{"eng"}}, "", []string{"eng"}, false},
 	}

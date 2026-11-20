@@ -15097,7 +15097,13 @@ export type GetRepositoryEffectiveAccessData = {
     repositoryId: string;
   };
   query?: {
+    /**
+     * The principal to simulate. A user:<name> actor includes the user groups of that account, and a group:<id> actor previews what the members of that user group are allowed.
+     */
     actor?: string;
+    /**
+     * The account level to simulate. The global roles of the account's user groups still apply, so the level is the highest of this role and those roles, as it is for the real account.
+     */
     role?: "member" | "admin";
     resource?: string;
   };

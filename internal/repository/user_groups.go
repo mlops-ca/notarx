@@ -84,6 +84,8 @@ var (
 	ErrUserGroupExternalID   = errors.New("user group external id already exists for this provider")
 	ErrUserGroupInvalid      = errors.New("user group is invalid")
 	ErrUserGroupMemberExists = errors.New("user is already a member of the group")
+	// ErrUserGroupProviderNotFound reports a provisioned or claims-sourced group of an identity provider that does not exist.
+	ErrUserGroupProviderNotFound = errors.New("identity provider of the user group not found")
 )
 
 // UserGroupStore persists user groups and their memberships. Every mutation takes the audit records to write in
@@ -118,16 +120,40 @@ func ValidUserGroupRole(role string) bool {
 	return false
 }
 
+// ClampUserGroupPageSize applies the page size of the contract: 50 by default, at most 200.
+func ClampUserGroupPageSize(limit int) int {
+	switch {
+	case limit <= 0:
+		return 50
+	case limit > 200:
+		return 200
+	}
+	return limit
+}
+
+// NormalizeUserGroupName trims and bounds a display name.
+func NormalizeUserGroupName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if len(name) < 1 || len(name) > 255 {
+		return "", ErrUserGroupInvalid
+	}
+	return name, nil
+}
+
 // NormalizeUserGroup trims and validates a group before it is stored. A SCIM group can never be created with
 // the admin role and a claims group is only ever role none (ADR 0018 Decision 5): the flag is an administrator
 // action on an existing group, and a delete followed by a recreate starts again at none.
 func NormalizeUserGroup(group UserGroup) (UserGroup, error) {
-	group.DisplayName = strings.TrimSpace(group.DisplayName)
+	name, err := NormalizeUserGroupName(group.DisplayName)
+	if err != nil {
+		return UserGroup{}, err
+	}
+	group.DisplayName = name
 	group.ExternalID = strings.TrimSpace(group.ExternalID)
 	if group.GlobalRole == "" {
 		group.GlobalRole = UserGroupRoleNone
 	}
-	if len(group.DisplayName) < 1 || len(group.DisplayName) > 255 || len(group.ExternalID) > 255 || !ValidUserGroupRole(group.GlobalRole) {
+	if len(group.ExternalID) > 255 || !ValidUserGroupRole(group.GlobalRole) {
 		return UserGroup{}, ErrUserGroupInvalid
 	}
 	switch group.Source {

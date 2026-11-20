@@ -226,3 +226,94 @@ func TestPostgresGroupChangesAnnounceTheUserOrTheScope(t *testing.T) {
 		t.Fatalf("a group change announced %v, want the scope", got)
 	}
 }
+
+// Deleting an identity provider sets provider_id to NULL on its groups. They must not fall into the namespace of
+// local groups: a local group of the same name neither blocks the delete nor collides afterwards.
+func TestPostgresProviderDeleteLeavesProvisionedGroupsOutOfTheLocalNamespace(t *testing.T) {
+	store := userGroupTestStore(t)
+	ctx := context.Background()
+	providerID := uuid.NewString()
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO identity_providers (id,slug,kind,display_name) VALUES ($1::uuid,$2,'oidc','Orphan test')`, providerID, "orph-"+providerID[:12]); err != nil {
+		t.Fatal(err)
+	}
+	name := "Developers " + uuid.NewString()[:8]
+	local, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: name, Source: UserGroupSourceLocal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.DeleteUserGroup(context.Background(), local.ID) })
+	provisioned := make([]UserGroup, 0, 2)
+	for i, source := range []UserGroupSource{UserGroupSourceSCIM, UserGroupSourceClaims} {
+		group, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: name, Source: source, ProviderID: providerID, ExternalID: uuid.NewString()[:8] + string(rune('a'+i))})
+		if err != nil {
+			t.Fatalf("a %s group may share the name of a local group: %v", source, err)
+		}
+		provisioned = append(provisioned, group)
+		t.Cleanup(func() { _ = store.DeleteUserGroup(context.Background(), group.ID) })
+	}
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM identity_providers WHERE id=$1::uuid`, providerID); err != nil {
+		t.Fatalf("deleting the provider failed because of its groups: %v", err)
+	}
+	for _, group := range provisioned {
+		orphan, err := store.GetUserGroup(ctx, group.ID)
+		if err != nil || orphan.ProviderID != "" || orphan.Source != group.Source {
+			t.Fatalf("orphan = %#v, %v", orphan, err)
+		}
+		if _, err := store.RenameUserGroup(ctx, group.ID, name+" (former)", orphan.Version); err != nil {
+			t.Fatalf("an orphaned group can still be renamed: %v", err)
+		}
+	}
+}
+
+func TestPostgresDeletingAGroupRemovesItsGrantsAndVersionsTheGrantSet(t *testing.T) {
+	store := userGroupTestStore(t)
+	ctx := context.Background()
+	repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "group-grants-" + uuid.NewString()[:8], Format: FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM repository_grants WHERE repository_id=$1::uuid`, repo.ID)
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM repository_grant_sets WHERE repository_id=$1::uuid`, repo.ID)
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM hosted_repositories WHERE id=$1::uuid`, repo.ID)
+	})
+	group, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: "grants-" + uuid.NewString()[:8], Source: UserGroupSourceLocal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal := "group:" + group.ID
+	before, err := store.ReplaceRepositoryGrants(ctx, repo.ID, []RepositoryGrant{
+		{Principal: principal, Scopes: []string{"repositories:admin"}},
+		{Principal: principal, Scopes: []string{"repositories:read"}, ResourcePrefix: "releases/"},
+		{Principal: "user:keeper", Scopes: []string{"repositories:read"}},
+	}, "1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The multi-principal candidate query finds the repository through the group principal, using the principal index.
+	found, err := store.ListRepositoriesGrantedToPrincipals(ctx, []string{"user:nobody", principal}, "repositories:admin")
+	if err != nil || len(found) != 1 || found[0].ID != repo.ID {
+		t.Fatalf("candidates = %v, %v", found, err)
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := explaincheck.Plan(ctx, tx, listRepositoriesGrantedToPrincipalsQuery, []string{"user:nobody", principal}, "repositories:admin")
+	_ = tx.Rollback()
+	if err != nil || !plan.UsesAnyIndexContaining("repository_grants_principal_idx") {
+		t.Fatalf("the multi-principal candidate query does not use repository_grants_principal_idx: %v %v", plan.Indexes(), err)
+	}
+
+	if err := store.DeleteUserGroup(ctx, group.ID); err != nil {
+		t.Fatal(err)
+	}
+	after, err := store.GetRepositoryGrants(ctx, repo.ID)
+	if err != nil || len(after.Grants) != 1 || after.Grants[0].Principal != "user:keeper" || after.Version == before.Version {
+		t.Fatalf("grants after the delete = %#v (was %s), %v", after, before.Version, err)
+	}
+	reloaded, err := store.GetHostedRepository(ctx, repo.ID)
+	if err != nil || reloaded.GrantsVersion <= repo.GrantsVersion {
+		t.Fatalf("grants version %d -> %d, %v", repo.GrantsVersion, reloaded.GrantsVersion, err)
+	}
+}

@@ -55,7 +55,7 @@ func (s *MemoryStore) CreateUserGroup(ctx context.Context, group UserGroup, audi
 	defer s.mu.Unlock()
 	state := s.userGroupsLocked()
 	for _, existing := range state.groups {
-		if group.ProviderID == "" && existing.ProviderID == "" && strings.EqualFold(existing.DisplayName, group.DisplayName) {
+		if group.Source == UserGroupSourceLocal && existing.Source == UserGroupSourceLocal && strings.EqualFold(existing.DisplayName, group.DisplayName) {
 			return UserGroup{}, ErrUserGroupNameExists
 		}
 		if group.ExternalID != "" && existing.ProviderID == group.ProviderID && existing.ExternalID == group.ExternalID {
@@ -103,9 +103,7 @@ func (s *MemoryStore) ListUserGroups(_ context.Context, limit int, cursor string
 		}
 		items = kept
 	}
-	if limit <= 0 {
-		limit = 50
-	}
+	limit = ClampUserGroupPageSize(limit)
 	next := ""
 	if len(items) > limit {
 		items = items[:limit]
@@ -136,19 +134,19 @@ func (s *MemoryStore) RenameUserGroup(ctx context.Context, id, displayName, expe
 	if current.Version != expectedVersion {
 		return UserGroup{}, ErrVersionConflict
 	}
-	renamed, err := NormalizeUserGroup(UserGroup{ProviderID: current.ProviderID, ExternalID: current.ExternalID, DisplayName: displayName, Source: current.Source, GlobalRole: current.GlobalRole})
+	name, err := NormalizeUserGroupName(displayName)
 	if err != nil {
 		return UserGroup{}, err
 	}
 	for other, existing := range state.groups {
-		if other != id && current.ProviderID == "" && existing.ProviderID == "" && strings.EqualFold(existing.DisplayName, renamed.DisplayName) {
+		if other != id && current.Source == UserGroupSourceLocal && existing.Source == UserGroupSourceLocal && strings.EqualFold(existing.DisplayName, name) {
 			return UserGroup{}, ErrUserGroupNameExists
 		}
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return UserGroup{}, err
 	}
-	current.DisplayName = renamed.DisplayName
+	current.DisplayName = name
 	current.Version = nextHostedGroupVersion(current.Version)
 	current.UpdatedAt = time.Now().UTC()
 	state.groups[id] = current
@@ -191,7 +189,30 @@ func (s *MemoryStore) DeleteUserGroup(ctx context.Context, id string, audit ...A
 	}
 	delete(state.groups, id)
 	delete(state.members, id)
+	s.removeGroupGrantsLocked(groupPrincipal(id))
 	return nil
+}
+
+// removeGroupGrantsLocked drops the grants that name a deleted group and versions the affected grant sets.
+func (s *MemoryStore) removeGroupGrantsLocked(principal string) {
+	for repositoryID, set := range s.repositoryGrants {
+		kept := make([]RepositoryGrant, 0, len(set.Grants))
+		for _, grant := range set.Grants {
+			if grant.Principal != principal {
+				kept = append(kept, grant)
+			}
+		}
+		if len(kept) == len(set.Grants) {
+			continue
+		}
+		set.Grants = kept
+		set.Version = nextHostedGroupVersion(set.Version)
+		s.repositoryGrants[repositoryID] = set
+		if repo, ok := s.hostedRepositories[repositoryID]; ok {
+			repo.GrantsVersion++
+			s.hostedRepositories[repositoryID] = repo
+		}
+	}
 }
 
 func (s *MemoryStore) AddUserGroupMember(ctx context.Context, groupID, userID string, source UserGroupSource, audit ...AuditRecord) error {
@@ -253,9 +274,7 @@ func (s *MemoryStore) ListUserGroupMembers(_ context.Context, groupID string, li
 		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].UserID < items[j].UserID })
-	if limit <= 0 {
-		limit = 50
-	}
+	limit = ClampUserGroupPageSize(limit)
 	next := ""
 	if len(items) > limit {
 		items = items[:limit]
