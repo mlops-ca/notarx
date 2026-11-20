@@ -499,3 +499,13 @@ Issue #482, after the amendment above. The release gates call the same `test-sui
 
 1. Contract lanes of a few minutes run packed into one job (`jobs` in `scripts/ci-contract-lanes.json`, for example `packed-checks-auth` runs `core-checks` and `six-format-auth`). A lane stays the unit of the plan, of its evidence directory and of its verdict. A packed job runs every lane even after one fails, and it fails when any lane failed. The gate list in item 2 above names jobs of the suite, not lanes, so it is unchanged. The `object-store-contract` matrix becomes one job that runs its three configurations in turn.
 2. Pull requests run the arm64 contract lanes and arm64 lint only for an architecture-sensitive change (ADR 0016, amendment of 2026-11-19). The `mainline` scope refuses `--no-arm64`, so the release gates always run every lane on both architectures. A release therefore still never ships code that has not passed every test on both architectures. `docs/ci.md` maps every earlier job to where it runs now.
+
+## Amendment (2026-11-20): a build-only Go cache warm on pushes to main
+
+Status: accepted (2026-11-20)
+
+Issue #518. Owner decision: the rule of the amendment "pushes to main run no tests" stands, and a push to `main` may also compile, without running any test, to warm the build cache that pull request CI restores. Item 1 of that amendment gains a job:
+
+1. `ci.yml` on a push to `main` also runs `mainline-go-cache`, one job per architecture. It restores the newest race build cache, runs `make race-coverage-build` (amd64) or `make race-build` (arm64), which pass `go test -c -o /dev/null` and so compile and link the test binaries of `quality` and `quality-arm64` without running them, saves the cache under a key per run and deletes the older race build caches of its architecture.
+2. The warm runs no test, no `TestMain` and no vet or lint. Anything that would run code under test does not belong in it.
+3. It must stay cheap: it compiles only what changed since the cache it restored. `docs/ci.md` (Go checks) records its measured cost. It does not gate `main`, so `ci-ok` does not need it.

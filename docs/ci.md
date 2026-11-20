@@ -110,12 +110,27 @@ holds the race-instrumented build. `quality-arm64` used the `actions/setup-go` c
 until issue #518, so its race pass compiled every package with the race detector on
 every run.
 
-Both caches are restored on every run and saved only by runs on `main` (the nightly
-release gates), under daily keys (runner, toolchain or lint image, `go.sum`, the UTC
-date): an exact hit saves nothing, so a fixed key would freeze a cache at its first
-contents, and a save from every pull request would crowd the repository's cache quota.
-A pull request restores the newest cache `main` saved, by key prefix. The unit-test
-pass uses `-count=1`, so a restored build cache never replays an earlier test result.
+Both caches are restored on every run and saved only by runs on `main`: an exact hit
+saves nothing, so a fixed key would freeze a cache at its first contents, and a save
+from every pull request would crowd the repository's cache quota. A pull request
+restores the newest cache `main` saved, by key prefix. The unit-test pass uses
+`-count=1`, so a restored build cache never replays an earlier test result.
+
+The lint cache has a daily key (runner, lint image, `go.sum` and `.golangci.yml`, the
+UTC date) and the release gates save it. The race build cache has a key per run
+(runner, toolchain, `go.sum`, the UTC date, the run id and attempt). Until issue #518
+it had a daily key too, so only the first save of a day stuck, and a pull request
+compiled again every package that `main` changed since then: `quality` took 4.2
+minutes on the morning's cache and 7.3 once `main` had moved (runs 44723845622 and
+44740891885). Every push to `main` now runs `mainline-go-cache` in `ci.yml`, one job
+per architecture, which restores the newest race build cache, compiles the build of
+`quality` (`make race-coverage-build`, amd64) or of `quality-arm64`
+(`make race-build`, arm64) and saves it. Both targets pass `go test -c -o /dev/null`,
+so they compile and link the test binaries and run no test: the owner rule that a push
+to `main` runs no tests (ADR 0024, amendment of 2026-11-19) allows this build-only
+warm, as long as it stays cheap (ADR 0024, amendment of 2026-11-20). The warm then
+deletes every older race build cache of its architecture on `main`, because only the
+newest is ever restored. It does not gate `main`: `ci-ok` does not need it.
 
 The repository has a 10 GB cache quota, and beyond it GitHub evicts the least recently
 used entries (11.8 GB were in use on 2026-11-20, most of it BuildKit layers and

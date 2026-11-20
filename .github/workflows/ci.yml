@@ -169,7 +169,8 @@ jobs:
           done
           exit $status
 
-  # Mainline publication (ADR 0016): the only jobs a push to main runs. No test runs here:
+  # Mainline publication (ADR 0016) and the build-only Go cache warm: the only jobs a push
+  # to main runs. No test runs here:
   # the nightly release gates test the commit they release (ADR 0024). Both jobs call the reusable workflows that the
   # ADR 0024 release pipeline also calls. Archives build natively on four runners;
   # each image builds natively per architecture and is merged afterwards.
@@ -193,6 +194,35 @@ jobs:
             echo "main-sha-${GITHUB_SHA::12}"
             echo EOF
           } >> "$GITHUB_OUTPUT"
+
+  # The build-only Go cache warm (ADR 0024, amendment of 2026-11-20): it compiles the
+  # race build of quality (amd64, with coverage) and of quality-arm64 for the new tip and
+  # saves it, so the next pull request compiles only what it changed. It runs no test
+  # (make race-build and make race-coverage-build pass -c -o /dev/null) and does not
+  # gate main.
+  mainline-go-cache:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    name: mainline-go-cache (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04, race: 'false', race-coverage: 'true' }
+          - { arch: arm64, runner: ubuntu-24.04-arm, race: 'true', race-coverage: 'false' }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/go-quality
+        with:
+          lint: 'false'
+          vet: 'false'
+          race: ${{ matrix.race }}
+          race-coverage: ${{ matrix.race-coverage }}
+          build-only: 'true'
 
   mainline-assets:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

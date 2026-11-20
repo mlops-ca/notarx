@@ -29,6 +29,13 @@ inputs:
       coverage floors). Like race, it uses a build cache of its own for the
       race-instrumented build.
     default: "false"
+  build-only:
+    description: >-
+      Compile what race or race-coverage would run (make race-build or make
+      race-coverage-build) and run no test: the cache warm of pushes to main (ADR 0024).
+      On main it saves the race build cache and deletes the race caches it supersedes,
+      so the job needs actions: write.
+    default: "false"
   openapi-tools:
     description: Also install tools/openapi (no caller needs it now; the release checks install it in their own job).
     default: "false"
@@ -44,10 +51,12 @@ runs:
         go-version-file: go.mod
         cache: ${{ inputs.race != 'true' && inputs.race-coverage != 'true' }}
     # The lint results and the race build are restored on every run but saved only by
-    # runs on main (the nightly release gates), under a daily key: an exact hit saves
-    # nothing, so a fixed key would freeze the cache, and saves from every pull request
-    # would crowd the repository's cache quota. Pull requests restore main's newest
-    # cache by prefix.
+    # runs on main: an exact hit saves nothing, so a fixed key would freeze the cache,
+    # and saves from every pull request would crowd the repository's cache quota. The
+    # lint cache has a daily key (the release gates save it). The race build cache gets
+    # a key per run, saved by the build-only warm of every push to main and by the
+    # release gates; the warm deletes the entries it supersedes. Pull requests restore
+    # main's newest cache by prefix.
     - if: inputs.lint == 'true' || inputs.race == 'true' || inputs.race-coverage == 'true'
       name: Locate the Go caches
       id: cache-dirs
@@ -70,7 +79,7 @@ runs:
         path: |
           ${{ steps.cache-dirs.outputs.gomodcache }}
           ${{ steps.cache-dirs.outputs.gocache }}
-        key: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}
+        key: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
         restore-keys: |
           go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-
           go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-
@@ -119,14 +128,22 @@ runs:
       name: Run Go vet
       shell: bash
       run: make vet
-    - if: inputs.race == 'true'
+    - if: inputs.race == 'true' && inputs.build-only != 'true'
       name: Run race detector
       shell: bash
       run: make race
-    - if: inputs.race-coverage == 'true'
+    - if: inputs.race-coverage == 'true' && inputs.build-only != 'true'
       name: Run the unit tests once with the race detector and enforce the coverage floors
       shell: bash
       run: make race-coverage
+    - if: inputs.race == 'true' && inputs.build-only == 'true'
+      name: Compile the race build (no test runs)
+      shell: bash
+      run: make race-build
+    - if: inputs.race-coverage == 'true' && inputs.build-only == 'true'
+      name: Compile the race and coverage build (no test runs)
+      shell: bash
+      run: make race-coverage-build
     - if: (inputs.race == 'true' || inputs.race-coverage == 'true') && github.ref == 'refs/heads/main'
       name: Save the race build cache (main only)
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -134,4 +151,18 @@ runs:
         path: |
           ${{ steps.cache-dirs.outputs.gomodcache }}
           ${{ steps.cache-dirs.outputs.gocache }}
-        key: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}
+        key: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
+    # Only the newest race build cache of an architecture is ever restored (by prefix),
+    # so the warm deletes the older ones instead of leaving them to the quota's eviction.
+    - if: inputs.build-only == 'true' && github.ref == 'refs/heads/main'
+      name: Delete the superseded race build caches (main only)
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        KEEP: go-race-${{ runner.os }}-${{ runner.arch }}-${{ steps.cache-dirs.outputs.go }}-${{ hashFiles('go.sum') }}-${{ steps.cache-dirs.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
+        PREFIX: go-race-${{ runner.os }}-${{ runner.arch }}-
+      run: |
+        gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --key "$PREFIX" --limit 100 --json key --jq '.[].key' |
+          while read -r key; do
+            [[ "$key" == "$KEEP" ]] || gh cache delete --repo "$GITHUB_REPOSITORY" "$key"
+          done

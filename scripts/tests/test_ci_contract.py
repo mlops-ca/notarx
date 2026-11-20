@@ -526,6 +526,17 @@ class PlanTests(unittest.TestCase):
         self.assertIn("  changes:\n    if: github.event_name == 'pull_request'", workflow)
         self.assertEqual(workflow.count('uses: ./.github/workflows/test-suite.yml'), 1)
         self.assertEqual(release.count('uses: ./.github/workflows/test-suite.yml'), 1)
+        # ADR 0024 amendment of 2026-11-20: the Go cache warm of a push to main compiles
+        # the race builds and runs no test.
+        warm = workflow[workflow.index('  mainline-go-cache:\n'):workflow.index('  mainline-assets:\n')]
+        self.assertIn("if: github.event_name == 'push' && github.ref == 'refs/heads/main'", warm)
+        self.assertIn("build-only: 'true'", warm)
+        self.assertIn("lint: 'false'", warm)
+        self.assertIn("vet: 'false'", warm)
+        makefile = (ROOT / 'Makefile').read_text()
+        for target in ('race-build', 'race-coverage-build'):
+            recipe = makefile[makefile.index('\n' + target + ':\n'):].split('\n\n')[0]
+            self.assertIn(' -c -o /dev/null ', recipe)
         self.assertNotIn('platforms: linux/amd64,linux/arm64', workflow)
         self.assertNotIn('continue-on-error', workflow + suite + release)
         for group in ci.GROUPS:
