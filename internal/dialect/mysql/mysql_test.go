@@ -28,7 +28,8 @@ func TestNewBundlesEveryPrimitive(t *testing.T) {
 }
 
 func TestBucketIsStableAndWithinTheTable(t *testing.T) {
-	if bucket("a") != bucket("a") {
+	first := bucket("a")
+	if again := bucket("a"); first != again {
 		t.Fatal("the bucket of a key changes")
 	}
 	seen := map[uint16]bool{}

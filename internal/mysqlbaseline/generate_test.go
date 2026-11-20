@@ -43,8 +43,9 @@ func TestCheckedInBaselineIsGenerated(t *testing.T) {
 	}
 }
 
-// TestBaselineSplitsIntoStatements runs the checked-in file through the migration runner's own splitter
-// and lint-free loader, so a statement the runner cannot read fails here and not on a MySQL server.
+// TestBaselineSplitsIntoStatements runs the checked-in file through the migration runner's own loader and
+// splitter, so a statement the runner cannot read fails here and not on a MySQL server. The lint rules for later
+// migrations (IF NOT EXISTS and so on) do not apply to a baseline, which the runner exempts.
 func TestBaselineSplitsIntoStatements(t *testing.T) {
 	files, err := migrate.LoadDir(root("migrations", "mysql"))
 	if err != nil {
@@ -62,8 +63,8 @@ func TestBaselineSplitsIntoStatements(t *testing.T) {
 	if strings.Contains(body, "utf8mb4_0900_ai_ci") {
 		t.Error("an ai_ci collation is not allowed outside the parity allow-list")
 	}
-	if findings := migrate.LintSQL(files[0].Name, body); len(findings) == 0 {
-		t.Log("the baseline passes the post-baseline lint as well")
+	if _, err := migrate.SplitStatements(body); err != nil {
+		t.Errorf("the migration runner cannot split the baseline: %v", err)
 	}
 }
 
