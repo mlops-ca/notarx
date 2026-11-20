@@ -6,6 +6,7 @@ package dialecttest
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"strconv"
@@ -57,22 +58,25 @@ func Run(t *testing.T, h Harness) {
 		}
 	}
 	t.Cleanup(drop)
-	for name, contract := range map[string]func(*testing.T, Harness){
-		"MutualExclusion":               mutualExclusion,
-		"BucketOrderingWithoutDeadlock": orderingWithoutDeadlock,
-		"TransactionWaiterCancellation": transactionWaiterCancellation,
-		"SessionLocks":                  sessionLocks,
-		"SessionWaiterCancellation":     sessionWaiterCancellation,
-		"LockReleasedOnConnectionKill":  releasedOnConnectionKill,
-		"SkipLockedClaimAndRequeue":     claimAndRequeue,
-		"LeaseExpiry":                   leaseExpiry,
-		"ClaimRejectsUnsafeQueries":     claimRejectsUnsafeQueries,
-		"NotificationLatency":           notificationLatency,
-		"ErrorClassification":           errorClassification,
-		"DeadlockIsRetryable":           deadlockIsRetryable,
-		"RunTxRetriesADeadlock":         runTxRetriesADeadlock,
+	for _, contract := range []struct {
+		name string
+		run  func(*testing.T, Harness)
+	}{
+		{"MutualExclusion", mutualExclusion},
+		{"BucketOrderingWithoutDeadlock", orderingWithoutDeadlock},
+		{"TransactionWaiterCancellation", transactionWaiterCancellation},
+		{"SessionLocks", sessionLocks},
+		{"SessionWaiterCancellation", sessionWaiterCancellation},
+		{"LockReleasedOnConnectionKill", releasedOnConnectionKill},
+		{"SkipLockedClaimAndRequeue", claimAndRequeue},
+		{"LeaseExpiry", leaseExpiry},
+		{"ClaimRejectsUnsafeQueries", claimRejectsUnsafeQueries},
+		{"NotificationLatency", notificationLatency},
+		{"ErrorClassification", errorClassification},
+		{"DeadlockIsRetryable", deadlockIsRetryable},
+		{"RunTxRetriesADeadlock", runTxRetriesADeadlock},
 	} {
-		t.Run(name, func(t *testing.T) { contract(t, h) })
+		t.Run(contract.name, func(t *testing.T) { contract.run(t, h) })
 	}
 }
 
@@ -279,8 +283,12 @@ func sessionWaiterCancellation(t *testing.T, h Harness) {
 	if err := h.Set.Locker.UnlockSession(context.Background(), holder, "contract:cancel"); err != nil {
 		t.Fatal(err)
 	}
+	// The cancelled request may still be queued on the server for a moment: it must not leave the lock held
+	// once its connection is gone, so close the waiter and give the next taker a few seconds.
+	_ = waiter.Raw(func(any) error { return driver.ErrBadConn })
+	_ = waiter.Close()
 	third := openConn(t, h)
-	if acquired, err = h.Set.Locker.LockSession(context.Background(), third, "contract:cancel", 0); err != nil || !acquired {
+	if acquired, err = h.Set.Locker.LockSession(context.Background(), third, "contract:cancel", 10*time.Second); err != nil || !acquired {
 		t.Fatalf("the lock was not free after the waiter was cancelled: %t, %v", acquired, err)
 	}
 }
@@ -300,6 +308,9 @@ func releasedOnConnectionKill(t *testing.T, h Harness) {
 	if err := h.Terminate(ctx, h.DB, id); err != nil {
 		t.Fatal(err)
 	}
+	// The killed connection must not go back to the pool as if it were usable.
+	_ = holder.Raw(func(any) error { return driver.ErrBadConn })
+	_ = holder.Close()
 	waiter := openConn(t, h)
 	var acquired bool
 	within(t, 60*time.Second, "the lock after the kill", func() {

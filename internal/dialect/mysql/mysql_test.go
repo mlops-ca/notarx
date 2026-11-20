@@ -46,6 +46,24 @@ func TestBucketIsStableAndWithinTheTable(t *testing.T) {
 	}
 }
 
+// TestBucketCollisionRates records what ADR 0022 asks slice 4 to measure on the hash side: how many of k concurrent distinct
+// keys share a bucket with another. With 4096 buckets the expected number of shared keys is about k*(k-1)/2/4096 pairs.
+func TestBucketCollisionRates(t *testing.T) {
+	for _, k := range []int{32, 64, 128, 256, 512} {
+		owners := map[uint16]int{}
+		for i := range k {
+			owners[bucket(fmt.Sprintf("hosted:repo-%d", i))]++
+		}
+		shared := k - len(owners)
+		expected := float64(k) * float64(k-1) / 2 / Buckets
+		t.Logf("%d distinct keys: %d share a bucket with another (about %.1f expected)", k, shared, expected)
+		// Far from the expectation means the hash does not spread.
+		if float64(shared) > 4*expected+4 {
+			t.Errorf("%d keys: %d collisions; about %.1f expected", k, shared, expected)
+		}
+	}
+}
+
 func TestBucketsAreSortedAndDeduplicated(t *testing.T) {
 	keys := []string{"b", "a", "b", "c", "a"}
 	got := buckets(keys)
