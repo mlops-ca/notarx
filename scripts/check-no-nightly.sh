@@ -45,16 +45,19 @@ done
 stamped='[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]+'
 scratch=$(mktemp -d)
 trap 'rm -rf "$scratch"' EXIT
+# Listings live apart from the per-asset extract directories ($scratch/<asset>.d).
+lists=$scratch/lists
+mkdir "$lists"
 
 assets=()
 if [[ -n "$dir" ]]; then
   # Listed into a file first so that a failing find or sort fails the check instead of
   # shortening the list; NUL-separated so that a name holding a newline stays one path.
-  { find "$dir" -maxdepth 1 -type f -print0 | LC_ALL=C sort -z >"$scratch/assets"; } || fail "cannot list $dir"
+  { find "$dir" -maxdepth 1 -type f -print0 | LC_ALL=C sort -z >"$lists/assets"; } || fail "cannot list $dir"
   while IFS= read -r -d '' path; do
     [[ "$(basename "$path")" != release-manifest.json ]] || continue
     assets+=("$path")
-  done <"$scratch/assets"
+  done <"$lists/assets"
 fi
 # Every failure below exits, so a finished run has checked each listed asset.
 checked=${#assets[@]}
@@ -77,7 +80,7 @@ for path in ${assets[@]+"${assets[@]}"}; do
       extract=$scratch/$name.d
       mkdir -p "$extract"
       tar -xzf "$path" -C "$extract" || fail "cannot extract $name"
-      find "$extract" -type f -print0 >"$scratch/members" || fail "cannot list the members of $name"
+      find "$extract" -type f -print0 >"$lists/members" || fail "cannot list the members of $name"
       while IFS= read -r -d '' file; do
         if [[ "$(basename "$file")" == VERSION.txt ]] && grep -q -i nightly "$file"; then
           fail "$name: VERSION.txt reports a nightly version"
@@ -86,7 +89,7 @@ for path in ${assets[@]+"${assets[@]}"}; do
           *.md | LICENSE* | NOTICE*) continue ;;
         esac
         if grep -a -q -E "$stamped" "$file"; then fail "$name: $(basename "$file") embeds a stamped nightly version"; fi
-      done <"$scratch/members"
+      done <"$lists/members"
       rm -rf "$extract"
       ;;
     *.deb)

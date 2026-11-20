@@ -111,14 +111,14 @@ new_release 0.1.0 0.1.0 0.1.0
 printf 'not a gzip stream' >"$dir/notarx_0.1.0_linux_amd64.tar.gz"
 expect_fail 'a corrupt archive fails with a message' 'cannot list notarx_0\.1\.0_linux_amd64\.tar\.gz' check
 
-new_release 0.1.0 0.1.0 0.1.0
-printf 'x' >"$dir/notarx_0.1.0
-nightly.tar.gz"
-expect_fail 'a name holding a newline is checked as one asset' "asset name 'notarx_0\.1\.0" check
+# An archive whose name holds a newline is still one .tar.gz asset: its stamped binary is found
+# (a newline-split listing would see two paths of unknown type instead).
+new_release 0.1.0 0.1.0 0.1.0-nightly.3
+mv "$dir/notarx_0.1.0_linux_amd64.tar.gz" "$dir/notarx_0.1.0
+linux_amd64.tar.gz"
+expect_fail 'a name holding a newline is checked as one asset' 'embeds a stamped nightly' check
 
-new_release 0.1.0 0.1.0 0.1.0
-printf '{"images":' >"$dir/broken-manifest.json"
-mv "$dir/broken-manifest.json" "$workdir/broken-manifest.json"
+printf '{"images":' >"$workdir/broken-manifest.json"
 expect_fail 'an unreadable manifest fails' 'unreadable manifest' bash "$root/scripts/check-no-nightly.sh" --manifest "$workdir/broken-manifest.json" --registry ghcr.io/o
 
 mkdir "$workdir/empty"
