@@ -180,10 +180,11 @@ The former `core-backup` lane ran the Conan E2E, `make backup-transfer-test`,
 | `core-integration-1` | `make integration-test INTEGRATION_SHARD=1`, `make published-native-backup-test` | integration 9.9 min in total, published 1.6 min |
 | `core-integration-2` | `make integration-test INTEGRATION_SHARD=2`, `make conan-e2e` | Conan 2.2 min |
 
-`scripts/integration-test.sh` holds the integration package list and splits it into
-two shards balanced by measured test time; `--list` prints the assignment, and
-`make test` (`scripts/integration-isolation-test.sh`) fails when a package with
-integration-tagged files is missing from the shards or listed twice. Each shard starts
+`scripts/integration-packages.txt` holds the integration package list and assigns each
+package to one of two shards balanced by measured test time; `scripts/integration-test.sh --list`
+prints it. `TestRequiredIntegrationCommandCoversIntegrationTaggedPackages` (`contracts/`)
+and `make test` (`scripts/integration-isolation-test.sh`) fail when a package with
+integration-tagged files is missing from the list or listed twice. Each shard starts
 its own PostgreSQL and RustFS stack, so the shards cannot see each other's data; inside
 a shard the packages still run one at a time (`-p 1`), because they share that
 database. `-p 1` used to serialize compilation too (about two minutes of the

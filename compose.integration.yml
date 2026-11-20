@@ -46,7 +46,8 @@ services:
       NOTARX_EXPLAIN_SCALE: ${NOTARX_EXPLAIN_SCALE:-10}
     working_dir: /src
     # No default command: callers pass the go test invocation. The integration package
-    # list and its CI shards live in scripts/integration-test.sh.
+    # list and its CI shards live in scripts/integration-packages.txt, which
+    # scripts/integration-test.sh runs.
     command: ["sh", "-ec", "echo 'pass a go test command (scripts/integration-test.sh, scripts/explain-check.sh)' >&2; exit 2"]
     volumes:
       - ./:/src:ro

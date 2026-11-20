@@ -1,34 +1,24 @@
 #!/usr/bin/env bash
 # The tagged integration suite against one migrated PostgreSQL and RustFS stack.
 #
-#   scripts/integration-test.sh             every package (both shards, one run)
-#   scripts/integration-test.sh --shard N   only shard N of SHARDS below (CI runs each
-#                                           shard as its own contract lane, docs/ci.md)
+#   scripts/integration-test.sh             every package (every shard, one run)
+#   scripts/integration-test.sh --shard N   only shard N of scripts/integration-packages.txt
+#                                           (CI runs each shard as its own contract lane,
+#                                           docs/ci.md)
 #   scripts/integration-test.sh --list      print "<shard> <package>" for every package
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$root"
 
-# Every integration package belongs to exactly one shard. The packages share one
-# database, so a shard runs them one at a time (-p 1); the shards are balanced by
-# their measured test time (CI run 44640058817: shard 1 about 3.4 minutes of tests,
-# shard 2 about 3.3 minutes). The official Cargo replay below runs with shard 1,
-# which holds ./internal/app.
-shard_1=(./internal/app ./internal/repository ./internal/aptpublication ./internal/auditwriter
-  ./internal/partitions ./internal/retention ./internal/objectstore ./cmd/notarx)
-shard_2=(./internal/backupops ./internal/nexusmigration/pgstore ./internal/nexussource/pgstore
-  ./internal/secrets/reseal ./internal/repositorypreset/pgstore ./internal/format/nuget
-  ./internal/format/helm ./internal/format/rubygems ./internal/rubygemspublication/pgstore
-  ./internal/preflight)
-SHARDS=2
+# The package list and its shards live in scripts/integration-packages.txt.
+assignments=$(grep -Ev '^[[:space:]]*(#|$)' scripts/integration-packages.txt)
 
 shard=
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --list)
-      printf '1 %s\n' "${shard_1[@]}"
-      printf '2 %s\n' "${shard_2[@]}"
+      printf '%s\n' "$assignments"
       exit 0 ;;
     --shard)
       [[ $# -ge 2 ]] || { printf 'integration-test: --shard needs a number\n' >&2; exit 2; }
@@ -36,12 +26,18 @@ while [[ $# -gt 0 ]]; do
     *) printf 'integration-test: unknown argument %s\n' "$1" >&2; exit 2 ;;
   esac
 done
-case "$shard" in
-  '') packages=("${shard_1[@]}" "${shard_2[@]}"); cargo=1 ;;
-  1) packages=("${shard_1[@]}"); cargo=1 ;;
-  2) packages=("${shard_2[@]}"); cargo=0 ;;
-  *) printf 'integration-test: --shard must be 1 to %s, not %s\n' "$SHARDS" "$shard" >&2; exit 2 ;;
-esac
+if [[ -n "$shard" ]] && ! awk -v shard="$shard" '$1 == shard { found = 1 } END { exit !found }' <<<"$assignments"; then
+  printf 'integration-test: scripts/integration-packages.txt has no shard %s\n' "$shard" >&2
+  exit 2
+fi
+packages=()
+while read -r package_shard package; do
+  if [[ -z "$shard" || "$package_shard" == "$shard" ]]; then packages+=("$package"); fi
+done <<<"$assignments"
+# The official Cargo replay belongs to the shard that holds ./internal/app.
+app_shard=$(awk '$2 == "./internal/app" { print $1 }' <<<"$assignments")
+cargo=0
+if [[ -z "$shard" || "$shard" == "$app_shard" ]]; then cargo=1; fi
 
 compose=(docker compose --env-file /dev/null --project-name notarx-integration -f compose.integration.yml)
 cleanup() {
