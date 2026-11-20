@@ -13,6 +13,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createServiceAccount,
   createServiceAccountCredential,
+  deleteServiceAccountAssertionAudience,
+  listServiceAccountAssertionAudiences,
   listServiceAccountCredentials,
   listServiceAccounts,
   revokeServiceAccountCredential,
@@ -30,6 +32,7 @@ vi.mock("../../client", async () => {
     ...actual,
     createServiceAccount: vi.fn(),
     createServiceAccountCredential: vi.fn(),
+    deleteServiceAccountAssertionAudience: vi.fn(),
     listServiceAccounts: vi.fn(),
     listServiceAccountCredentials: vi.fn(),
     // The allow-list card of the detail reads it; these tests are about the credentials.
@@ -90,6 +93,12 @@ const mockRevokeServiceAccountCredential = vi.mocked(
   revokeServiceAccountCredential,
 );
 const mockUpdateServiceAccount = vi.mocked(updateServiceAccount);
+const mockListServiceAccountAssertionAudiences = vi.mocked(
+  listServiceAccountAssertionAudiences,
+);
+const mockDeleteServiceAccountAssertionAudience = vi.mocked(
+  deleteServiceAccountAssertionAudience,
+);
 
 function renderPage() {
   return render(
@@ -356,6 +365,46 @@ describe("ServiceAccountsPage", () => {
     expect(screen.getByText("release-green")).toBeInTheDocument();
   });
 
+  it("does not carry an allow-list error or a draft over to another account", async () => {
+    const user = userEvent.setup();
+    mockListServiceAccounts.mockResolvedValue({
+      data: { items: [activeAccount, secondAccount] },
+    } as never);
+    mockListServiceAccountCredentials.mockResolvedValue({
+      data: { items: [] },
+    } as never);
+    mockListServiceAccountAssertionAudiences.mockResolvedValue({
+      data: {
+        items: [
+          {
+            serviceAccountId: accountId,
+            audience: "api://AzureADTokenExchange",
+            maxLifetimeSeconds: 300,
+            createdAt: "2026-08-18T00:00:00Z",
+          },
+        ],
+      },
+    } as never);
+    mockDeleteServiceAccountAssertionAudience.mockResolvedValue({
+      error: { code: "not_found", message: "audience is gone" },
+    } as never);
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Remove audience api://AzureADTokenExchange",
+      }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    expect(await screen.findByText(/audience is gone/)).toBeVisible();
+
+    await user.click(screen.getByText("release-bot"));
+    await waitFor(() =>
+      expect(screen.queryByText(/audience is gone/)).not.toBeInTheDocument(),
+    );
+  });
+
   it("creates the first stable machine identity from the empty state", async () => {
     const user = userEvent.setup();
     mockListServiceAccounts
@@ -454,6 +503,37 @@ describe("ServiceAccountsPage", () => {
       }),
     );
     expect(await screen.findByText("jenkins-green")).toBeInTheDocument();
+  });
+
+  it("discards the draft of the create dialog when it is closed", async () => {
+    const user = userEvent.setup();
+    mockListServiceAccounts.mockResolvedValue({
+      data: { items: [activeAccount] },
+    } as never);
+    mockListServiceAccountCredentials.mockResolvedValue({
+      data: { items: [] },
+    } as never);
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: /New service account/ }),
+    );
+    let dialog = await screen.findByRole("dialog");
+    const [name, subject] = Array.from(dialog.querySelectorAll("input"));
+    await user.type(name, "draft-name");
+    await user.type(subject, "legacy-subject");
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: /New service account/ }),
+    );
+    dialog = await screen.findByRole("dialog");
+    const reopened = Array.from(dialog.querySelectorAll("input"));
+    expect(reopened[0]).toHaveValue("");
+    expect(reopened[1]).toHaveValue("");
   });
 
   it("disables and re-enables every credential through the stable account state", async () => {

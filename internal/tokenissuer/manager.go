@@ -413,7 +413,7 @@ func (m *Manager) Revoke(ctx context.Context, kid string, options ...Option) err
 		}
 		if call.actor != "" {
 			if err := tx.Audit(ctx, AuditEvent{Actor: call.actor, Operation: "issuer.revoke", Evidence: map[string]string{
-				"kid": kid, "algorithm": target.Alg, "state": string(StateRetired), "wasActive": fmt.Sprint(wasActive),
+				"kid": kid, "algorithm": target.Alg, "state": string(target.State), "wasActive": fmt.Sprint(wasActive),
 			}}); err != nil {
 				return err
 			}

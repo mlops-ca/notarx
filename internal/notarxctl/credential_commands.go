@@ -15,6 +15,7 @@ import (
 	"unicode/utf8"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -200,8 +201,8 @@ func serviceAccountCreateCommand() command {
 				body.Description = &trimmed
 			}
 			if env.flagSet["assertion-subject"] {
-				if assertionSubject == "" || assertionSubject != strings.TrimSpace(assertionSubject) || utf8.RuneCountInString(assertionSubject) > 255 {
-					return &UsageError{Message: "--assertion-subject must be 1 to 255 characters without surrounding spaces", Hint: "the subject is matched byte for byte by Entra and cannot be changed later"}
+				if !repository.ValidAssertionText(assertionSubject) {
+					return &UsageError{Message: "--assertion-subject must be 1 to 255 printable characters without surrounding spaces", Hint: "the subject is matched byte for byte by Entra and cannot be changed later"}
 				}
 				body.AssertionSubject = &assertionSubject
 			}

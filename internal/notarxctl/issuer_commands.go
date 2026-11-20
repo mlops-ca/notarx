@@ -10,9 +10,9 @@ import (
 	"net/url"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
+	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets/reseal"
 )
 
@@ -249,8 +249,8 @@ func validAudienceFlag(audience string) error {
 	if err := requireFlag("audience", audience, "for example --audience api://AzureADTokenExchange"); err != nil {
 		return err
 	}
-	if audience != strings.TrimSpace(audience) || utf8.RuneCountInString(audience) > 255 {
-		return &UsageError{Message: "--audience must be 1 to 255 characters without surrounding spaces", Hint: "the audience is matched byte for byte by Entra and by notarx peers"}
+	if !repository.ValidAssertionText(audience) {
+		return &UsageError{Message: "--audience must be 1 to 255 printable characters without surrounding spaces", Hint: "the audience is matched byte for byte by Entra and by notarx peers"}
 	}
 	return nil
 }

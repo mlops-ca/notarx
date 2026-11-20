@@ -191,8 +191,12 @@ func (s *MemoryStore) GetAssertionAudience(_ context.Context, accountID, audienc
 func (s *MemoryStore) PutAssertionAudience(ctx context.Context, entry AssertionAudience, audit ...AuditRecord) (AssertionAudience, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.serviceAccounts[entry.ServiceAccountID]; !ok {
+	account, ok := s.serviceAccounts[entry.ServiceAccountID]
+	if !ok {
 		return AssertionAudience{}, false, ErrNotFound
+	}
+	if account.AssertionSubject == "" {
+		return AssertionAudience{}, false, ErrAssertionSubjectMissing
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return AssertionAudience{}, false, err

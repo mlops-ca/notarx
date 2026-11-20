@@ -18,6 +18,9 @@ CREATE TABLE public.service_account_assertion_audiences (
     CONSTRAINT service_account_assertion_audiences_lifetime_check CHECK (((max_lifetime_seconds >= 60) AND (max_lifetime_seconds <= 600)))
 );
 
+-- The MySQL baseline keeps this column as TEXT (the bound applies to indexed columns only); the 255 character limit is
+-- still enforced there, because the same transaction inserts the subject into service_account_assertion_subjects.subject,
+-- a key column that the baseline generator widens to 255 (migrations/mysql-decisions.yaml).
 ALTER TABLE public.service_accounts ADD COLUMN assertion_subject character varying(255);
 
 -- Subjects are reserved for good. Deleting an issuer-enabled account keeps its row (the foreign key nulls the owner),

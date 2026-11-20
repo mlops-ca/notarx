@@ -15,7 +15,9 @@ var (
 	ErrDisabled   = errors.New("group is disabled")
 	ErrNameExists = errors.New("group name already exists")
 	// ErrAssertionSubjectReserved reports an assertion subject that an account holds or once held (ADR 0020).
-	ErrAssertionSubjectReserved      = errors.New("assertion subject is reserved")
+	ErrAssertionSubjectReserved = errors.New("assertion subject is reserved")
+	// ErrAssertionSubjectMissing reports an allow-list change for a service account that has no assertion subject.
+	ErrAssertionSubjectMissing       = errors.New("service account has no assertion subject")
 	ErrIdempotencyConflict           = errors.New("idempotency key conflicts with request")
 	ErrVersionConflict               = errors.New("resource version conflicts with current state")
 	ErrIdentityProviderSlugExists    = errors.New("identity provider slug already exists")

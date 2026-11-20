@@ -33,6 +33,15 @@ export function CreateServiceAccountDialog({
   const [accountDescription, setAccountDescription] = useState("");
   const [assertionSubject, setAssertionSubject] = useState("");
 
+  // Closing discards the draft: a custom subject is permanent, so it must not wait in the form for the next account.
+  const close = () => {
+    setCreateError(null);
+    setAccountName("");
+    setAccountDescription("");
+    setAssertionSubject("");
+    onClose();
+  };
+
   const submitAccount = async () => {
     setBusy(true);
     setCreateError(null);
@@ -63,11 +72,11 @@ export function CreateServiceAccountDialog({
     <Modal
       open={open}
       title={t("identity.newServiceAccount")}
-      onClose={onClose}
+      onClose={close}
       busy={busy}
       footer={
         <Space>
-          <Button onClick={onClose} disabled={busy}>
+          <Button onClick={close} disabled={busy}>
             {t("identity.cancel")}
           </Button>
           <Button

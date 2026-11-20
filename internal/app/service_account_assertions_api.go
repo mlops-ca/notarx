@@ -6,9 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
@@ -28,20 +26,6 @@ const (
 	problemIssuerDisabled              = "issuer_disabled"
 	problemSigningUnavailable          = "signing_unavailable"
 )
-
-// validAssertionText reports whether value is usable as an audience or a subject: printable, trimmed and short enough
-// for the key columns that hold it.
-func validAssertionText(value string) bool {
-	if value == "" || value != strings.TrimSpace(value) || utf8.RuneCountInString(value) > repository.MaxAssertionAudienceLength || !utf8.ValidString(value) {
-		return false
-	}
-	for _, r := range value {
-		if r < 0x20 || r == 0x7f {
-			return false
-		}
-	}
-	return true
-}
 
 // MintServiceAccountAssertion implements POST /service-accounts/{id}/assertions (ADR 0020): a service account, through
 // one of its API keys or as a federated workload principal, mints a short-lived JWT for an audience on its own
@@ -74,7 +58,7 @@ func (h identityManagementHandler) MintServiceAccountAssertion(w http.ResponseWr
 	var request adminopenapi.MintServiceAccountAssertion
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || !validAssertionText(request.Audience) {
+	if err := decoder.Decode(&request); err != nil || !repository.ValidAssertionText(request.Audience) {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an audience of 1 to 255 printable characters is required")
 		return
 	}
@@ -106,6 +90,7 @@ func (h identityManagementHandler) MintServiceAccountAssertion(w http.ResponseWr
 	}
 	entry, err := h.serviceAccounts.GetAssertionAudience(r.Context(), accountID, request.Audience)
 	if errors.Is(err, repository.ErrNotFound) {
+		h.auditRefusedMint(r, principal, accountID, request.Audience, credential, problemAssertionAudienceNotAllowed)
 		writeHostedProblem(w, http.StatusForbidden, problemAssertionAudienceNotAllowed, "the audience is not on the assertion allow-list of the service account")
 		return
 	}
@@ -115,6 +100,7 @@ func (h identityManagementHandler) MintServiceAccountAssertion(w http.ResponseWr
 	}
 	limit := min(time.Duration(entry.MaxLifetimeSeconds)*time.Second, h.issuer.Config.MaxTokenLifetime)
 	if lifetime > limit {
+		h.auditRefusedMint(r, principal, accountID, request.Audience, credential, problemAssertionLifetime)
 		writeHostedProblem(w, http.StatusBadRequest, problemAssertionLifetime, "the lifetime exceeds the maximum of "+limit.String()+" for this audience")
 		return
 	}
@@ -154,6 +140,24 @@ func (h identityManagementHandler) MintServiceAccountAssertion(w http.ResponseWr
 	})
 }
 
+// auditRefusedMint records a mint that was refused for a policy reason, so a credential probing for allowed audiences
+// leaves a trail. The request is refused either way, so a failure to write the record is logged, not surfaced.
+func (h identityManagementHandler) auditRefusedMint(r *http.Request, principal Principal, accountID, audience, credential, reason string) {
+	if h.audit == nil {
+		return
+	}
+	record := managementAudit(repository.AuditRecord{
+		Class: repository.AuditClassSync, Outcome: repository.AuditAccessDenied, Actor: principal.Actor, Resource: "service-accounts/" + accountID,
+		Operation: "service_account.assertion.mint", Status: http.StatusForbidden, AuthorizationSource: credential, AuthorizationReason: reason,
+		Evidence: map[string]string{
+			"serviceAccountId": accountID, "audience": audience, "credentialId": principal.CredentialID, "credentialKind": credential, "reason": reason,
+		},
+	})
+	if err := h.audit.RecordAudit(r.Context(), record); err != nil {
+		slog.Error("record refused assertion mint", "error", err)
+	}
+}
+
 func assertionAudienceResponse(entry repository.AssertionAudience) adminopenapi.ServiceAccountAssertionAudience {
 	return adminopenapi.ServiceAccountAssertionAudience{
 		ServiceAccountId: uuid.MustParse(entry.ServiceAccountID), Audience: entry.Audience,
@@ -188,7 +192,7 @@ func (h identityManagementHandler) PutServiceAccountAssertionAudience(w http.Res
 	var request adminopenapi.PutServiceAccountAssertionAudience
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&request); err != nil || !validAssertionText(request.Audience) {
+	if err := decoder.Decode(&request); err != nil || !repository.ValidAssertionText(request.Audience) {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an audience of 1 to 255 printable characters is required")
 		return
 	}
@@ -201,25 +205,16 @@ func (h identityManagementHandler) PutServiceAccountAssertionAudience(w http.Res
 		return
 	}
 	accountID := serviceAccountID.String()
-	// An audience that is not a plain identifier is stored as given: Entra and notarx peers match it byte for byte.
-	account, err := h.serviceAccounts.GetServiceAccount(r.Context(), accountID)
-	if errors.Is(err, repository.ErrNotFound) {
-		writeHostedProblem(w, http.StatusNotFound, "not_found", "service account not found")
-		return
-	}
-	if err != nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "read service account failed")
-		return
-	}
-	if account.AssertionSubject == "" {
-		writeHostedProblem(w, http.StatusConflict, problemAssertionSubjectMissing, "the service account has no assertion subject; recreate it with a valid name or a custom subject")
-		return
-	}
+	// An audience is stored as given: Entra and notarx peers match it byte for byte.
 	entry, created, err := h.serviceAccounts.PutAssertionAudience(r.Context(), repository.AssertionAudience{
 		ServiceAccountID: accountID, Audience: request.Audience, MaxLifetimeSeconds: seconds,
 	}, h.assertionAudienceAudit(r, accountID, request.Audience, "service_account.assertion_audience.put", seconds)...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "service account not found")
+		return
+	}
+	if errors.Is(err, repository.ErrAssertionSubjectMissing) {
+		writeHostedProblem(w, http.StatusConflict, problemAssertionSubjectMissing, "the service account has no assertion subject; create it again with a valid name or a custom subject")
 		return
 	}
 	if err != nil {
@@ -237,7 +232,7 @@ func (h identityManagementHandler) DeleteServiceAccountAssertionAudience(w http.
 	if _, ok := h.authorize(w, r); !ok {
 		return
 	}
-	if !validAssertionText(params.Audience) {
+	if !repository.ValidAssertionText(params.Audience) {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "an audience of 1 to 255 printable characters is required")
 		return
 	}

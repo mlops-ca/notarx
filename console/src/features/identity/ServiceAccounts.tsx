@@ -267,7 +267,11 @@ export function ServiceAccountsPage() {
                   onRevoke={setCredentialToRevoke}
                   onToggleState={() => setAccountStateChange(selectedAccount)}
                 />
-                <AssertionAudiences account={selectedAccount} />
+                {/* Keyed by account: a removal prompt or an error of one account never carries over to another. */}
+                <AssertionAudiences
+                  key={selectedAccount.id}
+                  account={selectedAccount}
+                />
               </div>
             </SectionBoundary>
           )}

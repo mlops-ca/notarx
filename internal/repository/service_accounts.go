@@ -2,7 +2,10 @@ package repository
 
 import (
 	"context"
+	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 type ServiceAccountState string
@@ -46,6 +49,21 @@ const (
 	// DefaultAssertionSubjectPrefix prefixes the account name in the default assertion subject.
 	DefaultAssertionSubjectPrefix = "notarx:service-account:"
 )
+
+// ValidAssertionText reports whether value is usable as an assertion audience or subject: printable characters only
+// (no control, format or non-ASCII space characters, which are invisible or confusable and are matched byte for byte
+// by Entra and peers), no surrounding space and at most MaxAssertionAudienceLength characters.
+func ValidAssertionText(value string) bool {
+	if value == "" || value != strings.TrimSpace(value) || utf8.RuneCountInString(value) > MaxAssertionAudienceLength || !utf8.ValidString(value) {
+		return false
+	}
+	for _, r := range value {
+		if !unicode.IsPrint(r) {
+			return false
+		}
+	}
+	return true
+}
 
 // DefaultAssertionSubject returns the default assertion subject of a service account name and whether the name may
 // be used in one: characters outside [A-Za-z0-9._:-] are refused (ADR 0020).

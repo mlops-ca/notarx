@@ -82,6 +82,10 @@ func (h identityManagementHandler) RotateIssuerKeys(w http.ResponseWriter, r *ht
 		return
 	}
 	result, err := h.issuer.Manager.RotateNow(r.Context(), algorithm, tokenissuer.WithActor(principal.Actor))
+	if errors.Is(err, tokenissuer.ErrNoNextKey) {
+		writeHostedProblem(w, http.StatusConflict, "no_next_key", "there is no next "+algorithm+" key to promote; a key pair exists only for an algorithm that is or was NOTARX_ISSUER_ALG")
+		return
+	}
 	if problem, status, known := issuerLifecycleProblem(err); known {
 		writeHostedProblem(w, status, problem, err.Error())
 		return

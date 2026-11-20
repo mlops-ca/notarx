@@ -123,7 +123,7 @@ func (h identityManagementHandler) CreateServiceAccount(w http.ResponseWriter, r
 		return
 	}
 	if errors.Is(err, repository.ErrAssertionSubjectReserved) {
-		writeHostedProblem(w, http.StatusConflict, problemAssertionSubjectReserved, "the assertion subject is held by another service account or was held by a deleted one")
+		writeHostedProblem(w, http.StatusConflict, problemAssertionSubjectReserved, "that assertion subject is reserved: another service account holds it")
 		return
 	}
 	if err != nil {
@@ -304,7 +304,7 @@ func (h identityManagementHandler) RevokeServiceAccountCredential(w http.Respons
 // subject: it is refused while the issuer is enabled and created without one otherwise.
 func (h identityManagementHandler) assertionSubjectFor(name string, custom *string) (subject, problem string) {
 	if custom != nil {
-		if !validAssertionText(*custom) {
+		if !repository.ValidAssertionText(*custom) {
 			return "", "assertionSubject must be 1 to 255 printable characters without surrounding spaces"
 		}
 		return *custom, ""

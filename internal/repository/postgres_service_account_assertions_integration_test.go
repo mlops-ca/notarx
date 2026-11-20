@@ -42,6 +42,13 @@ func TestPostgresAssertionAudiencesAndSubjects(t *testing.T) {
 		t.Fatalf("an account without a subject reads back %q, %v", withoutSubject.AssertionSubject, err)
 	}
 
+	otherID := mustAccountByName(t, store, "other-"+name)
+	if _, _, err := store.PutAssertionAudience(ctx, AssertionAudience{ServiceAccountID: otherID, Audience: "a", MaxLifetimeSeconds: 60}); !errors.Is(err, ErrAssertionSubjectMissing) {
+		t.Fatalf("put for an account without a subject err=%v", err)
+	}
+	if list, err := store.ListAssertionAudiences(ctx, otherID); err != nil || len(list) != 0 {
+		t.Fatalf("an empty list of an existing account = %v, %v", list, err)
+	}
 	if _, err := store.ListAssertionAudiences(ctx, uuid.NewString()); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("list of an unknown account err=%v", err)
 	}

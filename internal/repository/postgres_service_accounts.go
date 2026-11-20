@@ -226,9 +226,6 @@ func scanAssertionAudience(row interface{ Scan(...any) error }, entry *Assertion
 }
 
 func (s *PostgresStore) ListAssertionAudiences(ctx context.Context, accountID string) ([]AssertionAudience, error) {
-	if _, err := s.GetServiceAccount(ctx, accountID); err != nil {
-		return nil, err
-	}
 	rows, err := s.db.QueryContext(ctx, `SELECT `+assertionAudienceColumns+` FROM service_account_assertion_audiences WHERE service_account_id=$1::uuid ORDER BY audience`, accountID)
 	if err != nil {
 		return nil, err
@@ -242,7 +239,16 @@ func (s *PostgresStore) ListAssertionAudiences(ctx context.Context, accountID st
 		}
 		entries = append(entries, entry)
 	}
-	return entries, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		// An empty list is an answer only for an account that exists.
+		if _, err := s.GetServiceAccount(ctx, accountID); err != nil {
+			return nil, err
+		}
+	}
+	return entries, nil
 }
 
 func (s *PostgresStore) GetAssertionAudience(ctx context.Context, accountID, audience string) (AssertionAudience, error) {
@@ -260,11 +266,15 @@ func (s *PostgresStore) PutAssertionAudience(ctx context.Context, entry Assertio
 		created bool
 	}
 	out, err := runAudited(ctx, s, audit, func(q sqlRunner) (result, error) {
-		if _, err := getServiceAccountOn(ctx, q, entry.ServiceAccountID); err != nil {
+		account, err := getServiceAccountOn(ctx, q, entry.ServiceAccountID)
+		if err != nil {
 			return result{}, err
 		}
+		if account.AssertionSubject == "" {
+			return result{}, ErrAssertionSubjectMissing
+		}
 		var created bool
-		err := q.QueryRowContext(ctx, `INSERT INTO service_account_assertion_audiences (service_account_id, audience, max_lifetime_seconds) VALUES ($1::uuid,$2,$3)
+		err = q.QueryRowContext(ctx, `INSERT INTO service_account_assertion_audiences (service_account_id, audience, max_lifetime_seconds) VALUES ($1::uuid,$2,$3)
 			ON CONFLICT (service_account_id, audience) DO UPDATE SET max_lifetime_seconds=EXCLUDED.max_lifetime_seconds
 			RETURNING `+assertionAudienceColumns+`, (xmax = 0)`, entry.ServiceAccountID, entry.Audience, entry.MaxLifetimeSeconds).Scan(&entry.ServiceAccountID, &entry.Audience, &entry.MaxLifetimeSeconds, &entry.CreatedAt, &created)
 		return result{entry: entry, created: created}, err

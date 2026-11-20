@@ -41,8 +41,9 @@ There are no email, groups or roles claims, and a caller never chooses `sub`.
 the outbound minting endpoint. It is separate from the inbound `POST /auth/token-exchange` of
 workload identity federation. The caller must be the service account itself, authenticated with one
 of its API keys or as a federated workload principal that resolves to it. A workload principal can
-therefore mint assertions for the account it maps to: the blast radius of a trust policy includes
-this capability. Human users, the static administrator token and platform API keys receive 403, so
+therefore mint assertions for the account it maps to: the blast radius of a trust policy, and of every
+API key of the account, includes this capability. There is no narrower scope for minting; the audience
+allow-list is the control, so keep it as short as the use requires. Human users, the static administrator token and platform API keys receive 403, so
 a human session cannot be turned into a workload assertion.
 
 ### Audience allow-lists
@@ -62,7 +63,8 @@ notarxctl service-account assertion-audience remove SERVICE_ACCOUNT_ID \
 Each entry caps the lifetime (1 to 10 minutes); the global ceiling `NOTARX_ISSUER_MAX_TOKEN_LIFETIME`
 (default and maximum `10m`) caps every request. Changes to the list and every mint are audited:
 the mint event names the service account, audience, `jti`, key id and credential id, never the
-token.
+token. A refused mint (an audience that is not allowed, a lifetime above the cap) is audited too, as an
+access denial, so a credential that probes for allowed audiences leaves a trail.
 
 ### The assertion subject
 

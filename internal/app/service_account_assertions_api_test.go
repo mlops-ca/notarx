@@ -326,6 +326,11 @@ func TestMintAssertionRefusals(t *testing.T) {
 	if response := f.mint(account.ID, account.Token, `{"audience":"https://unlisted.example"}`); response.Code != http.StatusForbidden || problemCode(t, response) != problemAssertionAudienceNotAllowed {
 		t.Fatalf("unlisted audience: %d %s", response.Code, response.Body.String())
 	}
+	// The refusal of an audience is itself audited, so a key probing for allowed audiences leaves a trail.
+	refused, _ := f.store.ListAudits(context.Background(), repository.AuditQuery{Operation: "service_account.assertion.mint", Limit: 10})
+	if len(refused) != 1 || refused[0].Outcome != repository.AuditAccessDenied || refused[0].Evidence["reason"] != problemAssertionAudienceNotAllowed || refused[0].Evidence["audience"] != "https://unlisted.example" || refused[0].Status != http.StatusForbidden {
+		t.Fatalf("refusal audit = %+v", refused)
+	}
 	// The static administrator token and an administrator API key are not workload credentials.
 	if response := f.mint(account.ID, "root", body); response.Code != http.StatusForbidden || problemCode(t, response) != problemAssertionPrincipal {
 		t.Fatalf("static admin: %d %s", response.Code, response.Body.String())
@@ -377,8 +382,13 @@ func TestMintAssertionRefusals(t *testing.T) {
 		t.Fatalf("disabled account: %d", response.Code)
 	}
 	records, _ := f.store.ListAudits(context.Background(), repository.AuditQuery{Operation: "service_account.assertion.mint", Limit: 10})
-	if len(records) != 1 {
-		t.Fatalf("only the successful mint is audited, got %d records", len(records))
+	if len(records) != 3 { // the refused audience, the refused lifetime and the successful mint
+		t.Fatalf("expected the two refusals and the mint to be audited, got %d records", len(records))
+	}
+	for _, record := range records {
+		if strings.Contains(record.Resource+record.Actor+record.AuthorizationReason, "eyJ") {
+			t.Fatalf("record holds a token: %+v", record)
+		}
 	}
 }
 
@@ -527,6 +537,9 @@ func TestIssuerAdminAPI(t *testing.T) {
 	if response := f.call(http.MethodPost, "/api/v2/issuer/rotation", "root", `{"algorithm":"RS512"}`); response.Code != http.StatusBadRequest {
 		t.Fatalf("unknown algorithm: %d", response.Code)
 	}
+	if response := f.call(http.MethodPost, "/api/v2/issuer/rotation", "root", `{"algorithm":"RS256"}`); response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "no next RS256 key") {
+		t.Fatalf("an algorithm without keys: %d %s", response.Code, response.Body.String())
+	}
 	if response := f.call(http.MethodPost, "/api/v2/issuer/keys/"+rotation.Activated+"/revoke", "root", ""); response.Code != http.StatusNoContent {
 		t.Fatalf("revoke: %d %s", response.Code, response.Body.String())
 	}
@@ -540,6 +553,24 @@ func TestIssuerAdminAPI(t *testing.T) {
 	}
 	if seen["issuer.rotate"].Evidence["activated"] != rotation.Activated || seen["issuer.revoke"].Evidence["kid"] != rotation.Activated || seen["issuer.rotate"].Actor != "root" {
 		t.Fatalf("audit = %+v", seen)
+	}
+}
+
+func TestAllowListNeedsASubjectAndSubjectsAreReportedHonestly(t *testing.T) {
+	f := newAssertionFixture(t, false)
+	created := f.call(http.MethodPost, "/api/v2/service-accounts", "root", `{"name":"has space"}`)
+	var account createdAssertionAccount
+	if created.Code != http.StatusCreated || json.Unmarshal(created.Body.Bytes(), &account) != nil || account.AssertionSubject != "" {
+		t.Fatalf("create: %d %s", created.Code, created.Body.String())
+	}
+	response := f.call(http.MethodPost, "/api/v2/service-accounts/"+account.ID+"/assertion-audiences", "root", `{"audience":"api://x"}`)
+	if response.Code != http.StatusConflict || problemCode(t, response) != problemAssertionSubjectMissing {
+		t.Fatalf("allow-list for an account without a subject: %d %s", response.Code, response.Body.String())
+	}
+	f.account(`{"name":"holder","assertionSubject":"taken"}`)
+	response = f.call(http.MethodPost, "/api/v2/service-accounts", "root", `{"name":"other","assertionSubject":"taken"}`)
+	if response.Code != http.StatusConflict || strings.Contains(response.Body.String(), "deleted") || !strings.Contains(response.Body.String(), "another service account holds it") {
+		t.Fatalf("reserved subject: %d %s", response.Code, response.Body.String())
 	}
 }
 

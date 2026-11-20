@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -110,5 +111,43 @@ func TestMemoryAssertionAudiences(t *testing.T) {
 	}
 	if _, err := store.GetAssertionAudience(ctx, account.ID, "c"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("the failed put must not have added the entry: %v", err)
+	}
+}
+
+func TestValidAssertionText(t *testing.T) {
+	for value, want := range map[string]bool{
+		"api://AzureADTokenExchange":  true,
+		"notarx:service-account:ci":   true,
+		"a b":                         true,
+		"caf\u00e9":                   true,
+		"":                            false,
+		" padded":                     false,
+		"padded ":                     false,
+		"tab\there":                   false,
+		"new\nline":                   false,
+		"nul\x00":                     false,
+		"next\u0085line":              false,
+		"zero\u200bwidth":             false,
+		"bidi\u202eflip":              false,
+		"no-break\u00a0space":         false,
+		"ideographic\u3000space":      false,
+		"bad\xffutf8":                 false,
+		strings.Repeat("x", 255):      true,
+		strings.Repeat("x", 256):      false,
+		strings.Repeat("\u00e9", 255): true,
+		strings.Repeat("\u00e9", 256): false,
+	} {
+		if got := ValidAssertionText(value); got != want {
+			t.Errorf("ValidAssertionText(%q) = %v, want %v", value, got, want)
+		}
+	}
+}
+
+func TestMemoryAssertionAudienceNeedsASubject(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	account, _ := store.CreateServiceAccount(ctx, ServiceAccount{ID: "11111111-1111-4111-8111-111111111111", Name: "has space"})
+	if _, _, err := store.PutAssertionAudience(ctx, AssertionAudience{ServiceAccountID: account.ID, Audience: "a", MaxLifetimeSeconds: 60}); !errors.Is(err, ErrAssertionSubjectMissing) {
+		t.Fatalf("put for an account without a subject err=%v", err)
 	}
 }
