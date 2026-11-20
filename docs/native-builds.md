@@ -59,8 +59,10 @@ release builds all four, so a macOS runner capacity outage cannot turn `main` re
 coverage floor is enforced on amd64 only because coverage is architecture
 independent. Contract lanes take a `runner` input. Every lane runs on amd64. On
 arm64 the six core lanes and the native-format smoke subset (`six-format-auth`,
-`oci-discovery`) run on every pull request, and the remaining lanes join on pushes
-to `main`. The tiers live in `scripts/ci-contract-lanes.json`; evidence and
+`oci-discovery`) run on every architecture-sensitive pull request (the `arm64` change
+class), and the release gates run every lane on both architectures (ADR 0016, amendment
+of 2026-11-19). `quality-arm64` runs vet and the race detector on arm64 for every Go
+change, and lint as well for an architecture-sensitive one. The tiers live in `scripts/ci-contract-lanes.json`; evidence and
 artifact names carry the architecture so legs never collide. See
 [CI path classes](ci.md#contract-lanes).
 

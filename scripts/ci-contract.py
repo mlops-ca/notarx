@@ -143,20 +143,25 @@ RUNNERS = {'amd64': 'ubuntu-24.04', 'arm64': 'ubuntu-24.04-arm'}
 SCOPES = ('pull-request', 'mainline')
 
 
-def matrix(scope='mainline'):
+def matrix(scope='mainline', arm64=True):
     """The GitHub Actions matrix, straight from the plan (ADR 0016).
 
     Every lane runs on amd64. A lane also runs natively on arm64 when its
-    `arm64` tier is `pull-request` (every pull request) or the scope is
-    `mainline` (pushes to main: the remaining lanes join). Nothing is emulated.
+    `arm64` tier is `pull-request` or the scope is `mainline` (the release
+    gates: every lane joins). A pull request that changes nothing
+    architecture-sensitive (`arm64=False`, the arm64 class of
+    scripts/ci-changes.sh) runs no arm64 lane; ADR 0016, amendment of 2026-11-19.
+    The mainline scope always runs every arm64 lane. Nothing is emulated.
     """
+    if scope == 'mainline' and not arm64:
+        raise ValueError('the mainline scope runs every arm64 lane; --no-arm64 is for pull requests')
     def entry(name, lane, arch):
         return {'lane': name, 'timeout': lane['timeoutMinutes'], 'arch': arch, 'runner': RUNNERS[arch],
                 **{need: need in lane['needs'] for need in TOOL_NEEDS}}
 
     include = [entry(name, lane, 'amd64') for name, lane in PLAN['lanes'].items()]
     include += [entry(name, lane, 'arm64') for name, lane in PLAN['lanes'].items()
-                if scope == 'mainline' or lane['arm64'] == 'pull-request']
+                if scope == 'mainline' or (arm64 and lane['arm64'] == 'pull-request')]
     return {'include': include}
 
 
@@ -216,7 +221,11 @@ def main():
     commands.add_parser('list')
     plan_matrix = commands.add_parser('matrix')
     plan_matrix.add_argument('--scope', choices=SCOPES, default='mainline')
+    plan_matrix.add_argument('--no-arm64', dest='arm64', action='store_false',
+                             help='pull-request scope only: the change is not architecture-sensitive')
     args = parser.parse_args()
+    if args.command == 'matrix' and args.scope == 'mainline' and not args.arm64:
+        parser.error('the mainline scope runs every arm64 lane; --no-arm64 is for pull requests')
     if args.command == 'run':
         return run_lane(args)
     if args.command == 'openapi-fresh':
@@ -224,7 +233,7 @@ def main():
     elif args.command == 'list':
         print('\n'.join(LANES))
     else:
-        print(json.dumps(matrix(args.scope)))
+        print(json.dumps(matrix(args.scope, args.arm64)))
     return 0
 
 
