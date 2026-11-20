@@ -60,6 +60,7 @@ describe("console route table", () => {
       "/workload-identity",
       "/service-accounts",
       "/users",
+      "/user-groups",
     ]);
     expect(navItemsFor(reader).map((item) => item.to)).toEqual([
       "/repositories",

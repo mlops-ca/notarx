@@ -49,6 +49,7 @@ export const shellFrCA: Record<keyof typeof shellEnCA, string> = {
   "nav.apiKeys": "Clés d’API",
   "nav.serviceAccounts": "Comptes de service",
   "nav.users": "Utilisateurs",
+  "nav.userGroups": "Groupes d’utilisateurs",
   "nav.authentication": "Authentification",
   "nav.siteSettings": "Paramètres du site",
   "nav.workloadIdentity": "Identité de charge de travail",

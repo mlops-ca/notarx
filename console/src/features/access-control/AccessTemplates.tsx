@@ -1,5 +1,11 @@
 import { useMemo } from "react";
-import type { ApiKey, Repository, ServiceAccount, User } from "../../client";
+import type {
+  ApiKey,
+  Repository,
+  ServiceAccount,
+  User,
+  UserGroup,
+} from "../../client";
 import { ErrorBanner } from "../../components/ui/Feedback";
 import { useAuth } from "../../lib/auth";
 import {
@@ -17,6 +23,7 @@ export function AccessTemplates({
   users,
   apiKeys,
   serviceAccounts,
+  userGroups,
   repositories,
   directoryError,
   onRetry,
@@ -24,6 +31,7 @@ export function AccessTemplates({
   users: User[];
   apiKeys: ApiKey[];
   serviceAccounts: ServiceAccount[];
+  userGroups: UserGroup[];
   repositories: Repository[];
   directoryError: unknown;
   onRetry: () => void;
@@ -63,8 +71,14 @@ export function AccessTemplates({
           `${t("access.serviceAccount")} · ${account.name}`,
         ),
       );
+    userGroups.forEach((group) =>
+      add(
+        `group:${group.id}`,
+        `${t("userGroups.principalGroup")} · ${group.displayName}`,
+      ),
+    );
     return options;
-  }, [apiKeys, identity, serviceAccounts, t, users]);
+  }, [apiKeys, identity, serviceAccounts, t, userGroups, users]);
   return (
     <div className="ag-page-stack">
       {directoryError !== null && (

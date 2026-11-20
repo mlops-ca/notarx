@@ -20,6 +20,7 @@ import { settingsFrCA } from "./settings.fr-CA";
 import { shellFrCA } from "./shell.fr-CA";
 import { systemFrCA } from "./system.fr-CA";
 import { uiFrCA } from "./ui.fr-CA";
+import { userGroupsFrCA } from "./user-groups.fr-CA";
 import { workloadFrCA } from "./workload.fr-CA";
 
 // One merged module per locale, loaded on demand by `loadMessages` (ADR 0014).
@@ -45,6 +46,7 @@ const frCAMessages = {
   ...shellFrCA,
   ...systemFrCA,
   ...uiFrCA,
+  ...userGroupsFrCA,
   ...workloadFrCA,
 };
 

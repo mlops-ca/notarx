@@ -22,6 +22,7 @@ export function useGrantPrincipalChoices() {
   const directoryUsers = directory.users.data?.items;
   const directoryApiKeys = directory.apiKeys.data?.items;
   const directoryServiceAccounts = directory.serviceAccounts.data?.items;
+  const directoryUserGroups = directory.userGroups.data?.items;
   const principalChoices = useMemo(
     () =>
       principalOptions(
@@ -29,14 +30,22 @@ export function useGrantPrincipalChoices() {
         directoryApiKeys ?? [],
         directoryServiceAccounts ?? [],
         t,
+        directoryUserGroups ?? [],
       ),
-    [directoryApiKeys, directoryServiceAccounts, directoryUsers, t],
+    [
+      directoryApiKeys,
+      directoryServiceAccounts,
+      directoryUserGroups,
+      directoryUsers,
+      t,
+    ],
   );
   const authorizationRoles = rolesQuery.data ?? [];
   const principalChoicesError =
     directory.users.error ||
     directory.apiKeys.error ||
     directory.serviceAccounts.error ||
+    directory.userGroups.error ||
     rolesQuery.error
       ? new Error(
           t("repositoryGrants.couldNotLoadUsersApiKeysServiceAccountsOr"),
