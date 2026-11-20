@@ -158,6 +158,44 @@ func (s *PostgresStore) stagePayload(ctx context.Context, data []byte) (stagedPa
 	return stagedPayload{data: data, inline: inline, ref: ref, staged: true}, nil
 }
 
+type stagedPayloadContextKey struct{}
+
+// PayloadStager is implemented by a store that can externalise a payload ahead of its commit (PostgresStore).
+type PayloadStager interface {
+	// StagePayload externalises data now and returns a context that carries the result, so the commit made with
+	// that context (or one derived from it, such as the one a publication advisory lock returns) finds the object
+	// already stored and never calls the object store itself.
+	StagePayload(ctx context.Context, data []byte) (context.Context, error)
+}
+
+// StagePayload stages data on store when it supports staging and returns ctx unchanged otherwise. A publication
+// handler calls it before it takes the publication advisory lock, so the lock and its dedicated connection never
+// wait on the object store. The staged object is unreferenced until the commit uses it; a commit that is refused
+// leaves it for the sweep of unreferenced objects.
+func StagePayload(ctx context.Context, store any, data []byte) (context.Context, error) {
+	if stager, ok := store.(PayloadStager); ok {
+		return stager.StagePayload(ctx, data)
+	}
+	return ctx, nil
+}
+
+// StagePayload implements PayloadStager.
+func (s *PostgresStore) StagePayload(ctx context.Context, data []byte) (context.Context, error) {
+	staged, err := s.stagePayload(ctx, data)
+	if err != nil {
+		return ctx, err
+	}
+	return context.WithValue(ctx, stagedPayloadContextKey{}, staged), nil
+}
+
+// stagedFor returns the payload staged on ctx by StagePayload when it holds data, and stages data now otherwise.
+func (s *PostgresStore) stagedFor(ctx context.Context, data []byte) (stagedPayload, error) {
+	if staged, ok := ctx.Value(stagedPayloadContextKey{}).(stagedPayload); ok && staged.staged && bytes.Equal(staged.data, data) {
+		return staged, nil
+	}
+	return s.stagePayload(ctx, data)
+}
+
 // externalizeIn returns the staged result when data is the staged payload. When the row changed after the payload
 // was staged it externalises data now through q, the transaction's connection (see PostgresStore.externalizeIn),
 // the behaviour before staging; the object staged for the old bytes is left for the sweep.

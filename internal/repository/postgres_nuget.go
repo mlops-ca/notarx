@@ -338,5 +338,5 @@ func (s *PostgresStore) stageNuGetNuspec(ctx context.Context, session NuGetSessi
 	if session.State != "staged" || session.Actor != actor || !session.ExpiresAt.After(time.Now()) {
 		return stagedPayload{}, nil
 	}
-	return s.stagePayload(ctx, session.Nuspec)
+	return s.stagedFor(ctx, session.Nuspec)
 }

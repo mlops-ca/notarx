@@ -15,12 +15,7 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 	for _, v := range c.Versions {
 		keys = append(keys, artifactScanLockKey(c.RepositoryID, FormatNPM, c.PackageName+"@"+v.Version, v.Digest))
 	}
-	ctx, release, err := s.lockPostgresAdvisoryKeys(ctx, keys)
-	if err != nil {
-		return err
-	}
-	defer release()
-	// Large manifests go to the object store before the transaction opens, so its locks never wait on it.
+	// Large manifests go to the object store before the publication advisory lock is taken, so neither the lock nor its connection waits on the object store.
 	manifests := make(map[string]npmManifest, len(c.Versions))
 	for _, v := range c.Versions {
 		inline, ref, err := s.externalizeJSON(ctx, v.Manifest, "{}")
@@ -29,12 +24,16 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 		}
 		manifests[v.Version] = npmManifest{inline: inline, ref: ref}
 	}
-	// The manifests of the versions already stored are compared with the incoming ones, so they are read before the
-	// transaction opens too.
+	// The manifests of the versions already stored are compared with the incoming ones, so they are read before the lock too.
 	prefetched, err := s.prefetchNPMManifests(ctx, c)
 	if err != nil {
 		return err
 	}
+	ctx, release, err := s.lockPostgresAdvisoryKeys(ctx, keys)
+	if err != nil {
+		return err
+	}
+	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

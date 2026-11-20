@@ -199,7 +199,7 @@ func (m *Module) push(w http.ResponseWriter, r *http.Request, repo repository.Ho
 		return
 	}
 	defer func() { _ = spool.Close() }()
-	meta, _, err := inspectSpool(spool)
+	meta, nuspec, err := inspectSpool(spool)
 	if err != nil {
 		m.failure(w, err)
 		return
@@ -207,7 +207,14 @@ func (m *Module) push(w http.ResponseWriter, r *http.Request, repo repository.Ho
 	if _, ok = m.authorize(w, r, repo, authorization.RepositoryWrite, strings.ToLower(meta.ID)); !ok {
 		return
 	}
-	ctx, unlock, err := m.store.LockNuGetPublication(r.Context(), repo.ID, strings.ToLower(meta.ID), meta.Version)
+	// A large nuspec goes to the object store before the publication lock is taken, so the lock and its connection
+	// never wait on the store while the commit runs.
+	staged, err := repository.StagePayload(r.Context(), m.store, nuspec)
+	if err != nil {
+		m.failure(w, err)
+		return
+	}
+	ctx, unlock, err := m.store.LockNuGetPublication(staged, repo.ID, strings.ToLower(meta.ID), meta.Version)
 	if err != nil {
 		m.failure(w, err)
 		return

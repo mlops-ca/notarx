@@ -294,7 +294,7 @@ func (s *PostgresStore) stageHelmChart(ctx context.Context, session HelmSession,
 	if session.State != "pending" || session.Actor != actor || !session.ExpiresAt.After(time.Now()) {
 		return stagedPayload{}, nil
 	}
-	return s.stagePayload(ctx, session.ChartYAML)
+	return s.stagedFor(ctx, session.ChartYAML)
 }
 
 // insertHelmPublicationFromSession publishes a committed session: the row copies the session's

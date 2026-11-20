@@ -328,3 +328,41 @@ func TestInternalizeWithPrefersThePrefetchedPayload(t *testing.T) {
 		t.Fatalf("a prefetched payload of another size must not be trusted: %q %v", got, err)
 	}
 }
+
+type plainStore struct{}
+
+func TestStagePayloadStagesOnceAndTheCommitReusesIt(t *testing.T) {
+	payloads := newMemoryPayloadStore()
+	store := &PostgresStore{}
+	store.SetPayloadStore(payloads, 4)
+	data := []byte("a chart.yaml above the inline threshold")
+	ctx, err := StagePayload(context.Background(), store, data)
+	if err != nil || payloads.puts != 1 {
+		t.Fatalf("stage: puts=%d err=%v", payloads.puts, err)
+	}
+	// The context a publication lock returns is derived from the staged one.
+	type key struct{}
+	derived := context.WithValue(ctx, key{}, "lock")
+	staged, err := store.stagedFor(derived, data)
+	if err != nil || !staged.ref.external() || payloads.puts != 1 {
+		t.Fatalf("the commit must reuse the staged object: puts=%d ref=%v err=%v", payloads.puts, staged.ref, err)
+	}
+	if _, err = store.stagedFor(derived, []byte("other bytes above the threshold")); err != nil || payloads.puts != 2 {
+		t.Fatalf("a changed payload is stored by the commit: puts=%d err=%v", payloads.puts, err)
+	}
+	if _, err = store.stagedFor(context.Background(), data); err != nil || payloads.puts != 3 {
+		t.Fatalf("an unstaged context stores the payload: puts=%d err=%v", payloads.puts, err)
+	}
+}
+
+func TestStagePayloadIgnoresStoresThatCannotStageAndReportsFailures(t *testing.T) {
+	ctx := context.Background()
+	if got, err := StagePayload(ctx, plainStore{}, []byte("x")); err != nil || got != ctx {
+		t.Fatalf("a store without staging leaves the context alone: %v", err)
+	}
+	store := &PostgresStore{}
+	store.SetPayloadStore(&failingPayloadStore{}, 1)
+	if _, err := StagePayload(ctx, store, []byte("large payload")); err == nil {
+		t.Fatal("a failed put must fail the staging")
+	}
+}

@@ -249,13 +249,16 @@ func TestPostgresScanSBOMBodyAboveAndBelowTheThreshold(t *testing.T) {
 type connectionWatchPayloadStore struct {
 	*memoryPayloadStore
 	db       *sql.DB
+	lockDB   *sql.DB
 	baseline int
 	inTx     atomic.Int64
+	// underLock counts the calls made while a publication advisory lock (its dedicated connection) was held.
+	underLock atomic.Int64
 }
 
 func watchPayloadStore(t *testing.T, store *PostgresStore, inlineMax int) *connectionWatchPayloadStore {
 	t.Helper()
-	watch := &connectionWatchPayloadStore{memoryPayloadStore: newMemoryPayloadStore(), db: store.db, baseline: store.db.Stats().InUse}
+	watch := &connectionWatchPayloadStore{memoryPayloadStore: newMemoryPayloadStore(), db: store.db, lockDB: store.lockDB, baseline: store.db.Stats().InUse}
 	store.SetPayloadStore(watch, inlineMax)
 	return watch
 }
@@ -263,6 +266,9 @@ func watchPayloadStore(t *testing.T, store *PostgresStore, inlineMax int) *conne
 func (w *connectionWatchPayloadStore) observe() {
 	if w.db.Stats().InUse > w.baseline {
 		w.inTx.Add(1)
+	}
+	if w.lockDB.Stats().InUse > 0 {
+		w.underLock.Add(1)
 	}
 }
 
@@ -284,6 +290,104 @@ func requireNoPayloadCallInTransaction(t *testing.T, watch *connectionWatchPaylo
 	if n := watch.inTx.Load(); n != 0 {
 		t.Fatalf("%d object store calls ran while a database connection was checked out", n)
 	}
+}
+
+func requireNoPayloadCallUnderLock(t *testing.T, watch *connectionWatchPayloadStore) {
+	t.Helper()
+	if n := watch.underLock.Load(); n != 0 {
+		t.Fatalf("%d object store calls ran while a publication advisory lock was held", n)
+	}
+}
+
+// TestPostgresStagedHelmAndNuGetCommitsNeverCallThePayloadStoreUnderTheLock drives the handlers' order of
+// operations: the payload is staged first, then the publication lock is taken, and the commit under the lock reuses
+// the staged object. The control run without staging shows the watch sees a put made under the lock.
+func TestPostgresStagedHelmAndNuGetCommitsNeverCallThePayloadStoreUnderTheLock(t *testing.T) {
+	store := newPostgresNuGetStore(t)
+	watch := watchPayloadStore(t, store, 1)
+	ctx := t.Context()
+	chart, nuspec := []byte("staged chart metadata"), []byte("staged nuspec")
+
+	helmRepo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "helm-staged-" + uuid.NewString(), Format: FormatHelm, Type: RepositoryTypeHosted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reserveHelm := func(version string) HelmSession {
+		in := HelmSession{ID: uuid.NewString(), RepositoryID: helmRepo.ID, Name: "staged", Version: version, Digest: "sha256:" + fmt.Sprintf("%064x", 600), Size: 60, Actor: "publisher", MetadataJSON: []byte(`{"name":"staged","version":"` + version + `"}`), ChartYAML: chart, ExpiresAt: time.Now().UTC().Add(time.Hour)}
+		in, _, err := store.ReserveHelmPublication(ctx, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return in
+	}
+	commitHelm := func(staging bool, version string) {
+		staged := ctx
+		if staging {
+			if staged, err = StagePayload(ctx, store, chart); err != nil {
+				t.Fatal(err)
+			}
+		}
+		locked, release, err := store.LockHelmPublication(staged, helmRepo.ID, "staged", version)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer release()
+		session := reserveHelm(version)
+		if _, _, err = store.CommitHelmPublication(locked, session.ID, session.Actor); err != nil {
+			t.Fatal(err)
+		}
+	}
+	commitHelm(false, "0.0.1")
+	if watch.underLock.Load() == 0 {
+		t.Fatal("the watch must see the put an unstaged commit makes under the lock")
+	}
+	watch.underLock.Store(0)
+	putsBefore := watch.puts
+	commitHelm(true, "1.0.0")
+	requireNoPayloadCallUnderLock(t, watch)
+	if watch.puts != putsBefore+1 {
+		t.Fatalf("the staged chart.yaml must be stored once: %d puts", watch.puts-putsBefore)
+	}
+
+	nugetRepo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "nuget-staged-" + uuid.NewString(), Format: FormatNuGet, Type: RepositoryTypeHosted})
+	if err != nil {
+		t.Fatal(err)
+	}
+	staged, err := StagePayload(ctx, store, nuspec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked, release, err := store.LockNuGetPublication(staged, nugetRepo.ID, "acme.staged", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	in := NuGetSession{ID: uuid.NewString(), RepositoryID: nugetRepo.ID, PackageID: "acme.staged", Version: "1.0.0", Digest: "sha256:" + fmt.Sprintf("%064x", 601), Size: 60, Actor: "publisher", ExpiresAt: time.Now().UTC().Add(time.Hour)}
+	if in, _, err = store.ReserveNuGetPublication(locked, in); err != nil {
+		t.Fatal(err)
+	}
+	in.MetadataJSON, in.Nuspec = []byte(`{"id":"Acme.Staged","version":"1.0.0"}`), nuspec
+	if _, err = store.StageNuGetPublication(locked, in); err != nil {
+		t.Fatal(err)
+	}
+	putsBefore = watch.puts
+	if _, _, err = store.CommitNuGetPublication(locked, in.ID, in.Actor); err != nil {
+		t.Fatal(err)
+	}
+	if watch.puts != putsBefore {
+		t.Fatalf("the commit stored the nuspec again: %d puts", watch.puts-putsBefore)
+	}
+	requireNoPayloadCallUnderLock(t, watch)
+}
+
+func TestPostgresOCIDiscoverySnapshotsNeverCallThePayloadStoreInATransaction(t *testing.T) {
+	store := openDiscoveryPostgres(t)
+	watch := watchPayloadStore(t, store, 1)
+	testOCIDiscoveryStore(t, store, store)
+	if watch.gets == 0 {
+		t.Fatal("the run never read an externalised snapshot")
+	}
+	requireNoPayloadCallInTransaction(t, watch)
 }
 
 func TestPostgresHelmAndNuGetCommitsNeverCallThePayloadStoreInATransaction(t *testing.T) {
@@ -335,6 +439,7 @@ func TestPostgresNPMNeverCallsThePayloadStoreInATransaction(t *testing.T) {
 	watch := watchPayloadStore(t, store, 1)
 	exerciseNPMMetadataContract(t, store, repo.ID)
 	requireNoPayloadCallInTransaction(t, watch)
+	requireNoPayloadCallUnderLock(t, watch)
 }
 
 func TestPostgresNPMMetadataAndTombstoneSurviveAMissingManifestObject(t *testing.T) {
@@ -451,4 +556,5 @@ func TestPostgresNPMProxyCacheAndImportNeverCallThePayloadStoreInATransaction(t 
 		t.Fatalf("cache the tarball without the manifest object: %v", err)
 	}
 	requireNoPayloadCallInTransaction(t, watch)
+	requireNoPayloadCallUnderLock(t, watch)
 }

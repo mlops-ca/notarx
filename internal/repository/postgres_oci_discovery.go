@@ -74,11 +74,7 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 	var priorRef payloadRef
 	err = tx.QueryRowContext(ctx, `SELECT payload,body_digest,body_size,body_key FROM oci_discovery_snapshots WHERE id=$1`, snapshot.ID).Scan(&prior, &priorRef.digest, &priorRef.size, &priorRef.key)
 	if err == nil {
-		var existing discovery.Snapshot
-		if prior, err = s.internalize(ctx, prior, priorRef); err != nil {
-			return err
-		}
-		if json.Unmarshal(prior, &existing) != nil || !sameOCISnapshot(existing, snapshot) {
+		if !s.sameStoredOCISnapshot(prior, priorRef, data, ref, snapshot) {
 			return discovery.ErrChanged
 		}
 		return tx.Commit()
@@ -105,15 +101,24 @@ func (s *PostgresStore) SaveOCIDiscoverySnapshot(ctx context.Context, snapshot d
 	return tx.Commit()
 }
 
-func (s *PostgresStore) GetOCIDiscoverySnapshot(ctx context.Context, id, owner string) (discovery.Snapshot, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return discovery.Snapshot{}, err
+// sameStoredOCISnapshot reports whether the stored row (its inline payload and reference) holds the snapshot being saved,
+// without reading the object store, so the save transaction never waits on it. An externalised payload is the exact
+// bytes data of a snapshot (discovery.Payload), so two payloads are equal when their digests are; an inline payload is
+// jsonb, which normalises the text, so it is compared as a snapshot.
+func (s *PostgresStore) sameStoredOCISnapshot(prior []byte, priorRef payloadRef, data []byte, ref payloadRef, snapshot discovery.Snapshot) bool {
+	if priorRef.external() {
+		return payloadsEqual(nil, priorRef, data, ref)
 	}
-	defer func() { _ = tx.Rollback() }()
+	var existing discovery.Snapshot
+	return json.Unmarshal(prior, &existing) == nil && sameOCISnapshot(existing, snapshot)
+}
+
+// GetOCIDiscoverySnapshot reads the snapshot row, resolves an externalised payload, and only then opens the
+// transaction that checks the guards the payload names, so no transaction waits on the object store.
+func (s *PostgresStore) GetOCIDiscoverySnapshot(ctx context.Context, id, owner string) (discovery.Snapshot, error) {
 	var data []byte
 	var ref payloadRef
-	err = tx.QueryRowContext(ctx, `SELECT payload,body_digest,body_size,body_key FROM oci_discovery_snapshots WHERE id=$1::uuid AND owner=$2 AND expires_at>clock_timestamp()`, id, owner).Scan(&data, &ref.digest, &ref.size, &ref.key)
+	err := s.db.QueryRowContext(ctx, `SELECT payload,body_digest,body_size,body_key FROM oci_discovery_snapshots WHERE id=$1::uuid AND owner=$2 AND expires_at>clock_timestamp()`, id, owner).Scan(&data, &ref.digest, &ref.size, &ref.key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return discovery.Snapshot{}, discovery.ErrNotFound
 	}
@@ -127,6 +132,11 @@ func (s *PostgresStore) GetOCIDiscoverySnapshot(ctx context.Context, id, owner s
 	if json.Unmarshal(data, &snapshot) != nil {
 		return discovery.Snapshot{}, discovery.ErrInvalid
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return discovery.Snapshot{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
 	if err := checkPostgresOCIGuards(ctx, tx, snapshot.Guards); err != nil {
 		return discovery.Snapshot{}, err
 	}
