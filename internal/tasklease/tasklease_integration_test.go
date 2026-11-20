@@ -43,14 +43,15 @@ func runContract(t *testing.T, driver, url string) {
 	t.Cleanup(func() { _ = db.Close() })
 	leaser := tasklease.Leaser{DB: db, Dialect: tasklease.Dialect(driver)}
 	ctx := t.Context()
+	bind := placeholder(driver)
 	reset := func(t *testing.T) {
 		t.Helper()
-		if _, err := db.ExecContext(ctx, "DELETE FROM scheduled_tasks WHERE name = "+placeholder(driver, 1), contractTask.Name); err != nil {
+		if _, err := db.ExecContext(ctx, "DELETE FROM scheduled_tasks WHERE name = "+bind, contractTask.Name); err != nil {
 			t.Fatal(err)
 		}
 	}
 	reset(t)
-	t.Cleanup(func() {
+	t.Cleanup(func() { _, _ = db.Exec("DELETE FROM scheduled_tasks WHERE name = "+bind, contractTask.Name) })
 		_, _ = db.Exec("DELETE FROM scheduled_tasks WHERE name = "+placeholder(driver, 1), contractTask.Name)
 	})
 	acquire := func(t *testing.T, owner string, ttl, interval time.Duration) bool {
@@ -79,6 +80,10 @@ func runContract(t *testing.T, driver, url string) {
 			t.Fatal("the holder renews its lease whatever the interval")
 		}
 		release(t, "b", true)
+		var completed sql.NullTime
+		if err := db.QueryRowContext(ctx, "SELECT last_run_at FROM scheduled_tasks WHERE name = "+bind, contractTask.Name).Scan(&completed); err != nil || completed.Valid {
+			t.Fatalf("a release by a node that does not hold the lease recorded a completed run: %v %v", completed, err)
+		}
 		if acquire(t, "b", time.Minute, 0) {
 			t.Fatal("a node that does not hold the lease cannot release it")
 		}
@@ -88,7 +93,21 @@ func runContract(t *testing.T, driver, url string) {
 		}
 		release(t, "b", false)
 	})
-	t.Run("owners_are_compared_as_binary", func(t *testing.T) {
+	t.Run("holder_renews_inside_the_interval_of_its_own_completed_run", func(t *testing.T) {
+		reset(t)
+		if !acquire(t, "a", time.Minute, 0) {
+			t.Fatal("acquire")
+		}
+		release(t, "a", true)
+		if !acquire(t, "a", time.Minute, 0) {
+			t.Fatal("a zero interval takes the lease again")
+		}
+		if !acquire(t, "a", time.Minute, time.Hour) {
+			t.Fatal("the holder renews its lease although the last completed run is younger than the interval")
+		}
+		release(t, "a", false)
+	})
+	t.Run("owners_are_compared_exactly", func(t *testing.T) {
 		reset(t)
 		if !acquire(t, "Node-A", time.Minute, 0) {
 			t.Fatal("acquire")
@@ -108,15 +127,17 @@ func runContract(t *testing.T, driver, url string) {
 	})
 	t.Run("expired_lease_is_taken_over", func(t *testing.T) {
 		reset(t)
-		if !acquire(t, "a", 200*time.Millisecond, 0) {
+		if !acquire(t, "a", time.Minute, 0) {
 			t.Fatal("acquire")
 		}
-		deadline := time.Now().Add(5 * time.Second)
-		for !acquire(t, "b", time.Minute, 0) {
-			if time.Now().After(deadline) {
-				t.Fatal("a crashed holder must not block the fleet past its TTL")
-			}
-			time.Sleep(50 * time.Millisecond)
+		if acquire(t, "b", time.Minute, 0) {
+			t.Fatal("a second node got a lease that is held")
+		}
+		if _, err := db.ExecContext(ctx, "UPDATE scheduled_tasks SET lease_until = "+past(driver)+" WHERE name = "+bind, contractTask.Name); err != nil {
+			t.Fatal(err)
+		}
+		if !acquire(t, "b", time.Minute, 0) {
+			t.Fatal("a crashed holder must not block the fleet past its TTL")
 		}
 		release(t, "b", false)
 	})
@@ -140,17 +161,17 @@ func runContract(t *testing.T, driver, url string) {
 		// Nothing exists yet, so the nodes also race to create the row.
 		for round := range 5 {
 			reset(t)
-			wins := raceFor(t, db, leaser, contractTask, 16)
+			wins := raceFor(t, leaser, contractTask, 16)
 			if wins != 1 {
 				t.Fatalf("round %d: %d nodes hold the lease, want exactly one", round, wins)
 			}
 			var owner string
-			if err := db.QueryRowContext(ctx, "SELECT lease_owner FROM scheduled_tasks WHERE name = "+placeholder(driver, 1), contractTask.Name).Scan(&owner); err != nil || owner == "" {
+			if err := db.QueryRowContext(ctx, "SELECT lease_owner FROM scheduled_tasks WHERE name = "+bind, contractTask.Name).Scan(&owner); err != nil || owner == "" {
 				t.Fatalf("lease row: %q %v", owner, err)
 			}
 			// Releasing by the owner lets the next election pick exactly one again.
 			release(t, owner, false)
-			if wins := raceFor(t, db, leaser, contractTask, 16); wins != 1 {
+			if wins := raceFor(t, leaser, contractTask, 16); wins != 1 {
 				t.Fatalf("round %d after release: %d nodes hold the lease, want exactly one", round, wins)
 			}
 		}
@@ -158,7 +179,7 @@ func runContract(t *testing.T, driver, url string) {
 }
 
 // raceFor has n nodes call Acquire at once and returns how many were granted the lease.
-func raceFor(t *testing.T, _ *sql.DB, leaser tasklease.Leaser, task tasklease.Task, n int) int {
+func raceFor(t *testing.T, leaser tasklease.Leaser, task tasklease.Task, n int) int {
 	t.Helper()
 	var wins atomic.Int32
 	var group sync.WaitGroup
@@ -183,9 +204,18 @@ func raceFor(t *testing.T, _ *sql.DB, leaser tasklease.Leaser, task tasklease.Ta
 	return int(wins.Load())
 }
 
-func placeholder(driver string, n int) string {
+// past is the SQL of a timestamp one minute ago on the database clock.
+func past(driver string) string {
+	if driver == database.DriverMySQL {
+		return "DATE_SUB(NOW(6), INTERVAL 1 MINUTE)"
+	}
+	return "now() - interval '1 minute'"
+}
+
+// placeholder is the bind marker of the first argument in the driver's SQL.
+func placeholder(driver string) string {
 	if driver == database.DriverMySQL {
 		return "?"
 	}
-	return fmt.Sprintf("$%d", n)
+	return "$1"
 }
