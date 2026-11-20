@@ -8,6 +8,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/background"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	huggingfaceformat "github.com/mlops-ca/notarx/internal/format/huggingface"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -20,6 +21,7 @@ type CacheMaintenance struct {
 	oci   *OCICache
 	raw   *RawCache
 	conan *ConanCache
+	hf    *huggingfaceformat.Module
 
 	mu     sync.RWMutex
 	status CacheMaintenanceStatus
@@ -43,6 +45,12 @@ func NewCacheMaintenanceWithRaw(store ObjectStore, oci *OCICache, raw *RawCache)
 	return &CacheMaintenance{store: store, oci: oci, raw: raw}
 }
 func (m *CacheMaintenance) WithConan(conan *ConanCache) *CacheMaintenance { m.conan = conan; return m }
+
+// WithHuggingFace adds the blob garbage collection of the Hugging Face format.
+func (m *CacheMaintenance) WithHuggingFace(module *huggingfaceformat.Module) *CacheMaintenance {
+	m.hf = module
+	return m
+}
 
 func (m *CacheMaintenance) Status(ctx context.Context) (CacheMaintenanceStatus, error) {
 	status := m.snapshot()
@@ -97,6 +105,10 @@ func (m *CacheMaintenance) runFormats(ctx context.Context, formats []string) err
 			case cacheCollectionFormatConan:
 				if m.conan != nil {
 					err = m.conan.CollectGarbage(ctx)
+				}
+			case cacheCollectionFormatHuggingFace:
+				if m.hf != nil {
+					err = m.hf.CollectCache(ctx)
 				}
 			default:
 				err = fmt.Errorf("unsupported cache maintenance format %q", format)

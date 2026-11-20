@@ -257,7 +257,12 @@ func (h *fakeHub) serveResolve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("ETag", `"`+file.gitBlob()+`"`)
 	w.Header().Set("Content-Length", strconv.Itoa(len(file.Content)))
 	if r.Method == http.MethodGet {
-		_, _ = w.Write(file.Content)
+		body := file.Content
+		if file.Corrupt {
+			body = append([]byte(nil), body...)
+			body[len(body)/2] ^= 0xff
+		}
+		_, _ = w.Write(body)
 	}
 }
 

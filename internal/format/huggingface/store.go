@@ -419,6 +419,16 @@ func (s *Store) CommitBlob(ctx context.Context, repositoryID, hfRepoID, commitID
 	return tx.Commit()
 }
 
+// BlobHeldAnywhere reports whether any repository holds the digest.
+func (s *Store) BlobHeldAnywhere(ctx context.Context, sha256 string) (bool, error) {
+	var one int
+	err := s.row(ctx, s.DB, "SELECT 1 FROM hf_blobs WHERE sha256 = ? LIMIT 1", sha256).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
 // UnreferencedBlobs lists up to limit digests of the repo that no hf_files row of the repo
 // references any more.
 func (s *Store) UnreferencedBlobs(ctx context.Context, hfRepoID string, limit int) ([]string, error) {

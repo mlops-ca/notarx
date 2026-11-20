@@ -402,6 +402,9 @@ func (u *Upstream) Open(ctx context.Context, repoType, repoName, rev, filePath s
 	if err != nil {
 		return nil, err
 	}
+	// Reading a multi-gigabyte body must not hit the overall client timeout; the caller bounds the
+	// fetch with its context.
+	client.Timeout = 0
 	request, err := u.newRequest(ctx, http.MethodGet, u.endpointURL(path), header)
 	if err != nil {
 		return nil, err
@@ -411,7 +414,9 @@ func (u *Upstream) Open(ctx context.Context, repoType, repoName, rev, filePath s
 		return nil, &UpstreamError{Code: CodeUpstreamUnavailable, Err: err}
 	}
 	if egress.IsRedirect(response.StatusCode) {
-		follower := egress.FollowOnce(u.CDNAllowlist, u.Proxy, u.Hooks, u.base())
+		hopClient := *u.base()
+		hopClient.Timeout = 0
+		follower := egress.FollowOnce(u.CDNAllowlist, u.Proxy, u.Hooks, &hopClient)
 		response, err = follower.Follow(ctx, request, response)
 		if err != nil {
 			if errors.Is(err, egress.ErrRedirectRejected) {

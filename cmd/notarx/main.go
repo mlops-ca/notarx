@@ -316,7 +316,12 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	ociCache := app.NewDefaultOCICache(cacheStore, cfg.OCIProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithTTL(cfg.OCICacheTTL)
 	rawCache := app.NewDefaultRawCache(cacheStore, cfg.RawProxyAllowedHosts).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.RawCacheMaxObjectBytes).WithMaxConcurrentSpools(cfg.RawCacheMaxConcurrentSpools).WithTTL(cfg.RawCacheTTL)
 	conanCache := app.NewDefaultConanCache(cacheStore, nil).WithCoordinator(coordinator).WithQuota(quota).WithMaxObjectBytes(cfg.ConanCacheMaxObjectBytes).WithTTL(cfg.ConanCacheTTL)
-	maintenance := app.NewCacheMaintenanceWithRaw(cacheStore, ociCache, rawCache).WithConan(conanCache)
+	huggingFace, err := huggingfaceformat.New(huggingfaceformat.Options{Store: huggingfaceformat.NewStore(databasePool, huggingFaceDialect(cfg.DatabaseDriver)), Objects: objectStore})
+	if err != nil {
+		slog.Error("configure Hugging Face format", "error", err)
+		return 1
+	}
+	maintenance := app.NewCacheMaintenanceWithRaw(cacheStore, ociCache, rawCache).WithConan(conanCache).WithHuggingFace(huggingFace)
 	caches := newReadCaches(cfg, store)
 	gatewayStore := caches.cachedStore(store)
 	caches.start(notificationPool)
@@ -540,11 +545,6 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			slog.Warn("legacy repository reads are unrestricted without reader patterns",
 				"detail", "NOTARX_REPOSITORY_READERS is empty and NOTARX_LEGACY_READ_DEFAULT=allow, so any authenticated caller may read a legacy repository with no grant",
 				"change", "unset NOTARX_LEGACY_READ_DEFAULT to deny unmatched readers once every reading actor has a reader pattern or a per-repository grant")
-		}
-		huggingFace, setupErr := huggingfaceformat.New(huggingfaceformat.Options{Store: huggingfaceformat.NewStore(databasePool, huggingFaceDialect(cfg.DatabaseDriver))})
-		if setupErr != nil {
-			slog.Error("configure Hugging Face format", "error", setupErr)
-			return 1
 		}
 		gatewayOptions := app.GatewayOptions{
 			HuggingFace:       huggingFace,
