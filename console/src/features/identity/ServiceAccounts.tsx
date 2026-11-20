@@ -252,27 +252,24 @@ export function ServiceAccountsPage() {
               recoveryKeys={[selectedAccount, credentialsQuery.data]}
               onReset={() => credentialsQuery.refetch({ throwOnError: true })}
             >
-              <div className="space-y-4">
-                <ServiceAccountDetail
-                  account={selectedAccount}
-                  credentials={credentials}
-                  credentialsError={credentialsError}
-                  nextCredentialsPageToken={nextCredentialsPageToken}
-                  loadingMoreCredentials={credentialsQuery.isFetchingNextPage}
-                  onRefresh={loadCredentials}
-                  onMoreCredentials={() =>
-                    void credentialsQuery.fetchNextPage()
-                  }
-                  onIssue={credentialDialog.show}
-                  onRevoke={setCredentialToRevoke}
-                  onToggleState={() => setAccountStateChange(selectedAccount)}
-                />
+              <ServiceAccountDetail
+                account={selectedAccount}
+                credentials={credentials}
+                credentialsError={credentialsError}
+                nextCredentialsPageToken={nextCredentialsPageToken}
+                loadingMoreCredentials={credentialsQuery.isFetchingNextPage}
+                onRefresh={loadCredentials}
+                onMoreCredentials={() => void credentialsQuery.fetchNextPage()}
+                onIssue={credentialDialog.show}
+                onRevoke={setCredentialToRevoke}
+                onToggleState={() => setAccountStateChange(selectedAccount)}
+              >
                 {/* Keyed by account: a removal prompt or an error of one account never carries over to another. */}
                 <AssertionAudiences
                   key={selectedAccount.id}
                   account={selectedAccount}
                 />
-              </div>
+              </ServiceAccountDetail>
             </SectionBoundary>
           )}
         </div>

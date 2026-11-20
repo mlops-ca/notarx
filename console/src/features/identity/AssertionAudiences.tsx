@@ -18,7 +18,7 @@ import {
   Loading,
   Notice,
 } from "../../components/ui/Feedback";
-import { Card, CardHeader, Field } from "../../components/ui/Layout";
+import { CardHeader, Field } from "../../components/ui/Layout";
 import { ConfirmDialog, Modal, useDisclosure } from "../../components/ui/Modal";
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
@@ -36,8 +36,9 @@ const LIFETIMES = [
 ] as const;
 
 /**
- * The assertion subject and the audience allow-list of one service account (ADR 0020). The subject is read-only: it
- * is stored when the account is created and never changes. Audiences are an explicit act; there is no default list.
+ * The assertion subject and the audience allow-list of one service account (ADR 0020), a section of the account card.
+ * The subject is read-only: it is stored when the account is created and never changes. Audiences are an explicit
+ * act; there is no default list.
  */
 export function AssertionAudiences({ account }: { account: ServiceAccount }) {
   const { locale, t } = usePreferences();
@@ -154,7 +155,7 @@ export function AssertionAudiences({ account }: { account: ServiceAccount }) {
   ];
 
   return (
-    <Card>
+    <>
       <CardHeader
         title={t("assertions.title")}
         extra={
@@ -289,6 +290,6 @@ export function AssertionAudiences({ account }: { account: ServiceAccount }) {
         onClose={() => setToRemove(null)}
         onConfirm={() => void remove()}
       />
-    </Card>
+    </>
   );
 }

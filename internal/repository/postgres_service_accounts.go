@@ -29,7 +29,9 @@ func scanServiceAccount(row interface{ Scan(...any) error }, account *ServiceAcc
 }
 
 func (s *PostgresStore) CreateServiceAccount(ctx context.Context, account ServiceAccount, audit ...AuditRecord) (ServiceAccount, error) {
-	return runAudited(ctx, s, audit, func(q sqlRunner) (ServiceAccount, error) {
+	// Always one transaction, with or without an audit record: the account and the reservation of its assertion subject
+	// stand or fall together, so a refused subject never leaves the account behind.
+	return runTransactional(ctx, s, audit, func(q sqlRunner) (ServiceAccount, error) {
 		subject := account.AssertionSubject
 		err := scanServiceAccount(
 			q.QueryRowContext(
