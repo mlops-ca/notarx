@@ -204,6 +204,24 @@ steps have one definition. They are separate jobs, not a matrix, so the amd64-on
 out of the arm64 leg. See
 [native builds](native-builds.md).
 
+## Measured effect (issue #482)
+
+Go-only pull requests, all with `ci-ok` green. The before runs are 44640058817, 44633978455, 44626976683 and 44620652504, the four the issue measured; every arm64 lane ran on pull requests then. The after runs are the three attempts of run 44673768958 (draft #496, a comment-only Go change, so no `arm64` class). The race and lint caches were cold: `main` saves them only from the nightly release gates, which had not run yet. Queue is the longest wait of a job for a runner; the other runs of the repository caused it.
+
+| Run | Wall (min) | Longest queue (min) | Lint verdict (min) | Unit tests and coverage (min) | Runner-minutes | Jobs |
+| --- | --- | --- | --- | --- | --- | --- |
+| before, 44640058817 | 26.9 | 3.7 | 17.8 (`quality`) | 17.8 | 189 | 46 |
+| before, 44633978455 | 28.7 | 13.7 | 16.1 | 16.1 | 192 | 46 |
+| before, 44626976683 | 34.7 | 12.1 | 23.4 | 23.4 | 179 | 46 |
+| before, 44620652504 | 26.5 | 6.5 | 17.7 | 17.7 | 187 | 46 |
+| after, attempt 1 | 17.1 | 2.0 | 8.6 | 10.9 | 122 | 29 |
+| after, attempt 2 | 18.8 | 6.1 | 6.5 | 6.9 | 104 | 29 |
+| after, attempt 3 | 19.1 | 6.5 | 9.9 | 11.8 | 108 | 29 |
+
+Before, lint, vet, race and coverage reported together when `quality` ended. After, `lint` reports separately. Wall time fell by about a third and runner-minutes by 35 to 45 percent. A pull request with the `arm64` class (run 44670328253) took 14.7 minutes with 41 jobs and 173 runner-minutes.
+
+Four targets of the issue are still open: a verdict in 12 minutes or less, half the runner-minutes, 25 jobs or fewer, and a first signal in 5 minutes. Issue #500 tracks them. The largest remaining lever is that every contract lane waits for all four `build-images` legs, about 4.9 minutes into the run.
+
 ## Where every former check runs (issue #482)
 
 Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
