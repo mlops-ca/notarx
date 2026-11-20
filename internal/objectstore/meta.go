@@ -124,6 +124,23 @@ func (m *MetaStore) Get(ctx context.Context, digest string) ([]byte, error) {
 	return data, nil
 }
 
+// List returns the digest ("sha256:<hex>") of every object in the namespace, sorted. A stray
+// object under the prefix that is not a well-formed meta key is not listed, so a sweep never
+// deletes what it cannot address.
+func (m *MetaStore) List(ctx context.Context) ([]string, error) {
+	keys, err := m.store.List(ctx, MetaPrefix)
+	if err != nil {
+		return nil, fmt.Errorf("list meta objects: %w", err)
+	}
+	digests := make([]string, 0, len(keys))
+	for _, key := range keys {
+		if IsMetaObjectKey(key) {
+			digests = append(digests, digestPrefix+strings.TrimPrefix(key, MetaPrefix))
+		}
+	}
+	return digests, nil
+}
+
 // Delete removes the object of digest; it is for the sweep that deletes unreferenced
 // meta objects after their grace period.
 func (m *MetaStore) Delete(ctx context.Context, digest string) error {

@@ -15,13 +15,14 @@ const (
 	CacheScopeServiceAccount = "service_account"
 	// CacheScopeRepository, CacheScopeGroup and CacheScopePolicy are the access-decision inputs of ADR 0029:
 	// hosted repositories (visibility included), hosted groups with their members and the public access gate.
-	// Their NOTIFY is sent by row triggers (migration 000006), so no mutation path can forget it.
+	// Their NOTIFY is sent by triggers (migrations 000006 and 000010, statement-level and bounded), so no mutation path can forget it.
 	CacheScopeRepository = "repository"
 	CacheScopeGroup      = "group"
 	CacheScopePolicy     = "policy"
 	// CacheScopeUser, CacheScopeQuarantine and CacheScopeGrants are the account and repository-state inputs of the
 	// authenticated read path: users (state, role, session version), the quarantine read policy of a repository
-	// and its grant set. Their NOTIFY comes from row triggers (migration 000007), keyed by user id and repository id.
+	// and its grant set. Their NOTIFY comes from statement triggers (migrations 000007 and 000011), keyed by user id and
+	// repository id and bounded to 64 notifications per statement.
 	CacheScopeUser       = "user"
 	CacheScopeQuarantine = "quarantine"
 	CacheScopeGrants     = "grants"

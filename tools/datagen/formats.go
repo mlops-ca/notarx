@@ -82,6 +82,21 @@ func (f *formatRun) size(c coordinate) int64 {
 
 func (f *formatRun) semver(c coordinate) string { return fmt.Sprintf("1.%d.0", c.ver) }
 
+// The coordinate of a version in the catalogue, as the search projection names it per format.
+func ociName(c coordinate) string     { return fmt.Sprintf("perf/image-%08d", c.pkg) }
+func pypiProject(c coordinate) string { return fmt.Sprintf("perf-pkg-%08d", c.pkg) }
+func goModule(c coordinate) string    { return fmt.Sprintf("example.test/perf/mod%08d", c.pkg) }
+func rawPath(c coordinate) string     { return fmt.Sprintf("perf/pkg-%08d/%d.bin", c.pkg, c.ver) }
+func mavenCoordinate(f *formatRun, c coordinate) string {
+	return fmt.Sprintf("com.perf:perf-art-%08d:%s", c.pkg, f.semver(c))
+}
+func conanReference(f *formatRun, c coordinate) string {
+	return fmt.Sprintf("perf-pkg-%08d/%s", c.pkg, f.semver(c))
+}
+func aptPath(f *formatRun, c coordinate) string {
+	return fmt.Sprintf("pool/main/p/perf-pkg-%08d/perf-pkg-%08d_%s_amd64.deb", c.pkg, c.pkg, f.semver(c))
+}
+
 // tableSpec is one table a format writes: its columns, how many rows each version (or package) yields and the
 // row builder. Tables are written in order, so a referenced table comes first.
 type tableSpec struct {
@@ -127,38 +142,37 @@ func formatTables(format string) []tableSpec {
 			columns: []string{"repository_id", "name", "digest", "object_key", "media_type", "size", "created_at", "artifact_type"},
 			row: func(f *formatRun, c coordinate, _ int) []any {
 				d := f.digest(c, "")
-				return []any{f.repo(c), fmt.Sprintf("perf/image-%08d", c.pkg), "sha256:" + d, "perf/oci/" + d,
+				return []any{f.repo(c), ociName(c), "sha256:" + d, "perf/oci/" + d,
 					"application/vnd.oci.image.manifest.v1+json", f.size(c), f.created(c), ""}
 			}}}
 	case "maven":
 		return []tableSpec{{table: "native_maven_artifacts",
 			columns: []string{"id", "repository_id", "coordinate", "digest", "state", "created_at", "build_number", "publisher"},
 			row: func(f *formatRun, c coordinate, _ int) []any {
-				return []any{f.id(c), f.repo(c), fmt.Sprintf("com.perf:perf-art-%08d:%s", c.pkg, f.semver(c)), "sha256:" + f.digest(c, ""),
+				return []any{f.id(c), f.repo(c), mavenCoordinate(f, c), "sha256:" + f.digest(c, ""),
 					"visible", f.created(c), int32(0), "perf-publisher"}
 			}}}
 	case "pypi":
 		return []tableSpec{{table: "native_pypi_files",
 			columns: []string{"repository_id", "project", "version", "filename", "file_type", "digest", "object_key", "size", "publisher", "state", "cached_at", "created_at"},
 			row: func(f *formatRun, c coordinate, _ int) []any {
-				project, d := fmt.Sprintf("perf-pkg-%08d", c.pkg), f.digest(c, "")
+				project, d := pypiProject(c), f.digest(c, "")
 				return []any{f.repo(c), project, f.semver(c), project + "-" + f.semver(c) + ".tar.gz", "sdist", "sha256:" + d, "perf/pypi/" + d,
 					f.size(c), "perf-publisher", "visible", f.created(c), f.created(c)}
 			}}}
 	case "go":
 		kinds := []string{"info", "mod", "zip"}
-		module := func(c coordinate) string { return fmt.Sprintf("example.test/perf/mod%08d", c.pkg) }
 		return []tableSpec{
 			{table: "native_go_versions",
 				columns: []string{"repository_id", "module_path", "version", "published_at", "publisher", "cached_at", "created_at"},
 				row: func(f *formatRun, c coordinate, _ int) []any {
-					return []any{f.repo(c), module(c), "v" + f.semver(c), f.created(c), "perf-publisher", f.created(c), f.created(c)}
+					return []any{f.repo(c), goModule(c), "v" + f.semver(c), f.created(c), "perf-publisher", f.created(c), f.created(c)}
 				}},
 			{table: "native_go_assets", perVersion: len(kinds),
 				columns: []string{"repository_id", "module_path", "version", "kind", "digest", "object_key", "size", "source_url", "cached_at", "created_at"},
 				row: func(f *formatRun, c coordinate, k int) []any {
 					d := f.digest(c, kinds[k])
-					return []any{f.repo(c), module(c), "v" + f.semver(c), kinds[k], "sha256:" + d, "perf/go/" + d, f.size(c), "", f.created(c), f.created(c)}
+					return []any{f.repo(c), goModule(c), "v" + f.semver(c), kinds[k], "sha256:" + d, "perf/go/" + d, f.size(c), "", f.created(c), f.created(c)}
 				}},
 		}
 	case "raw":
@@ -170,7 +184,7 @@ func formatTables(format string) []tableSpec {
 				}},
 			{table: "native_raw_assets", columns: []string{"repository_id", "path", "digest", "content_type", "updated_at"},
 				row: func(f *formatRun, c coordinate, _ int) []any {
-					return []any{f.repo(c), fmt.Sprintf("perf/pkg-%08d/%d.bin", c.pkg, c.ver), "sha256:" + f.digest(c, ""), "application/octet-stream", f.created(c)}
+					return []any{f.repo(c), rawPath(c), "sha256:" + f.digest(c, ""), "application/octet-stream", f.created(c)}
 				}},
 		}
 	case "cargo":
@@ -203,7 +217,7 @@ func formatTables(format string) []tableSpec {
 			columns: []string{"repository_id", "reference", "revision", "digest", "state", "created_at", "publisher"},
 			row: func(f *formatRun, c coordinate, _ int) []any {
 				d := f.digest(c, "")
-				return []any{f.repo(c), fmt.Sprintf("perf-pkg-%08d/%s", c.pkg, f.semver(c)), d[:32], "sha256:" + d, "visible", f.created(c), "perf-publisher"}
+				return []any{f.repo(c), conanReference(f, c), d[:32], "sha256:" + d, "visible", f.created(c), "perf-publisher"}
 			}}}
 	case "helm":
 		return publicationTables("helm", "native_helm_publication_sessions", "native_helm_publications", "name", "chart_yaml",
@@ -225,7 +239,7 @@ func formatTables(format string) []tableSpec {
 			columns: []string{"repository_id", "path", "digest", "object_key", "size", "content_type", "source_url", "cached_at", "created_at"},
 			row: func(f *formatRun, c coordinate, _ int) []any {
 				d := f.digest(c, "")
-				return []any{f.repo(c), fmt.Sprintf("pool/main/p/perf-pkg-%08d/perf-pkg-%08d_%s_amd64.deb", c.pkg, c.pkg, f.semver(c)), "sha256:" + d, "perf/apt/" + d,
+				return []any{f.repo(c), aptPath(f, c), "sha256:" + d, "perf/apt/" + d,
 					f.size(c), "application/vnd.debian.binary-package", "", f.created(c), f.created(c)}
 			}}}
 	}
@@ -259,9 +273,9 @@ func publicationTables(format, sessionTable, publicationTable, identityColumn, d
 }
 
 // seedFormats writes the versions of every format of FormatMix through bulk COPY, with Zipfian placement of
-// packages in the repositories of their format, and returns the number of rows written.
-func seedFormats(ctx context.Context, db Copier, p Profile, rng *rand.Rand, now time.Time, repos map[string][]uuid.UUID) (int64, error) {
-	var total int64
+// packages in the repositories of their format, and returns the number of rows written and the number of
+// artifact_catalog rows among them (the catalogue is written after the version rows it summarises).
+func seedFormats(ctx context.Context, db Copier, p Profile, rng *rand.Rand, now time.Time, repos map[string][]uuid.UUID) (total, catalog int64, err error) {
 	budgets := otherFormatVersions(p.Versions)
 	for _, share := range FormatMix {
 		run := &formatRun{format: share.Format, repos: repos[share.Format], rng: rng, now: now}
@@ -269,10 +283,15 @@ func seedFormats(ctx context.Context, db Copier, p Profile, rng *rand.Rand, now 
 		for _, table := range formatTables(share.Format) {
 			n, err := db.CopyFrom(ctx, pgx.Identifier{table.table}, table.columns, table.walk(run, packages))
 			if err != nil {
-				return total, fmt.Errorf("datagen: copy %s: %w", table.table, err)
+				return total, catalog, fmt.Errorf("datagen: copy %s: %w", table.table, err)
 			}
 			total += n
 		}
+		n, err := seedCatalog(ctx, db, run, packages)
+		if err != nil {
+			return total, catalog, err
+		}
+		catalog += n
 	}
-	return total, nil
+	return total, catalog, nil
 }

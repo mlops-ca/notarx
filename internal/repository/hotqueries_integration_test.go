@@ -57,7 +57,7 @@ func TestHotQueriesKeepTheirPlans(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	for _, table := range []string{"hosted_repositories", "native_npm_packages", "native_npm_versions", "resolver_audit_log", "lifecycle_jobs", "security_audit_log"} {
+	for _, table := range []string{"hosted_repositories", "native_npm_packages", "native_npm_versions", "resolver_audit_log", "lifecycle_jobs", "security_audit_log", "artifact_catalog"} {
 		if _, err := conn.ExecContext(ctx, "ANALYZE "+table); err != nil {
 			t.Fatal(err)
 		}

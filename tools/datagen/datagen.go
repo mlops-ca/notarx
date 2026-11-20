@@ -109,7 +109,9 @@ type Copier interface {
 type Counts struct {
 	Repositories, Packages, Versions, AuditRows int64
 	// FormatRows is the number of rows written for the formats of FormatMix, across their tables.
-	FormatRows                                             int64
+	FormatRows int64
+	// CatalogRows is the number of artifact_catalog rows written, for npm and the formats the catalogue covers.
+	CatalogRows                                            int64
 	WebhookSubscriptions, WebhookEvents, WebhookDeliveries int64
 }
 
@@ -214,6 +216,9 @@ func Seed(ctx context.Context, db Copier, p Profile, seed int64, now time.Time) 
 	}
 
 	pkg, version := 0, 0
+	// The size of a version is drawn while its row is written; the catalogue row of a package carries the size
+	// of its newest version, which is version 0.
+	newestSizes := make([]int64, len(packages))
 	counts.Versions, err = db.CopyFrom(ctx, pgx.Identifier{"native_npm_versions"},
 		[]string{"repository_id", "package_name", "version", "digest", "tarball_name", "object_key", "size", "manifest", "publisher", "created_at", "cached_at"},
 		pgx.CopyFromFunc(func() ([]any, error) {
@@ -228,10 +233,14 @@ func Seed(ctx context.Context, db Copier, p Profile, seed int64, now time.Time) 
 			ver := fmt.Sprintf("1.%d.0", version)
 			digest := digestOf(name + "@" + ver)
 			created := now.Add(-time.Duration(pkg*averageVersionsPerPackage+version) * time.Second)
+			size := int64(1024 + rng.Intn(1<<20))
+			if version == 0 {
+				newestSizes[pkg] = size
+			}
 			row := []any{
 				pgtype.UUID{Bytes: repositoryIDs[packages[pkg].repository], Valid: true}, name, ver,
 				"sha256:" + digest, name + "-" + ver + ".tgz", "perf/" + digest[:2] + "/" + digest,
-				int64(1024 + rng.Intn(1<<20)),
+				size,
 				fmt.Sprintf(`{"name":%q,"version":%q,"description":"synthetic package for performance measurement"}`, name, ver),
 				"perf-publisher", created, created,
 			}
@@ -242,10 +251,16 @@ func Seed(ctx context.Context, db Copier, p Profile, seed int64, now time.Time) 
 		return counts, fmt.Errorf("datagen: copy versions: %w", err)
 	}
 
+	if counts.CatalogRows, err = seedNPMCatalog(ctx, db, packages, repositoryIDs, newestSizes, now); err != nil {
+		return counts, err
+	}
+
 	if p.AllFormats {
-		if counts.FormatRows, err = seedFormats(ctx, db, p, rng, now, formatRepoIDs); err != nil {
+		var catalogRows int64
+		if counts.FormatRows, catalogRows, err = seedFormats(ctx, db, p, rng, now, formatRepoIDs); err != nil {
 			return counts, err
 		}
+		counts.CatalogRows += catalogRows
 	}
 
 	repoPop := NewPopularity(rng, p.Repositories)

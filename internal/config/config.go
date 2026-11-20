@@ -137,7 +137,13 @@ type Config struct {
 	AuditReadMode        string
 	// InlineMaxBytes is the largest payload kept inline in a database row; a larger
 	// one goes to the object store meta namespace (ADR 0023 section 9).
-	InlineMaxBytes       int
+	InlineMaxBytes int
+	// MetaSweepGrace, MetaSweepBatchSize and MetaSweepInterval tune the sweep that deletes unreferenced meta
+	// objects (ADR 0023 section 9): the age an object must reach, the objects examined per lease renewal and
+	// the time between two completed sweeps.
+	MetaSweepGrace       time.Duration
+	MetaSweepBatchSize   int
+	MetaSweepInterval    time.Duration
 	UsageFlushInterval   time.Duration
 	ShutdownFlushTimeout time.Duration
 	// AuthzCacheTTL is the revocation window of the read caches (ADR 0023
@@ -264,6 +270,9 @@ func Load() (Config, error) {
 		AuditDenialMode:             "queue",
 		AuditReadMode:               "async",
 		InlineMaxBytes:              DefaultInlineMaxBytes,
+		MetaSweepGrace:              DefaultMetaSweepGrace,
+		MetaSweepBatchSize:          DefaultMetaSweepBatchSize,
+		MetaSweepInterval:           DefaultMetaSweepInterval,
 		UsageFlushInterval:          5 * time.Second,
 		ShutdownFlushTimeout:        10 * time.Second,
 		AuthzCacheTTL:               5 * time.Second,
@@ -618,6 +627,9 @@ func Load() (Config, error) {
 		return Config{}, err
 	}
 	if cfg.InlineMaxBytes, err = positiveIntEnv("NOTARX_INLINE_MAX_BYTES", cfg.InlineMaxBytes, true); err != nil {
+		return Config{}, err
+	}
+	if err := loadMetaSweepConfig(&cfg); err != nil {
 		return Config{}, err
 	}
 	if cfg.MigrationStoragePoolID != "" && !regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`).MatchString(cfg.MigrationStoragePoolID) {

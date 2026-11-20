@@ -545,7 +545,15 @@ re-scan does not rewrite the SBOM, keyed `(repository_id, digest)`; the final sh
 `artifact_vulnerability_finding` and `artifact_scan_history`, is owned by ADR 0030 section 2), `nuspec` and
 `chart_yaml`, proxy documents (`native_nuget_source_documents`, Helm `body`, Cargo
 index bodies, `oci_discovery_snapshots`) and npm version manifests. A mark-and-sweep
-job deletes unreferenced `meta/` objects after a grace period. `metadata_json TEXT`
+job deletes unreferenced `meta/` objects after a grace period
+(`NOTARX_META_SWEEP_GRACE`, `NOTARX_META_SWEEP_BATCH_SIZE`, `NOTARX_META_SWEEP_INTERVAL`). One scheduler runs it under a
+database lease. Because the objects are content-addressed, a publish of bytes that already exist races a
+delete of the same object, so a writer records `meta_object_pins(digest, seen_at)` in its own committed
+statement (or in the transaction that writes the referencing row) before it puts the object. The first sweep that
+finds an object unreferenced marks it; a later one deletes it only while it holds that pin row locked, the pin and
+the mark are older than the grace period and no row references the object (a `body_key` index on every table that
+can hold one makes the check cheap). An object with no pin is pinned when first seen. The pin protects only writers
+that pin, so the sweep is enabled once every node runs a version that does. `metadata_json TEXT`
 becomes `jsonb` (MySQL `JSON`); object-shape validation moves to Go and the
 `jsonb_typeof(metadata_json::jsonb)` and `octet_length(payload::text)` CHECKs are
 dropped. Queries select only the columns they need so TOAST values are not
