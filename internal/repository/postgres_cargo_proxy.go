@@ -47,14 +47,15 @@ func (s *PostgresStore) PutCargoProxyConfig(ctx context.Context, value CargoProx
 	return tx.Commit()
 }
 
+const cargoProxyIndexColumns = `repository_id::text,name,body,status,upstream_etag,upstream_modified,fetched_at,expires_at,source_version,body_digest,body_size,body_key`
+
 func (s *PostgresStore) GetCargoProxyIndex(ctx context.Context, repositoryID, name string) (CargoProxyIndex, error) {
 	identity, err := cargo.NormalizeIdentity(name, "0.0.0")
 	if err != nil || repositoryID == "" {
 		return CargoProxyIndex{}, ErrInvalidCargoIdentity
 	}
 	var value CargoProxyIndex
-	err = s.scanCargoProxyIndex(ctx, s.db.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
-		upstream_modified,fetched_at,expires_at,source_version,body_digest,body_size,body_key FROM native_cargo_proxy_indexes
+	err = s.scanCargoProxyIndex(ctx, s.db.QueryRowContext(ctx, `SELECT `+cargoProxyIndexColumns+` FROM native_cargo_proxy_indexes
 		WHERE repository_id=$1::uuid AND collision_key=$2`, repositoryID, identity.CollisionKey), &value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CargoProxyIndex{}, ErrNotFound
@@ -228,12 +229,10 @@ func scanCargoProxyIndexRef(row interface{ Scan(...any) error }, value *CargoPro
 // so the transaction validates against it without waiting on the object store. A missing row or an inline body
 // prefetches nothing.
 func (s *PostgresStore) prefetchCargoProxyIndex(ctx context.Context, repositoryID, collisionKey string) (payloadPrefetch, error) {
-	var value CargoProxyIndex
 	var ref payloadRef
-	err := scanCargoProxyIndexRef(s.db.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
-		upstream_modified,fetched_at,expires_at,source_version,body_digest,body_size,body_key FROM native_cargo_proxy_indexes
-		WHERE repository_id=$1::uuid AND collision_key=$2`, repositoryID, collisionKey), &value, &ref)
-	if errors.Is(err, sql.ErrNoRows) || err == nil && !ref.external() {
+	err := s.db.QueryRowContext(ctx, `SELECT body_digest,body_size,body_key FROM native_cargo_proxy_indexes
+		WHERE repository_id=$1::uuid AND collision_key=$2 AND body_digest IS NOT NULL`, repositoryID, collisionKey).Scan(&ref.digest, &ref.size, &ref.key)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -253,8 +252,7 @@ func (s *PostgresStore) prefetchCargoProxyIndex(ctx context.Context, repositoryI
 func (s *PostgresStore) lockCargoProxyIndex(ctx context.Context, tx *sql.Tx, repositoryID, collisionKey string, prefetched payloadPrefetch) (CargoProxyIndex, error) {
 	var value CargoProxyIndex
 	var ref payloadRef
-	if err := scanCargoProxyIndexRef(tx.QueryRowContext(ctx, `SELECT repository_id::text,name,body,status,upstream_etag,
-		upstream_modified,fetched_at,expires_at,source_version,body_digest,body_size,body_key FROM native_cargo_proxy_indexes
+	if err := scanCargoProxyIndexRef(tx.QueryRowContext(ctx, `SELECT `+cargoProxyIndexColumns+` FROM native_cargo_proxy_indexes
 		WHERE repository_id=$1::uuid AND collision_key=$2 FOR UPDATE`, repositoryID, collisionKey), &value, &ref); err != nil {
 		return value, err
 	}

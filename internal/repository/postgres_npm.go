@@ -852,6 +852,11 @@ func scanNPMVersionRef(row interface{ Scan(...any) error }, version *NPMVersion,
 	if err != nil {
 		return err
 	}
+	if ref.external() {
+		// The column holds a placeholder: the manifest is in the object store, so a row read without resolving
+		// carries none rather than a wrong one.
+		version.Manifest = nil
+	}
 	if cachedAt.Valid {
 		version.CachedAt = cachedAt.Time
 	}

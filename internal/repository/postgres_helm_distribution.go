@@ -173,7 +173,7 @@ func helmReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job) (di
 }
 
 // helmReplicationSourceTx locks the source publication. Its chart.yaml stays in the object store when it is
-// externalised: ref names it, and alignPayloads compares it with another payload without a read.
+// externalised: ref names it, and payloadsEqual compares it with another payload without a read.
 func (s *PostgresStore) helmReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (HelmPublication, payloadRef, error) {
 	if index < 0 || index >= len(j.Items) {
 		return HelmPublication{}, payloadRef{}, dist.ErrInvalid
@@ -439,7 +439,7 @@ func (s *PostgresStore) BindHelmReplicationSession(ctx context.Context, lease di
 }
 func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease dist.Lease, index int, proof dist.Commit, check dist.Check) (dist.Job, error) {
 	// The target's chart.yaml reaches the object store before the transaction opens (see CommitHelmPublication).
-	staged, err := s.stageHelmSession(ctx, proof.SessionID)
+	staged, err := s.stageHelmReplication(ctx, lease, proof.SessionID)
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -475,8 +475,7 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 	}
 	target, targetRef, err := scanHelmPublicationRef(tx.QueryRowContext(ctx, `SELECT `+helmPublicationColumns+` FROM native_helm_publications WHERE repository_id=$1::uuid AND name=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.Name, item.Version))
 	if err == nil {
-		alignPayloads(&source.ChartYAML, sourceRef, &target.ChartYAML, targetRef)
-		if err = helmReplicationExisting(source, target); err != nil {
+		if err = helmReplicationExisting(source, target, payloadsEqual(source.ChartYAML, sourceRef, target.ChartYAML, targetRef)); err != nil {
 			return dist.Job{}, err
 		}
 		if target.SessionID != session.ID {
@@ -484,8 +483,7 @@ func (s *PostgresStore) CompleteHelmReplicationItem(ctx context.Context, lease d
 		}
 		item.Result = "already_present"
 	} else if errors.Is(err, ErrNotFound) {
-		alignPayloads(&source.ChartYAML, sourceRef, &session.ChartYAML, payloadRef{})
-		if err = helmReplicationSession(source, session, j.TargetRepositoryID); err != nil {
+		if err = helmReplicationSession(source, session, j.TargetRepositoryID, payloadsEqual(source.ChartYAML, sourceRef, session.ChartYAML, payloadRef{})); err != nil {
 			return dist.Job{}, err
 		}
 		if session.Actor != j.Actor || session.State != "pending" || !session.ExpiresAt.After(time.Now()) || !validHelmSession(session) {
@@ -623,4 +621,19 @@ func (s *PostgresStore) AuthorizeHelmReplicationItem(ctx context.Context, lease 
 		return err
 	}
 	return tx.Commit()
+}
+
+// stageHelmReplication stages the chart.yaml of the target session a replication worker is completing, once its
+// lease is live and the session belongs to the job's target repository and actor, the checks the transaction makes.
+func (s *PostgresStore) stageHelmReplication(ctx context.Context, lease dist.Lease, sessionID string) (stagedPayload, error) {
+	session, err := s.GetHelmSession(ctx, sessionID)
+	if err != nil {
+		return stagedPayload{}, nil
+	}
+	var live bool
+	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_helm_replication_jobs WHERE id=$1::uuid AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() AND target_repository_id=$5::uuid AND actor=$6)`, lease.JobID, lease.Owner, lease.Token, lease.Fence, session.RepositoryID, session.Actor).Scan(&live)
+	if err != nil || !live {
+		return stagedPayload{}, nil
+	}
+	return s.stageHelmChart(ctx, session, session.Actor)
 }

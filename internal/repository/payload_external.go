@@ -125,33 +125,20 @@ func (r payloadRef) matches(data []byte) bool {
 	return r.digest.String == "sha256:"+hex.EncodeToString(sum[:])
 }
 
-// alignPayloads makes bytes.Equal(*a, *b) report whether the two payloads are equal without reading the object
-// store, for the comparison a locking transaction must make between a row whose payload is externalised and another
-// payload. Both sides are scanned without resolving, so an externalised side holds no bytes: it takes the other
-// side's bytes when the reference matches them, and bytes that differ from them otherwise. Two references are equal
-// when their digests are.
-func alignPayloads(a *[]byte, aRef payloadRef, b *[]byte, bRef payloadRef) {
-	differ := func(data []byte) []byte { return append([]byte{0}, data...) }
+// payloadsEqual reports whether two payloads are equal without reading the object store, for the comparison a
+// locking transaction must make between a row whose payload is externalised and another payload. A payload scanned
+// without resolving holds no bytes (its reference names them): two references are equal when their digests are, and
+// a reference equals bytes that hash to its digest.
+func payloadsEqual(a []byte, aRef payloadRef, b []byte, bRef payloadRef) bool {
 	switch {
 	case aRef.external() && bRef.external():
-		if aRef.digest.String == bRef.digest.String && aRef.size.Int64 == bRef.size.Int64 {
-			*a, *b = nil, nil
-		} else {
-			*a, *b = differ(nil), nil
-		}
+		return aRef.digest.String == bRef.digest.String && aRef.size.Int64 == bRef.size.Int64
 	case aRef.external():
-		if aRef.matches(*b) {
-			*a = *b
-		} else {
-			*a = differ(*b)
-		}
+		return aRef.matches(b)
 	case bRef.external():
-		if bRef.matches(*a) {
-			*b = *a
-		} else {
-			*b = differ(*a)
-		}
+		return bRef.matches(a)
 	}
+	return bytes.Equal(a, b)
 }
 
 // stagedPayload is a payload externalised before a transaction opens, so the object store write never runs while

@@ -177,7 +177,7 @@ func nuGetReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job) (d
 }
 
 // nuGetReplicationSourceTx locks the source publication. Its nuspec stays in the object store when it is
-// externalised: ref names it, and alignPayloads compares it with another payload without a read.
+// externalised: ref names it, and payloadsEqual compares it with another payload without a read.
 func (s *PostgresStore) nuGetReplicationSourceTx(ctx context.Context, tx *sql.Tx, j dist.Job, index int) (NuGetPublication, payloadRef, error) {
 	if index < 0 || index >= len(j.Items) {
 		return NuGetPublication{}, payloadRef{}, dist.ErrInvalid
@@ -443,7 +443,7 @@ func (s *PostgresStore) BindNuGetReplicationSession(ctx context.Context, lease d
 }
 func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease dist.Lease, index int, proof dist.Commit, check dist.Check) (dist.Job, error) {
 	// The target's nuspec reaches the object store before the transaction opens (see CommitNuGetPublication).
-	staged, err := s.stageNuGetSession(ctx, proof.SessionID)
+	staged, err := s.stageNuGetReplication(ctx, lease, proof.SessionID)
 	if err != nil {
 		return dist.Job{}, err
 	}
@@ -479,8 +479,7 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 	}
 	target, targetRef, err := scanNuGetPublicationRef(tx.QueryRowContext(ctx, `SELECT `+nuGetPublicationColumns+` FROM native_nuget_publications WHERE repository_id=$1::uuid AND package_id=$2 AND version=$3 FOR UPDATE`, j.TargetRepositoryID, item.PackageID, item.Version))
 	if err == nil {
-		alignPayloads(&source.Nuspec, sourceRef, &target.Nuspec, targetRef)
-		if err = nuGetReplicationExisting(source, target); err != nil {
+		if err = nuGetReplicationExisting(source, target, payloadsEqual(source.Nuspec, sourceRef, target.Nuspec, targetRef)); err != nil {
 			return dist.Job{}, err
 		}
 		if target.SessionID != session.ID {
@@ -488,8 +487,7 @@ func (s *PostgresStore) CompleteNuGetReplicationItem(ctx context.Context, lease 
 		}
 		item.Result = "already_present"
 	} else if errors.Is(err, ErrNotFound) {
-		alignPayloads(&source.Nuspec, sourceRef, &session.Nuspec, payloadRef{})
-		if err = nuGetReplicationSession(source, session, j.TargetRepositoryID); err != nil {
+		if err = nuGetReplicationSession(source, session, j.TargetRepositoryID, payloadsEqual(source.Nuspec, sourceRef, session.Nuspec, payloadRef{})); err != nil {
 			return dist.Job{}, err
 		}
 		if session.Actor != j.Actor || session.State != "staged" || !session.ExpiresAt.After(time.Now()) || !validNuGetStaging(session) {
@@ -629,4 +627,19 @@ func (s *PostgresStore) AuthorizeNuGetReplicationItem(ctx context.Context, lease
 		return err
 	}
 	return tx.Commit()
+}
+
+// stageNuGetReplication stages the nuspec of the target session a replication worker is completing, once its lease
+// is live and the session belongs to the job's target repository and actor, the checks the transaction makes.
+func (s *PostgresStore) stageNuGetReplication(ctx context.Context, lease dist.Lease, sessionID string) (stagedPayload, error) {
+	session, err := s.GetNuGetSession(ctx, sessionID)
+	if err != nil {
+		return stagedPayload{}, nil
+	}
+	var live bool
+	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_nuget_replication_jobs WHERE id=$1::uuid AND state='running' AND lease_owner=$2 AND lease_token=$3 AND lease_fence=$4 AND lease_until>clock_timestamp() AND target_repository_id=$5::uuid AND actor=$6)`, lease.JobID, lease.Owner, lease.Token, lease.Fence, session.RepositoryID, session.Actor).Scan(&live)
+	if err != nil || !live {
+		return stagedPayload{}, nil
+	}
+	return s.stageNuGetNuspec(ctx, session, session.Actor)
 }

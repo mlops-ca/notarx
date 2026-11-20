@@ -178,11 +178,9 @@ func (s *PostgresStore) CommitNuGetPublication(ctx context.Context, id, actor st
 	}
 	// A large nuspec goes to the object store before the transaction opens, so its locks and its connection never
 	// wait on the store. The transaction re-reads the session and stores again only if the payload changed meanwhile.
-	var staged stagedPayload
-	if before.State == "staged" {
-		if staged, err = s.stagePayload(ctx, before.Nuspec); err != nil {
-			return NuGetPublication{}, false, err
-		}
+	staged, err := s.stageNuGetNuspec(ctx, before, actor)
+	if err != nil {
+		return NuGetPublication{}, false, err
 	}
 	tx, name, err := s.nuGetTransaction(ctx, before.RepositoryID, before.SourceVersion)
 	if err != nil {
@@ -333,11 +331,11 @@ func (s *PostgresStore) insertNuGetPublicationFromSession(ctx context.Context, t
 	return p, err
 }
 
-// stageNuGetSession externalises the nuspec of a staged session before the transaction that commits it opens. A
-// session that cannot be read or is not staged stages nothing: the transaction reports its own state.
-func (s *PostgresStore) stageNuGetSession(ctx context.Context, id string) (stagedPayload, error) {
-	session, err := s.GetNuGetSession(ctx, id)
-	if err != nil || session.State != "staged" {
+// stageNuGetNuspec externalises the nuspec of a session before the transaction that commits it opens. A commit the
+// transaction would refuse (another actor, a session that is not staged or has expired) stages nothing, so a
+// rejected request never writes an object.
+func (s *PostgresStore) stageNuGetNuspec(ctx context.Context, session NuGetSession, actor string) (stagedPayload, error) {
+	if session.State != "staged" || session.Actor != actor || !session.ExpiresAt.After(time.Now()) {
 		return stagedPayload{}, nil
 	}
 	return s.stagePayload(ctx, session.Nuspec)

@@ -141,14 +141,18 @@ func (s *PostgresStore) PublishNPMImport(ctx context.Context, c NPMImportClosure
 // prefetchNPMManifests reads the manifests of the visible stored versions the closure imports again, by digest, so
 // the import transaction compares them without waiting on the object store.
 func (s *PostgresStore) prefetchNPMManifests(ctx context.Context, c NPMImportClosure) (payloadPrefetch, error) {
-	if s.payloads.Load() == nil {
+	if s.payloads.Load() == nil || len(c.Versions) == 0 {
 		return nil, nil
+	}
+	versions := make([]string, len(c.Versions))
+	for i, v := range c.Versions {
+		versions[i] = v.Version
 	}
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT repository_id::text,package_name,version,digest,integrity,shasum,
 		       tarball_name,upstream_tarball,object_key,size,manifest,publisher,state,cached_at,deleted_at,collected_at,created_at,deprecated,collecting_at,body_digest,body_size,body_key
 		FROM native_npm_versions
-		WHERE repository_id=$1::uuid AND package_name=$2 AND state='visible' AND body_digest IS NOT NULL`, c.RepositoryID, c.PackageName)
+		WHERE repository_id=$1::uuid AND package_name=$2 AND version=ANY($3::text[]) AND state='visible' AND body_digest IS NOT NULL`, c.RepositoryID, c.PackageName, versions)
 	if err != nil {
 		return nil, err
 	}
@@ -158,21 +162,11 @@ func (s *PostgresStore) prefetchNPMManifests(ctx context.Context, c NPMImportClo
 		return nil, err
 	}
 	_ = rows.Close()
-	incoming := make(map[string]bool, len(c.Versions))
-	for _, v := range c.Versions {
-		incoming[v.Version] = true
-	}
-	var wanted []scannedNPMVersion
-	for _, version := range scanned {
-		if incoming[version.Version] {
-			wanted = append(wanted, version)
-		}
-	}
-	if err = s.resolveNPMManifests(ctx, wanted); err != nil {
+	if err = s.resolveNPMManifests(ctx, scanned); err != nil {
 		return nil, err
 	}
 	prefetched := payloadPrefetch{}
-	for _, version := range wanted {
+	for _, version := range scanned {
 		prefetched.add(version.ref, version.Manifest)
 	}
 	return prefetched, nil

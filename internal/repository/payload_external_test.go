@@ -230,7 +230,7 @@ func TestPayloadRefMatchesOnlyItsOwnBytes(t *testing.T) {
 	}
 }
 
-func TestAlignPayloadsComparesWithoutReadingTheStore(t *testing.T) {
+func TestPayloadsEqualWithoutReadingTheStore(t *testing.T) {
 	payloads := newMemoryPayloadStore()
 	store := &PostgresStore{}
 	store.SetPayloadStore(payloads, 1)
@@ -267,13 +267,12 @@ func TestAlignPayloadsComparesWithoutReadingTheStore(t *testing.T) {
 		if c.bExt {
 			bRef, b = externalRef(c.bRef), nil
 		}
-		alignPayloads(&a, aRef, &b, bRef)
-		if got := bytes.Equal(a, b); got != c.want {
+		if got := payloadsEqual(a, aRef, b, bRef); got != c.want {
 			t.Errorf("%s: equal=%v want %v", c.name, got, c.want)
 		}
 	}
 	if payloads.gets != 0 {
-		t.Fatalf("alignment read the object store %d times", payloads.gets)
+		t.Fatalf("comparison read the object store %d times", payloads.gets)
 	}
 }
 

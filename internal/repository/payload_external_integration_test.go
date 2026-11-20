@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -86,7 +87,9 @@ func TestPostgresExternalizedNPMManifestsRoundTrip(t *testing.T) {
 	}
 }
 
-func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
+// newCargoProxyFixture opens a store with an active Cargo proxy repository and its config.
+func newCargoProxyFixture(t *testing.T) (*PostgresStore, HostedRepository, time.Time) {
+	t.Helper()
 	databaseURL := os.Getenv("TEST_DATABASE_URL")
 	if databaseURL == "" {
 		t.Skip("TEST_DATABASE_URL is required")
@@ -110,6 +113,12 @@ func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
 	if err := store.PutCargoProxyConfig(ctx, CargoProxyConfig{RepositoryID: repo.ID, SourceVersion: repo.Version, DownloadTemplate: "https://static.example.test/crates", FetchedAt: now, ExpiresAt: now.Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
+	return store, repo, now
+}
+
+func TestPostgresCargoProxyIndexAboveAndBelowTheThreshold(t *testing.T) {
+	store, repo, now := newCargoProxyFixture(t)
+	ctx := context.Background()
 	payloads := newMemoryPayloadStore()
 	store.SetPayloadStore(payloads, 1000)
 	body := func(name string, versions int) []byte {
@@ -239,6 +248,7 @@ type connectionWatchPayloadStore struct {
 	*memoryPayloadStore
 	db       *sql.DB
 	baseline int
+	held     int
 	inTx     atomic.Int64
 }
 
@@ -249,8 +259,12 @@ func watchPayloadStore(t *testing.T, store *PostgresStore, inlineMax int) *conne
 	return watch
 }
 
+// allowHeldConnections lets n connections stay checked out outside any transaction, such as the advisory lock
+// session a store call holds while it runs.
+func (w *connectionWatchPayloadStore) allowHeldConnections(n int) { w.held = n }
+
 func (w *connectionWatchPayloadStore) observe() {
-	if w.db.Stats().InUse > w.baseline {
+	if w.db.Stats().InUse > w.baseline+w.held {
 		w.inTx.Add(1)
 	}
 }
@@ -348,4 +362,81 @@ func TestPostgresNPMMetadataAndTombstoneSurviveAMissingManifestObject(t *testing
 	if _, err = store.GetNPMVersion(ctx, repo.ID, name, "1.1.0"); err == nil {
 		t.Fatal("only the caller that needs the manifest fails")
 	}
+}
+
+func TestPostgresCargoProxyWritesNeverCallThePayloadStoreInATransaction(t *testing.T) {
+	store, repo, now := newCargoProxyFixture(t)
+	ctx := context.Background()
+	watch := watchPayloadStore(t, store, 100)
+	checksum := strings.Repeat("a", 64)
+	body := []byte(`{"name":"demo","vers":"1.0.0","cksum":"` + checksum + `","yanked":false,"deps":[],"features":{},` + strings.Repeat(" ", 200) + `"v":2}` + "\n")
+	index := CargoProxyIndex{RepositoryID: repo.ID, SourceVersion: repo.Version, Name: "demo", Body: body, Status: 200, FetchedAt: now, ExpiresAt: now.Add(time.Hour)}
+	for _, step := range []string{"first write", "refresh against the stored body"} {
+		if err := store.PutCargoProxyIndex(ctx, index); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	crate := CargoProxyCrate{RepositoryID: repo.ID, SourceVersion: repo.Version, Name: "demo", Version: "1.0.0", Checksum: checksum,
+		ObjectKey: "native/cargo-proxy/sha256/" + checksum, Size: 23, CachedAt: now}
+	if err := store.PutCargoProxyCrate(ctx, crate); err != nil {
+		t.Fatal(err)
+	}
+	if watch.gets == 0 {
+		t.Fatal("the refresh and the crate write never validated against an externalised body")
+	}
+	requireNoPayloadCallInTransaction(t, watch)
+}
+
+func TestPostgresNPMProxyCacheAndImportNeverCallThePayloadStoreInATransaction(t *testing.T) {
+	store, _, repo := openPostgresNPMDistTagStores(t)
+	ctx := context.Background()
+	watch := watchPayloadStore(t, store, 1)
+	const name = "@scope/imported"
+	manifest := func(extra string) []byte {
+		return []byte(`{"name":"` + name + `","version":"1.0.0","dist":{"tarball":"https://registry.example/imported.tgz"}` + extra + `}`)
+	}
+	version := NPMVersion{RepositoryID: repo.ID, PackageName: name, Version: "1.0.0", Digest: uniqueDigest(), Integrity: "sha512-YQ==", Shasum: strings.Repeat("b", 40),
+		TarballName: "imported-1.0.0.tgz", ObjectKey: "native/npm/sha256/" + uuid.NewString(), Size: 8, Manifest: manifest(""), Publisher: "importer"}
+	closure := NPMImportClosure{RepositoryID: repo.ID, PackageName: name, Versions: []NPMVersion{version}, DistTags: map[string]string{"latest": "1.0.0"},
+		Audit: npmDistTagMutation(repo.ID, name, "", "").Audit}
+	// Importing the identical content again compares the stored manifest, which is read before the transaction.
+	watch.allowHeldConnections(1)
+	for _, step := range []string{"first import", "identical re-import"} {
+		if err := store.PublishNPMImport(ctx, closure); err != nil {
+			t.Fatalf("%s: %v", step, err)
+		}
+	}
+	changed := closure
+	changed.Versions = []NPMVersion{version}
+	changed.Versions[0].Manifest = manifest(`,"description":"changed"`)
+	if err := store.PublishNPMImport(ctx, changed); !errors.Is(err, ErrNameExists) {
+		t.Fatalf("a different manifest for a stored version must conflict: %v", err)
+	}
+	if watch.gets == 0 {
+		t.Fatal("the re-import never compared against an externalised manifest")
+	}
+	watch.allowHeldConnections(0)
+
+	proxy, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "npm-proxy-external-" + uuid.NewString()[:8], Format: FormatNPM, Type: RepositoryTypeProxy, Endpoint: "https://proxy.example"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, proxy.ID) })
+	listed := NPMVersion{Version: "1.0.0", UpstreamTarball: "https://registry.example/widget.tgz", TarballName: "widget.tgz", Manifest: []byte(`{"name":"widget","version":"1.0.0"}`)}
+	if _, err = store.SyncNPMProxyPackage(ctx, NPMPackage{RepositoryID: proxy.ID, SourceVersion: proxy.Version, Name: "widget", SourceEndpoint: proxy.Endpoint, Versions: []NPMVersion{listed}, DistTags: map[string]string{"latest": "1.0.0"}}); err != nil {
+		t.Fatal(err)
+	}
+	cached, err := store.GetNPMVersion(ctx, proxy.ID, "widget", "1.0.0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cached.Digest, cached.ObjectKey, cached.Size, cached.SourceVersion = uniqueDigest(), "npm/"+uuid.NewString(), 40, proxy.Version
+	// Caching the tarball needs the version's identity, not its manifest, so it works without the manifest object.
+	watch.mu.Lock()
+	clear(watch.objects)
+	watch.mu.Unlock()
+	if _, err = store.CacheNPMProxyTarball(ctx, cached); err != nil {
+		t.Fatalf("cache the tarball without the manifest object: %v", err)
+	}
+	requireNoPayloadCallInTransaction(t, watch)
 }

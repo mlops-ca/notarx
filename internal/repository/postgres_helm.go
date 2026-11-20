@@ -125,11 +125,9 @@ func (s *PostgresStore) CommitHelmPublication(ctx context.Context, id, actor str
 	}
 	// A large chart.yaml goes to the object store before the transaction opens, so its locks and its connection never
 	// wait on the store. The transaction re-reads the session and stores again only if the payload changed meanwhile.
-	var staged stagedPayload
-	if before.State == "pending" {
-		if staged, err = s.stagePayload(ctx, before.ChartYAML); err != nil {
-			return HelmPublication{}, false, err
-		}
+	staged, err := s.stageHelmChart(ctx, before, actor)
+	if err != nil {
+		return HelmPublication{}, false, err
 	}
 	tx, name, err := s.helmWriteTransaction(ctx, before.RepositoryID, before.SourceVersion)
 	if err != nil {
@@ -289,11 +287,11 @@ func (s *PostgresStore) helmWriteTransaction(ctx context.Context, id, version st
 	return s.helmTransaction(ctx, id)
 }
 
-// stageHelmSession externalises the chart.yaml of a pending session before the transaction that commits it opens.
-// A session that cannot be read or is not pending stages nothing: the transaction reports its own state.
-func (s *PostgresStore) stageHelmSession(ctx context.Context, id string) (stagedPayload, error) {
-	session, err := s.GetHelmSession(ctx, id)
-	if err != nil || session.State != "pending" {
+// stageHelmChart externalises the chart.yaml of a session before the transaction that commits it opens. A commit the
+// transaction would refuse (another actor, a session that is not pending or has expired) stages nothing, so a
+// rejected request never writes an object.
+func (s *PostgresStore) stageHelmChart(ctx context.Context, session HelmSession, actor string) (stagedPayload, error) {
+	if session.State != "pending" || session.Actor != actor || !session.ExpiresAt.After(time.Now()) {
 		return stagedPayload{}, nil
 	}
 	return s.stagePayload(ctx, session.ChartYAML)

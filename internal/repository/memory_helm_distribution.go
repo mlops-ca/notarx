@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"sort"
 	"strings"
@@ -292,7 +293,7 @@ func (s *MemoryStore) CompleteHelmReplicationItem(ctx context.Context, lease dis
 	}
 	target, exists := s.helmPublications[helmKey(j.TargetRepositoryID, item.Name, item.Version)]
 	if exists {
-		if err = helmReplicationExisting(source, target); err != nil {
+		if err = helmReplicationExisting(source, target, bytes.Equal(source.ChartYAML, target.ChartYAML)); err != nil {
 			return dist.Job{}, err
 		}
 		if target.SessionID != session.ID {
@@ -300,7 +301,7 @@ func (s *MemoryStore) CompleteHelmReplicationItem(ctx context.Context, lease dis
 		}
 		item.Result = "already_present"
 	} else {
-		if err = helmReplicationSession(source, session, j.TargetRepositoryID); err != nil {
+		if err = helmReplicationSession(source, session, j.TargetRepositoryID, bytes.Equal(source.ChartYAML, session.ChartYAML)); err != nil {
 			return dist.Job{}, err
 		}
 		if session.Actor != j.Actor || session.State != "pending" || !session.ExpiresAt.After(time.Now()) || !validHelmSession(session) {
