@@ -118,3 +118,5 @@ func writeBackupReport(stdout, stderr io.Writer, report backupmanifest.Report) i
 	// Byte verification never grants overall backup success in this slice.
 	return 3
 }
+
+// Measurement marker for issue #518 (draft pull request, not to be merged).
