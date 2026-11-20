@@ -1,8 +1,9 @@
 name: Go cache
 
-# The build-only Go cache warm of a push to main (ADR 0024, amendment of 2026-11-20;
-# docs/ci.md, Go checks). It compiles the race builds of the quality jobs for the new
-# tip and saves them, so the next pull request compiles only what it changed. It runs
+# The build-only Go cache warm of a push to main that changes the Go build (ADR 0024,
+# amendment of 2026-11-20; docs/ci.md, Go checks). It compiles the race builds of the
+# quality jobs for the new tip and saves them, so the next pull request compiles only
+# what it changed. It runs
 # no test, vet or lint: make race-build, make race-coverage-build and make vet-build add
 # -c -o /dev/null to the go test commands of make race and make race-coverage, or
 # compile the plain build make vet checks. It is a workflow of its own so
@@ -11,11 +12,24 @@ name: Go cache
 on:
   push:
     branches: [main]
-    # Embedded files (migrations, templates, fixtures) change the build too, so only
-    # documentation is left out.
-    paths-ignore:
-      - 'docs/**'
-      - '**.md'
+    # What the Go build reads: Go files, modules, and every file of the directories
+    # that hold Go packages (go:embed reads files of its package directory only; the Go
+    # packages of scripts/ and deploy/ embed nothing), plus the warm itself. Other
+    # pushes would only link the same binaries again (about 1.3 minutes per job).
+    paths:
+      - '**.go'
+      - go.mod
+      - go.sum
+      - 'cmd/**'
+      - 'contracts/**'
+      - 'internal/**'
+      - 'tools/**'
+      - Makefile
+      - scripts/coverage-check.sh
+      - '.github/actions/go-quality/**'
+      - .github/workflows/go-cache.yml
+  # A failed warm is retried by hand: Actions, Go cache, Run workflow on main.
+  workflow_dispatch:
 
 permissions:
   contents: read
