@@ -243,12 +243,13 @@ func TestPostgresScanSBOMBodyAboveAndBelowTheThreshold(t *testing.T) {
 
 // connectionWatchPayloadStore is a payload store that counts the calls made while a pool connection is checked out
 // beyond the baseline: a call inside a transaction (or any other statement) holds one, so a call with the pool
-// idle proves no transaction, and so no row or advisory lock, waits on the object store.
+// idle proves no transaction, and so no row lock, waits on the object store. The advisory locks a handler takes use
+// a separate pool, and the test must drive the store from one goroutine, since another operation's transaction would
+// also hold a connection.
 type connectionWatchPayloadStore struct {
 	*memoryPayloadStore
 	db       *sql.DB
 	baseline int
-	held     int
 	inTx     atomic.Int64
 }
 
@@ -259,12 +260,8 @@ func watchPayloadStore(t *testing.T, store *PostgresStore, inlineMax int) *conne
 	return watch
 }
 
-// allowHeldConnections lets n connections stay checked out outside any transaction, such as the advisory lock
-// session a store call holds while it runs.
-func (w *connectionWatchPayloadStore) allowHeldConnections(n int) { w.held = n }
-
 func (w *connectionWatchPayloadStore) observe() {
-	if w.db.Stats().InUse > w.baseline+w.held {
+	if w.db.Stats().InUse > w.baseline {
 		w.inTx.Add(1)
 	}
 }
@@ -289,15 +286,32 @@ func requireNoPayloadCallInTransaction(t *testing.T, watch *connectionWatchPaylo
 	}
 }
 
-func TestPostgresNuGetAndHelmCommitsNeverCallThePayloadStoreInATransaction(t *testing.T) {
+func TestPostgresHelmAndNuGetCommitsNeverCallThePayloadStoreInATransaction(t *testing.T) {
 	store := newPostgresNuGetStore(t)
 	watch := watchPayloadStore(t, store, 1)
-	testNuGetStoreContract(t, store)
-	testNuGetSourceStoreContract(t, store, func(t *testing.T, repository, actor string) func() {
-		return testsupport.FailSecurityAudits(t, store.db, repository, actor)
-	})
-	testHelmStoreContract(t, store)
-	testHelmSourceStoreContract(t, store)
+	ctx := t.Context()
+	for _, kind := range []RepositoryType{RepositoryTypeHosted, RepositoryTypeProxy} {
+		repo, published := seedHelmGovernance(t, store, kind)
+		// A replayed commit returns the stored publication, its chart.yaml read after the transaction.
+		replayed, replay, err := store.CommitHelmPublication(ctx, published.SessionID, "publisher")
+		if err != nil || !replay || !bytes.Equal(replayed.ChartYAML, []byte("original chart metadata")) {
+			t.Fatalf("%s replay: %q replay=%v %v", kind, replayed.ChartYAML, replay, err)
+		}
+		if _, err = store.TransitionHelmGovernance(ctx, HelmGovernanceChange{RepositoryID: repo.ID, Name: published.Name, Version: published.Version, ExpectedDigest: published.Digest, ExpectedVersion: "1", Action: "quarantine", Actor: "operator", Reason: "Confirmed fixture quarantine"}); err != nil {
+			t.Fatalf("%s transition: %v", kind, err)
+		}
+	}
+	repo, published := seedNuGetGovernance(t, store)
+	replayed, replay, err := store.CommitNuGetPublication(ctx, published.SessionID, "publisher")
+	if err != nil || !replay || !bytes.Equal(replayed.Nuspec, []byte("original nuspec")) {
+		t.Fatalf("nuget replay: %q replay=%v %v", replayed.Nuspec, replay, err)
+	}
+	if _, err = store.TransitionNuGetGovernance(ctx, NuGetGovernanceChange{RepositoryID: repo.ID, PackageID: published.PackageID, Version: published.Version, ExpectedDigest: published.Digest, ExpectedVersion: "1", Action: "quarantine", Actor: "operator", Reason: "Confirmed fixture decision"}); err != nil {
+		t.Fatalf("nuget transition: %v", err)
+	}
+	if watch.gets == 0 {
+		t.Fatal("the replayed commits never read an externalised payload")
+	}
 	requireNoPayloadCallInTransaction(t, watch)
 }
 
@@ -400,7 +414,6 @@ func TestPostgresNPMProxyCacheAndImportNeverCallThePayloadStoreInATransaction(t 
 	closure := NPMImportClosure{RepositoryID: repo.ID, PackageName: name, Versions: []NPMVersion{version}, DistTags: map[string]string{"latest": "1.0.0"},
 		Audit: npmDistTagMutation(repo.ID, name, "", "").Audit}
 	// Importing the identical content again compares the stored manifest, which is read before the transaction.
-	watch.allowHeldConnections(1)
 	for _, step := range []string{"first import", "identical re-import"} {
 		if err := store.PublishNPMImport(ctx, closure); err != nil {
 			t.Fatalf("%s: %v", step, err)
@@ -415,7 +428,6 @@ func TestPostgresNPMProxyCacheAndImportNeverCallThePayloadStoreInATransaction(t 
 	if watch.gets == 0 {
 		t.Fatal("the re-import never compared against an externalised manifest")
 	}
-	watch.allowHeldConnections(0)
 
 	proxy, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "npm-proxy-external-" + uuid.NewString()[:8], Format: FormatNPM, Type: RepositoryTypeProxy, Endpoint: "https://proxy.example"})
 	if err != nil {
