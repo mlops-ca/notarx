@@ -235,6 +235,8 @@ jobs:
         run: make native-build-check
       - name: Check migration immutability and sequencing
         run: make migration-check
+      - name: Check schema parity (neutral catalogue against a migrated database)
+        run: make schema-parity
       - name: Audit dependencies
         run: make dependency-audit
 

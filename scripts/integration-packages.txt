@@ -32,3 +32,4 @@
 3 ./internal/capacity
 3 ./internal/lifecycle
 3 ./internal/migrate
+3 ./internal/schemaparity

@@ -87,11 +87,11 @@ app_shard=$("$root/scripts/integration-test.sh" --list | awk '$2 == "./internal/
 while read -r shard; do
   : >"$NOTARX_ISOLATION_LOG"
   "$root/scripts/integration-test.sh" --shard "$shard" >/dev/null
-  # Only the shard that runs ./internal/migrate starts MySQL.
-  if "$root/scripts/integration-test.sh" --list | grep -Fqx "$shard ./internal/migrate"; then
+  # Only the shard that runs ./internal/migrate and ./internal/schemaparity starts MySQL.
+  if "$root/scripts/integration-test.sh" --list | grep -Eqx "$shard ./internal/(migrate|schemaparity)"; then
     expect_logged 'up -d --wait postgres rustfs mysql'
   elif grep -Fq 'mysql' "$NOTARX_ISOLATION_LOG"; then
-    printf 'shard %s started MySQL, which only the shard of ./internal/migrate needs\n' "$shard" >&2
+    printf 'shard %s started MySQL, which only the shard of ./internal/migrate and ./internal/schemaparity needs\n' "$shard" >&2
     exit 1
   fi
   # The runner parity check of migration-runner-check.sh runs in every shard and names ./internal/migrate.

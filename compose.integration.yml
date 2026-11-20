@@ -29,7 +29,7 @@ services:
       - ./migrations/postgres:/migrations:ro
       - ./scripts/run-migrations.sh:/usr/local/bin/run-migrations:ro
 
-  # Started only for the shard that runs ./internal/migrate (scripts/integration-test.sh).
+  # Started only for the shard that runs ./internal/migrate and ./internal/schemaparity (scripts/integration-test.sh).
   mysql:
     image: mysql:8.4
     command: ["mysqld", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_bin"]
@@ -52,7 +52,7 @@ services:
         condition: service_completed_successfully
     environment:
       TEST_DATABASE_URL: postgres://notarx:integration-password@postgres:5432/notarx_test?sslmode=disable
-      # Only the migration runner tests read it (internal/migrate); the mysql service runs for their shard only.
+      # Only the migration runner and schema parity tests read it; the mysql service runs for their shard only.
       TEST_MYSQL_URL: mysql://root:integration-password@mysql:3306/notarx_test?tls=required
       TEST_OBJECT_STORE_ENDPOINT: http://rustfs:9000
       TEST_OBJECT_STORE_ACCESS_KEY: integration-rustfs

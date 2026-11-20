@@ -514,6 +514,13 @@ It always enforces unique, gap-free, snake_case migration names. Once a stable
 latest stable tag; nightly tags are ignored. `make test` runs the script's bash
 fixtures.
 
+The `lint` job also runs `make schema-parity` (`scripts/schema-parity.sh`, ADR 0022): it
+migrates a throwaway PostgreSQL (and a MySQL once `migrations/mysql` holds a baseline) and
+compares its `information_schema` with the neutral catalogue `migrations/catalogue.yaml`.
+`make test` also fails when a migration after the baseline exists in only one of
+`migrations/postgres` and `migrations/mysql` without an entry (dialect and reason) in
+`migrations/dialect-scope.yaml`.
+
 Run `bash scripts/ci-changes-test.sh` to check the classifier fixtures.
 
 ## Dependency updates

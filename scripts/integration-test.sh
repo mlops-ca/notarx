@@ -50,10 +50,13 @@ trap cleanup EXIT
 docker volume create notarx-go-mod >/dev/null
 docker volume create notarx-go-build >/dev/null
 cleanup
-# The migration runner tests (internal/migrate) also need MySQL; no other package does.
+# The migration runner and schema parity tests (internal/migrate, internal/schemaparity) also need MySQL.
 services=(postgres rustfs)
 for package in "${packages[@]}"; do
-  if [[ "$package" == ./internal/migrate ]]; then services+=(mysql); fi
+  if [[ "$package" == ./internal/migrate || "$package" == ./internal/schemaparity ]]; then
+    services+=(mysql)
+    break
+  fi
 done
 "${compose[@]}" up -d --wait "${services[@]}"
 "${compose[@]}" run --rm --no-deps rustfs-ready

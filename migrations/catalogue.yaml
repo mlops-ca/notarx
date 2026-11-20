@@ -1,0 +1,2335 @@
+# The dialect-neutral schema catalogue (ADR 0022, slice 3b).
+#
+# Generated from a migrated PostgreSQL with
+#   go run ./tools/schemaparity generate
+# and verified against PostgreSQL and MySQL with
+#   make schema-parity
+# Do not edit by hand. Column types are logical types (see internal/schemaparity/types.go):
+# "?" marks a nullable column, "generated" a computed one. Partial and expression
+# indexes are not listed.
+version: 1
+tables:
+  api_keys:
+    columns:
+      created_at: timestamp
+      expires_at: timestamp?
+      id: uuid
+      last_used_at: timestamp?
+      name: text
+      revoked_at: timestamp?
+      roles: array<text>
+      secret_hash: text
+      service_account_id: uuid?
+    primaryKey: [id]
+    unique: [[secret_hash]]
+    foreignKeys:
+      - service_account_id -> service_accounts(id)
+  artifact_catalog:
+    columns:
+      coordinate: text
+      format: text
+      latest_digest: text
+      latest_published_at: timestamp?
+      latest_version: text
+      publisher: text
+      repository_id: uuid
+      size_bytes: int64?
+      version_count: int32
+    primaryKey: [repository_id, format, coordinate]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  artifact_catalog_backfill:
+    columns:
+      completed_at: timestamp?
+      cursor_key: text
+      cursor_repository_id: uuid
+      format: text
+      updated_at: timestamp
+    primaryKey: [format]
+  artifact_intelligence:
+    columns:
+      body_digest: text?
+      body_key: text?
+      body_size: int64?
+      coordinate: text
+      created_at: timestamp
+      digest: text
+      format: text
+      licenses: json
+      provenance: json?
+      repository_id: uuid
+      sboms: json
+      signatures: json
+      updated_at: timestamp
+      updated_by: text
+      version: int64
+      vulnerability: json?
+    primaryKey: [repository_id, format, coordinate, digest]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  artifact_license:
+    columns:
+      artifact_digest: text
+      confidence: decimal
+      repository_id: uuid
+      source: text
+      spdx_id: text
+    primaryKey: [repository_id, artifact_digest, spdx_id, source]
+  artifact_quarantines:
+    columns:
+      coordinate: text
+      digest: text
+      format: text
+      quarantined_at: timestamp
+      reason: text
+      released_at: timestamp?
+      repository_id: uuid
+      state: text
+      updated_at: timestamp
+      updated_by: text
+      version: int64
+    primaryKey: [repository_id, format, coordinate, digest]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  artifact_sbom:
+    columns:
+      artifact_digest: text
+      body: json?
+      body_digest: text
+      body_key: text
+      body_size: int64
+      component_count: int32
+      created_at: timestamp
+      generator: text
+      generator_version: text
+      id: uuid
+      kind: text
+      repository_id: uuid
+      source: text
+      spec_version: text
+    primaryKey: [id]
+    unique: [[artifact_digest, kind, repository_id, source]]
+  artifact_scan_history:
+    columns:
+      artifact_digest: text
+      critical: int32
+      db_generation_id: uuid?
+      high: int32
+      id: uuid
+      low: int32
+      medium: int32
+      repository_id: uuid
+      scanned_at: timestamp
+      scanner_version: text
+      status: text
+      unknown: int32
+    primaryKey: [scanned_at, id]
+  artifact_tombstones:
+    columns:
+      coordinate: text
+      digest: text
+      format: text
+      repository_id: uuid
+      tombstoned_at: timestamp
+    primaryKey: [repository_id, format, coordinate]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  artifact_usage_stats:
+    columns:
+      download_count: int64
+      first_downloaded_at: timestamp
+      format: text
+      last_actor: text
+      last_downloaded_at: timestamp
+      repository_id: uuid
+      resource: text
+      total_bytes: int64
+    primaryKey: [repository_id, format, resource]
+  artifact_vulnerability:
+    columns:
+      artifact_digest: text
+      critical: int32
+      db_generation_id: uuid?
+      findings_total: int32
+      high: int32
+      id: uuid
+      low: int32
+      medium: int32
+      not_scanned_reason: text?
+      repository_id: uuid
+      scanned_at: timestamp
+      scanner: text
+      scanner_version: text
+      status: text
+      suppressed_count: int32
+      truncated: bool
+      unknown: int32
+    primaryKey: [id]
+    unique: [[artifact_digest, repository_id]]
+  artifact_vulnerability_finding:
+    columns:
+      component: text
+      cvss_score: decimal?
+      cvss_vector: text
+      description: text?
+      epss: decimal?
+      fixed_version: text
+      kev: bool?
+      location: text
+      ordinal: int32
+      severity: text
+      severity_rank: int16
+      source: text
+      status: text
+      title: text
+      url: text
+      version: text
+      vex_justification: text?
+      vex_status: text?
+      vuln_id: text
+      vulnerability_id: uuid
+    primaryKey: [vulnerability_id, ordinal]
+  audit_cleanup_jobs:
+    columns:
+      batch_size: int32
+      completed_at: timestamp?
+      created_at: timestamp
+      cutoff_at: timestamp
+      deleted: int32
+      id: uuid
+      idempotency_key: text
+      last_error: text
+      policy_version: int64
+      started_at: timestamp?
+      state: text
+    primaryKey: [id]
+    unique: [[idempotency_key]]
+  audit_retention_policy:
+    columns:
+      enabled: bool
+      keep_days: int32
+      singleton: bool
+      version: int64
+    primaryKey: [singleton]
+  authorization_roles:
+    columns:
+      created_at: timestamp
+      description: text
+      id: uuid
+      name: text
+      scopes: array<text>
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+  authorization_templates:
+    columns:
+      created_at: timestamp
+      description: text
+      grants: json
+      id: uuid
+      name: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+  cache_circuit_breakers:
+    columns:
+      expires_at: timestamp
+      key: text
+      updated_at: timestamp
+    primaryKey: [key]
+  cache_control_entries:
+    columns:
+      key: text
+      updated_at: timestamp
+      value: json
+    primaryKey: [key]
+  cache_tasks:
+    columns:
+      attempts: int32
+      available_at: timestamp
+      claim_token: uuid?
+      claimed_at: timestamp?
+      completed_at: timestamp?
+      created_at: timestamp
+      dedupe_key: text
+      id: uuid
+      task_type: text
+    primaryKey: [id]
+  conan_group_members:
+    columns:
+      allowed_hosts: array<text>
+      endpoint: text
+      group_name: text
+      member_type: text
+      name: text
+      position: int32
+      repository_id: uuid?
+    primaryKey: [group_name, position]
+    unique: [[group_name, name]]
+    foreignKeys:
+      - group_name -> conan_groups(name)
+      - repository_id -> hosted_repositories(id)
+  conan_groups:
+    columns:
+      anonymous: bool
+      cache_quota_bytes: int64
+      created_at: timestamp
+      enabled: bool
+      name: text
+    primaryKey: [name]
+  console_theme_packages:
+    columns:
+      created_at: timestamp
+      id: text
+      payload: json
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+  email_targets:
+    columns:
+      created_at: timestamp
+      enabled: bool
+      id: uuid
+      locale: text
+      name: text
+      recipient_ciphertext: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+  email_test_deliveries:
+    columns:
+      accepted_at: timestamp?
+      attempts: int32
+      automatic_cancellation_code: text
+      console_origin: text
+      created_at: timestamp
+      episode_id: uuid?
+      error_code: text
+      event_id: uuid
+      event_sequence: int64?
+      from_address: text
+      id: uuid
+      kind: text
+      lease_expires_at: timestamp?
+      lease_owner: text
+      lease_token: uuid?
+      locale: text
+      next_attempt_at: timestamp
+      possible_duplicate: bool
+      quota_descriptor: json?
+      quota_rule_id: uuid?
+      recipient_ciphertext: text
+      request_key: uuid
+      scenario: text
+      state: text
+      target_id: uuid
+      target_version: int64
+      template_version: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[event_id], [request_key]]
+    foreignKeys:
+      - quota_rule_id -> repository_quota_alert_rules(id)
+      - target_id -> email_targets(id)
+  email_test_requests:
+    columns:
+      created_at: timestamp
+      id: int64
+    primaryKey: [id]
+  hosted_group_idempotency:
+    columns:
+      actor: text
+      expires_at: timestamp
+      group_id: uuid
+      key: text
+      payload_hash: text
+    primaryKey: [actor, key]
+    foreignKeys:
+      - group_id -> hosted_groups(id)
+  hosted_group_members:
+    columns:
+      group_id: uuid
+      position: int32
+      repository_id: uuid
+    primaryKey: [group_id, position]
+    unique: [[group_id, repository_id]]
+    foreignKeys:
+      - group_id -> hosted_groups(id)
+      - repository_id -> hosted_repositories(id)
+  hosted_groups:
+    columns:
+      created_at: timestamp
+      format: text
+      id: uuid
+      name: text
+      version: int64
+      visibility: text
+    primaryKey: [id]
+    unique: [[name]]
+  hosted_repositories:
+    columns:
+      allowed_hosts: array<text>
+      created_at: timestamp
+      egress_proxy: json?
+      endpoint: text
+      format: text
+      grants_version: int64
+      id: uuid
+      maven_strict_publication: bool
+      name: text
+      oci_bearer: json?
+      repo_type: text
+      state: text
+      upstream_auth: json?
+      version: int64
+      visibility: text
+    primaryKey: [id]
+    unique: [[name]]
+  hosted_repository_idempotency:
+    columns:
+      actor: text
+      expires_at: timestamp
+      key: text
+      payload_hash: text
+      repository_id: uuid
+      target: text
+    primaryKey: [actor, target, key]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  identity_providers:
+    columns:
+      attribute_mapping: json
+      created_at: timestamp
+      display_name: text
+      email_linking_enabled: bool
+      enabled: bool
+      id: uuid
+      jit_default_role: text
+      kind: text
+      provisioning_mode: text
+      secrets_sealed: text?
+      settings: json
+      slug: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[slug]]
+  installation_repository_presets:
+    columns:
+      catalog_version: text
+      finished_at: timestamp?
+      groups_created: int32
+      repositories_created: int32
+      singleton: bool
+      state: text
+    primaryKey: [singleton]
+  lifecycle_jobs:
+    columns:
+      attempts: int32
+      completed_at: timestamp?
+      created_at: timestamp
+      id: uuid
+      idempotency_key: text
+      kind: text
+      last_error: text
+      lease_expires_at: timestamp?
+      lease_token: text
+      max_attempts: int32
+      next_attempt_at: timestamp?
+      payload: json
+      progress_current: int32
+      progress_message: text
+      progress_total: int32
+      repository_id: uuid
+      started_at: timestamp?
+      state: text
+    primaryKey: [id]
+    unique: [[idempotency_key, kind, repository_id]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  maven_group_members:
+    columns:
+      allowed_hosts: array<text>
+      endpoint: text
+      group_name: text
+      member_type: text
+      name: text
+      position: int32
+      repository_id: uuid?
+    primaryKey: [group_name, position]
+    unique: [[group_name, name]]
+    foreignKeys:
+      - group_name -> maven_groups(name)
+      - repository_id -> hosted_repositories(id)
+  maven_groups:
+    columns:
+      anonymous: bool
+      created_at: timestamp
+      enabled: bool
+      name: text
+    primaryKey: [name]
+  meta_object_pins:
+    columns:
+      digest: text
+      seen_at: timestamp
+      unreferenced_since: timestamp?
+    primaryKey: [digest]
+  meta_sweep_lease:
+    columns:
+      expires_at: timestamp
+      last_completed_at: timestamp?
+      name: text
+      owner: text
+    primaryKey: [name]
+  native_apt_archive_object_intents:
+    columns:
+      collected_at: timestamp?
+      digest: text
+      object_key: text
+      reclaim_scheduled_at: timestamp?
+      repository_id: uuid
+      restore_id: uuid
+      size: int64
+    primaryKey: [restore_id, object_key]
+    foreignKeys:
+      - repository_id,restore_id -> native_apt_archive_restores(repository_id,id)
+  native_apt_archive_restores:
+    columns:
+      created_at: timestamp
+      finished_at: timestamp?
+      id: uuid
+      plan_digest: text
+      repository_id: uuid
+      reserved_bytes: int64
+      snapshot_id: uuid
+      state: text
+    primaryKey: [id]
+    unique: [[id, repository_id]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_apt_assets:
+    columns:
+      cached_at: timestamp
+      content_type: text
+      created_at: timestamp
+      digest: text
+      object_key: text
+      path: text
+      repository_id: uuid
+      size: int64
+      source_url: text
+      source_version: text
+      upstream_etag: text
+      upstream_modified: text
+    primaryKey: [repository_id, path]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_apt_lifecycle_results:
+    columns:
+      id: uuid
+      repository_id: uuid
+      request_digest: text
+      snapshot_id: uuid
+    primaryKey: [id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+      - snapshot_id -> native_apt_repository_snapshots(id)
+  native_apt_package_deletions:
+    columns:
+      collected_at: timestamp?
+      data: json
+      id: uuid
+      reclaim_scheduled_at: timestamp?
+      repository_id: uuid
+      suite: text
+    primaryKey: [id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_apt_package_revisions:
+    columns:
+      architecture: text
+      canonical_identity: text
+      created_at: timestamp
+      digest: text
+      id: uuid
+      object_key: text
+      object_name: text
+      package_name: text
+      publisher: text
+      repository_id: uuid
+      size: int64
+      version: text
+    primaryKey: [id]
+    unique: [[canonical_identity, repository_id]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_apt_pool_paths:
+    columns:
+      content_type: text
+      digest: text
+      object_key: text
+      path: text
+      repository_id: uuid
+      size: int64
+    primaryKey: [repository_id, path]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_apt_publication_idempotency:
+    columns:
+      actor: text
+      expires_at: timestamp
+      key: text
+      payload_hash: text
+      session_id: uuid
+      target: text
+    primaryKey: [actor, target, key]
+    foreignKeys:
+      - session_id -> native_apt_publication_sessions(id)
+  native_apt_publication_sessions:
+    columns:
+      collected_at: timestamp?
+      component: text
+      created_at: timestamp
+      declared_digest: text
+      declared_size: int64
+      expected_identity: text
+      expires_at: timestamp
+      id: uuid
+      object_key: text
+      object_name: text
+      package_revision_id: uuid?
+      publisher: text
+      reclaim_scheduled_at: timestamp?
+      repository_id: uuid
+      state: text
+      suite: text
+    primaryKey: [id]
+    foreignKeys:
+      - package_revision_id -> native_apt_package_revisions(id)
+      - repository_id -> hosted_repositories(id)
+  native_apt_repository_snapshots:
+    columns:
+      created_at: timestamp
+      id: uuid
+      inrelease_digest: text
+      key_fingerprint: text
+      published_at: timestamp?
+      release_digest: text
+      repository_id: uuid
+      retired_at: timestamp?
+      sequence: int64
+      signature_algorithm: text
+      signer_identity: text
+      state: text
+      suite: text
+    primaryKey: [id]
+    unique: [[id, repository_id], [repository_id, sequence, suite]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_apt_snapshot_assets:
+    columns:
+      content_type: text
+      digest: text
+      object_key: text
+      path: text
+      repository_id: uuid
+      size: int64
+      snapshot_id: uuid
+    primaryKey: [snapshot_id, path]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+      - repository_id,snapshot_id -> native_apt_repository_snapshots(repository_id,id)
+  native_apt_snapshot_object_intents:
+    columns:
+      collected_at: timestamp?
+      created_at: timestamp
+      digest: text
+      object_key: text
+      reclaim_scheduled_at: timestamp?
+      repository_id: uuid
+      size: int64
+      snapshot_id: uuid
+    primaryKey: [snapshot_id, object_key]
+    foreignKeys:
+      - repository_id,snapshot_id -> native_apt_repository_snapshots(repository_id,id)
+  native_apt_snapshot_packages:
+    columns:
+      architecture: text
+      component: text
+      package_revision_id: uuid
+      publication_session_id: uuid
+      snapshot_id: uuid
+    primaryKey: [snapshot_id, publication_session_id]
+    unique: [[architecture, component, package_revision_id, snapshot_id]]
+    foreignKeys:
+      - package_revision_id -> native_apt_package_revisions(id)
+      - publication_session_id -> native_apt_publication_sessions(id)
+      - snapshot_id -> native_apt_repository_snapshots(id)
+  native_cargo_group_versions:
+    columns:
+      checksum: text
+      collision_key: text
+      group_id: uuid
+      index_row: bytes
+      name: text
+      source_repository_id: uuid
+      version: text
+      version_key: text
+    primaryKey: [group_id, collision_key, version_key]
+    foreignKeys:
+      - group_id -> hosted_groups(id)
+  native_cargo_identity_reservations:
+    columns:
+      collision_key: text
+      created_at: timestamp
+      digest: text
+      metadata_digest: text
+      repository_id: uuid
+      version: text
+      version_key: text
+    primaryKey: [repository_id, collision_key, version_key]
+    foreignKeys:
+      - collision_key,repository_id -> native_cargo_names(collision_key,repository_id)
+  native_cargo_names:
+    columns:
+      collision_key: text
+      created_at: timestamp
+      name: text
+      normalized_name: text
+      repository_id: uuid
+    primaryKey: [repository_id, collision_key]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_cargo_proxy_configs:
+    columns:
+      download_template: text
+      expires_at: timestamp
+      fetched_at: timestamp
+      repository_id: uuid
+      search_api: text
+      source_version: text
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_cargo_proxy_crates:
+    columns:
+      cached_at: timestamp
+      checksum: text
+      collision_key: text
+      name: text
+      object_key: text
+      repository_id: uuid
+      size: int64
+      source_version: text
+      version: text
+      version_key: text
+    primaryKey: [repository_id, collision_key, version_key]
+    foreignKeys:
+      - collision_key,repository_id -> native_cargo_proxy_indexes(collision_key,repository_id)
+      - repository_id -> hosted_repositories(id)
+  native_cargo_proxy_indexes:
+    columns:
+      body: bytes
+      body_digest: text?
+      body_key: text?
+      body_size: int64?
+      collision_key: text
+      expires_at: timestamp
+      fetched_at: timestamp
+      name: text
+      repository_id: uuid
+      source_version: text
+      status: int32
+      upstream_etag: text
+      upstream_modified: text
+    primaryKey: [repository_id, collision_key]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_cargo_publications:
+    columns:
+      collected_at: timestamp?
+      collecting_at: timestamp?
+      collision_key: text
+      created_at: timestamp
+      description: text
+      index_row: text
+      object_key: text
+      published_at: timestamp
+      publisher: text
+      repository_id: uuid
+      size: int64
+      updated_at: timestamp
+      version_key: text
+      yanked: bool
+    primaryKey: [repository_id, collision_key, version_key]
+    foreignKeys:
+      - collision_key,repository_id,version_key -> native_cargo_identity_reservations(collision_key,repository_id,version_key)
+  native_conan_assets:
+    columns:
+      digest: text
+      object_key: text
+      package_id: text
+      package_revision: text
+      path: text
+      recipe_revision: text
+      reference: text
+      repository_id: uuid
+      size: int64
+    primaryKey: [repository_id, reference, recipe_revision, package_id, package_revision, path]
+    foreignKeys:
+      - object_key -> native_conan_object_intents(object_key)
+      - repository_id -> hosted_repositories(id)
+  native_conan_object_intents:
+    columns:
+      claimed_at: timestamp?
+      collected_at: timestamp?
+      collecting_at: timestamp?
+      created_at: timestamp
+      digest: text
+      object_key: text
+      repository_id: uuid
+      size: int64
+    primaryKey: [object_key]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_conan_package_revisions:
+    columns:
+      created_at: timestamp
+      digest: text
+      package_id: text
+      recipe_revision: text
+      reference: text
+      repository_id: uuid
+      revision: text
+      state: text
+    primaryKey: [repository_id, reference, recipe_revision, package_id, revision]
+    foreignKeys:
+      - recipe_revision,reference,repository_id -> native_conan_recipe_revisions(revision,reference,repository_id)
+      - repository_id -> hosted_repositories(id)
+  native_conan_publish_sessions:
+    columns:
+      expires_at: timestamp
+      id: uuid
+      kind: text
+      native: bool
+      objects: json
+      package_id: text
+      package_revision: text
+      publisher: text
+      recipe_revision: text
+      reference: text
+      repository_id: uuid
+      state: text
+      version: int64
+    primaryKey: [id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_conan_publish_uploads:
+    columns:
+      object_key: text
+      object_name: text
+      session_id: uuid
+    primaryKey: [session_id, object_name]
+    foreignKeys:
+      - session_id -> native_conan_publish_sessions(id)
+  native_conan_recipe_revisions:
+    columns:
+      created_at: timestamp
+      digest: text
+      publisher: text
+      reference: text
+      repository_id: uuid
+      revision: text
+      state: text
+    primaryKey: [repository_id, reference, revision]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_go_assets:
+    columns:
+      cached_at: timestamp
+      collected_at: timestamp?
+      collecting_at: timestamp?
+      created_at: timestamp
+      digest: text
+      kind: text
+      module_path: text
+      object_key: text
+      repository_id: uuid
+      size: int64
+      source_url: text
+      version: text
+    primaryKey: [repository_id, module_path, version, kind]
+    foreignKeys:
+      - module_path,repository_id,version -> native_go_versions(module_path,repository_id,version)
+  native_go_versions:
+    columns:
+      cached_at: timestamp
+      created_at: timestamp
+      module_path: text
+      published_at: timestamp?
+      publisher: text
+      repository_id: uuid
+      version: text
+    primaryKey: [repository_id, module_path, version]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_helm_group_authorities:
+    columns:
+      created_at: timestamp
+      entry_json: json
+      group_id: uuid
+      name: text
+      version: text
+    primaryKey: [group_id, name, version]
+    foreignKeys:
+      - group_id -> hosted_groups(id)
+  native_helm_publication_sessions:
+    columns:
+      actor: text
+      chart_yaml: bytes
+      collected_at: timestamp?
+      committed_at: timestamp?
+      created_at: timestamp
+      digest: text
+      expires_at: timestamp
+      id: uuid
+      metadata_json: json
+      name: text
+      object_key: text
+      provenance_digest: text
+      provenance_key: text
+      provenance_size: int64
+      repository_id: uuid
+      size: int64
+      source_version: text
+      state: text
+      version: text
+    primaryKey: [id]
+    unique: [[object_key]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_helm_publications:
+    columns:
+      body_digest: text?
+      body_key: text?
+      body_size: int64?
+      chart_yaml: bytes
+      digest: text
+      governance_reason: text
+      governance_updated_at: timestamp?
+      governance_updated_by: text
+      governance_version: int64
+      metadata_json: json
+      name: text
+      object_key: text
+      provenance_digest: text
+      provenance_key: text
+      provenance_size: int64
+      published_at: timestamp
+      publisher: text
+      quarantined: bool
+      repository_id: uuid
+      session_id: uuid
+      size: int64
+      tombstoned: bool
+      version: text
+    primaryKey: [repository_id, name, version]
+    unique: [[session_id]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+      - session_id -> native_helm_publication_sessions(id)
+  native_helm_replication_items:
+    columns:
+      attempts: int32
+      code: text
+      completed_at: timestamp?
+      digest: text
+      item_index: int32
+      job_id: uuid
+      name: text
+      provenance_digest: text
+      provenance_size: int64
+      result: text
+      size: int64
+      source_governance_version: int64
+      state: text
+      target_session_id: uuid?
+      version: text
+    primaryKey: [job_id, item_index]
+    unique: [[job_id, name, version]]
+    foreignKeys:
+      - job_id -> native_helm_replication_jobs(id)
+      - target_session_id -> native_helm_publication_sessions(id)
+  native_helm_replication_jobs:
+    columns:
+      actor: text
+      actor_kind: text
+      created_at: timestamp
+      credential_id: text
+      id: uuid
+      lease_fence: int64
+      lease_owner: text
+      lease_token: text
+      lease_until: timestamp?
+      plan_digest: text
+      source_repository_id: uuid
+      state: text
+      target_repository_id: uuid
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    foreignKeys:
+      - source_repository_id -> hosted_repositories(id)
+      - target_repository_id -> hosted_repositories(id)
+  native_helm_replication_retries:
+    columns:
+      created_at: timestamp
+      job_id: uuid
+      payload_digest: text
+      request_key: text
+    primaryKey: [job_id, request_key]
+    foreignKeys:
+      - job_id -> native_helm_replication_jobs(id)
+  native_helm_source_documents:
+    columns:
+      body: bytes
+      body_digest: text?
+      body_key: text?
+      body_size: int64?
+      digest: text
+      etag: text
+      expires_at: timestamp
+      fetched_at: timestamp
+      last_modified: text
+      repository_id: uuid
+      repository_version: text
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_helm_source_snapshots:
+    columns:
+      created_at: timestamp
+      digest: text
+      entries_json: json
+      id: uuid
+      view_id: uuid
+      view_version: text
+    primaryKey: [id]
+  native_maven_artifacts:
+    columns:
+      build_number: int32
+      coordinate: text
+      created_at: timestamp
+      digest: text
+      id: uuid
+      publisher: text
+      repository_id: uuid
+      source_build_number: int32
+      source_timestamp: text
+      state: text
+    primaryKey: [id]
+    unique: [[build_number, coordinate, repository_id]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_maven_assets:
+    columns:
+      digest: text
+      object_key: text
+      path: text
+      repository_id: uuid
+      size: int64
+    primaryKey: [repository_id, path]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_maven_commit_idempotency:
+    columns:
+      expires_at: timestamp
+      key: text
+      payload_hash: text
+      session_id: uuid
+    primaryKey: [session_id]
+    foreignKeys:
+      - session_id -> native_maven_publish_sessions(id)
+  native_maven_object_intents:
+    columns:
+      claimed_at: timestamp?
+      claimed_token: text?
+      created_at: timestamp
+      deleted_at: timestamp?
+      digest: text
+      object_key: text
+      session_id: uuid
+      size: int64
+    primaryKey: [object_key]
+    foreignKeys:
+      - session_id -> native_maven_publish_sessions(id)
+  native_maven_object_references:
+    columns:
+      created_at: timestamp
+      object_key: text
+      repository_id: uuid
+    primaryKey: [object_key]
+    foreignKeys:
+      - object_key -> native_maven_object_intents(object_key)
+      - repository_id -> hosted_repositories(id)
+  native_maven_publish_idempotency:
+    columns:
+      actor: text
+      expires_at: timestamp
+      key: text
+      payload_hash: text
+      session_id: uuid
+      target: text
+    primaryKey: [actor, target, key]
+    foreignKeys:
+      - session_id -> native_maven_publish_sessions(id)
+  native_maven_publish_sessions:
+    columns:
+      client_build_number: int32
+      client_timestamp: text
+      coordinate: text
+      expires_at: timestamp
+      id: uuid
+      objects: json
+      pom_object: text
+      publisher: text
+      repository_id: uuid
+      state: text
+    primaryKey: [id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_maven_publish_uploads:
+    columns:
+      object_key: text
+      object_name: text
+      session_id: uuid
+    primaryKey: [session_id, object_name]
+    foreignKeys:
+      - session_id -> native_maven_publish_sessions(id)
+  native_maven_snapshot_imports:
+    columns:
+      actor: text
+      aliases: json
+      coordinate: text
+      created_at: timestamp
+      current_aliases: json
+      current_build_number: int32
+      manifest_digest: text
+      metadata: json?
+      plan_digest: text
+      repository_id: uuid
+      session_id: uuid
+      source_id: text
+      state: text
+      taken_over_at: timestamp?
+      takeover_actor: text
+      takeover_key: text
+      target_binding: text
+      target_id: text
+    primaryKey: [repository_id, coordinate]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+      - session_id -> native_maven_publish_sessions(id)
+  native_npm_packages:
+    columns:
+      created_at: timestamp
+      dist_tags: json
+      metadata_expires_at: timestamp?
+      name: text
+      negative: bool
+      negative_expires_at: timestamp?
+      repository_id: uuid
+      revision: int64
+      source_endpoint: text
+      source_version: text
+      updated_at: timestamp
+      upstream_etag: text
+      upstream_modified: text
+    primaryKey: [repository_id, name]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_npm_versions:
+    columns:
+      body_digest: text?
+      body_key: text?
+      body_size: int64?
+      cached_at: timestamp?
+      collected_at: timestamp?
+      collecting_at: timestamp?
+      created_at: timestamp
+      deleted_at: timestamp?
+      deprecated: text
+      digest: text
+      integrity: text?
+      manifest: json
+      object_key: text
+      package_name: text
+      publisher: text
+      repository_id: uuid
+      shasum: text?
+      size: int64
+      state: text
+      tarball_name: text
+      upstream_tarball: text
+      version: text
+    primaryKey: [repository_id, package_name, version]
+    unique: [[package_name, repository_id, tarball_name]]
+    foreignKeys:
+      - package_name,repository_id -> native_npm_packages(name,repository_id)
+  native_nuget_group_authorities:
+    columns:
+      created_at: timestamp
+      digest: text
+      group_id: uuid
+      package_id: text
+      repository_id: uuid
+      repository_version: text
+      size: int64
+      version: text
+    primaryKey: [group_id, package_id, version]
+    foreignKeys:
+      - group_id -> hosted_groups(id)
+      - repository_id -> hosted_repositories(id)
+  native_nuget_publication_sessions:
+    columns:
+      actor: text
+      collected_at: timestamp?
+      committed_at: timestamp?
+      created_at: timestamp
+      digest: text
+      expires_at: timestamp
+      id: uuid
+      metadata_json: json
+      nuspec: bytes
+      object_key: text
+      package_id: text
+      registration_url: text
+      repository_id: uuid
+      size: int64
+      source_url: text
+      source_version: text
+      state: text
+      version: text
+    primaryKey: [id]
+    unique: [[object_key]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_nuget_publications:
+    columns:
+      body_digest: text?
+      body_key: text?
+      body_size: int64?
+      digest: text
+      governance_reason: text
+      governance_updated_at: timestamp?
+      governance_updated_by: text
+      governance_version: int64
+      listed: bool
+      metadata_json: json
+      nuspec: bytes
+      object_key: text
+      package_id: text
+      published_at: timestamp
+      publisher: text
+      quarantined: bool
+      registration_url: text
+      repository_id: uuid
+      session_id: uuid
+      size: int64
+      source_url: text
+      source_version: text
+      tombstoned: bool
+      version: text
+    primaryKey: [repository_id, package_id, version, source_version]
+    unique: [[session_id]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+      - session_id -> native_nuget_publication_sessions(id)
+  native_nuget_replication_items:
+    columns:
+      attempts: int32
+      code: text
+      completed_at: timestamp?
+      digest: text
+      item_index: int32
+      job_id: uuid
+      listed: bool?
+      package_id: text
+      result: text
+      size: int64
+      source_governance_version: int64
+      state: text
+      target_session_id: uuid?
+      version: text
+    primaryKey: [job_id, item_index]
+    unique: [[job_id, package_id, version]]
+    foreignKeys:
+      - job_id -> native_nuget_replication_jobs(id)
+      - target_session_id -> native_nuget_publication_sessions(id)
+  native_nuget_replication_jobs:
+    columns:
+      actor: text
+      actor_kind: text
+      created_at: timestamp
+      credential_id: text
+      id: uuid
+      lease_fence: int64
+      lease_owner: text
+      lease_token: text
+      lease_until: timestamp?
+      plan_digest: text
+      source_repository_id: uuid
+      state: text
+      target_repository_id: uuid
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    foreignKeys:
+      - source_repository_id -> hosted_repositories(id)
+      - target_repository_id -> hosted_repositories(id)
+  native_nuget_replication_retries:
+    columns:
+      created_at: timestamp
+      job_id: uuid
+      payload_digest: text
+      request_key: text
+    primaryKey: [job_id, request_key]
+    foreignKeys:
+      - job_id -> native_nuget_replication_jobs(id)
+  native_nuget_source_documents:
+    columns:
+      body: bytes
+      body_digest: text?
+      body_key: text?
+      body_size: int64?
+      digest: text
+      etag: text
+      expires_at: timestamp
+      fetched_at: timestamp
+      last_modified: text
+      repository_id: uuid
+      source_version: text
+      status: int32
+      url: text
+    primaryKey: [repository_id, source_version, url]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_oci_blobs:
+    columns:
+      created_at: timestamp
+      digest: text
+      object_key: text
+      size: int64
+    primaryKey: [digest]
+    unique: [[object_key]]
+  native_oci_manifest_tombstones:
+    columns:
+      artifact_type: text
+      deleted_at: timestamp
+      digest: text
+      media_type: text
+      name: text
+      object_key: text
+      repository_id: uuid
+      size: int64
+      subject_digest: text?
+      tags: array<text>
+    primaryKey: [repository_id, name, digest]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_oci_manifests:
+    columns:
+      artifact_type: text
+      created_at: timestamp
+      digest: text
+      media_type: text
+      name: text
+      object_key: text
+      repository_id: uuid
+      size: int64
+      subject_digest: text?
+    primaryKey: [repository_id, name, digest]
+    unique: [[object_key]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_oci_object_intents:
+    columns:
+      claimed_at: timestamp?
+      collected_at: timestamp?
+      created_at: timestamp
+      digest: text
+      object_key: text
+      repository_id: uuid?
+      size: int64
+    primaryKey: [object_key]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_oci_repository_blobs:
+    columns:
+      digest: text
+      repository_id: uuid
+    primaryKey: [repository_id, digest]
+    foreignKeys:
+      - digest -> native_oci_blobs(digest)
+      - repository_id -> hosted_repositories(id)
+  native_oci_tags:
+    columns:
+      digest: text
+      name: text
+      repository_id: uuid
+      tag: text
+      updated_at: timestamp
+    primaryKey: [repository_id, name, tag]
+    foreignKeys:
+      - digest,name,repository_id -> native_oci_manifests(digest,name,repository_id)
+  native_oci_uploads:
+    columns:
+      byte_offset: int64
+      collected_at: timestamp?
+      expires_at: timestamp
+      id: uuid
+      name: text
+      object_key: text
+      repository_id: uuid
+      state: text
+    primaryKey: [id]
+    unique: [[object_key]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_pypi_files:
+    columns:
+      cached_at: timestamp?
+      collected_at: timestamp?
+      created_at: timestamp
+      deleted_at: timestamp?
+      digest: text
+      file_type: text
+      filename: text
+      object_key: text
+      project: text
+      publisher: text
+      python_version: text
+      repository_id: uuid
+      requires_python: text
+      size: int64
+      source_url: text
+      source_version: text
+      state: text
+      version: text
+      yank_reason: text
+      yank_revision: int64
+      yanked: bool
+    primaryKey: [repository_id, filename]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_raw_asset_tombstones:
+    columns:
+      content_type: text
+      deleted_at: timestamp
+      digest: text
+      path: text
+      repository_id: uuid
+    primaryKey: [repository_id, path]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_raw_assets:
+    columns:
+      content_type: text
+      digest: text
+      path: text
+      repository_id: uuid
+      updated_at: timestamp
+    primaryKey: [repository_id, path]
+    foreignKeys:
+      - digest -> native_raw_objects(digest)
+      - repository_id -> hosted_repositories(id)
+  native_raw_objects:
+    columns:
+      collected_at: timestamp?
+      created_at: timestamp
+      digest: text
+      object_key: text
+      repository_id: uuid?
+      size: int64
+    primaryKey: [digest]
+    unique: [[object_key]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_raw_uploads:
+    columns:
+      byte_offset: int64
+      collected_at: timestamp?
+      expires_at: timestamp
+      id: uuid
+      object_key: text
+      path: text
+      repository_id: uuid
+      state: text
+    primaryKey: [id]
+    unique: [[object_key]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_rubygems_quotas:
+    columns:
+      quota_bytes: int64
+      repository_id: uuid
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  native_rubygems_replication_items:
+    columns:
+      attempts: int32
+      canonical_version: text
+      code: text
+      completed_at: timestamp?
+      digest: text
+      item_index: int32
+      job_id: uuid
+      name: text
+      platform: text
+      result: text
+      size: int64
+      source_governance_version: int64
+      state: text
+      target_session_id: uuid?
+      version: text
+    primaryKey: [job_id, item_index]
+    unique: [[canonical_version, job_id, name, platform]]
+    foreignKeys:
+      - job_id -> native_rubygems_replication_jobs(id)
+      - target_session_id -> native_rubygems_sessions(id)
+  native_rubygems_replication_jobs:
+    columns:
+      actor: text
+      actor_kind: text
+      created_at: timestamp
+      credential_id: text
+      credential_until: timestamp?
+      id: uuid
+      lease_fence: int64
+      lease_owner: text
+      lease_token: text
+      lease_until: timestamp?
+      plan_digest: text
+      session_id: text
+      session_version: int64
+      source_repository_id: uuid
+      state: text
+      target_repository_id: uuid
+      updated_at: timestamp
+      user_id: text
+      version: int64
+    primaryKey: [id]
+    foreignKeys:
+      - source_repository_id -> hosted_repositories(id)
+      - target_repository_id -> hosted_repositories(id)
+  native_rubygems_replication_retries:
+    columns:
+      created_at: timestamp
+      job_id: uuid
+      payload_digest: text
+      request_key: text
+    primaryKey: [job_id, request_key]
+    foreignKeys:
+      - job_id -> native_rubygems_replication_jobs(id)
+  native_rubygems_sessions:
+    columns:
+      actor: text
+      canonical_version: text
+      collected_at: timestamp?
+      committed_at: timestamp?
+      created_at: timestamp
+      digest: text
+      expires_at: timestamp
+      full_name: text
+      governance_reason: text
+      governance_updated_at: timestamp?
+      governance_updated_by: text
+      governance_version: int64
+      id: uuid
+      metadata_json: json
+      metadata_yaml: bytes
+      name: text
+      object_key: text
+      platform: text
+      quarantined: bool
+      repository_id: uuid
+      size: int64
+      state: text
+      version: text
+      yanked: bool
+    primaryKey: [id]
+    unique: [[object_key]]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  nexus_migration_batches:
+    columns:
+      actor: text
+      actor_kind: text
+      cancel_requested: bool
+      capacity_evidence: json
+      created_at: timestamp
+      entry_count: int64
+      id: uuid
+      idempotency_key: text
+      last_error: text
+      last_scan_failure: json?
+      lease_epoch: int64
+      lease_expires_at: timestamp?
+      lease_token: text
+      manifest_sha256: text
+      metadata_discovered: int64
+      owner_id: uuid?
+      pause_requested: bool
+      request: json
+      request_hash: text
+      scan_complete: bool
+      schedule_epoch: int64?
+      schedule_id: uuid?
+      source_id: uuid
+      source_verification_bytes: int64
+      source_version: text
+      state: text
+      total_bytes: int64?
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[actor, idempotency_key]]
+    foreignKeys:
+      - schedule_id -> nexus_migration_schedules(id)
+  nexus_migration_controls:
+    columns:
+      actor: text
+      batch_id: uuid
+      idempotency_key: text
+      operation: text
+      request_hash: text
+      response: json
+    primaryKey: [batch_id, actor, idempotency_key]
+    foreignKeys:
+      - batch_id -> nexus_migration_batches(id)
+  nexus_migration_entries:
+    columns:
+      assets: json
+      attempts: int32
+      batch_id: uuid
+      format: text
+      id: uuid
+      identity: text
+      last_error: text
+      ordinal: int32
+      session_id: text
+      source_repository: text
+      state: text
+      target_repository_id: uuid
+      transferred_bytes: int64
+      updated_at: timestamp
+      verified_bytes: int64
+      visible_identities: int64
+    primaryKey: [id]
+    unique: [[batch_id, identity, target_repository_id], [batch_id, ordinal]]
+    foreignKeys:
+      - batch_id -> nexus_migration_batches(id)
+  nexus_migration_scan_pages:
+    columns:
+      batch_id: uuid
+      cursor: text
+      cursor_sha256: text
+      ordinal: int64
+      page: json
+      page_sha256: text
+      source_repository: text
+    primaryKey: [batch_id, ordinal]
+    unique: [[batch_id, cursor_sha256, source_repository]]
+    foreignKeys:
+      - batch_id -> nexus_migration_scans(batch_id)
+  nexus_migration_scan_paths:
+    columns:
+      batch_id: uuid
+      source_path: text
+      source_repository: text
+    primaryKey: [batch_id, source_repository, source_path]
+    foreignKeys:
+      - batch_id -> nexus_migration_scans(batch_id)
+  nexus_migration_scans:
+    columns:
+      asset_count: int64
+      batch_id: uuid
+      binding_sha256: text
+      cursor: text
+      metadata_bytes: int64
+      page_count: int64
+      repositories: json
+      repository_index: int32
+      verified_pages: int64
+    primaryKey: [batch_id]
+    foreignKeys:
+      - batch_id -> nexus_migration_batches(id)
+  nexus_migration_schedule_controls:
+    columns:
+      actor: text
+      idempotency_key: text
+      operation: text
+      request_hash: text
+      response: json
+      schedule_id: uuid
+    primaryKey: [schedule_id, actor, idempotency_key]
+    foreignKeys:
+      - schedule_id -> nexus_migration_schedules(id)
+  nexus_migration_schedules:
+    columns:
+      active_batch_id: uuid?
+      actor: text
+      actor_kind: text
+      capacity_evidence: json?
+      consumed_observed_at: timestamp?
+      created_at: timestamp
+      dispatch_attempts: int32
+      id: uuid
+      idempotency_key: text
+      interval_seconds: int32
+      last_batch_id: uuid?
+      last_error: text
+      last_successful_at: timestamp?
+      lease_epoch: int64
+      lease_expires_at: timestamp?
+      lease_token: text
+      next_run_at: timestamp?
+      owner_id: uuid?
+      request: json
+      request_hash: text
+      state: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[actor, idempotency_key]]
+    foreignKeys:
+      - active_batch_id -> nexus_migration_batches(id)
+      - last_batch_id -> nexus_migration_batches(id)
+  nexus_migration_sources:
+    columns:
+      base_url: text
+      created_at: timestamp
+      credential_ciphertext: text
+      id: uuid
+      name: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+  object_store_identity:
+    columns:
+      created_at: timestamp
+      driver: text
+      root_id: text
+      singleton: bool
+    primaryKey: [singleton]
+  oci_bound_objects:
+    columns:
+      digest: text
+      image: text
+      owner: text
+      payload: json
+      scope: text
+      source_id: uuid
+      source_version: int64
+      subject: text
+    primaryKey: [scope, owner, image, digest]
+    foreignKeys:
+      - image,owner,scope,subject -> oci_subject_bindings(image,owner,scope,subject)
+      - source_id -> hosted_repositories(id)
+  oci_discovery_snapshots:
+    columns:
+      body_digest: text?
+      body_key: text?
+      body_size: int64?
+      created_at: timestamp
+      expires_at: timestamp
+      id: uuid
+      kind: text
+      owner: text
+      payload: json
+    primaryKey: [id]
+  oci_group_members:
+    columns:
+      allowed_hosts: array<text>
+      endpoint: text
+      group_name: text
+      member_type: text
+      name: text
+      position: int32
+      repository_id: uuid?
+    primaryKey: [group_name, position]
+    unique: [[group_name, name]]
+    foreignKeys:
+      - group_name -> oci_groups(name)
+      - repository_id -> hosted_repositories(id)
+  oci_groups:
+    columns:
+      anonymous: bool
+      created_at: timestamp
+      enabled: bool
+      name: text
+    primaryKey: [name]
+  oci_subject_bindings:
+    columns:
+      image: text
+      owner: text
+      payload: json
+      scope: text
+      source_id: uuid
+      source_version: int64
+      subject: text
+    primaryKey: [scope, owner, image, subject]
+    foreignKeys:
+      - source_id -> hosted_repositories(id)
+  public_access_policy:
+    columns:
+      enabled: bool
+      singleton: bool
+      version: int64
+    primaryKey: [singleton]
+  raw_group_members:
+    columns:
+      allowed_hosts: array<text>
+      endpoint: text
+      group_name: text
+      member_type: text
+      name: text
+      position: int32
+      repository_id: uuid?
+    primaryKey: [group_name, position]
+    unique: [[group_name, name]]
+    foreignKeys:
+      - group_name -> raw_groups(name)
+      - repository_id -> hosted_repositories(id)
+  raw_groups:
+    columns:
+      anonymous: bool
+      cache_quota_bytes: int64
+      created_at: timestamp
+      enabled: bool
+      name: text
+    primaryKey: [name]
+  replication_checkpoints:
+    columns:
+      attempts: int32
+      byte_offset: int64
+      digest: text
+      last_error: text
+      object_key: text
+      plan_id: uuid
+      size: int64
+      source_object_key: text
+      state: text
+      updated_at: timestamp
+      verified_at: timestamp?
+    primaryKey: [plan_id, object_key]
+    foreignKeys:
+      - plan_id -> replication_plans(id)
+  replication_plans:
+    columns:
+      apt_target_suite: text
+      attempts: int32
+      completed_at: timestamp?
+      coordinate: text
+      created_at: timestamp
+      digest: text
+      format: text
+      id: uuid
+      idempotency_key: text
+      last_error: text
+      lease_expires_at: timestamp?
+      lease_token: text?
+      max_attempts: int32
+      next_attempt_at: timestamp?
+      source_repository_id: uuid
+      started_at: timestamp?
+      state: text
+      target_repository_id: uuid
+    primaryKey: [id]
+    unique: [[idempotency_key, target_repository_id]]
+    foreignKeys:
+      - source_repository_id -> hosted_repositories(id)
+      - target_repository_id -> hosted_repositories(id)
+  repository_capacity_quotas:
+    columns:
+      quota_bytes: int64
+      repository_id: uuid
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  repository_grant_sets:
+    columns:
+      repository_id: uuid
+      version: int64
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  repository_grants:
+    columns:
+      principal: text
+      repository_id: uuid
+      resource_prefix: text
+      scopes: array<text>
+    primaryKey: [repository_id, principal, resource_prefix]
+    foreignKeys:
+      - repository_id -> repository_grant_sets(repository_id)
+  repository_quarantine_read_policies:
+    columns:
+      enabled: bool
+      repository_id: uuid
+      version: int64
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  repository_quota_alert_events:
+    columns:
+      created_at: timestamp
+      delivery_id: uuid?
+      episode_id: uuid
+      id: uuid
+      notification_code: text
+      rule_id: uuid
+      rule_version: int64
+      scenario: text
+      sequence: int64
+      snapshot: json
+      target_id: uuid
+      target_version: int64
+    primaryKey: [id]
+    unique: [[episode_id, scenario], [rule_id, sequence]]
+    foreignKeys:
+      - delivery_id -> email_test_deliveries(id)
+      - rule_id -> repository_quota_alert_rules(id)
+      - target_id -> email_targets(id)
+  repository_quota_alert_rules:
+    columns:
+      active_episode_id: uuid?
+      created_at: timestamp
+      deleted: bool
+      enabled: bool
+      evaluated_at: timestamp?
+      id: uuid
+      last_event_id: uuid?
+      next_evaluate_at: timestamp
+      policy: json
+      repository_id: uuid
+      sequence: int64
+      state: json
+      state_version: int64
+      target_id: uuid
+      target_version: int64
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    foreignKeys:
+      - target_id -> email_targets(id)
+  repository_request_rollup:
+    columns:
+      bucket_start: timestamp
+      bytes: int64
+      outcome: int16
+      repository_id: uuid
+      requests: int64
+    primaryKey: [repository_id, bucket_start, outcome]
+  repository_retention_policies:
+    columns:
+      coordinate_patterns: array<text>
+      enabled: bool
+      keep_days: int32
+      keep_downloaded_days: int32
+      maximum_versions: int32
+      minimum_versions: int32
+      protected_patterns: array<text>
+      repository_id: uuid
+      snapshot_keep_days: int32
+      version: int64
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  repository_security_policies:
+    columns:
+      allowed_licenses: array<text>
+      auto_scan_on_publish: bool
+      enabled: bool
+      fail_on_scan_error: bool
+      max_allowed_severity: text
+      repository_id: uuid
+      require_provenance: bool
+      require_sbom: bool
+      require_signature: bool
+      require_verified_signature: bool
+      require_vulnerability_scan: bool
+      version: int64
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  repository_usage_counters:
+    columns:
+      bytes: int64
+      objects: int64
+      quota_bytes: int64?
+      reconciled_at: timestamp?
+      repository_id: uuid
+      updated_at: timestamp
+    primaryKey: [repository_id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  repository_vex_document:
+    columns:
+      author: text
+      body_digest: text
+      body_key: text
+      created_at: timestamp
+      created_by: uuid?
+      format: text
+      id: uuid
+      repository_id: uuid
+    primaryKey: [id]
+  resolver_audit_log:
+    columns:
+      actor: text
+      authorization_reason: text?
+      authorization_source: text?
+      bytes: int64?
+      cache_disposition: text?
+      evidence: json
+      format: text?
+      group_name: text
+      http_status: int32?
+      id: int64
+      member_name: text?
+      member_type: text?
+      occurred_at: timestamp
+      operation: text?
+      outcome: text
+      repository: text
+      repository_id: uuid?
+      representation: text?
+      request_id: text?
+      resource: text?
+      trace_id: text?
+      upstream_host: text?
+    primaryKey: [occurred_at, id]
+  runtime_node_sessions:
+    columns:
+      build_revision: text?
+      build_version: text?
+      instance_id: text
+      last_seen_at: timestamp
+      roles: json
+      session_id: text
+      started_at: timestamp
+      stopped_at: timestamp?
+      worker_formats: json
+      worker_kinds: json
+    primaryKey: [session_id]
+  runtime_nodes:
+    columns:
+      build_revision: text?
+      build_version: text?
+      instance_id: text
+      last_seen_at: timestamp
+      roles: json
+      started_at: timestamp
+      worker_formats: json
+      worker_kinds: json
+    primaryKey: [instance_id]
+  saml_assertion_ids:
+    columns:
+      assertion_id: text
+      expires_at: timestamp
+      provider_id: uuid
+    primaryKey: [provider_id, assertion_id]
+  saml_request_state:
+    columns:
+      expires_at: timestamp
+      id: uuid
+      provider_id: uuid
+    primaryKey: [id]
+  scanner_db_generation:
+    columns:
+      built_at: timestamp
+      id: uuid
+      kind: text
+      observed_at: timestamp
+      oci_digest: text
+      source: text
+    primaryKey: [id]
+    unique: [[kind, oci_digest]]
+  scheduled_task_runs:
+    columns:
+      completed_at: timestamp?
+      created_at: timestamp
+      id: uuid
+      last_error: text
+      scheduled_at: timestamp
+      state: text
+      target_id: text
+      target_kind: text
+      task_id: uuid
+      trigger: text
+    primaryKey: [id]
+    foreignKeys:
+      - task_id -> scheduled_tasks(id)
+  scheduled_tasks:
+    columns:
+      created_at: timestamp
+      description: text
+      enabled: bool
+      id: uuid
+      interval_seconds: int32
+      kind: text
+      last_error: text
+      last_run_at: timestamp?
+      last_run_id: uuid?
+      last_run_state: text
+      lease_owner: text
+      lease_until: timestamp?
+      name: text
+      next_run_at: timestamp
+      repository_id: uuid?
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    foreignKeys:
+      - repository_id -> hosted_repositories(id)
+  security_audit_log:
+    columns:
+      actor: text
+      authorization_reason: text?
+      authorization_source: text?
+      bytes: int64?
+      cache_disposition: text?
+      evidence: json
+      format: text?
+      group_name: text
+      http_status: int32?
+      id: int64
+      member_name: text?
+      member_type: text?
+      occurred_at: timestamp
+      operation: text?
+      outcome: text
+      repository: text
+      repository_id: uuid?
+      representation: text?
+      request_id: text?
+      resource: text?
+      trace_id: text?
+      upstream_host: text?
+    primaryKey: [occurred_at, id]
+  service_accounts:
+    columns:
+      created_at: timestamp
+      description: text
+      id: uuid
+      name: text
+      state: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+  settings:
+    columns:
+      key: text
+      updated_at: timestamp
+      value: text
+    primaryKey: [key]
+  site_settings:
+    columns:
+      brand_mark: text
+      default_theme_id: text
+      enabled_theme_ids: array<text>
+      logo_url: text
+      singleton: bool
+      site_name: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [singleton]
+  token_signing_keys:
+    columns:
+      activated_at: timestamp?
+      alg: text
+      created_at: timestamp
+      expires_at: timestamp?
+      integrity_mac: text
+      kid: text
+      private_sealed: text
+      public_jwk: json
+      published_at: timestamp?
+      retired_at: timestamp?
+      sealing_ref: text
+      state: text
+    primaryKey: [kid]
+  user_identities:
+    columns:
+      created_at: timestamp
+      display_name: text
+      email: text
+      email_verified: bool
+      id: uuid
+      issuer: text
+      kind: text
+      last_login_at: timestamp?
+      provider_id: uuid
+      scim_external_id: text?
+      subject: text?
+      updated_at: timestamp
+      user_id: uuid
+    primaryKey: [id]
+    unique: [[provider_id, user_id]]
+    foreignKeys:
+      - provider_id -> identity_providers(id)
+      - user_id -> users(id)
+  user_sessions:
+    columns:
+      created_at: timestamp
+      expires_at: timestamp
+      id: uuid
+      idp_session_id: text?
+      ip_address: text
+      kind: text
+      revoked_at: timestamp?
+      user_agent: text
+      user_id: uuid
+    primaryKey: [id]
+    foreignKeys:
+      - user_id -> users(id)
+  users:
+    columns:
+      created_at: timestamp
+      description: text
+      disabled_reason: text?
+      display_name: text
+      email: text
+      email_verified_at: timestamp?
+      email_verified_by: text
+      email_verified_by_admin: bool
+      failed_login_attempts: int32
+      id: uuid
+      last_login_at: timestamp?
+      locked_until: timestamp?
+      must_change_password: bool
+      name: text
+      password_changed_at: timestamp?
+      role: text
+      secret_hash: text
+      session_version: int64
+      state: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[name]]
+  webhook_deliveries:
+    columns:
+      attempts: int32
+      created_at: timestamp
+      delivered_at: timestamp?
+      event_id: uuid
+      id: uuid
+      last_error: text
+      last_status: int32?
+      lease_expires_at: timestamp?
+      lease_owner: text?
+      lease_token: uuid?
+      next_attempt_at: timestamp?
+      state: text
+      subscription_id: uuid
+      updated_at: timestamp
+    primaryKey: [id]
+    unique: [[event_id, subscription_id]]
+    foreignKeys:
+      - event_id -> webhook_events(id)
+      - subscription_id -> webhook_subscriptions(id)
+  webhook_events:
+    columns:
+      created_at: timestamp
+      event_type: text
+      id: uuid
+      occurred_at: timestamp
+      payload: json
+    primaryKey: [id]
+  webhook_subscriptions:
+    columns:
+      created_at: timestamp
+      enabled: bool
+      endpoint_url: text
+      event_types: json
+      id: uuid
+      name: text
+      secret_ciphertext: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[name]]
+  workload_issuers:
+    columns:
+      allow_private_network: bool
+      allowed_algs: array<text>
+      audiences: array<text>
+      ca_bundle_pem: text?
+      created_at: timestamp
+      id: uuid
+      issuer: text
+      jwks_mode: text
+      jwks_uri: text?
+      kind: text
+      name: text
+      state: text
+      static_jwks: json?
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[issuer], [name]]
+  workload_jti_seen:
+    columns:
+      expires_at: timestamp
+      issuer_id: uuid
+      jti_hash: bytes
+    primaryKey: [issuer_id, jti_hash]
+  workload_trust_policies:
+    columns:
+      conditions: json
+      created_at: timestamp
+      expires_at: timestamp?
+      id: uuid
+      issuer_id: uuid
+      max_token_ttl_seconds: int32
+      name: text
+      service_account_id: uuid
+      single_use: bool
+      state: text
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[name]]
+    foreignKeys:
+      - issuer_id -> workload_issuers(id)
+      - service_account_id -> service_accounts(id)
+seeds:
+  audit_retention_policy:
+    - enabled: "true"
+      keep_days: "90"
+      singleton: "true"
+      version: "1"
+  installation_repository_presets:
+    - catalog_version: standard-v1
+      groups_created: "0"
+      repositories_created: "0"
+      singleton: "true"
+      state: pending
+  public_access_policy:
+    - enabled: "false"
+      singleton: "true"
+      version: "1"
+  settings:
+    - key: deployment_id
+  site_settings:
+    - brand_mark: NX
+      default_theme_id: notarx-dark
+      enabled_theme_ids: '["notarx-dark","notarx-light"]'
+      logo_url: ""
+      singleton: "true"
+      site_name: notarx
+      version: "1"

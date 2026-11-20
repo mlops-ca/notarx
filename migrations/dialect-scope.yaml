@@ -1,0 +1,44 @@
+# Migrations after the baseline that ship for one dialect only (ADR 0022).
+#
+# Every migration from 000002 on either exists in migrations/postgres and migrations/mysql, or is
+# named here with the one dialect it applies to and why. make test fails otherwise
+# (internal/schemaparity, TestRepositoryMigrationsShipInEveryDialectOrAreNamed).
+#
+# These files were written before the MySQL baseline exists. The MySQL baseline (slice 3c) is
+# generated from the neutral catalogue (migrations/catalogue.yaml), which is taken after all of
+# them, so MySQL starts with their schema effects and never replays them.
+version: 1
+migrations:
+  000002_native_npm_versions_object_key_index.sql:
+    dialect: postgres
+    reason: partial index; MySQL gets a generated-column index in the slice 3c baseline
+  000003_artifact_catalog.sql:
+    dialect: postgres
+    reason: creates the artifact_catalog table, which the catalogue carries into the MySQL baseline, and a trigram index MySQL does not have
+  000004_quota_evaluation_wakeup.sql:
+    dialect: postgres
+    reason: LISTEN/NOTIFY trigger for the quota evaluator; MySQL polls instead
+  000005_keyset_listing_indexes.sql:
+    dialect: postgres
+    reason: PostgreSQL index definitions (descending order, COLLATE "C"); the slice 3c baseline declares the MySQL equivalents
+  000006_read_cache_invalidation_triggers.sql:
+    dialect: postgres
+    reason: NOTIFY triggers for cache invalidation; MySQL polls cache_epochs instead
+  000007_read_cache_account_state.sql:
+    dialect: postgres
+    reason: NOTIFY triggers for cache invalidation; MySQL polls cache_epochs instead
+  000008_externalize_payload_constraints.sql:
+    dialect: postgres
+    reason: PostgreSQL CHECK constraint rewrites; the slice 3c baseline declares the MySQL constraints
+  000009_repository_grants_principal_index.sql:
+    dialect: postgres
+    reason: partial index; MySQL gets a generated-column index in the slice 3c baseline
+  000010_read_cache_statement_notifications.sql:
+    dialect: postgres
+    reason: statement-level NOTIFY triggers; MySQL polls cache_epochs instead
+  000011_read_cache_statement_notifications_accounts.sql:
+    dialect: postgres
+    reason: statement-level NOTIFY triggers; MySQL polls cache_epochs instead
+  000012_meta_object_sweep.sql:
+    dialect: postgres
+    reason: creates meta_object_pins, which the catalogue carries into the MySQL baseline

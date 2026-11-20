@@ -409,6 +409,16 @@ specification per `ALTER TABLE`, `INSERT ... ON DUPLICATE KEY UPDATE` instead of
 `INSERT IGNORE` or `REPLACE`, `WHERE` on every `UPDATE` and `DELETE`, and the
 `IF [NOT] EXISTS` guards MySQL offers.
 
+The neutral schema catalogue `migrations/catalogue.yaml` (ADR 0022) lists every table with
+its logical column types, nullability, keys, unique sets, generated columns and seed rows.
+It is generated from a migrated PostgreSQL, never edited by hand: after a schema change run
+`go run ./tools/schemaparity generate` against a migrated database (`TEST_DATABASE_URL`) and
+commit the result. `make schema-parity` compares it with a migrated PostgreSQL, and with a
+migrated MySQL once `migrations/mysql` exists, through the logical-type mapping in
+`internal/schemaparity/types.go`, and fails on drift. Every migration after the baseline ships in
+both `migrations/postgres` and `migrations/mysql`, or is named with its one dialect and the
+reason in `migrations/dialect-scope.yaml`; `make test` fails otherwise.
+
 `make migration-check` (`scripts/migration-immutability-check.sh`) runs in CI
 and in `make preflight`. It always rejects duplicate, out-of-sequence or gapped
 prefixes and names that do not match `NNNNNN_<snake_case>.sql`. Once a stable

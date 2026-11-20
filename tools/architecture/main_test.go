@@ -141,24 +141,26 @@ func TestDialectSeamKeepsDriversOutOfTheInterfacePackage(t *testing.T) {
 	}
 }
 
-func TestMigrateRunnerStaysALeaf(t *testing.T) {
-	inv := inventory{Imports: map[string]map[string]bool{
-		"internal/migrate": {"database/sql": true, "example.test/notarx/internal/database": true, "github.com/jackc/pgx/v5": true, mysqlDriver: true,
-			"example.test/notarx/internal/config": true, "example.test/notarx/internal/repository": true, "example.test/notarx/internal/app/x": true},
-	}}
-	want := []string{
-		"internal/migrate -> github.com/go-sql-driver/mysql",
-		"internal/migrate -> github.com/jackc/pgx/v5",
-		"internal/migrate -> internal/app/x",
-		"internal/migrate -> internal/config",
-		"internal/migrate -> internal/repository",
-	}
-	if got := dialectViolations(inv, "example.test/notarx"); !reflect.DeepEqual(got, want) {
-		t.Fatalf("got %v; want %v", got, want)
-	}
-	inv.Imports["internal/migrate"] = map[string]bool{"example.test/notarx/internal/database": true}
-	if got := dialectViolations(inv, "example.test/notarx"); len(got) != 0 {
-		t.Fatalf("the migrate runner may import internal/database: %v", got)
+func TestMigrateAndSchemaParityStayLeaves(t *testing.T) {
+	for _, pkg := range []string{"internal/migrate", "internal/schemaparity"} {
+		inv := inventory{Imports: map[string]map[string]bool{
+			pkg: {"database/sql": true, "example.test/notarx/internal/database": true, "github.com/jackc/pgx/v5": true, mysqlDriver: true,
+				"example.test/notarx/internal/config": true, "example.test/notarx/internal/repository": true, "example.test/notarx/internal/app/x": true},
+		}}
+		want := []string{
+			pkg + " -> github.com/go-sql-driver/mysql",
+			pkg + " -> github.com/jackc/pgx/v5",
+			pkg + " -> internal/app/x",
+			pkg + " -> internal/config",
+			pkg + " -> internal/repository",
+		}
+		if got := dialectViolations(inv, "example.test/notarx"); !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: got %v; want %v", pkg, got, want)
+		}
+		inv.Imports[pkg] = map[string]bool{"example.test/notarx/internal/database": true}
+		if got := dialectViolations(inv, "example.test/notarx"); len(got) != 0 {
+			t.Fatalf("%s may import internal/database: %v", pkg, got)
+		}
 	}
 }
 
