@@ -270,4 +270,17 @@ func TestPostgresAccountStateBulkWritesSendABoundedNumberOfCacheNotifications(t 
 			}
 		})
 	}
+
+	// A statement that changes no row announces nothing: it never fired the row triggers either.
+	for _, query := range []string{
+		`UPDATE token_signing_keys SET sealing_ref='local' WHERE kid=$1`,
+		`DELETE FROM token_signing_keys WHERE kid=$1`,
+		`UPDATE users SET session_version=session_version+1 WHERE name=$1`,
+		`DELETE FROM workload_issuers WHERE name=$1`,
+	} {
+		exec(query, prefix+"absent")
+		if got := listener.drain(300 * time.Millisecond); len(got) != 0 {
+			t.Fatalf("%q matched no row and sent %v", query, got)
+		}
+	}
 }

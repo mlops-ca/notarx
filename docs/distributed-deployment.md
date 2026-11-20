@@ -413,16 +413,26 @@ NOTARX_INLINE_MAX_BYTES=16384
 A scheduler node deletes the `meta/` objects that no row references any more (a row deleted, a
 payload replaced, a transaction rolled back after its object was written). The sweep runs under a
 database lease, so one node sweeps at a time, and once per interval for the whole fleet. It lists the
-namespace, asks the database object by object whether any row references it, and deletes an object only
-after it has gone unreferenced for the grace period. A writer records the object in `meta_object_pins`
-before it writes it, and the sweep holds that row while it checks and deletes, so a publish of the same
-bytes at the same moment never loses its object. An object written by a node that predates the pin is
-pinned when the sweep first sees it, so it too waits out one grace period. Keep the grace period longer
-than the longest transaction that writes a row referencing a payload; the default is a day.
+namespace and asks the database object by object whether any row references it. The first sweep that
+finds an object unreferenced marks it, and a later sweep deletes it only when it is still unreferenced
+a grace period after the mark and was not written within the grace period, so an object is deleted
+between one grace period and one grace period plus one interval after its last reference went away.
+A writer records the object in `meta_object_pins` before it writes it (in the transaction that writes
+the referencing row where there is one), and the sweep holds that row while it checks and deletes, so a
+publish of the same bytes at the same moment never loses its object, and writing an object again
+clears its mark. An object written by a node that predates the pin is pinned when the sweep first
+sees it. Run the sweep only when every node is on a version that pins (the pin is written by the
+writer, so during a rolling upgrade a node on the old version can publish bytes the sweep is deleting);
+set `NOTARX_META_SWEEP_INTERVAL` above the length of the upgrade, or let the upgrade finish, before
+the first sweep. Keep the grace period longer than the longest transaction that writes a row
+referencing a payload; the default is a day. A sweep that cannot delete some objects still counts as
+completed (it reports them in `notarx_meta_sweep_objects_total{outcome="failed"}` and the log), so a
+persistent failure does not repeat every minute. The sweep holds the digest of every object in memory
+while it runs.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `NOTARX_META_SWEEP_GRACE` | `24h` | How long an object is kept after it was last written, or first seen by the sweep, while nothing references it. At least one minute. |
+| `NOTARX_META_SWEEP_GRACE` | `24h` | How long an object is kept after it was last written and after a sweep first found it unreferenced. At least one minute. |
 | `NOTARX_META_SWEEP_BATCH_SIZE` | `500` | Objects examined between two renewals of the sweep lease. |
 | `NOTARX_META_SWEEP_INTERVAL` | `1h` | Time between two completed sweeps of the fleet. |
 

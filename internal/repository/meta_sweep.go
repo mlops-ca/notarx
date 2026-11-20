@@ -39,8 +39,10 @@ type MetaSweepStore interface {
 	// the interval, and otherwise another node may retry at once.
 	FinishMetaSweepLease(ctx context.Context, owner string, completed bool) error
 	// SweepMetaObject runs remove, and forgets the object's pin, when digest ("sha256:<hex>") is referenced by
-	// no row and was last pinned at least grace ago. The reference check, the pin check and remove run while
-	// the pin row is locked, which is what keeps a concurrent writer of the same bytes from losing them.
+	// no row, was last pinned at least grace ago and has been seen unreferenced by an earlier sweep at least grace
+	// ago; the first sweep that finds an unreferenced object only marks it. The reference check, the pin check and
+	// remove run while the pin row is locked, which is what keeps a concurrent writer of the same bytes from losing
+	// them.
 	SweepMetaObject(ctx context.Context, digest string, grace time.Duration, remove func(context.Context) error) (MetaSweepOutcome, error)
 	// MetaObjectPinsOlderThan returns up to limit digests after the given one, in order, whose pin is at least
 	// grace old. The sweep compares them with the objects that exist: a pin without an object is left by a put
@@ -61,16 +63,18 @@ func metaDigestKey(digest string) (string, error) {
 	return "meta/sha256/" + hexPart, nil
 }
 
-// pinMetaObject records that the object of data is about to be written, in its own committed statement and
-// before the put: the sweep reads the pin as the age of the object and waits on its row while it deletes.
-func (s *PostgresStore) pinMetaObject(ctx context.Context, data []byte) error {
+// pinMetaObject records that the object of data is about to be written, before the put: the sweep reads the pin as
+// the age of the object and waits on its row while it deletes. With q the autocommit database the pin is committed
+// when the call returns; with the transaction that writes the referencing row it commits with the row, and the
+// sweep waits for it on the pin's row lock, then sees a fresh pin.
+func (s *PostgresStore) pinMetaObject(ctx context.Context, q sqlRunner, data []byte) error {
 	if s.db == nil {
 		// A store with no database, as the unit tests of the payload paths build, has nothing to pin in.
 		return nil
 	}
 	sum := sha256.Sum256(data)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO meta_object_pins (digest, seen_at) VALUES ($1, now())
-		ON CONFLICT (digest) DO UPDATE SET seen_at = now()`, "sha256:"+hex.EncodeToString(sum[:]))
+	_, err := q.ExecContext(ctx, `INSERT INTO meta_object_pins (digest, seen_at) VALUES ($1, now())
+		ON CONFLICT (digest) DO UPDATE SET seen_at = now(), unreferenced_since = NULL`, "sha256:"+hex.EncodeToString(sum[:]))
 	if err != nil {
 		return fmt.Errorf("pin meta object: %w", err)
 	}
@@ -137,9 +141,10 @@ var metaReferenceTables = []struct {
 	{"repository_vex_document", false},
 }
 
-// metaObjectReferencedQuery asks whether any row of any of those tables references the object key $1. Each branch
-// is served by its partial index, so the check reads a handful of index pages however large the tables are.
-var metaObjectReferencedQuery = func() string {
+// metaObjectReferencedExpression is the boolean expression that says whether any row of any of those tables
+// references the object key $1. Each branch is served by its partial index, so the check reads a handful of index
+// pages however large the tables are.
+var metaObjectReferencedExpression = func() string {
 	branches := make([]string, len(metaReferenceTables))
 	for i, t := range metaReferenceTables {
 		branches[i] = "EXISTS (SELECT 1 FROM " + t.table + " WHERE body_key=$1"
@@ -148,40 +153,66 @@ var metaObjectReferencedQuery = func() string {
 		}
 		branches[i] += ")"
 	}
-	return "SELECT " + strings.Join(branches, " OR ")
+	return "(" + strings.Join(branches, " OR ") + ")"
 }()
 
-// SweepMetaObject implements MetaSweepStore.
+// SweepMetaObject implements MetaSweepStore. An object goes through three states: referenced (the common case,
+// answered by one read and left alone), unreferenced and not yet marked (the sweep records when it first saw it
+// so), and unreferenced since a mark older than the grace period (deleted). A write of the object, which pins
+// it, resets all of that.
 func (s *PostgresStore) SweepMetaObject(ctx context.Context, digest string, grace time.Duration, remove func(context.Context) error) (MetaSweepOutcome, error) {
 	key, err := metaDigestKey(digest)
 	if err != nil {
 		return "", err
+	}
+	// The first look takes no lock and writes nothing unless the object is referenced and carries an old pin, which
+	// it forgets: nearly every object of a namespace is referenced.
+	var referenced bool
+	if err = s.db.QueryRowContext(ctx, `WITH ref AS (SELECT `+metaObjectReferencedExpression+` AS referenced),
+		forgotten AS (DELETE FROM meta_object_pins WHERE digest = $2 AND seen_at <= now() - make_interval(secs => $3) AND (SELECT referenced FROM ref) RETURNING 1)
+		SELECT referenced FROM ref`, key, digest, grace.Seconds()).Scan(&referenced); err != nil {
+		return "", fmt.Errorf("check meta object references: %w", err)
+	}
+	if referenced {
+		return MetaSweepReferenced, nil
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// An object nobody pinned is pinned now: it waits out one grace period from the first sweep that sees it. The
-	// insert and the lock that follows make the pin row ours until the transaction ends; a writer that pins the same
-	// digest meanwhile waits for it.
+	// An object nobody pinned is pinned now. The insert and the lock that follows make the pin row ours until the
+	// transaction ends; a writer that pins the same digest meanwhile waits for it.
 	if _, err = tx.ExecContext(ctx, `INSERT INTO meta_object_pins (digest) VALUES ($1) ON CONFLICT (digest) DO NOTHING`, digest); err != nil {
 		return "", fmt.Errorf("pin meta object: %w", err)
 	}
 	var young bool
-	if err = tx.QueryRowContext(ctx, `SELECT seen_at > now() - make_interval(secs => $2) FROM meta_object_pins WHERE digest = $1 FOR UPDATE`,
-		digest, grace.Seconds()).Scan(&young); err != nil {
+	var withinGrace sql.NullBool
+	if err = tx.QueryRowContext(ctx, `SELECT seen_at > now() - make_interval(secs => $2), unreferenced_since > now() - make_interval(secs => $2)
+		FROM meta_object_pins WHERE digest = $1 FOR UPDATE`, digest, grace.Seconds()).Scan(&young, &withinGrace); err != nil {
 		return "", fmt.Errorf("lock meta object pin: %w", err)
 	}
 	if young {
 		return MetaSweepYoung, tx.Commit()
 	}
-	var referenced bool
-	if err = tx.QueryRowContext(ctx, metaObjectReferencedQuery, key).Scan(&referenced); err != nil {
+	// Decided again under the lock: a row may have been committed since the first look.
+	if err = tx.QueryRowContext(ctx, `SELECT `+metaObjectReferencedExpression, key).Scan(&referenced); err != nil {
 		return "", fmt.Errorf("check meta object references: %w", err)
 	}
 	if referenced {
+		if _, err = tx.ExecContext(ctx, `DELETE FROM meta_object_pins WHERE digest = $1`, digest); err != nil {
+			return "", fmt.Errorf("forget meta object pin: %w", err)
+		}
 		return MetaSweepReferenced, tx.Commit()
+	}
+	if !withinGrace.Valid {
+		if _, err = tx.ExecContext(ctx, `UPDATE meta_object_pins SET unreferenced_since = now() WHERE digest = $1`, digest); err != nil {
+			return "", fmt.Errorf("mark meta object: %w", err)
+		}
+		return MetaSweepYoung, tx.Commit()
+	}
+	if withinGrace.Bool {
+		return MetaSweepYoung, tx.Commit()
 	}
 	if err = remove(ctx); err != nil {
 		return "", err

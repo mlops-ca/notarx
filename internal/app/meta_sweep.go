@@ -40,8 +40,9 @@ const metaSweepTick = time.Minute
 
 // MetaSweeper deletes the objects of the meta namespace that no row references (ADR 0023 section 9).
 // Payloads are content-addressed and shared, so a row delete cannot say whether its object may go: the sweep
-// lists the namespace and asks the database, object by object, whether anything still references it. It only
-// deletes an object that has been unreferenced for the grace period, and the store makes that decision while it
+// lists the namespace and asks the database, object by object, whether anything still references it. The first
+// sweep that finds an object unreferenced marks it; it deletes the object only when a later sweep finds it still
+// unreferenced a grace period after the mark, and the store makes that decision while it
 // holds the object's pin (repository.MetaSweepStore.SweepMetaObject), so a publish that writes the same bytes
 // at the same moment never loses them. One node sweeps at a time, under a lease, once per interval.
 type MetaSweeper struct {
@@ -68,6 +69,11 @@ func (s MetaSweeper) batchSize() int {
 
 // Run sweeps once, when this node can take the lease. It returns a zero result and no error when another node
 // holds the lease or the last sweep is more recent than the interval.
+//
+// A sweep that reached the end of the namespace counts as completed, so the fleet waits for the interval, even when
+// some objects could not be swept: they are reported in the error, and a persistent failure must not turn into a
+// full sweep on every scheduler tick. One that was interrupted (the listing failed, the lease was lost, the context
+// ended) releases the lease uncompleted, so another node may retry at once.
 func (s MetaSweeper) Run(ctx context.Context) (MetaSweepResult, error) {
 	var result MetaSweepResult
 	acquired, err := s.Store.AcquireMetaSweepLease(ctx, s.Owner, metaSweepLeaseTTL, s.Interval)
@@ -83,44 +89,44 @@ func (s MetaSweeper) Run(ctx context.Context) (MetaSweepResult, error) {
 			slog.Warn("release meta sweep lease", "component", "meta_sweep", "error", finishErr)
 		}
 	}()
-	err = s.sweep(ctx, &result)
-	if err != nil {
+	failures, interrupted := s.sweep(ctx, &result)
+	completed = interrupted == nil
+	if failures != nil || interrupted != nil {
 		s.run("failed")
-		return result, err
+		return result, errors.Join(interrupted, failures)
 	}
-	completed = true
 	s.run("completed")
 	return result, nil
 }
 
-func (s MetaSweeper) sweep(ctx context.Context, result *MetaSweepResult) error {
+// sweep returns the errors of single objects, which do not stop it, and the error that interrupted it.
+func (s MetaSweeper) sweep(ctx context.Context, result *MetaSweepResult) (failures, interrupted error) {
 	digests, err := s.Objects.List(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	live := make(map[string]struct{}, len(digests))
 	for _, digest := range digests {
 		live[digest] = struct{}{}
 	}
-	var firstErr error
 	for start := 0; start < len(digests); start += s.batchSize() {
 		if err := ctx.Err(); err != nil {
-			return err
+			return failures, err
 		}
 		if err := s.Store.RenewMetaSweepLease(ctx, s.Owner, metaSweepLeaseTTL); err != nil {
 			// Another node took the lease: it owns the sweep now.
-			return err
+			return failures, err
 		}
 		for _, digest := range digests[start:min(start+s.batchSize(), len(digests))] {
 			outcome, err := s.Store.SweepMetaObject(ctx, digest, s.Grace, func(ctx context.Context) error { return s.Objects.Delete(ctx, digest) })
 			result.Examined++
 			if err != nil {
 				if ctx.Err() != nil {
-					return ctx.Err()
+					return failures, ctx.Err()
 				}
 				// One object that cannot be swept does not stop the rest; the run reports it.
 				s.object("failed")
-				firstErr = errors.Join(firstErr, err)
+				failures = errors.Join(failures, err)
 				continue
 			}
 			s.object(string(outcome))
@@ -135,9 +141,12 @@ func (s MetaSweeper) sweep(ctx context.Context, result *MetaSweepResult) error {
 		}
 	}
 	if err := s.forgetOrphanedPins(ctx, live, result); err != nil {
-		firstErr = errors.Join(firstErr, err)
+		if ctx.Err() != nil {
+			return failures, ctx.Err()
+		}
+		failures = errors.Join(failures, err)
 	}
-	return firstErr
+	return failures, nil
 }
 
 // forgetOrphanedPins removes the pins of objects that do not exist and have not been written for the grace

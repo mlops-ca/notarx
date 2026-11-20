@@ -71,13 +71,20 @@ func (r payloadRef) columns() (any, any, any) {
 // The inline value of an externalised payload is empty. The object is written before the row,
 // so a rolled-back transaction leaves an unreferenced object for the sweep, never a dangling row.
 func (s *PostgresStore) externalize(ctx context.Context, data []byte) ([]byte, payloadRef, error) {
+	return s.externalizeIn(ctx, s.db, data)
+}
+
+// externalizeIn is externalize for a caller that already holds a transaction: the pin of the object is written
+// through q, the connection the caller holds, because a second connection per publish would let concurrent
+// publishes exhaust the pool while each waits for the other connection.
+func (s *PostgresStore) externalizeIn(ctx context.Context, q sqlRunner, data []byte) ([]byte, payloadRef, error) {
 	settings := s.payloads.Load()
 	if settings == nil || len(data) <= settings.inlineMax {
 		return data, payloadRef{}, nil
 	}
 	// The pin is committed before the put: the sweep of unreferenced objects (meta_sweep.go) treats an object
 	// pinned within its grace period as in use and waits for the pin while it deletes one.
-	if err := s.pinMetaObject(ctx, data); err != nil {
+	if err := s.pinMetaObject(ctx, q, data); err != nil {
 		return nil, payloadRef{}, err
 	}
 	digest, key, err := settings.store.Put(ctx, data)

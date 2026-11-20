@@ -47,6 +47,27 @@ func auditPage(query func(hotQueryFixture) AuditQuery) func(hotQueryFixture) (st
 	}
 }
 
+// The statement shapes of the catalogue search of ADR 0023 section 8: the keyset page of a repository and format in
+// coordinate order, one row per coordinate, and the same page filtered by a substring of the coordinate, which the
+// trigram index artifact_catalog_coordinate_trgm_idx serves. No store method runs them yet: the search rewrite
+// (SearchArtifactProjection reading artifact_catalog instead of the projection view) must keep these shapes, and
+// this registry is where its plans are pinned before and after it lands.
+const (
+	catalogPageQuery = `
+	SELECT coordinate, latest_version, latest_digest, latest_published_at, publisher, version_count, size_bytes
+	FROM artifact_catalog
+	WHERE repository_id=$1::uuid AND format=$2 AND coordinate>$3
+	ORDER BY coordinate
+	LIMIT $4`
+	catalogContainsQuery = `
+	SELECT coordinate, latest_version, latest_digest, latest_published_at, publisher, version_count, size_bytes
+	FROM artifact_catalog
+	WHERE repository_id=$1::uuid AND format=$2 AND coordinate ILIKE $3 ESCAPE '\'
+	  AND coordinate>$4
+	ORDER BY coordinate
+	LIMIT $5`
+)
+
 // hotQueryCount is the size of the registry: the top 30 statements of ADR 0023 section 11 and the two catalogue
 // search plans of section 8.
 const hotQueryCount = 32

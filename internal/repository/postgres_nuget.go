@@ -301,7 +301,7 @@ func (s *PostgresStore) LockNuGetPublication(ctx context.Context, repo, id, vers
 // metadata and moves the nuspec to the object store when it is above the inline threshold. The object is
 // written inside the commit transaction (issue #501 moves it out).
 func (s *PostgresStore) insertNuGetPublicationFromSession(ctx context.Context, tx *sql.Tx, session NuGetSession) (NuGetPublication, error) {
-	nuspec, ref, err := s.externalize(ctx, session.Nuspec)
+	nuspec, ref, err := s.externalizeIn(ctx, tx, session.Nuspec)
 	if err != nil {
 		return NuGetPublication{}, err
 	}

@@ -20,8 +20,18 @@
 CREATE FUNCTION public.notarx_notify_cache_statement_scope() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
+DECLARE
+    changed boolean;
 BEGIN
-    PERFORM pg_notify('notarx_cache', TG_ARGV[0] || ':');
+    -- A statement that changed no row announces nothing, as the row trigger it replaces never fired for it.
+    IF TG_OP = 'DELETE' THEN
+        SELECT EXISTS (SELECT 1 FROM old_rows) INTO changed;
+    ELSE
+        SELECT EXISTS (SELECT 1 FROM new_rows) INTO changed;
+    END IF;
+    IF changed THEN
+        PERFORM pg_notify('notarx_cache', TG_ARGV[0] || ':');
+    END IF;
     RETURN NULL;
 END;
 $$;

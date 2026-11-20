@@ -280,7 +280,7 @@ func (s *PostgresStore) helmWriteTransaction(ctx context.Context, id, version st
 // metadata and moves chart.yaml to the object store when it is above the inline threshold. The object is
 // written inside the commit transaction (issue #501 moves it out).
 func (s *PostgresStore) insertHelmPublicationFromSession(ctx context.Context, tx *sql.Tx, session HelmSession) (HelmPublication, error) {
-	chart, ref, err := s.externalize(ctx, session.ChartYAML)
+	chart, ref, err := s.externalizeIn(ctx, tx, session.ChartYAML)
 	if err != nil {
 		return HelmPublication{}, err
 	}

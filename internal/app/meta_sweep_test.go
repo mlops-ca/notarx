@@ -138,7 +138,7 @@ func TestMetaSweeperSweepsEveryObjectInBatchesAndCompletesTheLease(t *testing.T)
 	}
 }
 
-func TestMetaSweeperKeepsGoingPastOneObjectAndReleasesTheLeaseUncompleted(t *testing.T) {
+func TestMetaSweeperKeepsGoingPastOneObjectAndStillCompletesTheLease(t *testing.T) {
 	boom := errors.New("boom")
 	store := &fakeMetaSweepStore{acquire: true, failing: map[string]error{"sha256:1": boom},
 		outcomes: map[string]repository.MetaSweepOutcome{"sha256:2": repository.MetaSweepDeleted}}
@@ -147,7 +147,7 @@ func TestMetaSweeperKeepsGoingPastOneObjectAndReleasesTheLeaseUncompleted(t *tes
 	if !errors.Is(err, boom) || result.Examined != 2 || result.Deleted != 1 {
 		t.Fatalf("result %+v err %v", result, err)
 	}
-	if !slices.Equal(store.finished, []bool{false}) || !slices.Equal(metrics.runs, []string{"failed"}) || !slices.Equal(metrics.objects, []string{"failed", "deleted"}) {
+	if !slices.Equal(store.finished, []bool{true}) || !slices.Equal(metrics.runs, []string{"failed"}) || !slices.Equal(metrics.objects, []string{"failed", "deleted"}) {
 		t.Fatalf("lease finish %v, runs %v, objects %v", store.finished, metrics.runs, metrics.objects)
 	}
 }

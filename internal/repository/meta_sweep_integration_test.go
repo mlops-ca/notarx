@@ -5,7 +5,9 @@ package repository
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -66,9 +68,22 @@ func (f metaSweepFixture) exists(t *testing.T, digest string) bool {
 
 func (f metaSweepFixture) age(t *testing.T, digest string, by time.Duration) {
 	t.Helper()
-	if _, err := f.store.db.ExecContext(t.Context(), `UPDATE meta_object_pins SET seen_at = seen_at - make_interval(secs => $2) WHERE digest = $1`, digest, by.Seconds()); err != nil {
+	if _, err := f.store.db.ExecContext(t.Context(), `UPDATE meta_object_pins SET seen_at = seen_at - make_interval(secs => $2),
+		unreferenced_since = unreferenced_since - make_interval(secs => $2) WHERE digest = $1`, digest, by.Seconds()); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func (f metaSweepFixture) pin(t *testing.T, digest string) (seenAt time.Time, mark sql.NullTime, exists bool) {
+	t.Helper()
+	err := f.store.db.QueryRowContext(t.Context(), `SELECT seen_at, unreferenced_since FROM meta_object_pins WHERE digest=$1`, digest).Scan(&seenAt, &mark)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, sql.NullTime{}, false
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seenAt, mark, true
 }
 
 func (f metaSweepFixture) sweep(t *testing.T, digest string, grace time.Duration) MetaSweepOutcome {
@@ -80,33 +95,77 @@ func (f metaSweepFixture) sweep(t *testing.T, digest string, grace time.Duration
 	return outcome
 }
 
-func TestPostgresMetaSweepHonoursTheGraceAndNeverDeletesAReferencedObject(t *testing.T) {
+func TestPostgresMetaSweepMarksThenDeletesAfterTheGraceAndNeverDeletesAReferencedObject(t *testing.T) {
 	f := newMetaSweepFixture(t)
 	payload := []byte("sweep payload " + uuid.NewString())
 	digest, rowID := f.publish(t, payload)
 
-	// A just-written object is young, referenced or not.
-	if got := f.sweep(t, digest, time.Hour); got != MetaSweepYoung {
-		t.Fatalf("a fresh object: %s", got)
-	}
-	// An old object a row still references is kept.
-	f.age(t, digest, 2*time.Hour)
+	// A referenced object is kept, and its pin is forgotten once it is old: the table holds recent writes only.
 	if got := f.sweep(t, digest, time.Hour); got != MetaSweepReferenced || !f.exists(t, digest) {
 		t.Fatalf("a referenced object: %s", got)
 	}
-	// Once nothing references it the object is deleted, after its grace period and not before.
+	if _, _, exists := f.pin(t, digest); !exists {
+		t.Fatal("the pin of a just-written object was forgotten")
+	}
+	f.age(t, digest, 2*time.Hour)
+	if got := f.sweep(t, digest, time.Hour); got != MetaSweepReferenced || !f.exists(t, digest) {
+		t.Fatalf("an old referenced object: %s", got)
+	}
+	if _, _, exists := f.pin(t, digest); exists {
+		t.Fatal("the pin of an old referenced object was kept")
+	}
+
+	// Unreferenced, the object is pinned when the sweep first sees it, marked by the next one once that pin is
+	// old, and deleted only when a sweep finds it still unreferenced a grace period after the mark.
 	f.unreference(t, rowID)
-	f.age(t, digest, -3*time.Hour) // written again just now
 	if got := f.sweep(t, digest, time.Hour); got != MetaSweepYoung || !f.exists(t, digest) {
-		t.Fatalf("an unreferenced object within the grace: %s", got)
+		t.Fatalf("first sight of an unreferenced object: %s", got)
 	}
-	f.age(t, digest, 3*time.Hour)
+	f.age(t, digest, 2*time.Hour)
+	if got := f.sweep(t, digest, time.Hour); got != MetaSweepYoung || !f.exists(t, digest) {
+		t.Fatalf("the sweep that marks the object: %s", got)
+	}
+	if _, mark, _ := f.pin(t, digest); !mark.Valid {
+		t.Fatal("the sweep did not mark the object")
+	}
+	if got := f.sweep(t, digest, time.Hour); got != MetaSweepYoung || !f.exists(t, digest) {
+		t.Fatalf("a marked object within the grace: %s", got)
+	}
+	f.age(t, digest, 2*time.Hour)
 	if got := f.sweep(t, digest, time.Hour); got != MetaSweepDeleted || f.exists(t, digest) {
-		t.Fatalf("an unreferenced old object: %s", got)
+		t.Fatalf("an object unreferenced for the grace: %s", got)
 	}
-	var pins int
-	if err := f.store.db.QueryRow(`SELECT count(*) FROM meta_object_pins WHERE digest=$1`, digest).Scan(&pins); err != nil || pins != 0 {
-		t.Fatalf("the pin of a deleted object survived: %d %v", pins, err)
+	if _, _, exists := f.pin(t, digest); exists {
+		t.Fatal("the pin of a deleted object survived")
+	}
+}
+
+func TestPostgresMetaSweepClearsTheMarkWhenARowReferencesTheObjectAgain(t *testing.T) {
+	f := newMetaSweepFixture(t)
+	payload := []byte("referenced again " + uuid.NewString())
+	digest, rowID := f.publish(t, payload)
+	f.unreference(t, rowID)
+	f.age(t, digest, 2*time.Hour)
+	f.sweep(t, digest, time.Hour)
+	f.age(t, digest, 2*time.Hour) // marked and past the grace
+	// The same bytes are published again: the pin clears the mark, so the sweep cannot delete them.
+	_, again := f.publish(t, payload)
+	if got := f.sweep(t, digest, time.Hour); got != MetaSweepReferenced || !f.exists(t, digest) {
+		t.Fatalf("an object referenced again: %s", got)
+	}
+	// And a re-publish that has not yet written its row is young, whatever the mark said.
+	f.unreference(t, again)
+	f.age(t, digest, 2*time.Hour)
+	f.sweep(t, digest, time.Hour)
+	f.age(t, digest, 2*time.Hour)
+	if _, _, err := f.store.externalize(t.Context(), payload); err != nil {
+		t.Fatal(err)
+	}
+	if _, mark, _ := f.pin(t, digest); mark.Valid {
+		t.Fatal("a write of the object did not clear its mark")
+	}
+	if got := f.sweep(t, digest, time.Hour); got != MetaSweepYoung || !f.exists(t, digest) {
+		t.Fatalf("an object written moments ago: %s", got)
 	}
 }
 
@@ -121,9 +180,21 @@ func TestPostgresMetaSweepPinsAnObjectNoWriterPinned(t *testing.T) {
 		t.Fatalf("first sweep of an unpinned object: %s", got)
 	}
 	f.age(t, digest, 2*time.Hour)
-	if got := f.sweep(t, digest, time.Hour); got != MetaSweepDeleted || f.exists(t, digest) {
-		t.Fatalf("second sweep after the grace: %s", got)
+	if got := f.sweep(t, digest, time.Hour); got != MetaSweepYoung || !f.exists(t, digest) {
+		t.Fatalf("second sweep, which marks it: %s", got)
 	}
+	f.age(t, digest, 2*time.Hour)
+	if got := f.sweep(t, digest, time.Hour); got != MetaSweepDeleted || f.exists(t, digest) {
+		t.Fatalf("third sweep after the grace: %s", got)
+	}
+}
+
+// deletable leaves an unreferenced object with an old pin and an old mark, the state in which the sweep deletes it.
+func (f metaSweepFixture) deletable(t *testing.T, digest string) {
+	t.Helper()
+	f.age(t, digest, 2*time.Hour)
+	f.sweep(t, digest, time.Hour)
+	f.age(t, digest, 2*time.Hour)
 }
 
 // A writer of the same bytes that arrives while the sweep deletes the object waits for the delete and then puts the
@@ -133,7 +204,7 @@ func TestPostgresMetaSweepWaitsForNoWriterOfTheSameBytes(t *testing.T) {
 	payload := []byte("contended payload " + uuid.NewString())
 	digest, rowID := f.publish(t, payload)
 	f.unreference(t, rowID)
-	f.age(t, digest, 2*time.Hour)
+	f.deletable(t, digest)
 
 	deleting := make(chan struct{})
 	release := make(chan struct{})
@@ -204,7 +275,7 @@ func TestPostgresMetaSweepNeverDeletesWhatConcurrentPublishesReference(t *testin
 		}
 		f.unreference(t, rowID)
 		// Old again and unreferenced: from here the sweep may delete the object until the next iteration pins it.
-		f.age(t, digest, 2*time.Hour)
+		f.deletable(t, digest)
 	}
 	stop.Store(true)
 	sweeping.Wait()
@@ -295,7 +366,7 @@ func TestPostgresMetaSweepPinListingAndReferenceIndexes(t *testing.T) {
 	if _, err = tx.Exec(`SET LOCAL enable_seqscan = off`); err != nil {
 		t.Fatal(err)
 	}
-	rows, err := tx.Query(`EXPLAIN `+metaObjectReferencedQuery, "meta/sha256/"+fmt.Sprintf("%064x", 1))
+	rows, err := tx.Query(`EXPLAIN SELECT `+metaObjectReferencedExpression, "meta/sha256/"+fmt.Sprintf("%064x", 1))
 	if err != nil {
 		t.Fatal(err)
 	}

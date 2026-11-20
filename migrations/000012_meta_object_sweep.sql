@@ -3,17 +3,22 @@
 -- ADR 0023 section 9: the mark-and-sweep job that deletes unreferenced meta/ objects
 -- (internal/app/meta_sweep.go).
 --
--- meta_object_pins records when an object of the meta namespace was last written, or first seen by the sweep.
--- A writer pins the digest, in its own committed statement, before it puts the object, and a content-addressed
--- put of bytes that already exist pins the same row again. The sweep deletes an object only when its pin is
--- older than the grace period and no row references the object, and it holds the pin row locked from the
--- reference check until the object is deleted. A writer that pins an object the sweep is about to delete waits
--- on that lock and writes the object again afterwards, so a delete can never remove bytes a row is about to
--- reference. An object with no pin (written by a node that predates the pin, or restored from a backup) is
--- pinned when the sweep first sees it, so it too waits out one grace period.
+-- meta_object_pins records when an object of the meta namespace was last written (seen_at) and since when the sweep
+-- has found it unreferenced (unreferenced_since). A writer pins the digest before it puts the object, in the
+-- transaction that writes the referencing row or, where it has none, in its own committed statement, and a
+-- content-addressed put of bytes that already exist pins the same row again, which also clears the mark. The sweep
+-- deletes an object only when no row references it, its pin is older than the grace period and an earlier sweep
+-- marked it unreferenced at least a grace period ago, and it holds the pin row locked from the last reference check
+-- until the object is deleted. A writer that pins an object the sweep is about to delete waits on that lock and
+-- writes the object again afterwards, so a delete can never remove bytes a row is about to reference. An object
+-- with no pin (written by a node that predates the pin, or restored from a backup) is pinned when the sweep first
+-- sees it, so it too waits out one grace period. Pins of referenced objects are not kept: the sweep forgets an old
+-- one when it finds the object referenced, so the table holds the recent writes and the objects under a mark.
+-- Every node must run a version that pins before the sweep is enabled; the docs say so.
 CREATE TABLE public.meta_object_pins (
     digest text NOT NULL,
     seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    unreferenced_since timestamp with time zone,
     CONSTRAINT meta_object_pins_pkey PRIMARY KEY (digest)
 );
 
@@ -29,7 +34,8 @@ CREATE TABLE public.meta_sweep_lease (
 );
 
 -- The reference check looks an object key up in every table that can hold one. Only rows that externalised a
--- payload have a key, so the indexes stay small next to the tables they cover.
+-- payload have a key, so the indexes stay small next to the tables they cover, and building one scans its table once
+-- while holding a lock that blocks writes to it for that scan.
 CREATE INDEX native_npm_versions_body_key_idx ON public.native_npm_versions USING btree (body_key) WHERE (body_key IS NOT NULL);
 CREATE INDEX native_cargo_proxy_indexes_body_key_idx ON public.native_cargo_proxy_indexes USING btree (body_key) WHERE (body_key IS NOT NULL);
 CREATE INDEX native_helm_publications_body_key_idx ON public.native_helm_publications USING btree (body_key) WHERE (body_key IS NOT NULL);
