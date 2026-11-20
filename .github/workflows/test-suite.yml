@@ -253,14 +253,18 @@ jobs:
           race: "false"
           race-coverage: "true"
 
-  # The architecture-independent release, packaging and SAML fuzz checks. They used to
-  # follow lint in the lint job and held its verdict back by about 2.5 minutes, and
-  # after the unit tests in quality they made that job the slowest of the suite; on
-  # their own they finish long before the contract lanes (docs/ci.md, issue #500).
+  # The architecture-independent release, packaging and SAML fuzz checks, and the native
+  # deb and rpm packages (ADR 0025): build all three from release archives, assert
+  # contents, modes, Version/Release fields and maintainer scripts, then install them in
+  # debian:12 and rockylinux:9 containers and drive notarx-migrate against PostgreSQL
+  # 16. The release checks used to follow lint in the lint job and held its verdict
+  # back by about 2.5 minutes, and the packages were a job of their own in ci.yml; here
+  # they share one setup and still finish long before the contract lanes (docs/ci.md,
+  # issue #500).
   release-checks:
     if: inputs.go
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -268,6 +272,7 @@ jobs:
       - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
         with:
           go-version-file: go.mod
+          cache: true
       # Node runs the prune-ghcr and release manifest tests; stamp-version-test needs
       # the OpenAPI tools.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -295,6 +300,20 @@ jobs:
         run: make packages-signing-drill packages-environments-test
       - name: Fuzz the SAML response verifier (60s, committed corpus)
         run: make saml-fuzz
+      - name: Cache the pinned nfpm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/notarx/nfpm
+          key: nfpm-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/nfpm.version', 'scripts/install-nfpm.sh') }}
+      - name: Install the package inspection tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends rpm cpio
+      - name: Build the packages, assert their contents and run the container install test
+        env:
+          # Authenticated download of the pinned nfpm (scripts/lib/github-release.sh).
+          GH_TOKEN: ${{ github.token }}
+        run: make package-install-test
 
   # vet and the race detector run natively on arm64 for every Go change; lint (whose
   # result differs only by architecture build constraints) runs on arm64 when the

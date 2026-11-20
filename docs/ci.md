@@ -21,7 +21,7 @@ show as `tests / <job>`.
 | `console` | `console/`, `api/` (the generated client) | `console` (unit tests, build, visual) and `console-e2e` |
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
-| `ci` | `.github/`, `Makefile`, `scripts/`, `packaging/` | everything, including `packages` (native deb and rpm build, content assertions and container install test; ADR 0025) |
+| `ci` | `.github/`, `Makefile`, `scripts/`, `packaging/` | everything, including the package checks of `release-checks` (native deb and rpm build, content assertions and container install test; ADR 0025), which every Go change runs too |
 | `arm64` | the `images` and `ci` paths, `go.mod`, `go.sum`, per-architecture Go sources and assembly (`*_amd64.go`, `*_arm64.go`, their `_test.go` and `.s` files), and any changed Go file whose `//go:build` line names `amd64` or `arm64` or that reads `runtime.GOARCH` | lint on arm64 (in `quality-arm64`) and the arm64 contract lanes (ADR 0016, amendment of 2026-11-19); `quality-arm64` vet and race and the arm64 image build run for every Go change |
 
 A path that matches no class also runs everything, so a new top-level directory
@@ -114,7 +114,7 @@ Both Playwright installs (the `console` job and the `console-e2e` shards) use th
 
 ## The ci-ok gate
 
-`ci-ok` depends on `changes`, `tests`, `packages` and the two `oci-free-tier` jobs and
+`ci-ok` depends on `changes`, `tests` and the two `oci-free-tier` jobs and
 always runs. It passes when each needed job succeeded or was skipped, and fails on any
 failure or cancellation. On a pull request `changes` and `tests` must have
 succeeded; `changes` also runs `scripts/check-no-chinese.py` (the owner rule that no
@@ -273,7 +273,21 @@ Issue #500 removed the wait of every contract lane for all four image builds (th
 | Lint verdict (min) | 6.0 | 3.6 |
 | Wall (min) | 14.0 | 15.0 (`core-native-e2e` queued 3.9 minutes; `quality` 13.4 with the release checks, since moved out) |
 
-The Go-only measurement (three attempts of one draft pull request, as for #482) is recorded here when it has run. Run 44670328253 had cold queues (the issue's figure of 4.9 minutes before the first lane is from the Go-only draft #496, whose image legs queued).
+The Go-only measurement: the three attempts of run 44692652060 (draft #512, a comment-only Go change, `arm64` class off), with the columns of the #482 table:
+
+| Run | Wall (min) | Longest queue (min) | Lint verdict (min) | Unit tests and coverage (min) | Runner-minutes | Jobs |
+| --- | --- | --- | --- | --- | --- | --- |
+| #482 after, attempts 1 to 3 (run 44673768958) | 17.1 to 19.1 | 2.0 to 6.5 | 6.5 to 9.9 | 6.9 to 11.8 | 104 to 122 | 29 |
+| #500, attempt 1 | 16.8 | 6.5 | 4.5 | 10.7 | 116 | 26 |
+| #500, attempt 2 | 13.2 | 2.9 | 5.0 | 7.2 | 112 | 26 |
+| #500, attempt 3 | 12.4 | 0.1 | 3.7 | 6.9 | 108 | 26 |
+
+Attempt 3 failed on a planner-statistics flake in `./internal/repository` that the resharding exposed (fixed in #515); its timing is complete. The jobs count `packages`, which ci.yml ran next to the suite for every Go change; it is now a set of steps of `release-checks`, so a Go-only pull request runs 25 jobs.
+
+- **Lint verdict**: 3.7 to 5.0 minutes, on target.
+- **Wall**: 12.4 minutes with no queue, 13.2 and 16.8 with queues of 2.9 and 6.5 minutes. The amd64 image lanes still queue for runners (the repository may use 20 at once and the other open pull requests share them), and `core-native-e2e` (about 8 minutes after the amd64 images at about 2.6) is the critical path without queue.
+- **Runner-minutes**: 108 to 116, against the target of about 93. The contract lanes hold most of them (the lane steps themselves, not setup: setup is 0.3 to 0.5 minutes per job), and `quality` restores no race build cache until the nightly release gates save one on `main`.
+- **Jobs**: 26 in these runs, 25 with `packages` folded into `release-checks`. Run 44670328253 had cold queues (the issue's figure of 4.9 minutes before the first lane is from the Go-only draft #496, whose image legs queued).
 
 ## Where every former check runs (issue #482)
 
@@ -284,7 +298,8 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | Earlier job | Now (pull request) | Release gates (`mainline` scope) |
 | --- | --- | --- |
 | `no-chinese` | a step of `changes` that records its verdict without failing the job; `ci-ok` fails on a violation, and the rest of the suite still runs | not part of the gates (as before) |
-| `changes`, `packages`, `oci-free-tier`, `oci-free-tier-tofu` | unchanged | unchanged |
+| `changes`, `oci-free-tier`, `oci-free-tier-tofu` | unchanged | unchanged |
+| `packages` | steps of `release-checks` (issue #500) | `release-checks` (the gates did not run it before) |
 | `quality`: lint, vet, native-build rules, migration, release and packaging checks, SAML fuzz, dependency audit | `lint` (lint, vet, native-build rules, migration checks, dependency audit); `release-checks` (release and packaging checks, SAML fuzz; issue #500) | the same |
 | `quality`: `make race`, `make coverage` and the per-package coverage reruns | `quality`: `make race-coverage`, one pass with the race detector and every floor | `quality` |
 | `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
