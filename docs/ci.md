@@ -22,7 +22,7 @@ show as `tests / <job>`.
 | `docs` | `docs/`, `*.md`, `LICENSE`, `NOTICE` | `docs` (i18n twins, links, capability claims) |
 | `images` | `Dockerfile*`, `compose*.yml`, `deploy/` | everything that executes the product (`go` and `console` too) |
 | `ci` | `.github/`, `Makefile`, `scripts/`, `packaging/` | everything, including `packages` (native deb and rpm build, content assertions and container install test; ADR 0025) |
-| `arm64` | the `images` and `ci` paths, `go.mod`, `go.sum`, per-architecture Go sources and assembly (`*_amd64.go`, `*_arm64.go`, their `_test.go` and `.s` files) | lint on arm64 (in `quality-arm64`) and the arm64 contract lanes (ADR 0016, amendment of 2026-11-19); `quality-arm64` vet and race and the arm64 image build run for every Go change |
+| `arm64` | the `images` and `ci` paths, `go.mod`, `go.sum`, per-architecture Go sources and assembly (`*_amd64.go`, `*_arm64.go`, their `_test.go` and `.s` files), and any changed Go file whose `//go:build` line names `amd64` or `arm64` or that reads `runtime.GOARCH` | lint on arm64 (in `quality-arm64`) and the arm64 contract lanes (ADR 0016, amendment of 2026-11-19); `quality-arm64` vet and race and the arm64 image build run for every Go change |
 
 A path that matches no class also runs everything, so a new top-level directory
 cannot silently skip a job. An unresolvable range runs everything. The release gates
@@ -99,7 +99,7 @@ pass uses `-count=1`, so a restored build cache never replays an earlier test re
 
 ## Workflow linting
 
-`make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint, which also lints the shell in every `run` step) over every file in `.github/workflows`. Any finding fails the `lint` job, so a workflow warning cannot be merged.
+`make lint` runs `make actionlint-check`, which runs the pinned `rhysd/actionlint` image (actionlint, which also lints the shell in every `run` step) over every file in `.github/workflows`. Any finding fails the `lint` job (and `quality-arm64` when it lints), so a workflow warning cannot be merged.
 
 ## Playwright browser install
 

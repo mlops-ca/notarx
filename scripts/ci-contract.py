@@ -224,8 +224,6 @@ def main():
     plan_matrix.add_argument('--no-arm64', dest='arm64', action='store_false',
                              help='pull-request scope only: the change is not architecture-sensitive')
     args = parser.parse_args()
-    if args.command == 'matrix' and args.scope == 'mainline' and not args.arm64:
-        parser.error('the mainline scope runs every arm64 lane; --no-arm64 is for pull requests')
     if args.command == 'run':
         return run_lane(args)
     if args.command == 'openapi-fresh':
@@ -233,7 +231,11 @@ def main():
     elif args.command == 'list':
         print('\n'.join(LANES))
     else:
-        print(json.dumps(matrix(args.scope, args.arm64)))
+        try:
+            plan = matrix(args.scope, args.arm64)
+        except ValueError as error:
+            parser.error(str(error))
+        print(json.dumps(plan))
     return 0
 
 

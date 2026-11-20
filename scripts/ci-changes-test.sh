@@ -30,13 +30,27 @@ check true,false,false,false,false,false internal/x/template.md
 check false,true,false,false,false,false console/src/notes.md
 check true,false,true,false,false,false CHANGELOG.md
 # Architecture-sensitive Go: per-architecture sources, assembly and the module set.
-check true,false,false,false,false,true internal/x/cpu_arm64.go
-check true,false,false,false,false,true internal/x/cpu_amd64.s
-check true,false,false,false,false,true internal/x/cpu_arm64_test.go
-check true,false,false,false,false,true go.mod
-check true,false,false,false,false,true go.sum
+for path in internal/x/cpu_amd64.go internal/x/cpu_arm64.go internal/x/cpu_amd64_test.go \
+  internal/x/cpu_arm64_test.go internal/x/cpu_amd64.s internal/x/cpu_arm64.s go.mod go.sum; do
+  check true,false,false,false,false,true "$path"
+done
 check true,false,false,false,false,false internal/x/arm64_notes.go
+check true,true,false,false,true,true compose.integration.yml
+check true,true,true,true,true,true .github/actions/go-quality/action.yml
+# A Go file whose build constraint or code names the architecture, read from the checkout.
+fixtures=$(mktemp -d)
+trap 'rm -rf "$fixtures"' EXIT
+mkdir -p "$fixtures/internal/x"
+printf '//go:build arm64 && !purego\n\npackage x\n' >"$fixtures/internal/x/fast.go"
+printf '//go:build !amd64\n\npackage x\n' >"$fixtures/internal/x/generic.go"
+printf 'package x\n\nimport "runtime"\n\nvar wide = runtime.GOARCH == "arm64"\n' >"$fixtures/internal/x/wide.go"
+printf '//go:build integration\n\npackage x\n' >"$fixtures/internal/x/db_test.go"
+for path in internal/x/fast.go internal/x/generic.go internal/x/wide.go; do
+  CI_CHANGES_ROOT=$fixtures check true,false,false,false,false,true "$path"
+done
+CI_CHANGES_ROOT=$fixtures check true,false,false,false,false,false internal/x/db_test.go
 
 # No range resolves to the full run.
-[[ "$(scripts/ci-changes.sh | cut -d= -f2 | paste -sd, -)" == true,true,true,true,true,true ]]
+[[ "$(scripts/ci-changes.sh | cut -d= -f2 | paste -sd, -)" == true,true,true,true,true,true ]] ||
+  { printf 'FAIL no range: want every class\n' >&2; exit 1; }
 printf 'ci-changes classification checks passed.\n'

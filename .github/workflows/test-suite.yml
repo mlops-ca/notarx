@@ -211,8 +211,9 @@ jobs:
   # architecture-independent checks (native-build rules, migrations, release and
   # packaging checks, SAML fuzzing, dependency audit); `quality` runs the unit tests
   # once, with the race detector and -coverprofile, and enforces every coverage floor
-  # from that one profile (make race-coverage). quality-arm64 runs lint, vet and race
-  # on arm64 (ADR 0016); make test runs on arm64 in the core lanes of the contract matrix.
+  # from that one profile (make race-coverage). quality-arm64 runs vet and race on arm64
+  # for every Go change and lint too for an architecture-sensitive one or in the release
+  # gates (ADR 0016); make test runs on arm64 in the core lanes of the contract matrix.
   lint:
     if: inputs.go
     runs-on: ubuntu-24.04

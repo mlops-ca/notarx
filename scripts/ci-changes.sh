@@ -7,7 +7,8 @@
 # Prints go=, console=, docs=, ci=, images=, arm64= as true/false lines (suitable
 # for $GITHUB_OUTPUT). arm64 marks an architecture-sensitive change: it turns on the
 # arm64 contract lanes and arm64 lint of pull request CI (ADR 0016, amendment of
-# 2026-11-19). With no range, or when the range cannot be resolved, every
+# 2026-11-19): per-architecture Go files, a Go file whose build constraint names
+# amd64 or arm64 or that reads runtime.GOARCH, go.mod, go.sum, images and CI. With no range, or when the range cannot be resolved, every
 # class is true (tags, manual runs). Any path that matches no
 # known class also turns everything on, so a new top-level directory can never
 # silently skip a job. See docs/ci.md.
@@ -32,9 +33,19 @@ else
   exit 0
 fi
 
+# A Go file is read from the checkout (CI_CHANGES_ROOT, default the working directory)
+# to find build constraints and GOARCH branches that its name does not show; a
+# deleted file is classified by its name alone.
+content_root=${CI_CHANGES_ROOT:-.}
+arch_sensitive_source() {
+  [[ "$1" == *.go && -f "$content_root/$1" ]] &&
+    grep -Eq '^//go:build.*\b(amd64|arm64)\b|runtime\.GOARCH' "$content_root/$1"
+}
+
 go=false console=false docs=false ci=false images=false arm64=false
 while IFS= read -r path; do
   [[ -z "$path" ]] && continue
+  if arch_sensitive_source "$path"; then arm64=true; fi
   case "$path" in
     .github/*|Makefile|scripts/*|packaging/*)
       ci=true ;;
@@ -47,7 +58,7 @@ while IFS= read -r path; do
       console=true ;;
     api/*)
       go=true console=true ;;
-    *.go|go.mod|go.sum|migrations/*|internal/*|cmd/*|contracts/*|examples/*)
+    *.go|migrations/*|internal/*|cmd/*|contracts/*|examples/*)
       go=true ;;
     Dockerfile*|compose*.yml|deploy/*)
       images=true ;;
