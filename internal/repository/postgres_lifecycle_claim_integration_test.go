@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/background"
 )
 
 func openClaimStore(t *testing.T) *PostgresStore {
@@ -307,7 +308,7 @@ func TestPostgresLifecycleTerminalWritesSurviveACancelledContext(t *testing.T) {
 	store := openClaimStore(t)
 	fixture := newClaimFixture(t, store)
 	// One repository per job: a repository runs one job of a kind at a time.
-	repos := []string{fixture.repository("terminal-a"), fixture.repository("terminal-b"), fixture.repository("terminal-c")}
+	repos := []string{fixture.repository("terminal-a"), fixture.repository("terminal-b"), fixture.repository("terminal-c"), fixture.repository("terminal-d")}
 	for _, repo := range repos {
 		fixture.enqueue(repo, LifecycleJobReclaim, 1)
 	}
@@ -340,9 +341,9 @@ func TestPostgresLifecycleTerminalWritesSurviveACancelledContext(t *testing.T) {
 			t.Fatalf("no job of repository %s was claimed", repo)
 		}
 	}
-	stopped, stop := context.WithCancel(context.Background())
-	stop()
-	finished, interrupted, failed := claimed[repos[0]], claimed[repos[1]], claimed[repos[2]]
+	stopped, stop := context.WithCancelCause(context.Background())
+	stop(background.ErrShutdown)
+	finished, interrupted, failed, lostLease := claimed[repos[0]], claimed[repos[1]], claimed[repos[2]], claimed[repos[3]]
 
 	if err := store.CompleteLifecycleJob(stopped, finished.ID, finished.LeaseToken); err != nil {
 		t.Fatalf("complete on a cancelled context: %v", err)
@@ -357,6 +358,16 @@ func TestPostgresLifecycleTerminalWritesSurviveACancelledContext(t *testing.T) {
 	got, err = store.GetLifecycleJob(context.Background(), repos[1], interrupted.ID)
 	if err != nil || got.State != LifecycleJobPending || got.Attempts != interrupted.Attempts-1 || got.LastError != "context canceled" {
 		t.Fatalf("interrupted job = %+v (claimed with %d attempts), %v; want pending with the attempt returned", got, interrupted.Attempts, err)
+	}
+	// A context cancelled for another reason (a lost lease cancels its job's context) is a failure that counts its attempt.
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := store.FailLifecycleJob(cancelled, lostLease.ID, lostLease.LeaseToken, "lease lost"); err != nil {
+		t.Fatalf("fail on a cancelled job context: %v", err)
+	}
+	got, err = store.GetLifecycleJob(context.Background(), repos[3], lostLease.ID)
+	if err != nil || got.State != LifecycleJobRetrying || got.Attempts != lostLease.Attempts {
+		t.Fatalf("job whose lease was lost = %+v, %v; want retrying with its attempt counted, not requeued as interrupted", got, err)
 	}
 	// A failure on a live context still counts its attempt.
 	if err := store.FailLifecycleJob(context.Background(), failed.ID, failed.LeaseToken, "boom"); err != nil {

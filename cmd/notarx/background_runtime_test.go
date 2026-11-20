@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"regexp"
 	"strconv"
@@ -133,5 +134,27 @@ func TestTerminationGraceFollowsTheKubernetesManifest(t *testing.T) {
 	grace := time.Duration(seconds) * time.Second
 	if terminationGrace >= grace || grace-terminationGrace > 5*time.Second {
 		t.Fatalf("terminationGrace=%s does not leave a small margin inside the manifest's %s", terminationGrace, grace)
+	}
+}
+
+func TestSignalContextIsCancelledWithTheShutdownCause(t *testing.T) {
+	ctx, stop := signalContext()
+	if ctx.Err() != nil {
+		t.Fatal("the context starts live")
+	}
+	stop()
+	<-ctx.Done()
+	if !errors.Is(context.Cause(ctx), background.ErrShutdown) {
+		t.Fatalf("cause = %v, want background.ErrShutdown", context.Cause(ctx))
+	}
+	child, cancel := context.WithCancel(ctx)
+	defer cancel()
+	if !errors.Is(context.Cause(child), background.ErrShutdown) {
+		t.Fatalf("a job context derived from it must carry the cause: %v", context.Cause(child))
+	}
+	other, cancelOther := context.WithCancel(context.Background())
+	cancelOther()
+	if errors.Is(context.Cause(other), background.ErrShutdown) {
+		t.Fatal("a context cancelled for another reason must not carry the shutdown cause")
 	}
 }

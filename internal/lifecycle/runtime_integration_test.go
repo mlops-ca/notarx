@@ -38,8 +38,8 @@ func TestStoppingARuntimeWithAJobInFlightRecordsItsOutcome(t *testing.T) {
 	}
 
 	group := &background.Group{}
-	runCtx, stop := context.WithCancel(background.WithGroup(ctx, group))
-	defer stop()
+	runCtx, stop := context.WithCancelCause(background.WithGroup(ctx, group))
+	defer stop(nil)
 	inFlight := make(chan struct{})
 	runtime := Runtime{Store: onlyJobStore{PostgresStore: store, mine: job.ID}, Kind: repository.LifecycleJobReclaim, Formats: []repository.Format{repository.FormatRaw}, Name: "runtime stop test", Operation: "runtime_stop_test"}
 	runtime.Start(runCtx, time.Hour, 100, func(handlerCtx context.Context, claimed repository.LifecycleJob) error {
@@ -52,7 +52,7 @@ func TestStoppingARuntimeWithAJobInFlightRecordsItsOutcome(t *testing.T) {
 	case <-time.After(30 * time.Second):
 		t.Fatal("the job never started")
 	}
-	stop()
+	stop(background.ErrShutdown)
 	if !group.Wait(30 * time.Second) {
 		t.Fatal("the runtime loop did not return")
 	}

@@ -341,9 +341,11 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	// covers the normal exit and logs how it ended.
 	loops := &background.Group{}
 	runtimeContext = background.WithGroup(runtimeContext, loops)
+	var loopsAwaited bool
 	defer func() {
 		stopRuntime()
-		if !loops.Wait(shutdownWaitBound(0, cfg.ShutdownFlushTimeout)) {
+		// Start's wait runs first on a normal exit and spends the budget; a second wait would spend it again.
+		if !loopsAwaited && !loops.Wait(shutdownWaitBound(0, cfg.ShutdownFlushTimeout)) {
 			slog.Warn("background loops did not stop before shutdown", "component", "background")
 		}
 	}()
@@ -520,6 +522,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	defer func() {
 		stopRuntime()
 		waitBackground()
+		loopsAwaited = true
 	}()
 	handler := http.Handler(app.NewOperationalHandler(dependencies, metrics))
 	if startAPI {
@@ -636,9 +639,16 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	return 0
 }
 
+// signalContext is cancelled, with the cause background.ErrShutdown, by SIGINT or SIGTERM or by the returned
+// function. The cause tells a job interrupted by the stop from one cancelled for another reason.
 func signalContext() (context.Context, context.CancelFunc) {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	go func() { <-ctx.Done(); stop() }()
+	signals, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, cancel := context.WithCancelCause(context.Background())
+	stop := func() {
+		cancel(background.ErrShutdown)
+		stopSignals()
+	}
+	context.AfterFunc(signals, stop)
 	return ctx, stop
 }
 

@@ -31,15 +31,20 @@ type payloadSettings struct {
 	inlineMax int
 }
 
-// SetPayloadStore moves every payload larger than inlineMaxBytes out of the database rows into
-// store. A nil store keeps every payload inline; rows that already reference an object still
-// need a store to be read.
+// MaxInlineBytes is the largest inline payload a row accepts whatever NOTARX_INLINE_MAX_BYTES says: the inline
+// column of a cached Helm source document is CHECK-limited to 1 MiB (migration 000001), the smallest limit of any
+// payload kind, so a larger setting would let a payload stay inline that the database then rejects.
+const MaxInlineBytes = 1 << 20
+
+// SetPayloadStore moves every payload larger than inlineMaxBytes (at most MaxInlineBytes) out of the database
+// rows into store. A nil store keeps every payload inline; rows that already reference an object still need a
+// store to be read.
 func (s *PostgresStore) SetPayloadStore(store PayloadStore, inlineMaxBytes int) {
 	if store == nil {
 		s.payloads.Store(nil)
 		return
 	}
-	s.payloads.Store(&payloadSettings{store: store, inlineMax: inlineMaxBytes})
+	s.payloads.Store(&payloadSettings{store: store, inlineMax: min(inlineMaxBytes, MaxInlineBytes)})
 }
 
 // payloadRef is the nullable body_digest, body_size and body_key triple of a row. The zero

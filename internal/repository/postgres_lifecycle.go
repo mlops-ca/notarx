@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/requestcontext"
 )
 
@@ -626,10 +627,11 @@ func (s *PostgresStore) CompleteLifecycleJob(ctx context.Context, id, leaseToken
 }
 
 func (s *PostgresStore) FailLifecycleJob(ctx context.Context, id, leaseToken, message string) error {
-	// A caller whose context was cancelled, as opposed to timed out, is stopping: the process is shutting down
-	// and the job did not fail by its own fault. It goes back to the queue with the attempt its claim counted
-	// returned, instead of consuming an attempt (and, at the last one, failing for good) because of a deploy.
-	interrupted := errors.Is(ctx.Err(), context.Canceled)
+	// A caller whose context carries the shutdown cause was stopped with the process: the job did not fail by its
+	// own fault. It goes back to the queue with the attempt its claim counted returned, instead of consuming an
+	// attempt (and, at the last one, failing for good) because of a deploy. A context cancelled for any other
+	// reason, a lost lease for one, is a failure and counts its attempt.
+	interrupted := errors.Is(context.Cause(ctx), background.ErrShutdown)
 	ctx, cancel := terminalWriteContext(ctx)
 	defer cancel()
 	if interrupted {

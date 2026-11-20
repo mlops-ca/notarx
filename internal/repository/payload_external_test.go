@@ -205,3 +205,15 @@ func TestResolvePayloadsReportsAFailedRead(t *testing.T) {
 		t.Fatal("a missing object must fail the list")
 	}
 }
+
+func TestInlineLimitIsClampedToWhatTheInlineColumnsAccept(t *testing.T) {
+	store := &PostgresStore{}
+	payloads := newMemoryPayloadStore()
+	store.SetPayloadStore(payloads, 64<<20)
+	if _, ref, err := store.externalize(t.Context(), make([]byte, MaxInlineBytes)); err != nil || ref.external() {
+		t.Fatalf("a payload at the limit stays inline: %+v %v", ref, err)
+	}
+	if _, ref, err := store.externalize(t.Context(), make([]byte, MaxInlineBytes+1)); err != nil || !ref.external() {
+		t.Fatalf("a payload above the limit must be externalised whatever the setting: %+v %v", ref, err)
+	}
+}

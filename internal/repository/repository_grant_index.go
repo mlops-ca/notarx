@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"slices"
 	"sort"
 )
 
@@ -10,9 +11,9 @@ import (
 // as the aggregate lifecycle job listing: the authorizer stays the source of truth and decides on
 // each candidate, but the view no longer reads every repository to find them (ADR 0023 section 8).
 type RepositoryGrantIndex interface {
-	// ListRepositoryIDsGrantedToPrincipal returns the ids, ascending, of the repositories on which
-	// principal has a grant without a resource prefix whose scopes include scope.
-	ListRepositoryIDsGrantedToPrincipal(ctx context.Context, principal, scope string) ([]string, error)
+	// ListRepositoriesGrantedToPrincipal returns the repositories, in no particular order, on which principal has
+	// a grant without a resource prefix whose scopes include scope, in one query.
+	ListRepositoriesGrantedToPrincipal(ctx context.Context, principal, scope string) ([]HostedRepository, error)
 }
 
 var (
@@ -20,49 +21,48 @@ var (
 	_ RepositoryGrantIndex = (*MemoryStore)(nil)
 )
 
-// listRepositoryIDsGrantedToPrincipalQuery is served by repository_grants_principal_idx. ORDER BY names
-// the table column, not the selected id text.
-const listRepositoryIDsGrantedToPrincipalQuery = `SELECT g.repository_id::text FROM repository_grants g
-WHERE g.principal=$1 AND g.resource_prefix='' AND $2=ANY(g.scopes) ORDER BY g.repository_id`
+// listRepositoriesGrantedToPrincipalQuery reads the candidates through repository_grants_principal_idx. ORDER BY
+// names the table column, not the selected id text.
+const listRepositoriesGrantedToPrincipalQuery = `SELECT ` + hostedRepositoryColumns + ` FROM hosted_repositories
+WHERE id IN (SELECT g.repository_id FROM repository_grants g WHERE g.principal=$1 AND g.resource_prefix='' AND $2=ANY(g.scopes))
+ORDER BY hosted_repositories.id`
 
-func (s *PostgresStore) ListRepositoryIDsGrantedToPrincipal(ctx context.Context, principal, scope string) ([]string, error) {
-	rows, err := s.db.QueryContext(ctx, listRepositoryIDsGrantedToPrincipalQuery, principal, scope)
+func (s *PostgresStore) ListRepositoriesGrantedToPrincipal(ctx context.Context, principal, scope string) ([]HostedRepository, error) {
+	rows, err := s.db.QueryContext(ctx, listRepositoriesGrantedToPrincipalQuery, principal, scope)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	ids := []string{}
+	repos := []HostedRepository{}
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var repo HostedRepository
+		if err := scanHostedRepository(rows, &repo); err != nil {
 			return nil, err
 		}
-		ids = append(ids, id)
+		repos = append(repos, repo)
 	}
-	return ids, rows.Err()
+	return repos, rows.Err()
 }
 
-func (s *MemoryStore) ListRepositoryIDsGrantedToPrincipal(_ context.Context, principal, scope string) ([]string, error) {
+func (s *MemoryStore) ListRepositoriesGrantedToPrincipal(_ context.Context, principal, scope string) ([]HostedRepository, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	ids := []string{}
+	repos := []HostedRepository{}
 	for repositoryID, set := range s.repositoryGrants {
-		if _, ok := s.hostedRepositories[repositoryID]; !ok {
+		repo, ok := s.hostedRepositories[repositoryID]
+		if !ok {
 			continue
 		}
 		for _, grant := range set.Grants {
 			if grant.Principal != principal || grant.ResourcePrefix != "" {
 				continue
 			}
-			for _, granted := range grant.Scopes {
-				if granted == scope {
-					ids = append(ids, repositoryID)
-					break
-				}
+			if slices.Contains(grant.Scopes, scope) {
+				repos = append(repos, cloneHostedRepositoryOCIBearer(repo))
 			}
 			break
 		}
 	}
-	sort.Strings(ids)
-	return ids, nil
+	sort.Slice(repos, func(i, j int) bool { return repos[i].ID < repos[j].ID })
+	return repos, nil
 }

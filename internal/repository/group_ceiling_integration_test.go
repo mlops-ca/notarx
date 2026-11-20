@@ -257,11 +257,11 @@ func TestPostgresRepositoryGrantIndexListsWholeRepositoryGrantsOfOnePrincipal(t 
 			t.Fatal(err)
 		}
 	}
-	got, err := store.ListRepositoryIDsGrantedToPrincipal(ctx, principal, "repositories:admin")
-	if err != nil || len(got) != 1 || got[0] != admin.ID {
+	got, err := store.ListRepositoriesGrantedToPrincipal(ctx, principal, "repositories:admin")
+	if err != nil || len(got) != 1 || got[0].ID != admin.ID || got[0].Name != admin.Name {
 		t.Fatalf("administered = %v, %v; want only %s", got, err, admin.ID)
 	}
-	if got, err = store.ListRepositoryIDsGrantedToPrincipal(ctx, "nobody-"+uuid.NewString(), "repositories:admin"); err != nil || len(got) != 0 {
+	if got, err = store.ListRepositoriesGrantedToPrincipal(ctx, "nobody-"+uuid.NewString(), "repositories:admin"); err != nil || len(got) != 0 {
 		t.Fatalf("a principal without grants has %v, %v", got, err)
 	}
 }

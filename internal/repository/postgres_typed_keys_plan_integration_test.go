@@ -50,7 +50,6 @@ func TestPostgresTypedKeyQueriesUseIndexes(t *testing.T) {
 		{"hosted_groups first page", "hosted_groups", listHostedGroupsQuery, []any{"", 50}, true},
 		{"hosted_groups after a cursor", "hosted_groups", listHostedGroupsQuery, []any{id, 50}, true},
 		{"hosted_group_members of a page", "hosted_group_members", listHostedGroupMembersQuery, []any{[]string{id, uuid.NewString()}}, true},
-		{"repository_grants of a principal", "repository_grants", listRepositoryIDsGrantedToPrincipalQuery, []any{"alice", "repositories:admin"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -125,5 +124,47 @@ func TestPostgresIDKeysetListingsReadTheKeyInOrder(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			testsupport.RequireOrderedByIndex(t, store.db, tc.relation, tc.query, tc.args...)
 		})
+	}
+}
+
+// TestPostgresGrantIndexQueryScansItsIndex plans the candidate query of the aggregate lifecycle job listing with
+// sequential, bitmap and sort plans discouraged and expects it to find a principal's grants through
+// repository_grants_principal_idx (the primary key leads with repository_id and cannot serve it).
+func TestPostgresGrantIndexQueryScansItsIndex(t *testing.T) {
+	databaseURL := os.Getenv("TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("TEST_DATABASE_URL is required for PostgreSQL integration tests")
+	}
+	store, err := NewPostgresStore(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	tx, err := store.db.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	for _, setting := range []string{"enable_seqscan", "enable_bitmapscan"} {
+		if _, err = tx.Exec("SET LOCAL " + setting + " = off"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var raw []byte
+	if err = tx.QueryRow("EXPLAIN (FORMAT JSON) "+listRepositoriesGrantedToPrincipalQuery, "alice", "repositories:admin").Scan(&raw); err != nil {
+		t.Fatal(err)
+	}
+	var plans []struct {
+		Plan explainNode `json:"Plan"`
+	}
+	if err = json.Unmarshal(raw, &plans); err != nil || len(plans) != 1 {
+		t.Fatalf("explain output: %s %v", raw, err)
+	}
+	found := false
+	plans[0].Plan.walk(func(n explainNode) {
+		found = found || n.Relation == "repository_grants" && strings.Contains(n.IndexName, "repository_grants_principal_idx")
+	})
+	if !found {
+		t.Fatalf("the candidate query does not scan repository_grants_principal_idx: %s", raw)
 	}
 }

@@ -117,7 +117,7 @@ func (r Runtime) startLeaseHeartbeat(ctx context.Context, cancelJob context.Canc
 	if interval <= 0 {
 		interval = 3 * time.Minute
 	}
-	go func() {
+	background.Go(heartbeatCtx, func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -139,7 +139,7 @@ func (r Runtime) startLeaseHeartbeat(ctx context.Context, cancelJob context.Canc
 				return
 			}
 		}
-	}()
+	})
 	var once sync.Once
 	var stopErr error
 	return func() error {

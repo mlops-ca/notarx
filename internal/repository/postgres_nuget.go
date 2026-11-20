@@ -298,7 +298,8 @@ func (s *PostgresStore) LockNuGetPublication(ctx context.Context, repo, id, vers
 }
 
 // insertNuGetPublicationFromSession publishes a staged session: the row copies the session's
-// metadata and moves the nuspec to the object store when it is above the inline threshold.
+// metadata and moves the nuspec to the object store when it is above the inline threshold. The object is
+// written inside the commit transaction (issue #501 moves it out).
 func (s *PostgresStore) insertNuGetPublicationFromSession(ctx context.Context, tx *sql.Tx, session NuGetSession) (NuGetPublication, error) {
 	nuspec, ref, err := s.externalize(ctx, session.Nuspec)
 	if err != nil {

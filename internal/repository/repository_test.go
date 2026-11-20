@@ -638,12 +638,11 @@ func TestMemoryRepositoryGrantIndexListsWholeRepositoryGrantsOfOnePrincipal(t *t
 	grant(repos[1], "alice", "", "repositories:read")
 	grant(repos[2], "alice", "packages/", "repositories:admin")
 	grant(repos[3], "bob", "", "repositories:admin")
-	want := []string{repos[0].ID}
-	got, err := store.ListRepositoryIDsGrantedToPrincipal(ctx, "alice", "repositories:admin")
-	if err != nil || len(got) != 1 || got[0] != want[0] {
-		t.Fatalf("alice administers %v (%v), want only the whole-repository admin grant %v", got, err, want)
+	got, err := store.ListRepositoriesGrantedToPrincipal(ctx, "alice", "repositories:admin")
+	if err != nil || len(got) != 1 || got[0].ID != repos[0].ID || got[0].Name != repos[0].Name {
+		t.Fatalf("alice administers %v (%v), want only the whole-repository admin grant on %s", got, err, repos[0].ID)
 	}
-	if got, err = store.ListRepositoryIDsGrantedToPrincipal(ctx, "nobody", "repositories:admin"); err != nil || len(got) != 0 {
+	if got, err = store.ListRepositoriesGrantedToPrincipal(ctx, "nobody", "repositories:admin"); err != nil || len(got) != 0 {
 		t.Fatalf("a principal without grants has %v, %v", got, err)
 	}
 }

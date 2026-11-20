@@ -395,7 +395,8 @@ the database: the row stores the payload digest, size and object key, and the by
 object store under `meta/sha256/<hex>`, content-addressed and immutable, so a key can never
 change meaning. Every read re-verifies the digest and rejects a mismatch, and each node keeps a
 small in-process LRU of recent reads. A payload at or below the threshold stays inline in its row.
-`0` moves every non-empty payload out of the database.
+`0` moves every non-empty payload out of the database. A value above 1 MiB
+(1048576) counts as 1 MiB, the size limit of the smallest inline column.
 
 Both object-store drivers (filesystem and S3) support the namespace. These payloads move when
 they exceed the threshold: SBOM bodies, the findings of an artifact's vulnerability result (the

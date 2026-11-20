@@ -4,9 +4,15 @@ package background
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
+
+// ErrShutdown is the cancellation cause of the context a stopping process cancels its background work with. A
+// worker that sees it knows its job was interrupted by the stop, not that it failed or timed out
+// (context.Cause(ctx) reports it).
+var ErrShutdown = errors.New("process is shutting down")
 
 // Group counts the goroutines started through Go whose context carries it. Go is safe at any time,
 // also while another goroutine waits and also after every counted goroutine returned.

@@ -250,7 +250,7 @@ func TestAdministeredRepositoriesComeFromTheGrantsNotAWalk(t *testing.T) {
 	if store.listed != 0 {
 		t.Fatalf("the listing walked %d pages of the registry", store.listed)
 	}
-	if store.loaded > 2 {
-		t.Fatalf("the listing loaded %d repositories for a caller with one admin grant", store.loaded)
+	if store.loaded != 0 {
+		t.Fatalf("the candidates come from one grant query, yet the listing loaded %d repositories one by one", store.loaded)
 	}
 }

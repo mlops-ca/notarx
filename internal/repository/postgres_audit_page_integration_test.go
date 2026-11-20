@@ -119,9 +119,10 @@ func TestPostgresAuditPageMergesSecurityAndResolverTables(t *testing.T) {
 }
 
 type explainNode struct {
-	NodeType string        `json:"Node Type"`
-	Relation string        `json:"Relation Name"`
-	Plans    []explainNode `json:"Plans"`
+	NodeType  string        `json:"Node Type"`
+	Relation  string        `json:"Relation Name"`
+	IndexName string        `json:"Index Name"`
+	Plans     []explainNode `json:"Plans"`
 }
 
 func (n explainNode) walk(visit func(explainNode)) {

@@ -111,11 +111,11 @@ func (h generatedRepositoryAPIAdapter) ListLifecycleJobs(w http.ResponseWriter, 
 }
 
 // administeredRepositoryIDs lists the repositories the principal may administer, and reports whether that is
-// every repository (a role that administers them all). The candidates come from the principal's own
-// whole-repository grants through one indexed query, so the cost of a request scales with the caller's grants
-// and not with the whole registry. The authorizer stays the source of truth: each candidate is loaded and
-// authorized, so a grant that no longer decides, a repository that is gone and an account that is blocked
-// drop out exactly as they do everywhere else.
+// every repository (a role that administers them all). The candidates, with their rows, come from the
+// principal's own whole-repository grants in one indexed query, so the cost of a request scales with the
+// caller's grants and not with the whole registry. The authorizer stays the source of truth: each candidate is
+// authorized, so a grant that no longer decides and an account that is blocked drop out exactly as they do
+// everywhere else.
 func (h generatedRepositoryAPIAdapter) administeredRepositoryIDs(r *http.Request, principal Principal) (ids []string, all bool, err error) {
 	if principal.AccountStateReason() != "" {
 		return nil, false, nil
@@ -127,19 +127,12 @@ func (h generatedRepositoryAPIAdapter) administeredRepositoryIDs(r *http.Request
 	if !ok {
 		return nil, false, errGrantIndexUnavailable
 	}
-	candidates, err := index.ListRepositoryIDsGrantedToPrincipal(r.Context(), principal.Actor, authorization.GrantScopeAdmin)
+	candidates, err := index.ListRepositoriesGrantedToPrincipal(r.Context(), principal.Actor, authorization.GrantScopeAdmin)
 	if err != nil {
 		return nil, false, err
 	}
 	ids = make([]string, 0, len(candidates))
-	for _, id := range candidates {
-		repo, err := h.store.GetHostedRepository(r.Context(), id)
-		if errors.Is(err, repository.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return nil, false, err
-		}
+	for _, repo := range candidates {
 		if h.authorizer.Authorize(r.Context(), principal, repo, RepositoryAdmin).Allowed {
 			ids = append(ids, repo.ID)
 		}
