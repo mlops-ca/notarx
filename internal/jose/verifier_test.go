@@ -539,6 +539,33 @@ func TestStaleKeysServedOnFetchFailure(t *testing.T) {
 	}
 }
 
+// A failed key fetch is remembered for the negative-result bound of ADR 0023 section 6 (one second) and no
+// longer: an issuer that recovers is served again right after it, while a burst inside the bound is still not
+// forwarded to the failing issuer.
+func TestFailedKeyFetchIsRememberedForTheNegativeBoundOnly(t *testing.T) {
+	clk := newClock()
+	srv := newIssuerServer(t, pubKey(t, RS256, "k1"))
+	v := newTestVerifier(t, clk, &counters{})
+	fresh := func() string { return mint(t, RS256, "k1", claimsAt(clk, srv.URL, nil)) }
+	srv.fail.Store(true)
+	if _, err := v.Verify(t.Context(), fresh(), srv.issuer()); !errors.Is(err, ErrKeySourceUnavailable) {
+		t.Fatalf("cold start against a failing issuer err = %v, want ErrKeySourceUnavailable", err)
+	}
+	calls := srv.jwksCalls.Load()
+	srv.fail.Store(false)
+	clk.Advance(DefaultFailedFetchRetry / 2)
+	if _, err := v.Verify(t.Context(), fresh(), srv.issuer()); !errors.Is(err, ErrKeySourceUnavailable) {
+		t.Fatalf("inside the bound err = %v, want the remembered failure", err)
+	}
+	if srv.jwksCalls.Load() != calls {
+		t.Fatal("a failure inside the bound must not reach the issuer again")
+	}
+	clk.Advance(DefaultFailedFetchRetry)
+	if _, err := v.Verify(t.Context(), fresh(), srv.issuer()); err != nil {
+		t.Fatalf("past the bound the recovered issuer must be fetched again: %v", err)
+	}
+}
+
 func TestStaticJWKS(t *testing.T) {
 	clk := newClock()
 	metrics := &counters{}

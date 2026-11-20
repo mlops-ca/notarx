@@ -6,12 +6,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/jose"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
 
@@ -625,7 +627,9 @@ func TestJWKSServiceCachesAndInvalidates(t *testing.T) {
 		t.Fatal(err)
 	}
 	store.lists = 0
-	service := &JWKSService{Store: store, Now: clock.Now}
+	registry := readcache.NewRegistry(DefaultJWKSCacheTTL)
+	registry.SetClock(clock.Now)
+	service := &JWKSService{Store: store, Registry: registry, Now: clock.Now}
 	body, etag, err := service.Document(t.Context())
 	if err != nil {
 		t.Fatal(err)
@@ -648,6 +652,91 @@ func TestJWKSServiceCachesAndInvalidates(t *testing.T) {
 	_, _, _ = service.Document(t.Context())
 	if store.lists != 3 {
 		t.Fatalf("invalidate and ttl expiry must reload: %d", store.lists)
+	}
+}
+
+// The published key set lives in the shared read cache: a key change announced for the scope (the row trigger's
+// NOTIFY on another node) evicts it before the window, a lost notification still ends it at the window, and a
+// failed load is never cached.
+func TestJWKSServiceIsEvictedByTheScopeNotificationAndBoundedByTheWindow(t *testing.T) {
+	setRing(t)
+	clock := newClock()
+	store := &countingStore{MemoryStore: NewMemoryStore()}
+	if _, _, err := newManager(store, clock, jose.ES256).Reconcile(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	for _, window := range []time.Duration{5 * time.Second, time.Second} {
+		registry := readcache.NewRegistry(window)
+		registry.SetClock(clock.Now)
+		service := &JWKSService{Store: store, Registry: registry, Now: clock.Now}
+		store.lists = 0
+		_, _, _ = service.Document(t.Context())
+		_, _, _ = service.Document(t.Context())
+		if store.lists != 1 {
+			t.Fatalf("window %v: %d store reads for two requests", window, store.lists)
+		}
+		registry.HandleNotification(readcache.Payload(CacheScope, ""))
+		_, _, _ = service.Document(t.Context())
+		if store.lists != 2 {
+			t.Fatalf("window %v: the scope notification must evict the key set: %d reads", window, store.lists)
+		}
+		clock.Advance(window)
+		_, _, _ = service.Document(t.Context())
+		if store.lists != 3 {
+			t.Fatalf("window %v: a lost notification must end at the window: %d reads", window, store.lists)
+		}
+	}
+	// With every cache disabled the anonymous route still never reads the database per request.
+	registry := readcache.NewRegistry(0)
+	registry.SetClock(clock.Now)
+	service := &JWKSService{Store: store, Registry: registry, Now: clock.Now}
+	store.lists = 0
+	for range 5 {
+		_, _, _ = service.Document(t.Context())
+	}
+	if store.lists != 1 {
+		t.Fatalf("a window of 0 must still absorb anonymous traffic: %d reads for 5 requests", store.lists)
+	}
+	service.Invalidate()
+	_, _, _ = service.Document(t.Context())
+	clock.Advance(DisabledJWKSCacheTTL)
+	_, _, _ = service.Document(t.Context())
+	if store.lists != 3 {
+		t.Fatalf("a key change and the floor must reload: %d reads", store.lists)
+	}
+}
+
+// The trigger of migration 000007 and the cache name the service registers must agree on the scope.
+func TestSigningKeyTriggerNamesTheCacheScope(t *testing.T) {
+	body, err := os.ReadFile("../../migrations/000007_read_cache_account_state.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "ON public.token_signing_keys FOR EACH ROW EXECUTE FUNCTION public.notarx_notify_cache('" + CacheScope + "', '')"; !strings.Contains(string(body), want) {
+		t.Fatalf("migration 000007 does not announce %q on token_signing_keys", CacheScope)
+	}
+}
+
+type failingKeyReader struct {
+	calls int
+	err   error
+}
+
+func (r *failingKeyReader) ListPublicKeys(context.Context) ([]KeyRecord, error) {
+	r.calls++
+	return nil, r.err
+}
+
+func TestJWKSServiceNeverCachesAFailedLoad(t *testing.T) {
+	reader := &failingKeyReader{err: errors.New("database down")}
+	service := &JWKSService{Store: reader}
+	for range 3 {
+		if _, _, err := service.Document(t.Context()); err == nil {
+			t.Fatal("a failed key read must fail the request")
+		}
+	}
+	if reader.calls != 3 {
+		t.Fatalf("a failure was cached: %d reads for 3 requests", reader.calls)
 	}
 }
 

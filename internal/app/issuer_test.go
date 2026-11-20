@@ -44,7 +44,7 @@ func newIssuerFixture(t *testing.T) (*IssuerRuntime, *countingKeyStore, http.Han
 	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
 	t.Setenv(secrets.KeyPreviousEnv, "")
 	store := &countingKeyStore{MemoryStore: tokenissuer.NewMemoryStore()}
-	runtime, err := NewIssuerRuntime(issuerTestConfig(), store, "deployment")
+	runtime, err := NewIssuerRuntime(issuerTestConfig(), store, "deployment", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func issuerGet(handler http.Handler, path string, headers map[string]string) *ht
 func TestIssuerRoutesAnswer404WhenDisabled(t *testing.T) {
 	disabled := issuerTestConfig()
 	disabled.Enabled = false
-	runtime, err := NewIssuerRuntime(disabled, tokenissuer.NewMemoryStore(), "id")
+	runtime, err := NewIssuerRuntime(disabled, tokenissuer.NewMemoryStore(), "id", nil)
 	if err != nil || runtime != nil {
 		t.Fatalf("a disabled issuer builds nothing: %v %v", runtime, err)
 	}
@@ -290,7 +290,7 @@ func TestIssuerRotationWorkerStartsAndStops(t *testing.T) {
 	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
 	t.Setenv(secrets.KeyPreviousEnv, "")
 	store := tokenissuer.NewMemoryStore()
-	runtime, err := NewIssuerRuntime(issuerTestConfig(), store, "id")
+	runtime, err := NewIssuerRuntime(issuerTestConfig(), store, "id", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,12 +312,12 @@ func TestIssuerRotationWorkerStartsAndStops(t *testing.T) {
 func TestNewIssuerRuntimeRejectsBadLifecycle(t *testing.T) {
 	bad := issuerTestConfig()
 	bad.KeyPublishLead = 0
-	if _, err := NewIssuerRuntime(bad, tokenissuer.NewMemoryStore(), "id"); err == nil {
+	if _, err := NewIssuerRuntime(bad, tokenissuer.NewMemoryStore(), "id", nil); err == nil {
 		t.Fatal("accepted")
 	}
 	bad = issuerTestConfig()
 	bad.Alg = "none"
-	if _, err := NewIssuerRuntime(bad, tokenissuer.NewMemoryStore(), "id"); err == nil {
+	if _, err := NewIssuerRuntime(bad, tokenissuer.NewMemoryStore(), "id", nil); err == nil {
 		t.Fatal("accepted")
 	}
 }

@@ -19,7 +19,15 @@ import (
 	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
 
-type Store struct{ db, locks *sql.DB }
+type Store struct {
+	db, locks *sql.DB
+	// readPolicyChanged is told the repository id after a read policy commit, so the serving node evicts its
+	// read caches synchronously instead of waiting for its own notification.
+	readPolicyChanged func(repositoryID string)
+}
+
+// OnReadPolicyChange installs the hook run after ReplaceReadPolicy commits. Call it before the store serves.
+func (s *Store) OnReadPolicyChange(hook func(repositoryID string)) { s.readPolicyChanged = hook }
 
 // New uses caller-owned pools. The dedicated lock pool must not be the same
 // single-connection pool used by transactional publication queries.
@@ -27,7 +35,7 @@ func New(db, locks *sql.DB) (*Store, error) {
 	if db == nil || locks == nil {
 		return nil, errors.New("RubyGems database and advisory-lock pools are required")
 	}
-	return &Store{db, locks}, nil
+	return &Store{db: db, locks: locks}, nil
 }
 
 const columns = `id::text,repository_id::text,name,version,platform,digest,size,actor,state,object_key,metadata_json,metadata_yaml,created_at,expires_at,committed_at,collected_at,governance_version::text,yanked,quarantined,governance_updated_at,governance_updated_by,governance_reason`

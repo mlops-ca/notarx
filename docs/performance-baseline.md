@@ -253,20 +253,24 @@ the sizes that matter, and two make targets reproduce them.
 
 `make perf-seed PROFILE=tiny|freetier|target NOTARX_DATABASE_URL=...` runs
 `tools/datagen` against a migrated, empty PostgreSQL database. It bulk-loads
-repositories, packages, versions and audit rows with `COPY`, draws repository,
-package and actor popularity from a Zipf distribution so hot artifacts exist, and
-finishes with `ANALYZE`. The generation is deterministic for a seed and start time, and
+repositories, packages, versions, audit rows and webhook deliveries with `COPY`, draws
+repository, package, actor and subscription popularity from a Zipf distribution so hot
+artifacts exist, and finishes with `ANALYZE`. The generation is deterministic for a seed and start time, and
 runs in one transaction, so a failed run leaves nothing behind and can be repeated.
 
-| Profile | Versions | Audit rows | Use |
-| --- | --- | --- | --- |
-| `tiny` | 100,000 | 1,000,000 | CI and local checks |
-| `freetier` | 1,000,000 | 20,000,000 | OCI free-tier sizing |
-| `target` | 10,000,000 | 100,000,000 | on-demand capacity runs (8 vCPU, 32 GB, NVMe) |
+| Profile | Versions | Audit rows | Webhook deliveries | Use |
+| --- | --- | --- | --- | --- |
+| `tiny` | 100,000 | 1,000,000 | 20,000 | CI and local checks |
+| `freetier` | 1,000,000 | 20,000,000 | 1,000,000 | OCI free-tier sizing |
+| `target` | 10,000,000 | 100,000,000 | 20,000,000 | on-demand capacity runs (8 vCPU, 32 GB, NVMe) |
 
-The seed format is npm. The 20 million webhook deliveries of the `target` profile
-and the other formats are tracked as follow-up slices of ADR 0023 slice 17; the figures of ADR 0023 section 11 stay estimates until a
-`target` run replaces them.
+Webhook deliveries follow the state mix of a long-running instance: 90 percent
+succeeded, 4 pending, 2 retrying, 3 dead and 1 leased, spread over the profile's time
+window and fanned out to four subscriptions per event.
+
+The seed format is npm. The other formats, the `target` run and the ratification of the
+SLOs are tracked as follow-up slices of ADR 0023 slice 17; the figures of ADR 0023
+section 11 stay estimates until a `target` run replaces them.
 
 ## Mixed load profile
 

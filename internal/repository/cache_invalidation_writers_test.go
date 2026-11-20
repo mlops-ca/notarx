@@ -16,13 +16,21 @@ import (
 // needs no local eviction.
 func TestCachedTablesHaveNoOtherWriters(t *testing.T) {
 	allowed := []string{
-		"internal/repository/postgres_hosted.go",        // management methods wrapped with invalidateLocal
-		"internal/repository/postgres_public_access.go", // ReplacePublicAccessPolicy evicts the policy scope
-		"internal/repositorypreset/pgstore/store.go",    // first-install presets run before the caches start
-		"internal/secrets/reseal/reseal.go",             // notarxctl secrets reseal runs in its own process
-		"internal/testsupport/purge.go",                 // test support
+		"internal/repository/postgres_hosted.go",                  // management methods wrapped with invalidateLocal
+		"internal/repository/postgres_users.go",                   // every user mutation evicts the user
+		"internal/repository/postgres_user_identities.go",         // ResolveOIDCIdentity evicts the provisioned or linked user
+		"internal/repository/postgres_authorization_templates.go", // ApplyAuthorizationTemplate evicts the grant set
+		"internal/repository/postgres_quarantine_read_policy.go",  // the quarantine read policy mutations evict their repository
+		"internal/repository/postgres_helm_governance.go",         // idem
+		"internal/repository/postgres_nuget_governance.go",        // idem
+		"internal/rubygemspublication/pgstore/read_policy.go",     // ReplaceReadPolicy runs the OnReadPolicyChange hook, which main wires to the quarantine scope
+		"internal/repository/postgres_workload.go",                // workload issuer and policy mutations evict their entity
+		"internal/repository/postgres_public_access.go",           // ReplacePublicAccessPolicy evicts the policy scope
+		"internal/repositorypreset/pgstore/store.go",              // first-install presets run before the caches start
+		"internal/secrets/reseal/reseal.go",                       // notarxctl secrets reseal runs in its own process
+		"internal/testsupport/purge.go",                           // test support
 	}
-	writes := regexp.MustCompile(`(?i)\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+(public\.)?(hosted_repositories|hosted_groups|hosted_group_members|public_access_policy)\b`)
+	writes := regexp.MustCompile(`(?i)\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+(public\.)?(hosted_repositories|hosted_groups|hosted_group_members|public_access_policy|users|repository_grants|repository_quarantine_read_policies|workload_issuers|workload_trust_policies)\b`)
 	root := filepath.Join("..", "..")
 	var found []string
 	for _, dir := range []string{"cmd", "internal"} {

@@ -53,5 +53,11 @@ func (s *Store) ReplaceReadPolicy(ctx context.Context, c domain.PolicyChange, ch
 	if err = domain.CheckGovernance(ctx, check, a); err != nil {
 		return current, err
 	}
-	return next, tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return next, err
+	}
+	if audit != nil && s.readPolicyChanged != nil {
+		s.readPolicyChanged(c.RepositoryID)
+	}
+	return next, nil
 }

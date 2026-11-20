@@ -19,6 +19,15 @@ const (
 	CacheScopeRepository = "repository"
 	CacheScopeGroup      = "group"
 	CacheScopePolicy     = "policy"
+	// CacheScopeUser, CacheScopeQuarantine and CacheScopeGrants are the account and repository-state inputs of the
+	// authenticated read path: users (state, role, session version), the quarantine read policy of a repository
+	// and its grant set. Their NOTIFY comes from row triggers (migration 000007), keyed by user id and repository id.
+	CacheScopeUser       = "user"
+	CacheScopeQuarantine = "quarantine"
+	CacheScopeGrants     = "grants"
+	// CacheScopeWorkloadIssuer and CacheScopeWorkloadPolicy are the workload issuers and trust policies of ADR 0019.
+	CacheScopeWorkloadIssuer = "workload_issuer"
+	CacheScopeWorkloadPolicy = "workload_policy"
 )
 
 // CacheInvalidator evicts the cached entries of one entity in this process.
@@ -29,7 +38,8 @@ type CacheInvalidator func(scope, id string)
 // change through the pg_notify the mutation sent in its transaction.
 //
 // Every write a serving process makes to the cached tables (hosted_repositories,
-// hosted_groups, hosted_group_members, public_access_policy) goes through the
+// hosted_groups, hosted_group_members, public_access_policy, users, repository_grants,
+// repository_quarantine_read_policies, workload_issuers, workload_trust_policies) goes through the
 // store methods that run this eviction; TestCachedTablesHaveNoOtherWriters keeps
 // it so. The two other writers rely on the trigger notification alone: the
 // first-install repository presets run before the caches start, and
@@ -46,6 +56,13 @@ func (s *PostgresStore) invalidateLocal(scope, id string) {
 	if invalidate := s.cacheInvalidator.Load(); invalidate != nil && id != "" {
 		(*invalidate)(scope, id)
 	}
+}
+
+// invalidateGrants evicts what a grant mutation of a repository changes in this process: the grant set and the
+// repository row, whose grants_version the grant set is keyed on.
+func (s *PostgresStore) invalidateGrants(repositoryID string) {
+	s.invalidateLocal(CacheScopeGrants, repositoryID)
+	s.invalidateLocal(CacheScopeRepository, repositoryID)
 }
 
 // invalidateLocalScope flushes every cached entry of a scope in this process, for a change whose affected

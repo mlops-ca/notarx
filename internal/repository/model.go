@@ -57,7 +57,10 @@ type HostedRepository struct {
 	MavenStrictPublication bool            `json:"mavenStrictPublication"`
 	State                  RepositoryState `json:"state"`
 	Version                string          `json:"version"`
-	CreatedAt              time.Time       `json:"-"`
+	// GrantsVersion counts the changes of the repository grant set. Every grant mutation bumps it in its own
+	// transaction, so the read cache of grant sets (ADR 0023 section 6) keys on it and a bump is a miss.
+	GrantsVersion int64     `json:"-"`
+	CreatedAt     time.Time `json:"-"`
 }
 
 // EgressProxyMode selects how a Proxy Repository reaches its upstream.

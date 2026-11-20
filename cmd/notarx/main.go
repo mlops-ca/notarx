@@ -376,7 +376,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	metrics.WithQuotaDriftStats(quotaReconciler.Stats)
 	go quotaReconciler.Run(runtimeContext)
 	// Every node runs the issuer's key rotation worker; the database lock lets one act at a time.
-	issuerRuntime, err := setupIssuer(runtimeContext, cfg.Issuer, store)
+	issuerRuntime, err := setupIssuer(runtimeContext, cfg.Issuer, store, caches.registry)
 	if err != nil {
 		slog.Error("configure the OIDC issuer", "error", err)
 		return 1
@@ -462,6 +462,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			slog.Error("configure RubyGems preview publication store", "error", err)
 			return 1
 		}
+		rubyGemsStore.OnReadPolicyChange(func(repositoryID string) { caches.registry.Invalidate(repository.CacheScopeQuarantine, repositoryID) })
 		rubyGemsMaintenance, err = rubygemsformat.NewMaintenance(rubyGemsStore, objectStore)
 		if err != nil {
 			slog.Error("configure RubyGems preview maintenance", "error", err)

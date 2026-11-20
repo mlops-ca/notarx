@@ -64,7 +64,7 @@ func enabledIssuer() config.IssuerConfig {
 
 func TestSetupIssuerDisabledIsInert(t *testing.T) {
 	store := newFakeIssuerStore()
-	runtime, err := setupIssuer(t.Context(), config.IssuerConfig{}, store)
+	runtime, err := setupIssuer(t.Context(), config.IssuerConfig{}, store, nil)
 	if runtime != nil || err != nil || len(store.settings) != 0 {
 		t.Fatalf("runtime=%v err=%v settings=%v", runtime, err, store.settings)
 	}
@@ -72,7 +72,7 @@ func TestSetupIssuerDisabledIsInert(t *testing.T) {
 
 func TestSetupIssuerRequiresTheEncryptionKey(t *testing.T) {
 	t.Setenv(secrets.KeyEnv, "")
-	if _, err := setupIssuer(t.Context(), enabledIssuer(), newFakeIssuerStore()); err == nil || !strings.Contains(err.Error(), "encryption key") {
+	if _, err := setupIssuer(t.Context(), enabledIssuer(), newFakeIssuerStore(), nil); err == nil || !strings.Contains(err.Error(), "encryption key") {
 		t.Fatalf("err=%v", err)
 	}
 }
@@ -84,7 +84,7 @@ func TestSetupIssuerRecordsURLAndBuildsRuntime(t *testing.T) {
 		repository.AllowEntraWorkload(false)
 	})
 	store := newFakeIssuerStore()
-	runtime, err := setupIssuer(t.Context(), enabledIssuer(), store)
+	runtime, err := setupIssuer(t.Context(), enabledIssuer(), store, nil)
 	if err != nil || runtime == nil || runtime.DeploymentID != "dep-1" {
 		t.Fatalf("runtime=%v err=%v", runtime, err)
 	}
@@ -153,7 +153,7 @@ func TestSetupIssuerInstallsTheEntraSchemeAndAuditsExchanges(t *testing.T) {
 	})
 	store := newFakeIssuerStore()
 	cfg := enabledIssuer()
-	if _, err := setupIssuer(t.Context(), cfg, store); err != nil {
+	if _, err := setupIssuer(t.Context(), cfg, store, nil); err != nil {
 		t.Fatal(err)
 	}
 	auth := &repository.UpstreamAuth{Scheme: repository.UpstreamAuthSchemeEntraWorkload, TenantID: "contoso.onmicrosoft.com",

@@ -84,6 +84,14 @@ func parseWorkloadVersion(version string) (int64, error) {
 }
 
 func (s *PostgresStore) CreateWorkloadIssuer(ctx context.Context, issuer WorkloadIssuer, audit ...AuditRecord) (WorkloadIssuer, error) {
+	saved, err := s.createWorkloadIssuerMutation(ctx, issuer, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeWorkloadIssuer, saved.ID)
+	}
+	return saved, err
+}
+
+func (s *PostgresStore) createWorkloadIssuerMutation(ctx context.Context, issuer WorkloadIssuer, audit ...AuditRecord) (WorkloadIssuer, error) {
 	issuer, err := normalizeWorkloadIssuer(issuer)
 	if err != nil {
 		return WorkloadIssuer{}, err
@@ -154,6 +162,14 @@ func (s *PostgresStore) ListWorkloadIssuers(ctx context.Context, limit int, afte
 }
 
 func (s *PostgresStore) UpdateWorkloadIssuer(ctx context.Context, issuer WorkloadIssuer, expectedVersion string, audit ...AuditRecord) (WorkloadIssuer, error) {
+	saved, err := s.updateWorkloadIssuerMutation(ctx, issuer, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeWorkloadIssuer, saved.ID)
+	}
+	return saved, err
+}
+
+func (s *PostgresStore) updateWorkloadIssuerMutation(ctx context.Context, issuer WorkloadIssuer, expectedVersion string, audit ...AuditRecord) (WorkloadIssuer, error) {
 	issuer, err := normalizeWorkloadIssuer(issuer)
 	if err != nil {
 		return WorkloadIssuer{}, err
@@ -183,6 +199,14 @@ func (s *PostgresStore) UpdateWorkloadIssuer(ctx context.Context, issuer Workloa
 }
 
 func (s *PostgresStore) DeleteWorkloadIssuer(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) error {
+	err := s.deleteWorkloadIssuerMutation(ctx, id, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeWorkloadIssuer, id)
+	}
+	return err
+}
+
+func (s *PostgresStore) deleteWorkloadIssuerMutation(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) error {
 	version, err := parseWorkloadVersion(expectedVersion)
 	if err != nil {
 		return err
@@ -217,6 +241,14 @@ func deleteWorkloadRow(ctx context.Context, q sqlRunner, table, id string, versi
 }
 
 func (s *PostgresStore) CreateWorkloadTrustPolicy(ctx context.Context, policy WorkloadTrustPolicy, audit ...AuditRecord) (WorkloadTrustPolicy, error) {
+	saved, err := s.createWorkloadTrustPolicyMutation(ctx, policy, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeWorkloadPolicy, saved.ID)
+	}
+	return saved, err
+}
+
+func (s *PostgresStore) createWorkloadTrustPolicyMutation(ctx context.Context, policy WorkloadTrustPolicy, audit ...AuditRecord) (WorkloadTrustPolicy, error) {
 	policy, err := normalizeWorkloadTrustPolicy(policy)
 	if err != nil {
 		return WorkloadTrustPolicy{}, err
@@ -278,6 +310,14 @@ func (s *PostgresStore) ListActiveWorkloadTrustPolicies(ctx context.Context, iss
 }
 
 func (s *PostgresStore) UpdateWorkloadTrustPolicy(ctx context.Context, policy WorkloadTrustPolicy, expectedVersion string, audit ...AuditRecord) (WorkloadTrustPolicy, error) {
+	saved, err := s.updateWorkloadTrustPolicyMutation(ctx, policy, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeWorkloadPolicy, saved.ID)
+	}
+	return saved, err
+}
+
+func (s *PostgresStore) updateWorkloadTrustPolicyMutation(ctx context.Context, policy WorkloadTrustPolicy, expectedVersion string, audit ...AuditRecord) (WorkloadTrustPolicy, error) {
 	policy, err := normalizeWorkloadTrustPolicy(policy)
 	if err != nil {
 		return WorkloadTrustPolicy{}, err
@@ -310,6 +350,14 @@ func (s *PostgresStore) UpdateWorkloadTrustPolicy(ctx context.Context, policy Wo
 }
 
 func (s *PostgresStore) DeleteWorkloadTrustPolicy(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) error {
+	err := s.deleteWorkloadTrustPolicyMutation(ctx, id, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeWorkloadPolicy, id)
+	}
+	return err
+}
+
+func (s *PostgresStore) deleteWorkloadTrustPolicyMutation(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) error {
 	version, err := parseWorkloadVersion(expectedVersion)
 	if err != nil {
 		return err

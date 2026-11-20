@@ -311,12 +311,17 @@ Counters for a repository that was deleted or renamed before the flush are disca
 Each node keeps in-process read caches (ADR 0023 section 6): API-key principals by
 key hash and service-account state, hosted repositories by id and by name
 (visibility included), hosted groups with their members and the public access
-gate (the access-decision inputs of ADR 0029). Grants, users and quarantine state
-are not cached yet. The caches remove the per-request database queries of a
-protocol read; a warm cache issues no statement for credential, repository, group
-or policy lookup. No shared cache is involved. A change to a repository, group or
-the public access gate is announced by a database trigger in the mutating
-transaction, so no write path can forget it. A cached group holds its member ids
+gate (the access-decision inputs of ADR 0029), users by id and by name, the
+quarantine read policy of a repository, repository grant sets, the workload
+issuers and trust policies of ADR 0019 and the published signing key set of the
+notarx issuer (ADR 0020). A grant set is keyed by the repository id and its
+`grants_version`, which every grant mutation bumps in its transaction, so a bumped
+version is a miss even when an eviction is lost. User group ids and the verified
+token result are not cached yet. The caches remove the per-request database
+queries of a protocol read; a warm cache issues no statement for credential, user,
+repository, group, policy, quarantine or grant lookup. No shared cache is
+involved. A change to any of these rows is announced by a database trigger in the
+mutating transaction, so no write path can forget it. A cached group holds its member ids
 only and every member is read through the repository cache, so a repository change
 evicts that repository and leaves the groups cached. The serving node's own writes
 (the management API) also evict synchronously; the first-install repository presets
@@ -345,7 +350,10 @@ NOTARX_OVERVIEW_CACHE_TTL=30s
   token minting, login and every management API authorization read the database
   and never use these caches; only protocol reads do. A caller that supplies no
   request context reads through too.
-- **Negative results** (unknown key, unknown repository or group name) are cached
+- **Failed fetches.** A failed fetch of an external issuer's key set is remembered for
+  one second only (the negative-result bound), then the next verification fetches
+  again; the last good key set keeps serving in the meantime.
+- **Negative results** (unknown key, unknown user, repository or group name) are cached
   for at most 1s, so a key created on one node can take up to 1s to be accepted on
   another; a repository or group created on the node that serves the request is
   visible at once, because the invalidation of any repository clears the cached
@@ -440,7 +448,9 @@ Every node runs the rotation worker; one acts at a time under the PostgreSQL adv
 `notarx:issuer-rotation`. A `next` key is generated at rotation interval minus publish lead and
 promoted only after it was published for the whole lead, so verifiers trust it before it signs. A
 retired key stays published until `retired_at` plus the maximum token lifetime plus the lead.
-Nodes cache the active key for at most 30 seconds. Switching `NOTARX_ISSUER_ALG` only changes which
+Nodes cache the active key for at most 30 seconds; the published key set (JWKS) is a read cache
+of the authorization window (one second when `NOTARX_AUTHZ_CACHE_TTL=0`, so anonymous traffic never reaches the
+database per request) and is evicted on every node when a key rotates or is revoked. Switching `NOTARX_ISSUER_ALG` only changes which
 active key signs; the missing algorithm's key pair is created on the next pass.
 
 Each key row carries an `integrity_mac` keyed from the encryption key ring. Rows that fail it

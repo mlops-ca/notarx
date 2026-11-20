@@ -15,6 +15,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/jose"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/tokenissuer"
 )
 
@@ -48,12 +49,14 @@ type IssuerRuntime struct {
 	limiter       *clientLimiter
 }
 
-// NewIssuerRuntime wires the issuer for cfg on store. It returns nil when the issuer is disabled.
-func NewIssuerRuntime(cfg config.IssuerConfig, store tokenissuer.Store, deploymentID string) (*IssuerRuntime, error) {
+// NewIssuerRuntime wires the issuer for cfg on store. The published key set is cached in registry, which the
+// NOTIFY listener evicts when another node rotates a key; a nil registry keeps a private cache with the default
+// lifetime. It returns nil when the issuer is disabled.
+func NewIssuerRuntime(cfg config.IssuerConfig, store tokenissuer.Store, deploymentID string, registry *readcache.Registry) (*IssuerRuntime, error) {
 	if !cfg.Enabled {
 		return nil, nil
 	}
-	jwks := &tokenissuer.JWKSService{Store: store}
+	jwks := &tokenissuer.JWKSService{Store: store, Registry: registry}
 	signer, err := tokenissuer.NewLocalSigner(store, tokenissuer.SignerConfig{Alg: cfg.Alg})
 	if err != nil {
 		return nil, err

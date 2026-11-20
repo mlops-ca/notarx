@@ -26,6 +26,14 @@ func scanUser(row interface{ Scan(...any) error }, user *User) error {
 }
 
 func (s *PostgresStore) CreateUser(ctx context.Context, user User, audit ...AuditRecord) (User, error) {
+	user, err := s.createUserMutation(ctx, user, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeUser, user.ID)
+	}
+	return user, err
+}
+
+func (s *PostgresStore) createUserMutation(ctx context.Context, user User, audit ...AuditRecord) (User, error) {
 	var passwordChangedAt *time.Time
 	if user.SecretHash != "" {
 		now := time.Now().UTC()
@@ -123,6 +131,14 @@ func (s *PostgresStore) GetUserByName(ctx context.Context, name string) (User, e
 }
 
 func (s *PostgresStore) UpdateUser(ctx context.Context, update UserUpdate, expectedVersion string, audit ...AuditRecord) (User, error) {
+	user, err := s.updateUserMutation(ctx, update, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeUser, user.ID)
+	}
+	return user, err
+}
+
+func (s *PostgresStore) updateUserMutation(ctx context.Context, update UserUpdate, expectedVersion string, audit ...AuditRecord) (User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return User{}, err
@@ -191,6 +207,14 @@ func stringValue(value *string) string {
 }
 
 func (s *PostgresStore) DeleteUser(ctx context.Context, id string, audit ...AuditRecord) error {
+	err := s.deleteUserMutation(ctx, id, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeUser, id)
+	}
+	return err
+}
+
+func (s *PostgresStore) deleteUserMutation(ctx context.Context, id string, audit ...AuditRecord) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -226,6 +250,14 @@ func (s *PostgresStore) DeleteUser(ctx context.Context, id string, audit ...Audi
 }
 
 func (s *PostgresStore) RecordUserLoginSuccess(ctx context.Context, id string, occurredAt time.Time, audit ...AuditRecord) (User, error) {
+	user, err := s.recordUserLoginSuccessMutation(ctx, id, occurredAt, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeUser, user.ID)
+	}
+	return user, err
+}
+
+func (s *PostgresStore) recordUserLoginSuccessMutation(ctx context.Context, id string, occurredAt time.Time, audit ...AuditRecord) (User, error) {
 	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
 		var user User
 		err := scanUser(q.QueryRowContext(ctx, `UPDATE users SET last_login_at=$2, failed_login_attempts=0, locked_until=NULL, version=version+1, updated_at=$2 WHERE id=$1::uuid RETURNING `+userColumns, id, occurredAt.UTC()), &user)
@@ -237,6 +269,14 @@ func (s *PostgresStore) RecordUserLoginSuccess(ctx context.Context, id string, o
 }
 
 func (s *PostgresStore) RecordUserLoginFailure(ctx context.Context, id string, occurredAt time.Time, maxAttempts int, lockout time.Duration, audit ...AuditRecord) (User, error) {
+	user, err := s.recordUserLoginFailureMutation(ctx, id, occurredAt, maxAttempts, lockout, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeUser, user.ID)
+	}
+	return user, err
+}
+
+func (s *PostgresStore) recordUserLoginFailureMutation(ctx context.Context, id string, occurredAt time.Time, maxAttempts int, lockout time.Duration, audit ...AuditRecord) (User, error) {
 	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
 		var user User
 		lockedUntil := occurredAt.UTC().Add(lockout)
@@ -249,6 +289,14 @@ func (s *PostgresStore) RecordUserLoginFailure(ctx context.Context, id string, o
 }
 
 func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id, secretHash, expectedVersion string, mustChange bool, audit ...AuditRecord) (User, error) {
+	user, err := s.updateUserPasswordMutation(ctx, id, secretHash, expectedVersion, mustChange, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeUser, user.ID)
+	}
+	return user, err
+}
+
+func (s *PostgresStore) updateUserPasswordMutation(ctx context.Context, id, secretHash, expectedVersion string, mustChange bool, audit ...AuditRecord) (User, error) {
 	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
 		var user User
 		err := scanUser(q.QueryRowContext(ctx, `WITH updated_user AS (
@@ -267,6 +315,14 @@ func (s *PostgresStore) UpdateUserPassword(ctx context.Context, id, secretHash, 
 }
 
 func (s *PostgresStore) RevokeUserSessions(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) (User, error) {
+	user, err := s.revokeUserSessionsMutation(ctx, id, expectedVersion, audit...)
+	if err == nil {
+		s.invalidateLocal(CacheScopeUser, user.ID)
+	}
+	return user, err
+}
+
+func (s *PostgresStore) revokeUserSessionsMutation(ctx context.Context, id, expectedVersion string, audit ...AuditRecord) (User, error) {
 	return runAudited(ctx, s, audit, func(q sqlRunner) (User, error) {
 		var user User
 		err := scanUser(q.QueryRowContext(ctx, `WITH updated_user AS (

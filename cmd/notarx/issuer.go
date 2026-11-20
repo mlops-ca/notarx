@@ -10,6 +10,7 @@ import (
 
 	"github.com/mlops-ca/notarx/internal/app"
 	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 	"github.com/mlops-ca/notarx/internal/tokenissuer"
@@ -29,7 +30,7 @@ type issuerStore interface {
 
 // setupIssuer validates the issuer against the database and builds its runtime. It returns nil
 // while the issuer is disabled, so air-gapped installs run nothing and touch nothing.
-func setupIssuer(ctx context.Context, cfg config.IssuerConfig, store issuerStore) (*app.IssuerRuntime, error) {
+func setupIssuer(ctx context.Context, cfg config.IssuerConfig, store issuerStore, registry *readcache.Registry) (*app.IssuerRuntime, error) {
 	if !cfg.Enabled {
 		return nil, nil
 	}
@@ -46,7 +47,7 @@ func setupIssuer(ctx context.Context, cfg config.IssuerConfig, store issuerStore
 	if err != nil {
 		return nil, fmt.Errorf("read the deployment id: %w", err)
 	}
-	runtime, err := app.NewIssuerRuntime(cfg, store, deploymentID)
+	runtime, err := app.NewIssuerRuntime(cfg, store, deploymentID, registry)
 	if err != nil {
 		return nil, err
 	}
