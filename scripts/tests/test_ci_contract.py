@@ -370,15 +370,36 @@ class PlanTests(unittest.TestCase):
             self.assertTrue(all(not e['images'] for e in groups['early']))
             self.assertTrue(all(e['images'] and e['arch'] == 'amd64' for e in groups['amd64']))
             self.assertTrue(all(e['images'] and e['arch'] == 'arm64' for e in groups['arm64']))
-        # The lanes that drive the gateway image load it; the integration shards, the
-        # backup lane and the load test build what they run.
+        # A job is early only when none of its lanes loads the images.
         early = {lane for e in generate('--group', 'early') for lane in e['lanes'].split()}
-        self.assertEqual(early, {'core-backup', 'core-integration-1', 'core-integration-2', 'core-integration-3',
-                                 'perf-load'})
+        self.assertTrue(early)
+        self.assertEqual(early, {name for name, lanes in ci.jobs() for name in lanes
+                                 if not any(ci.PLAN['lanes'][lane]['images'] for lane in lanes)})
         self.assertEqual(generate('--scope', 'pull-request', '--no-arm64', '--group', 'arm64'), [])
         refused = subprocess.run([sys.executable, str(ROOT / 'scripts/ci-contract.py'), 'matrix', '--group', 'x'],
                                  capture_output=True, text=True)
         self.assertEqual(refused.returncode, 2, refused.stdout + refused.stderr)
+
+    def test_every_contract_group_job_passes_every_lane_input(self):
+        # The three group jobs call contract-lane.yml with the same inputs; one that
+        # missed an input would silently run with its default (images defaults to true).
+        suite = (ROOT / '.github/workflows/test-suite.yml').read_text()
+        lane_workflow = (ROOT / '.github/workflows/contract-lane.yml').read_text()
+        inputs_block = lane_workflow.split('    inputs:\n', 1)[1].split('\npermissions:', 1)[0]
+        inputs = set(re.findall(r'(?m)^      ([a-z][\w-]*):$', inputs_block))
+        self.assertIn('images', inputs)
+        callers = [(name, body) for name, body in
+                   re.findall(r'(?ms)^  (contract-[a-z0-9]+):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)', suite)
+                   if 'contract-lane.yml' in body]
+        self.assertEqual(sorted(name for name, _ in callers), sorted('contract-' + g for g in ci.GROUPS))
+        for name, body in callers:
+            with self.subTest(job=name):
+                self.assertIn('uses: ./.github/workflows/contract-lane.yml', body)
+                passed = set(re.findall(r'(?m)^      ([a-z][\w-]*): ', body.split('    with:\n', 1)[1]))
+                self.assertEqual(passed, inputs)
+                group = name.split('-', 1)[1]
+                self.assertIn('fromJSON(needs.contract-plan.outputs.' + group + ')', body)
+                self.assertIn("if: needs.contract-plan.outputs." + group + "-jobs != '0'", body)
 
     def test_packed_jobs_follow_the_plan(self):
         packs = ci.PLAN['jobs']

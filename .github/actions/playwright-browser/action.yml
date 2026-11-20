@@ -80,7 +80,29 @@ runs:
         # The archive directory setting must not outlive this step, and apt ran
         # as root: hand the packages to the runner user so the cache save can
         # read them, and drop the root-only lock and partial downloads.
-        trap 'sudo rm -f /etc/apt/apt.conf.d/80-playwright-deps; sudo rm -rf ~/.cache/playwright-deps/partial ~/.cache/playwright-deps/lock; sudo chown -R "$(id -u):$(id -g)" ~/.cache/playwright-deps; ls ~/.cache/playwright-deps/*.deb >/dev/null 2>&1 && echo "debs=true" >> "$GITHUB_OUTPUT"' EXIT
+        # Packages restored from another runner image version that apt did not
+        # use are dropped before the save, so the cache holds one version of each
+        # package and does not grow with every image: a package installed at
+        # another version always goes, and after a successful install so does
+        # every package that is not installed. A failed install keeps those for
+        # the next run to resume from.
+        finish() {
+          local status=$? deb name arch version installed
+          sudo rm -f /etc/apt/apt.conf.d/80-playwright-deps
+          sudo rm -rf ~/.cache/playwright-deps/partial ~/.cache/playwright-deps/lock
+          sudo chown -R "$(id -u):$(id -g)" ~/.cache/playwright-deps
+          for deb in ~/.cache/playwright-deps/*.deb; do
+            [[ -e "$deb" ]] || continue
+            read -r name arch version < <(dpkg-deb --show --showformat='${Package} ${Architecture} ${Version}\n' "$deb") || continue
+            if [[ "$arch" != all ]]; then name="$name:$arch"; fi
+            installed=$(dpkg-query --show --showformat='${Version}' "$name" 2>/dev/null || true)
+            if [[ -n "$installed" && "$installed" != "$version" ]] || [[ "$status" == 0 && -z "$installed" ]]; then
+              rm -f "$deb"
+            fi
+          done
+          if ls ~/.cache/playwright-deps/*.deb >/dev/null 2>&1; then echo "debs=true" >> "$GITHUB_OUTPUT"; fi
+        }
+        trap finish EXIT
         timeout 480 npx playwright install-deps chromium
     # Saved as soon as the step ends, not at the end of the job, so a later flaky
     # test cannot keep the cache from being written. Nothing is saved when no

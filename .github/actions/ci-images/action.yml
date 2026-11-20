@@ -49,6 +49,9 @@ runs:
         fi
         go mod verify
         echo "GOMOD_SEED=$GOMOD_DIR" >> "$GITHUB_ENV"
+    - name: Create the tarball directory
+      shell: bash
+      run: mkdir -p "$RUNNER_TEMP/images"
     - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
     # Both images build at once on one builder: the job ends when the slower one
     # is done, instead of each image paying its own runner and setup.
