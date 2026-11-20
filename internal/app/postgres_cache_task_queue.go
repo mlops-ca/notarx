@@ -38,9 +38,6 @@ type PostgresCacheTaskQueue struct {
 	listenerDB     *sql.DB
 	ownsDB         bool
 	ownsListenerDB bool
-	// dialectNotifier wakes the worker; nil means the PostgreSQL Notifier. The MySQL polling Notifier
-	// replaces it when the queue gains a MySQL store (ADR 0022).
-	dialectNotifier dialect.Notifier
 }
 
 func NewPostgresCacheTaskQueue(databaseURL string) (*PostgresCacheTaskQueue, error) {
@@ -256,9 +253,10 @@ func supportedCacheCollectionFormats(formats []string) []string {
 // low-frequency poll covers the gaps.
 func (q *PostgresCacheTaskQueue) listenForTasks(ctx context.Context) <-chan struct{} {
 	wake := make(chan struct{}, 1)
+	var notifier dialect.Notifier = dialectpostgres.Notifier{}
 	background.Go(ctx, func() {
 		for ctx.Err() == nil {
-			subscription, err := q.notifier().Subscribe(ctx, q.listenerDB, cacheTaskChannel)
+			subscription, err := notifier.Subscribe(ctx, q.listenerDB, cacheTaskChannel)
 			if err != nil {
 				select {
 				case <-ctx.Done():
@@ -280,11 +278,4 @@ func (q *PostgresCacheTaskQueue) listenForTasks(ctx context.Context) <-chan stru
 		}
 	})
 	return wake
-}
-
-func (q *PostgresCacheTaskQueue) notifier() dialect.Notifier {
-	if q.dialectNotifier != nil {
-		return q.dialectNotifier
-	}
-	return dialectpostgres.Notifier{}
 }

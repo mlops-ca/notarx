@@ -61,14 +61,15 @@ func (g *generator) problemf(format string, args ...any) {
 
 // tablePlan is everything the generator decides about one table.
 type tablePlan struct {
-	name    string
-	table   schemaparity.Table
-	indexed map[string]bool   // columns that appear in a key or an index
-	types   map[string]string // column -> MySQL type
-	hashed  map[string]bool   // columns keyed by their SHA-256 column
-	lines   []string          // column, key, index and check lines in order
-	flags   map[string]string // generated flag column -> expression
-	autoInc string
+	name        string
+	table       schemaparity.Table
+	indexed     map[string]bool   // columns that appear in a key or an index
+	types       map[string]string // column -> MySQL type
+	hashed      map[string]bool   // columns keyed by their SHA-256 column
+	lines       []string          // column, key, index and check lines in order
+	flags       map[string]string // generated flag column -> expression
+	autoInc     string
+	usedIndexes map[string]bool
 }
 
 type report struct {

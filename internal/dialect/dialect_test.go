@@ -98,6 +98,21 @@ func TestRunTxGivesUpAfterTheRetries(t *testing.T) {
 	}
 }
 
+func TestRunTxRollsBackWhenTheFunctionPanics(t *testing.T) {
+	s := txServer()
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("the panic was swallowed")
+			}
+		}()
+		_ = RunTx(context.Background(), s.Open(t), classifier{}, nil, func(*sql.Tx) error { panic("boom") })
+	}()
+	if len(s.Logged("ROLLBACK")) != 1 || len(s.Logged("COMMIT")) != 0 {
+		t.Fatalf("a panic must roll the transaction back: %v", s.Log)
+	}
+}
+
 func TestRunTxDoesNotRetryOtherErrors(t *testing.T) {
 	plain := errors.New("constraint")
 	var calls int

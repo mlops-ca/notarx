@@ -129,7 +129,7 @@ func TestGenerateSmallCatalogue(t *testing.T) {
 		"PRIMARY KEY (`id`)",
 		"UNIQUE KEY `uq_owners_name` (`name`)",
 		"UNIQUE KEY `uq_owners_path_sha256` (`path_sha256`)",
-		"KEY `ix_owners_created_at_name` (`created_at` DESC, `name`)",
+		"KEY `ix_owners_created_at_desc_name` (`created_at` DESC, `name`)",
 		"`live_owners_live` TINYINT(1) GENERATED ALWAYS AS (IF((`enabled` <> 0), 1, NULL)) VIRTUAL NULL",
 		"UNIQUE KEY `uq_owners_live` (`name`, `live_owners_live`)",
 		"`is_enabled` TINYINT(1) GENERATED ALWAYS AS (IF((`enabled` <> 0), 1, 0)) VIRTUAL NOT NULL",
@@ -315,5 +315,59 @@ func TestLoadDecisions(t *testing.T) {
 	}
 	if _, err := LoadDecisions(filepath.Join(dir, "missing.yaml")); err == nil {
 		t.Error("a missing file was accepted")
+	}
+}
+
+func TestGenerateKeepsIndexNamesUniquePerTable(t *testing.T) {
+	catalogue := schemaparity.Catalogue{Version: 1, Tables: map[string]schemaparity.Table{
+		"events": {
+			Columns:    map[string]schemaparity.Column{"id": {Type: "int64"}, "at": {Type: "timestamp"}},
+			PrimaryKey: []string{"at", "id"},
+			Defaults:   map[string]string{"id": "identity"},
+			Indexes:    []string{"at", "at desc", "id"},
+		},
+	}}
+	output, err := Generate(catalogue, Decisions{Version: 1, DefaultKeyWidth: 32})
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, line := range strings.Split(output.SQL, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "KEY ") {
+			continue
+		}
+		name := strings.Fields(strings.TrimSpace(line))[1]
+		if names[name] {
+			t.Errorf("the index name %s is used twice in one table", name)
+		}
+		names[name] = true
+	}
+	if len(names) != 4 { // at, at DESC, id, and the helper key of the AUTO_INCREMENT column
+		t.Fatalf("keys = %v", names)
+	}
+}
+
+func TestGenerateEscapesLiteralDefaultsAndRejectsBadBooleans(t *testing.T) {
+	catalogue := schemaparity.Catalogue{Version: 1, Tables: map[string]schemaparity.Table{
+		"t": {
+			Columns:    map[string]schemaparity.Column{"id": {Type: "uuid"}, "doc": {Type: "json"}, "at": {Type: "timestamp"}, "flag": {Type: "bool"}},
+			PrimaryKey: []string{"id"},
+			Defaults:   map[string]string{"doc": "'{\"re\":\"\\d\"}'", "at": "'2024-01-01 00:00:00+00'", "flag": "'maybe'"},
+		},
+	}, Seeds: map[string][]map[string]string{"t": {{"flag": "perhaps"}}}}
+	_, err := Generate(catalogue, Decisions{Version: 1, DefaultKeyWidth: 32})
+	if err == nil || !strings.Contains(err.Error(), "boolean text \"maybe\"") || !strings.Contains(err.Error(), "neither true nor false") {
+		t.Fatalf("err = %v", err)
+	}
+	delete(catalogue.Tables["t"].Defaults, "flag")
+	catalogue.Seeds = nil
+	output, err := Generate(catalogue, Decisions{Version: 1, DefaultKeyWidth: 32})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"DEFAULT (CAST('{\"re\":\"\\\\d\"}' AS JSON))", "DEFAULT '2024-01-01 00:00:00'"} {
+		if !strings.Contains(output.SQL, want) {
+			t.Errorf("the baseline lacks %q:\n%s", want, output.SQL)
+		}
 	}
 }

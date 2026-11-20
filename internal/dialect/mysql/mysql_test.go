@@ -106,10 +106,25 @@ func TestLockTxErrors(t *testing.T) {
 	}
 }
 
-func TestLockNameIsServerWideUniqueAndShort(t *testing.T) {
-	a, b := lockName("notarx", "key"), lockName("other", "key")
-	if a == b || !strings.HasPrefix(a, "nx:") || len(a) != 43 || lockName("notarx", "key") != a {
-		t.Fatalf("lockName = %q %q", a, b)
+func TestNotifierIsAWakerThroughTheDialectSet(t *testing.T) {
+	set := New(time.Hour)
+	waker, ok := set.Notifier.(dialect.Waker)
+	if !ok {
+		t.Fatal("the notifier of the dialect set cannot wake in-process subscribers")
+	}
+	subscription, err := set.Notifier.Subscribe(context.Background(), nil, "jobs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = subscription.Close() }()
+	if _, ok := subscription.(dialect.Resetter); !ok {
+		t.Fatal("the subscription cannot be reset after work")
+	}
+	waker.Notify("jobs")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if channel, err := subscription.Wait(ctx); err != nil || channel != "jobs" {
+		t.Fatalf("Wait = %q, %v", channel, err)
 	}
 }
 
@@ -124,8 +139,6 @@ func TestLockTimeout(t *testing.T) {
 func sessionServer(getLock any, release any) *fakesql.Server {
 	return server(func(query string, args []driver.NamedValue) (fakesql.Result, error) {
 		switch {
-		case strings.Contains(query, "DATABASE()"):
-			return fakesql.One("d", "notarx_test"), nil
 		case strings.Contains(query, "GET_LOCK"):
 			return fakesql.One("l", getLock), nil
 		case strings.Contains(query, "RELEASE_LOCK"):
@@ -153,26 +166,17 @@ func TestLockSessionResults(t *testing.T) {
 			if got != tc.want || (err != nil) != tc.wantErr {
 				t.Fatalf("LockSession = %t, %v", got, err)
 			}
-			if logged := s.Logged("GET_LOCK"); len(logged) != 1 || !strings.Contains(logged[0], "nx:") || !strings.HasSuffix(logged[0], ",3") {
-				t.Fatalf("GET_LOCK call = %v", logged)
+			logged := s.Logged("GET_LOCK")
+			if len(logged) != 1 || !strings.HasSuffix(logged[0], "| k,3") {
+				t.Fatalf("GET_LOCK call = %v; want the key and the timeout in seconds", logged)
+			}
+			// One statement, computed by the server: the name hashes the database, a NUL and the key.
+			for _, part := range []string{"CONCAT('nx:', LEFT(SHA2(CONCAT(DATABASE(), CHAR(0), ?), 256), 40))"} {
+				if !strings.Contains(logged[0], part) {
+					t.Fatalf("GET_LOCK call %q lacks %q", logged[0], part)
+				}
 			}
 		})
-	}
-}
-
-func TestLockSessionNeedsADatabase(t *testing.T) {
-	s := server(func(query string, _ []driver.NamedValue) (fakesql.Result, error) {
-		return fakesql.One("d", nil), nil
-	})
-	conn, err := s.Open(t).Conn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := (Locker{}).LockSession(context.Background(), conn, "k", 0); err == nil || !strings.Contains(err.Error(), "names no database") {
-		t.Fatalf("err = %v", err)
-	}
-	if err := (Locker{}).UnlockSession(context.Background(), conn, "k"); err == nil {
-		t.Fatal("UnlockSession needs a database too")
 	}
 }
 
@@ -184,23 +188,13 @@ func TestSessionLockQueryErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := (Locker{}).LockSession(context.Background(), conn, "k", 0); !errors.Is(err, boom) {
-		t.Fatalf("err = %v", err)
-	}
-	later := server(func(query string, _ []driver.NamedValue) (fakesql.Result, error) {
-		if strings.Contains(query, "DATABASE()") {
-			return fakesql.One("d", "x"), nil
-		}
-		return fakesql.Result{}, boom
-	})
-	conn, err = later.Open(t).Conn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := (Locker{}).LockSession(context.Background(), conn, "k", 0); !errors.Is(err, boom) {
 		t.Fatalf("GET_LOCK error = %v", err)
 	}
 	if err := (Locker{}).UnlockSession(context.Background(), conn, "k"); !errors.Is(err, boom) {
 		t.Fatalf("RELEASE_LOCK error = %v", err)
+	}
+	if err := (Locker{}).ReleaseAll(context.Background(), conn); !errors.Is(err, boom) {
+		t.Fatalf("RELEASE_ALL_LOCKS error = %v", err)
 	}
 }
 

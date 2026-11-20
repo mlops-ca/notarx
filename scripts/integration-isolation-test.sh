@@ -125,7 +125,7 @@ done
 : >"$NOTARX_ISOLATION_LOG"
 "$root/scripts/integration-test.sh" --driver mysql >/dev/null
 for expected in 'down -v --remove-orphans' 'up -d --wait mysql' 'NOTARX_DATABASE_DRIVER=mysql' 'migrate --dir migrations/mysql' \
-  'TEST_DATABASE_DRIVER=mysql' 'TEST_DATABASE_URL= --env' 'TEST_DATABASE_REQUIRED=1' 'go test -count=1 -p 1 -tags=integration "$@"'; do
+  'TEST_DATABASE_DRIVER=mysql' 'TEST_DATABASE_URL= --env' 'TEST_DATABASE_REQUIRED=1' 'go test -count=1 -p 1 -v -tags=integration "$@"'; do
   expect_logged "$expected"
 done
 if grep -Fq 'postgres' "$NOTARX_ISOLATION_LOG"; then

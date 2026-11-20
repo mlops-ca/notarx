@@ -9,7 +9,8 @@
 # run. The database is migrated by the Go runner from migrations/mysql, as a deployment would
 # migrate it. TEST_DATABASE_DRIVER=mysql selects the engine for the dialect-parametrised suites,
 # TEST_DATABASE_URL is left empty so the PostgreSQL-only suites skip themselves, and
-# TEST_DATABASE_REQUIRED=1 turns a suite that finds no database into a failure.
+# TEST_DATABASE_REQUIRED=1 turns a suite that finds no database into a failure. The run is verbose, so
+# the lock contention measurement of internal/dialect/mysql reaches the job log.
 set -euo pipefail
 
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -42,5 +43,5 @@ while IFS= read -r package; do selected+=("$package"); done <<<"$packages"
 "${compose[@]}" run --rm --no-deps \
   --env TEST_DATABASE_DRIVER=mysql --env TEST_DATABASE_URL= --env TEST_DATABASE_REQUIRED=1 test sh -ec '
   go test -count=1 -tags=integration -exec true "$@" >/dev/null
-  go test -count=1 -p 1 -tags=integration "$@"
+  go test -count=1 -p 1 -v -tags=integration "$@"
 ' integration-test-mysql "${selected[@]}"

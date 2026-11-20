@@ -10,6 +10,20 @@ import (
 	"github.com/mlops-ca/notarx/internal/schemaparity"
 )
 
+// indexName shortens prefix and parts to a MySQL index name that no other index of the table has:
+// the column list alone cannot tell two indexes apart (a and a DESC, or the helper key of an AUTO_INCREMENT column).
+func (t *tablePlan) indexName(prefix string, parts ...string) string {
+	if t.usedIndexes == nil {
+		t.usedIndexes = map[string]bool{}
+	}
+	name := shortName(prefix, parts...)
+	for n := 2; t.usedIndexes[name]; n++ {
+		name = shortName(prefix, append(slices.Clone(parts), strconv.Itoa(n))...)
+	}
+	t.usedIndexes[name] = true
+	return name
+}
+
 func (t *tablePlan) keyColumn(column string) string {
 	if t.hashed[column] {
 		return column + "_sha256"
@@ -63,7 +77,7 @@ func (g *generator) buildTable(t *tablePlan, specials []specialPlan) {
 	keys = append(keys, "PRIMARY KEY ("+quoteAll(pk)+")")
 	for _, set := range t.table.Unique {
 		columns := t.keyColumns(set)
-		name := shortName("uq_"+t.name, columns...)
+		name := t.indexName("uq_"+t.name, columns...)
 		checkKey("unique key "+name, columns)
 		keys = append(keys, "UNIQUE KEY "+quote(name)+" ("+quoteAll(columns)+")")
 	}
@@ -71,20 +85,23 @@ func (g *generator) buildTable(t *tablePlan, specials []specialPlan) {
 		parts := splitIndexColumns(index)
 		columns := make([]string, len(parts))
 		items := make([]string, len(parts))
+		nameParts := make([]string, len(parts))
 		for i, p := range parts {
 			columns[i] = t.keyColumn(p.column)
 			items[i] = quote(columns[i])
+			nameParts[i] = columns[i]
 			if p.desc {
 				items[i] += " DESC"
+				nameParts[i] += "_desc"
 			}
 		}
-		name := shortName("ix_"+t.name, columns...)
+		name := t.indexName("ix_"+t.name, nameParts...)
 		checkKey("index "+name, columns)
 		keys = append(keys, "KEY "+quote(name)+" ("+strings.Join(items, ", ")+")")
 	}
 	if t.autoInc != "" && !slices.Contains(keys, "PRIMARY KEY ("+quote(t.autoInc)+")") && !strings.HasPrefix(strings.TrimPrefix(keys[0], "PRIMARY KEY ("), quote(t.autoInc)) {
 		// AUTO_INCREMENT needs a key that starts with the column (the primary key here starts with a partition column).
-		keys = append(keys, "KEY "+quote(shortName("ix_"+t.name, t.autoInc))+" ("+quote(t.autoInc)+")")
+		keys = append(keys, "KEY "+quote(t.indexName("ix_"+t.name, t.autoInc))+" ("+quote(t.autoInc)+")")
 	}
 	for _, s := range specials {
 		line, generated := g.specialLines(t, s, checkKey)
@@ -163,19 +180,25 @@ func (g *generator) defaultClause(t *tablePlan, name string, col schemaparity.Co
 		return normalized, false
 	case stringLiteral.MatchString(normalized):
 		body := normalized[1 : len(normalized)-1]
+		// A backslash escapes in a MySQL string literal and not in PostgreSQL's.
+		escaped := strings.ReplaceAll(normalized, "\\", "\\\\")
 		switch {
 		case col.Type == "bytes":
 			if hex, ok := strings.CutPrefix(body, "\\x"); ok {
 				return "(X'" + hex + "')", false
 			}
 		case col.Type == "json" || strings.HasPrefix(col.Type, "array<"):
-			return "(CAST(" + normalized + " AS JSON))", false
+			return "(CAST(" + escaped + " AS JSON))", false
 		case col.Type == "timestamp":
-			return zoneSuffix.ReplaceAllString(normalized, "'"), false
+			return zoneSuffix.ReplaceAllString(escaped, "'"), false
 		case col.Type == "bool":
-			return map[string]string{"t": "1", "true": "1", "f": "0", "false": "0"}[body], false
+			if value, ok := map[string]string{"t": "1", "true": "1", "f": "0", "false": "0"}[body]; ok {
+				return value, false
+			}
+			g.problemf("default of %s is the boolean text %q: add it under defaults:", key, body)
+			return "", false
 		}
-		return wrap(strings.ReplaceAll(normalized, "\\", "\\\\")), false
+		return wrap(escaped), false
 	}
 	g.problemf("default of %s is %q, which the generator cannot translate: add it under defaults:", key, normalized)
 	return "", false
@@ -198,7 +221,7 @@ func (g *generator) specialLines(t *tablePlan, s specialPlan, checkKey func(stri
 		columns, items := g.indexItems(t, s.columns)
 		checkKey("index "+s.name, columns)
 		g.report.indexActions = append(g.report.indexActions, fmt.Sprintf("| %s | %s | %s | %s |", t.name, s.name, ActionFull, s.reason))
-		return "KEY " + quote(shortName("ix", s.name)) + " (" + strings.Join(items, ", ") + ")", nil
+		return "KEY " + quote(t.indexName("ix", s.name)) + " (" + strings.Join(items, ", ") + ")", nil
 	case ActionGenerated:
 		var generated []string
 		for _, c := range s.generated {
@@ -216,7 +239,7 @@ func (g *generator) specialLines(t *tablePlan, s specialPlan, checkKey func(stri
 		if s.unique {
 			kind, prefix = "UNIQUE KEY ", "uq"
 		}
-		return kind + quote(shortName(prefix, s.name)) + " (" + strings.Join(items, ", ") + ")", generated
+		return kind + quote(t.indexName(prefix, s.name)) + " (" + strings.Join(items, ", ") + ")", generated
 	case ActionFlag, ActionUniqueFlag:
 		translated, err := Translate(s.predicate)
 		if err != nil {
@@ -253,11 +276,11 @@ func (g *generator) specialLines(t *tablePlan, s specialPlan, checkKey func(stri
 		if s.action == ActionFlag {
 			columns = append([]string{flag}, columns...)
 			items = append([]string{quote(flag)}, items...)
-			line = "KEY " + quote(shortName("ix", s.name)) + " (" + strings.Join(items, ", ") + ")"
+			line = "KEY " + quote(t.indexName("ix", s.name)) + " (" + strings.Join(items, ", ") + ")"
 		} else {
 			columns = append(columns, flag)
 			items = append(items, quote(flag))
-			line = "UNIQUE KEY " + quote(shortName("uq", s.name)) + " (" + strings.Join(items, ", ") + ")"
+			line = "UNIQUE KEY " + quote(t.indexName("uq", s.name)) + " (" + strings.Join(items, ", ") + ")"
 		}
 		t.types[flag] = "TINYINT(1)"
 		checkKey("index "+s.name, columns)
@@ -434,7 +457,11 @@ func (g *generator) seedValue(t *tablePlan, column, value string) string {
 	}
 	switch {
 	case col.Type == "bool":
-		return map[string]string{"true": "1", "false": "0"}[value]
+		if bit, ok := map[string]string{"true": "1", "false": "0"}[value]; ok {
+			return bit
+		}
+		g.problemf("seed %s.%s is the boolean text %q, which is neither true nor false", t.name, column, value)
+		return "NULL"
 	case col.Type == "json", strings.HasPrefix(col.Type, "array<"):
 		return "CAST('" + escapeLiteral(value) + "' AS JSON)"
 	case numberLiteral.MatchString(value) && (col.Type == "int16" || col.Type == "int32" || col.Type == "int64" || col.Type == "decimal"):

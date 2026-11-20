@@ -107,7 +107,7 @@ func mutualExclusion(t *testing.T, h Harness) {
 	h.exec(t, "INSERT INTO dialect_contract_counter (id, n) VALUES (1, 0)")
 	const workers, rounds = 8, 3
 	var wg sync.WaitGroup
-	errs := make(chan error, workers)
+	errs := make(chan error, workers*rounds)
 	for range workers {
 		wg.Add(1)
 		go func() {
@@ -431,16 +431,18 @@ func notificationLatency(t *testing.T, h Harness) {
 		t.Fatal(err)
 	}
 	defer func() { _ = subscription.Close() }()
+	notified := make(chan error, 1)
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		if err := h.Notify(context.Background(), "contract_wake"); err != nil {
-			t.Error(err)
-		}
+		notified <- h.Notify(context.Background(), "contract_wake")
 	}()
 	started := time.Now()
 	channel, err := subscription.Wait(ctx)
 	if err != nil || channel != "contract_wake" {
 		t.Fatalf("Wait = %q, %v", channel, err)
+	}
+	if err := <-notified; err != nil {
+		t.Fatal(err)
 	}
 	if elapsed := time.Since(started); elapsed > h.LatencyBound {
 		t.Fatalf("the notification took %s; the bound is %s", elapsed, h.LatencyBound)

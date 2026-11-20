@@ -14,8 +14,6 @@ import (
 func mysqlLockServer(held bool, release any) *fakesql.Server {
 	return &fakesql.Server{Handler: func(query string, args []driver.NamedValue) (fakesql.Result, error) {
 		switch {
-		case strings.Contains(query, "DATABASE()"):
-			return fakesql.One("d", "notarx_test"), nil
 		case strings.Contains(query, "GET_LOCK"):
 			if held {
 				return fakesql.One("l", int64(1)), nil

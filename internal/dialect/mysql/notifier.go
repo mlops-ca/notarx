@@ -18,6 +18,14 @@ const (
 	MaxPollInterval     = 5 * time.Second
 )
 
+// A Notifier is a dialect.Waker and its subscriptions are dialect.Resetters: the interfaces are how a store
+// that holds only a dialect.Set wakes and resets them.
+var (
+	_ dialect.Notifier = (*Notifier)(nil)
+	_ dialect.Waker    = (*Notifier)(nil)
+	_ dialect.Resetter = (*subscription)(nil)
+)
+
 // Config tunes the polling Notifier; the zero value is the defaults.
 type Config struct {
 	Interval    time.Duration

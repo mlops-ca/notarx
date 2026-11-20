@@ -73,7 +73,7 @@ CREATE TABLE `artifact_intelligence` (
   `vulnerability` JSON NULL,
   `coordinate_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`coordinate`, 256))) STORED NOT NULL,
   PRIMARY KEY (`repository_id`, `format`, `coordinate_sha256`, `digest`),
-  KEY `ix_artifact_intelligence_updated_at` (`updated_at` DESC),
+  KEY `ix_artifact_intelligence_updated_at_desc` (`updated_at` DESC),
   KEY `ix_artifact_intelligence_body_key_idx` (`body_key`),
   CONSTRAINT `artifact_intelligence_body_ref_check` CHECK (((((`body_digest` IS NULL) AND (`body_size` IS NULL)) AND (`body_key` IS NULL)) OR ((((`body_digest` IS NOT NULL) AND (`body_size` IS NOT NULL)) AND (`body_key` IS NOT NULL)) AND (`body_size` >= 0)))),
   CONSTRAINT `artifact_intelligence_coordinate_check` CHECK (((CHAR_LENGTH(`coordinate`) >= 1) AND (CHAR_LENGTH(`coordinate`) <= 1024))),
@@ -154,7 +154,7 @@ CREATE TABLE `artifact_scan_history` (
   `status` TEXT NOT NULL,
   `unknown` INT NOT NULL DEFAULT 0,
   PRIMARY KEY (`scanned_at`, `id`),
-  KEY `ix_artifact_scan_history_repository_id_artifact_digest__c364873d` (`repository_id`, `artifact_digest`, `scanned_at` DESC)
+  KEY `ix_artifact_scan_history_repository_id_artifact_digest__5f20e24b` (`repository_id`, `artifact_digest`, `scanned_at` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `artifact_tombstones` (
@@ -180,7 +180,7 @@ CREATE TABLE `artifact_usage_stats` (
   `total_bytes` BIGINT NOT NULL DEFAULT 0,
   `resource_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`resource`, 256))) STORED NOT NULL,
   PRIMARY KEY (`repository_id`, `format`, `resource_sha256`),
-  KEY `ix_artifact_usage_stats_repository_id_download_count` (`repository_id`, `download_count` DESC)
+  KEY `ix_artifact_usage_stats_repository_id_download_count_desc` (`repository_id`, `download_count` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `artifact_vulnerability` (
@@ -276,7 +276,7 @@ CREATE TABLE `authorization_roles` (
   `version` BIGINT NOT NULL DEFAULT 1,
   `name_lower` VARCHAR(255) GENERATED ALWAYS AS (LOWER(`name`)) VIRTUAL NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `ix_authorization_roles_updated_at_id` (`updated_at` DESC, `id` DESC),
+  KEY `ix_authorization_roles_updated_at_desc_id_desc` (`updated_at` DESC, `id` DESC),
   UNIQUE KEY `uq_authorization_roles_name_ci_idx` (`name_lower`),
   CONSTRAINT `authorization_roles_scopes_nonempty` CHECK ((JSON_LENGTH(`scopes`) > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -291,7 +291,7 @@ CREATE TABLE `authorization_templates` (
   `version` BIGINT NOT NULL DEFAULT 1,
   `name_lower` VARCHAR(255) GENERATED ALWAYS AS (LOWER(`name`)) VIRTUAL NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `ix_authorization_templates_updated_at_id` (`updated_at` DESC, `id` DESC),
+  KEY `ix_authorization_templates_updated_at_desc_id_desc` (`updated_at` DESC, `id` DESC),
   UNIQUE KEY `uq_authorization_templates_name_ci_idx` (`name_lower`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -585,8 +585,8 @@ CREATE TABLE `lifecycle_jobs` (
   `actionable` TINYINT(1) GENERATED ALWAYS AS (IF((`state` IN ('pending', 'retrying')), 1, 0)) VIRTUAL NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_lifecycle_jobs_repository_id_kind_idempotency_key` (`repository_id`, `kind`, `idempotency_key`),
-  KEY `ix_lifecycle_jobs_created_at_id` (`created_at` DESC, `id` DESC),
-  KEY `ix_lifecycle_jobs_repository_id_created_at_id` (`repository_id`, `created_at` DESC, `id` DESC),
+  KEY `ix_lifecycle_jobs_created_at_desc_id_desc` (`created_at` DESC, `id` DESC),
+  KEY `ix_lifecycle_jobs_repository_id_created_at_desc_id_desc` (`repository_id`, `created_at` DESC, `id` DESC),
   KEY `ix_lifecycle_jobs_actionable_idx` (`actionable`, `next_attempt_at`, `created_at`),
   KEY `ix_lifecycle_jobs_kind_actionable_idx` (`actionable`, `kind`, `next_attempt_at`),
   KEY `ix_lifecycle_jobs_lease_idx` (`lease_expires_at`),
@@ -1753,7 +1753,7 @@ CREATE TABLE `native_oci_manifests` (
   `subject_digest` VARCHAR(255) NULL,
   PRIMARY KEY (`repository_id`, `name`, `digest`),
   UNIQUE KEY `uq_native_oci_manifests_object_key` (`object_key`),
-  KEY `ix_native_oci_manifests_repository_id_digest_name_created_at` (`repository_id`, `digest`, `name`, `created_at` DESC),
+  KEY `ix_native_oci_manifests_repository_id_digest_name_creat_8f7a5677` (`repository_id`, `digest`, `name`, `created_at` DESC),
   KEY `ix_native_oci_manifests_name_trgm_idx` (`name`),
   KEY `ix_native_oci_manifests_referrers_idx` (`repository_id`, `name`, `subject_digest`, `digest`),
   KEY `ix_native_oci_manifests_repository_name_pattern_idx` (`repository_id`, `name`),
@@ -1928,7 +1928,7 @@ CREATE TABLE `native_raw_versions` (
   `version` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_native_raw_versions_repository_id_name_version` (`repository_id`, `name`, `version`),
-  KEY `ix_native_raw_versions_repository_id_name_sealed_at_id` (`repository_id`, `name`, `sealed_at` DESC, `id` DESC),
+  KEY `ix_native_raw_versions_repository_id_name_sealed_at_desc_id_desc` (`repository_id`, `name`, `sealed_at` DESC, `id` DESC),
   KEY `ix_native_raw_versions_repository_id_state_sealed_at` (`repository_id`, `state`, `sealed_at`),
   KEY `ix_native_raw_versions_state_created_at` (`state`, `created_at`),
   KEY `ix_native_raw_versions_state_updated_at` (`state`, `updated_at`),
@@ -2590,7 +2590,7 @@ CREATE TABLE `repository_vex_document` (
   `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   PRIMARY KEY (`id`),
-  KEY `ix_repository_vex_document_repository_id_created_at_id` (`repository_id`, `created_at` DESC, `id`),
+  KEY `ix_repository_vex_document_repository_id_created_at_desc_id` (`repository_id`, `created_at` DESC, `id`),
   KEY `ix_repository_vex_document_body_key_idx` (`body_key`),
   CONSTRAINT `repository_vex_document_format_check` CHECK ((`format` = 'openvex'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2619,8 +2619,8 @@ CREATE TABLE `resolver_audit_log` (
   `trace_id` TEXT NULL,
   `upstream_host` TEXT NULL,
   PRIMARY KEY (`occurred_at`, `id`),
-  KEY `ix_resolver_audit_log_actor_occurred_at` (`actor`, `occurred_at` DESC),
-  KEY `ix_resolver_audit_log_repository_occurred_at` (`repository`, `occurred_at` DESC),
+  KEY `ix_resolver_audit_log_actor_occurred_at_desc` (`actor`, `occurred_at` DESC),
+  KEY `ix_resolver_audit_log_repository_occurred_at_desc` (`repository`, `occurred_at` DESC),
   KEY `ix_resolver_audit_log_id` (`id`),
   CONSTRAINT `resolver_audit_log_evidence_check` CHECK ((JSON_TYPE(`evidence`) = 'OBJECT'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2637,8 +2637,8 @@ CREATE TABLE `runtime_node_sessions` (
   `worker_formats` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   `worker_kinds` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   PRIMARY KEY (`session_id`),
-  KEY `ix_runtime_node_sessions_instance_id_last_seen_at` (`instance_id`, `last_seen_at` DESC),
-  KEY `ix_runtime_node_sessions_last_seen_at` (`last_seen_at` DESC),
+  KEY `ix_runtime_node_sessions_instance_id_last_seen_at_desc` (`instance_id`, `last_seen_at` DESC),
+  KEY `ix_runtime_node_sessions_last_seen_at_desc` (`last_seen_at` DESC),
   KEY `ix_runtime_node_sessions_retention_idx` (`stopped_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -2652,7 +2652,7 @@ CREATE TABLE `runtime_nodes` (
   `worker_formats` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   `worker_kinds` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
   PRIMARY KEY (`instance_id`),
-  KEY `ix_runtime_nodes_last_seen_at` (`last_seen_at` DESC)
+  KEY `ix_runtime_nodes_last_seen_at_desc` (`last_seen_at` DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `saml_assertion_ids` (
@@ -2681,7 +2681,7 @@ CREATE TABLE `scanner_db_generation` (
   `source` TEXT NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_scanner_db_generation_kind_oci_digest` (`kind`, `oci_digest`),
-  KEY `ix_scanner_db_generation_kind_built_at` (`kind`, `built_at` DESC),
+  KEY `ix_scanner_db_generation_kind_built_at_desc` (`kind`, `built_at` DESC),
   CONSTRAINT `scanner_db_generation_kind_check` CHECK ((`kind` IN ('trivy-db', 'java-db', 'checks'))),
   CONSTRAINT `scanner_db_generation_source_check` CHECK ((`source` IN ('upstream', 'mirror', 'feed')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2699,7 +2699,7 @@ CREATE TABLE `scheduled_task_runs` (
   `trigger` TEXT NOT NULL,
   PRIMARY KEY (`id`),
   KEY `ix_scheduled_task_runs_created_at` (`created_at`),
-  KEY `ix_scheduled_task_runs_task_id_created_at` (`task_id`, `created_at` DESC),
+  KEY `ix_scheduled_task_runs_task_id_created_at_desc` (`task_id`, `created_at` DESC),
   CONSTRAINT `scheduled_task_runs_state_check` CHECK ((`state` IN ('submitted', 'failed'))),
   CONSTRAINT `scheduled_task_runs_trigger_check` CHECK ((`trigger` IN ('scheduled', 'manual')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2759,8 +2759,8 @@ CREATE TABLE `security_audit_log` (
   `trace_id` TEXT NULL,
   `upstream_host` TEXT NULL,
   PRIMARY KEY (`occurred_at`, `id`),
-  KEY `ix_security_audit_log_actor_occurred_at` (`actor`, `occurred_at` DESC),
-  KEY `ix_security_audit_log_repository_occurred_at` (`repository`, `occurred_at` DESC),
+  KEY `ix_security_audit_log_actor_occurred_at_desc` (`actor`, `occurred_at` DESC),
+  KEY `ix_security_audit_log_repository_occurred_at_desc` (`repository`, `occurred_at` DESC),
   KEY `ix_security_audit_log_id` (`id`),
   CONSTRAINT `security_audit_log_evidence_check` CHECK ((JSON_TYPE(`evidence`) = 'OBJECT'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
@@ -2928,8 +2928,8 @@ CREATE TABLE `webhook_deliveries` (
   `due_at` DATETIME(6) GENERATED ALWAYS AS (COALESCE(`next_attempt_at`, `lease_expires_at`)) VIRTUAL NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_webhook_deliveries_event_id_subscription_id` (`event_id`, `subscription_id`),
-  KEY `ix_webhook_deliveries_created_at_id` (`created_at` DESC, `id` DESC),
-  KEY `ix_webhook_deliveries_subscription_id_created_at_id` (`subscription_id`, `created_at` DESC, `id` DESC),
+  KEY `ix_webhook_deliveries_created_at_desc_id_desc` (`created_at` DESC, `id` DESC),
+  KEY `ix_webhook_deliveries_subscription_id_created_at_desc_id_desc` (`subscription_id`, `created_at` DESC, `id` DESC),
   KEY `ix_webhook_deliveries_actionable_idx` (`due_at`, `created_at`),
   KEY `ix_webhook_deliveries_retention_idx` (`updated_at`),
   CONSTRAINT `webhook_deliveries_attempts_check` CHECK (((`attempts` >= 0) AND (`attempts` <= 8))),

@@ -1,7 +1,8 @@
 // Package dialect holds the four non-SQL primitives that differ between the
 // supported databases (ADR 0022): locks, row claims, notifications and error
-// classification. The interfaces live here; internal/dialect/postgres and,
-// later, internal/dialect/mysql implement them. This package imports no
+// classification. The interfaces live here; internal/dialect/postgres and
+// internal/dialect/mysql implement them, and internal/dialect/dialecttest is the
+// contract both must pass. This package imports no
 // database driver and no store, so every layer may depend on it.
 package dialect
 
@@ -49,14 +50,29 @@ type Claimer interface {
 
 // Subscription delivers wake-ups for the subscribed channels.
 type Subscription interface {
-	// Wait blocks until a notification arrives or ctx ends; it returns the channel name.
+	// Wait blocks until a notification arrives or ctx ends; it returns the channel name. On a
+	// dialect that polls (MySQL) it also returns when the poll interval passes: a return is a hint to
+	// look at the queue, never proof that work exists.
 	Wait(ctx context.Context) (string, error)
 	Close() error
 }
 
-// Notifier lets a worker learn that work was enqueued without polling.
+// Notifier lets a worker learn that work was enqueued: PostgreSQL pushes with LISTEN/NOTIFY, MySQL has no
+// push and wakes the worker at a poll cadence (ADR 0022).
 type Notifier interface {
 	Subscribe(ctx context.Context, db *sql.DB, channels ...string) (Subscription, error)
+}
+
+// Waker is implemented by a Notifier that cannot push through the database (MySQL): an enqueue in this
+// process calls Notify so the subscribers of the channel wake at once instead of at the next poll.
+type Waker interface {
+	Notify(channel string)
+}
+
+// Resetter is implemented by the Subscription of a polling Notifier: a worker calls Reset after it found
+// work, which returns the poll interval to its cadence (an idle subscription backs off).
+type Resetter interface {
+	Reset()
 }
 
 // ErrorClassifier maps driver errors to the sentinels above.

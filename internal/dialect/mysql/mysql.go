@@ -7,9 +7,7 @@ package mysql
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -71,24 +69,12 @@ func (Locker) LockTx(ctx context.Context, tx *sql.Tx, keys ...string) error {
 	return nil
 }
 
-// lockName is nx: plus the first 40 hex characters of SHA-256(database name + key). Lock names are
-// server-wide, not per database, so the database name keeps two notarx databases on one server
-// apart; the hash keeps the name (43 characters) under the 64 that GET_LOCK allows.
-func lockName(database, key string) string {
-	sum := sha256.Sum256([]byte(database + key))
-	return "nx:" + hex.EncodeToString(sum[:])[:40]
-}
-
-func sessionLockName(ctx context.Context, conn *sql.Conn, key string) (string, error) {
-	var name sql.NullString
-	if err := conn.QueryRowContext(ctx, `SELECT DATABASE()`).Scan(&name); err != nil {
-		return "", err
-	}
-	if !name.Valid {
-		return "", errors.New("the connection names no database")
-	}
-	return lockName(name.String, key), nil
-}
+// The session lock name is nx: plus the first 40 hex characters of SHA-256 of the database name, a NUL
+// byte and the key, computed by the server so a lock or an unlock costs one round trip. Lock names are
+// server-wide, not per database, so the database name keeps two notarx databases on one server apart, and the
+// NUL separator keeps ("notarx", "_testx") and ("notarx_test", "x") from hashing alike. The name is 43
+// characters, under the 64 that GET_LOCK allows.
+const lockNameSQL = `CONCAT('nx:', LEFT(SHA2(CONCAT(DATABASE(), CHAR(0), ?), 256), 40))`
 
 // lockTimeout turns a wait into the seconds GET_LOCK takes: 0 tries once, a negative wait waits
 // until the context ends (-1), and any other wait rounds up to whole seconds.
@@ -103,15 +89,12 @@ func lockTimeout(wait time.Duration) int64 {
 }
 
 // LockSession takes a GET_LOCK lock on conn. It reports false when the wait ran out (1 acquired, 0
-// timed out, NULL is an error). The lock belongs to the session, so conn must stay out of the pool
-// while it is held; a cancelled wait closes the driver connection, which also releases it.
+// timed out, NULL is an error, including a connection that names no database). The lock belongs to the
+// session, so conn must stay out of the pool while it is held; a cancelled wait closes the driver
+// connection, which also releases it.
 func (Locker) LockSession(ctx context.Context, conn *sql.Conn, key string, wait time.Duration) (bool, error) {
-	name, err := sessionLockName(ctx, conn, key)
-	if err != nil {
-		return false, err
-	}
 	var acquired sql.NullInt64
-	if err := conn.QueryRowContext(ctx, `SELECT GET_LOCK(?, ?)`, name, lockTimeout(wait)).Scan(&acquired); err != nil {
+	if err := conn.QueryRowContext(ctx, "SELECT GET_LOCK("+lockNameSQL+", ?)", key, lockTimeout(wait)).Scan(&acquired); err != nil {
 		return false, err
 	}
 	if !acquired.Valid {
@@ -122,12 +105,8 @@ func (Locker) LockSession(ctx context.Context, conn *sql.Conn, key string, wait 
 
 // UnlockSession releases a lock taken by LockSession on the same connection.
 func (Locker) UnlockSession(ctx context.Context, conn *sql.Conn, key string) error {
-	name, err := sessionLockName(ctx, conn, key)
-	if err != nil {
-		return err
-	}
 	var released sql.NullInt64
-	if err := conn.QueryRowContext(ctx, `SELECT RELEASE_LOCK(?)`, name).Scan(&released); err != nil {
+	if err := conn.QueryRowContext(ctx, "SELECT RELEASE_LOCK("+lockNameSQL+")", key).Scan(&released); err != nil {
 		return err
 	}
 	if !released.Valid || released.Int64 != 1 {
