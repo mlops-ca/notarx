@@ -65,7 +65,9 @@ export function CreateUserGroupDialog({
   const [source, setSource] = useState<"local" | "claims">("local");
   const [providerId, setProviderId] = useState<string | undefined>();
   const [externalId, setExternalId] = useState("");
-  const providers = useIdentityProviders();
+  const providers = useIdentityProviders({
+    enabled: open && source === "claims",
+  });
   const complete =
     name.trim() !== "" &&
     (source === "local" ||
@@ -134,12 +136,10 @@ export function CreateUserGroupDialog({
                 loading={providers.isPending}
                 placeholder={t("userGroups.providerPlaceholder")}
                 onChange={setProviderId}
-                options={(providers.data ?? [])
-                  .filter((provider) => provider.kind === "oidc")
-                  .map((provider) => ({
-                    value: provider.id,
-                    label: provider.displayName,
-                  }))}
+                options={(providers.data ?? []).map((provider) => ({
+                  value: provider.id,
+                  label: provider.displayName,
+                }))}
               />
             </Field>
             <Field

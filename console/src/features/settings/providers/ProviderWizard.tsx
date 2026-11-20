@@ -93,7 +93,9 @@ export function ProviderWizard({
   const submit = async () => {
     setBusy(true);
     setError(null);
+    let outcome: { message: string; warning?: string } | null = null;
     try {
+      const name = draft.displayName.trim();
       if (provider) {
         await unwrap(
           replaceIdentityProvider({
@@ -102,36 +104,35 @@ export function ProviderWizard({
             body: toReplaceBody(draft, provider),
           }),
         );
-        await onDone(t("providers.saved", { name: draft.displayName.trim() }));
-        return;
-      }
-      const created = await unwrap(
-        createIdentityProvider({ body: toCreateBody(draft) }),
-      );
-      let warning: string | undefined;
-      if (draft.kind === "saml" && created) {
-        try {
-          await unwrap(
-            importIdentityProviderMetadata({
-              path: { providerId: created.id },
-              body: draft.metadataXml.trim()
-                ? { xml: draft.metadataXml.trim() }
-                : { url: draft.metadataUrl.trim() },
-            }),
-          );
-        } catch {
-          warning = t("providers.metadataImportFailed");
+        outcome = { message: t("providers.saved", { name }) };
+      } else {
+        const created = await unwrap(
+          createIdentityProvider({ body: toCreateBody(draft) }),
+        );
+        let warning: string | undefined;
+        if (draft.kind === "saml" && created) {
+          try {
+            await unwrap(
+              importIdentityProviderMetadata({
+                path: { providerId: created.id },
+                body: draft.metadataXml.trim()
+                  ? { xml: draft.metadataXml.trim() }
+                  : { url: draft.metadataUrl.trim() },
+              }),
+            );
+          } catch {
+            warning = t("providers.metadataImportFailed");
+          }
         }
+        outcome = { message: t("providers.created", { name }), warning };
       }
-      await onDone(
-        t("providers.created", { name: draft.displayName.trim() }),
-        warning,
-      );
     } catch (nextError) {
       setError(nextError);
     } finally {
       setBusy(false);
     }
+    // The write is done: a failure to refresh afterwards is not a failure to save.
+    if (outcome) await onDone(outcome.message, outcome.warning);
   };
 
   const title = provider
@@ -325,6 +326,31 @@ export function ProviderWizard({
                     onChange={(scopes) => change({ scopes })}
                     tokenSeparators={[" ", ","]}
                   />
+                </Field>
+                <Field
+                  label={t("providers.roleMapping")}
+                  hint={t("providers.roleMappingHint")}
+                >
+                  <div className="space-y-2">
+                    {(
+                      [
+                        ["memberRoles", "providers.memberRoles"],
+                        ["adminRoles", "providers.adminRoles"],
+                        ["adminSubjects", "providers.adminSubjects"],
+                      ] as const
+                    ).map(([field, label]) => (
+                      <Select<string[]>
+                        key={field}
+                        mode="tags"
+                        className="w-full"
+                        aria-label={t(label)}
+                        placeholder={t(label)}
+                        value={draft[field]}
+                        onChange={(values) => change({ [field]: values })}
+                        tokenSeparators={[","]}
+                      />
+                    ))}
+                  </div>
                 </Field>
                 <Field
                   label={t("providers.jwksUrl")}

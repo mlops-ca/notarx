@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { authKeys } from "../../lib/query/keys";
 
 /** One enabled identity provider of the login chooser (GET /auth/idp). */
 export interface LoginIdentityProvider {
@@ -13,7 +14,7 @@ export interface LoginIdentityProvider {
  */
 export function useLoginIdentityProviders() {
   return useQuery({
-    queryKey: ["auth", "identity-providers"],
+    queryKey: authKeys.identityProviders(),
     queryFn: async ({ signal }): Promise<LoginIdentityProvider[]> => {
       try {
         const response = await fetch("/auth/idp", {

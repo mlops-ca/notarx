@@ -22,7 +22,7 @@ import { ConfirmDanger, useDisclosure } from "../../components/ui/Modal";
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
 import { unwrap } from "../../lib/query/client";
-import { settingsKeys, identityKeys } from "../../lib/query/keys";
+import { authKeys, identityKeys, settingsKeys } from "../../lib/query/keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { AuthorizationCacheCard } from "./AuthorizationCache";
 import {
@@ -81,6 +81,13 @@ export function IdentityProvidersPage() {
   const providersQuery = useIdentityProviders();
   const overageQuery = useGroupsOverage();
   const wizard = useDisclosure();
+  // Each opening starts a fresh form: the dialog keeps no draft, step or error between openings.
+  const [wizardRun, setWizardRun] = useState(0);
+  const openWizard = (provider: IdentityProvider | null) => {
+    setEditing(provider);
+    setWizardRun((count) => count + 1);
+    wizard.show();
+  };
   const [editing, setEditing] = useState<IdentityProvider | null>(null);
   const [toDelete, setToDelete] = useState<IdentityProvider | null>(null);
   const [actionError, setActionError] = useState<unknown>(null);
@@ -91,16 +98,13 @@ export function IdentityProvidersPage() {
   const [busyId, setBusyId] = useState("");
   const providers = providersQuery.data ?? null;
   const overage = overageQuery.data ?? new Map<string, string>();
-  const error = actionError ?? providersQuery.error ?? null;
 
   const refresh = async () => {
     // Provider changes also change what the sign-in page and the link form offer.
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: settingsKeys.all }),
       queryClient.invalidateQueries({ queryKey: identityKeys.linkProvider() }),
-      queryClient.invalidateQueries({
-        queryKey: ["auth", "identity-providers"],
-      }),
+      queryClient.invalidateQueries({ queryKey: authKeys.identityProviders() }),
     ]);
   };
   const run = async (
@@ -204,13 +208,7 @@ export function IdentityProvidersPage() {
       key: "actions",
       render: (_, provider) => (
         <Space wrap>
-          <Button
-            size="small"
-            onClick={() => {
-              setEditing(provider);
-              wizard.show();
-            }}
-          >
+          <Button size="small" onClick={() => openWizard(provider)}>
             {t("providers.edit")}
           </Button>
           {provider.kind === "oidc" && (
@@ -240,21 +238,25 @@ export function IdentityProvidersPage() {
           <Button
             type="primary"
             icon={<PlusOutlined />}
-            onClick={() => {
-              setEditing(null);
-              wizard.show();
-            }}
+            onClick={() => openWizard(null)}
           >
             {t("providers.add")}
           </Button>
         }
       />
-      {error !== null && (
+      {providersQuery.error !== null && (
         <ErrorBanner
-          error={error}
+          error={providersQuery.error}
           onRetry={() => void providersQuery.refetch()}
         />
       )}
+      {overageQuery.error !== null && (
+        <ErrorBanner
+          error={overageQuery.error}
+          onRetry={() => void overageQuery.refetch()}
+        />
+      )}
+      {actionError !== null && <ErrorBanner error={actionError} />}
       {notice && (
         <Notice
           tone={notice.tone}
@@ -301,7 +303,7 @@ export function IdentityProvidersPage() {
       </Card>
       <AuthorizationCacheCard />
       <ProviderWizard
-        key={editing?.id ?? "new"}
+        key={`${editing?.id ?? "new"}:${wizardRun}`}
         open={wizard.open}
         provider={editing}
         onClose={wizard.hide}

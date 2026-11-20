@@ -124,9 +124,15 @@ export const providersEnCA = {
     "The signing certificate of {name} expired on {date}. Sign-ins through this provider fail until a valid certificate is pinned.",
   "providers.certExpiresSoon":
     "The signing certificate of {name} expires in {days} days ({date}). Import the provider's metadata again, or pin the new certificate.",
-  "providers.overageTitle": "{name}: groups claim exceeded",
+  "providers.overageTitle": "{name}: too many groups for one sign-in",
   "providers.overage":
-    "Microsoft Entra ID did not send the groups of some users because they are in too many groups; they signed in without group memberships (last seen {date}). Use SCIM provisioning, or emit app roles or only the groups assigned to the application.",
+    "The provider did not send the groups of some users because they are in too many groups; they signed in without group memberships (last seen {date}, within the last 30 days). Use SCIM provisioning, or send app roles or only the groups assigned to the application.",
+  "providers.roleMapping": "Role mapping (replaced by user groups)",
+  "providers.roleMappingHint":
+    "Maps values of the roles or groups claims to account levels. User groups with a global role replace this mapping; keep it only until the groups are set up.",
+  "providers.memberRoles": "Member claim values",
+  "providers.adminRoles": "Administrator claim values",
+  "providers.adminSubjects": "Administrator subjects",
   "providers.sloTitle": "Single Logout is not supported",
   "providers.slo":
     "Signing out ends the notarx session only; the identity provider session stays open, and signing out there does not end the notarx session. A session lasts up to 12 hours. To cut access sooner, disable the user or end their sessions.",

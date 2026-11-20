@@ -127,6 +127,11 @@ export const auditKeys = {
   retentionJobs: () => [...auditKeys.all, "retention-jobs"] as const,
 };
 
+/** The enabled providers of the sign-in page (GET /auth/idp), cached apart from the admin registry. */
+export const authKeys = {
+  identityProviders: () => ["auth", "identity-providers"] as const,
+};
+
 export const settingsKeys = {
   all: ["settings"] as const,
   identityProviders: () => [...settingsKeys.all, "identity-providers"] as const,

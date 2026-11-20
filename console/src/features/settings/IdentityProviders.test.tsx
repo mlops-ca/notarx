@@ -177,27 +177,28 @@ describe("Identity providers page", () => {
     expect(screen.queryByText(/signing certificate of Okta SAML/)).toBeNull();
   });
 
-  it("warns about a groups overage recorded for the provider only", async () => {
+  it("warns about a recent groups overage recorded for the provider only", async () => {
+    const recent = new Date(Date.now() - 2 * DAY).toISOString();
     mockReads(
       [entra],
       [
         {
           operation: "auth.oidc.groups_overage",
           resource: "auth/oidc/entra",
-          occurredAt: "2026-11-10T10:00:00Z",
+          occurredAt: recent,
           outcome: "success",
         },
         {
           operation: "auth.oidc.groups_overage",
           resource: "auth/oidc/other",
-          occurredAt: "2026-11-11T10:00:00Z",
+          occurredAt: recent,
           outcome: "success",
         },
       ],
     );
     renderPage();
     expect(
-      await screen.findByText("Entra ID: groups claim exceeded"),
+      await screen.findByText("Entra ID: too many groups for one sign-in"),
     ).toBeInTheDocument();
     expect(listAudits).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -206,6 +207,88 @@ describe("Identity providers page", () => {
         }),
       }),
     );
+    expect(listAudits).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          operation: "auth.saml.groups_overage",
+        }),
+      }),
+    );
+  });
+
+  it("warns about a SAML groups overage and drops one older than 30 days", async () => {
+    const okta = saml(new Date(Date.now() + 400 * DAY).toISOString());
+    mockReads(
+      [entra, okta],
+      [
+        {
+          operation: "auth.saml.groups_overage",
+          resource: "auth/saml/okta",
+          occurredAt: new Date(Date.now() - DAY).toISOString(),
+          outcome: "success",
+        },
+        {
+          operation: "auth.oidc.groups_overage",
+          resource: "auth/oidc/entra",
+          occurredAt: new Date(Date.now() - 45 * DAY).toISOString(),
+          outcome: "success",
+        },
+      ],
+    );
+    renderPage();
+    expect(
+      await screen.findByText("Okta SAML: too many groups for one sign-in"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Entra ID: too many groups for one sign-in"),
+    ).toBeNull();
+  });
+
+  it("opens the wizard on a fresh form each time", async () => {
+    mockReads([entra]);
+    vi.mocked(createIdentityProvider).mockResolvedValue({
+      data: entra,
+    } as never);
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Add provider/ }),
+    );
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Next" }),
+    );
+    await userEvent.type(
+      within(screen.getByRole("dialog")).getAllByRole("textbox")[0],
+      "Draft name",
+    );
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Cancel",
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await userEvent.click(screen.getByRole("button", { name: /Add provider/ }));
+    const dialog = screen.getByRole("dialog");
+    // Back on the first step, with nothing left over from the abandoned draft.
+    expect(within(dialog).queryByRole("button", { name: "Back" })).toBeNull();
+    expect(within(dialog).getAllByRole("radio")[0]).toBeChecked();
+    expect(within(dialog).queryByDisplayValue("Draft name")).toBeNull();
+  });
+
+  it("shows why a delete failed", async () => {
+    mockReads([entra]);
+    vi.mocked(deleteIdentityProvider).mockResolvedValue({
+      error: { code: "version_conflict", message: "changed" },
+    } as never);
+    renderPage();
+    await userEvent.click(
+      (await rowOf("Entra ID")).getByRole("button", { name: "Delete" }),
+    );
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    expect(await screen.findByText(/changed/)).toBeInTheDocument();
   });
 
   it("disables a provider with the version it read", async () => {

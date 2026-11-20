@@ -3,6 +3,7 @@ import { Notice } from "../../../components/ui/Feedback";
 import { formatDate } from "../../../lib/format";
 import { usePreferences } from "../../../lib/preferences";
 import { SAML_CERTIFICATE_WARNING_DAYS, daysUntil } from "./providerModel";
+import { overageKey } from "./providerQueries";
 
 /** Certificates of a SAML provider that expire within the warning window, or already have. */
 function expiringCertificates(provider: IdentityProvider) {
@@ -19,7 +20,7 @@ export function providerWarningCount(
 ): number {
   return (
     expiringCertificates(provider).length +
-    (provider.kind === "oidc" && overage.has(provider.slug) ? 1 : 0)
+    (overage.has(overageKey(provider.kind, provider.slug)) ? 1 : 0)
   );
 }
 
@@ -33,7 +34,7 @@ export function ProviderWarnings({
   overage,
 }: {
   providers: IdentityProvider[];
-  /** Latest overage time by provider slug. */
+  /** Latest overage time by audit resource (auth/<kind>/<slug>). */
   overage: ReadonlyMap<string, string>;
 }) {
   const { locale, t } = usePreferences();
@@ -63,7 +64,7 @@ export function ProviderWarnings({
             />
           );
         }),
-        ...(provider.kind === "oidc" && overage.has(provider.slug)
+        ...(overage.has(overageKey(provider.kind, provider.slug))
           ? [
               <Notice
                 key={`${provider.id}:overage`}
@@ -73,7 +74,10 @@ export function ProviderWarnings({
                   name: provider.displayName,
                 })}
                 description={t("providers.overage", {
-                  date: formatDate(overage.get(provider.slug) ?? "", locale),
+                  date: formatDate(
+                    overage.get(overageKey(provider.kind, provider.slug)) ?? "",
+                    locale,
+                  ),
                 })}
               />,
             ]

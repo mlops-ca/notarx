@@ -120,10 +120,10 @@ export function AccountMenu({
               ? [
                   {
                     key: "sso-notice",
-                    disabled: true,
-                    className: "ag-account-sso-notice",
+                    // Readable and reachable by keyboard; not disabled, so it keeps normal contrast.
+                    style: { height: "auto", cursor: "default" },
                     label: (
-                      <span className="whitespace-normal text-xs">
+                      <span className="block max-w-64 whitespace-normal text-xs leading-snug">
                         {t("providers.sloSignOut")}
                       </span>
                     ),

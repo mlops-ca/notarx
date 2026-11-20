@@ -174,6 +174,31 @@ describe("User groups page", () => {
     );
   });
 
+  it("offers SAML providers for a claims group too", async () => {
+    mockReads();
+    vi.mocked(listIdentityProviders).mockResolvedValue({
+      data: {
+        items: [
+          {
+            id: "p-saml",
+            slug: "okta",
+            kind: "saml",
+            displayName: "Okta SAML",
+          },
+        ],
+      },
+    } as never);
+    renderPage();
+    await userEvent.click(
+      await screen.findByRole("button", { name: /New group/ }),
+    );
+    await choose(0, "Sign-in claims");
+    await userEvent.click(
+      within(screen.getByRole("dialog")).getAllByRole("combobox")[1],
+    );
+    expect(await screen.findByTitle("Okta SAML")).toBeInTheDocument();
+  });
+
   it("creates a claims group for a provider", async () => {
     mockReads();
     vi.mocked(createUserGroup).mockResolvedValue({ data: claims } as never);

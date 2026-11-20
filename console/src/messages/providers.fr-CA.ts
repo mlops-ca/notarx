@@ -131,9 +131,17 @@ export const providersFrCA: Record<keyof typeof providersEnCA, string> = {
     "Le certificat de signature de {name} a expiré le {date}. Les connexions par ce fournisseur échouent tant qu’un certificat valide n’est pas épinglé.",
   "providers.certExpiresSoon":
     "Le certificat de signature de {name} expire dans {days} jours ({date}). Importez de nouveau les métadonnées du fournisseur, ou épinglez le nouveau certificat.",
-  "providers.overageTitle": "{name}\u00a0: revendication de groupes dépassée",
+  "providers.overageTitle":
+    "{name}\u00a0: trop de groupes pour une seule connexion",
   "providers.overage":
-    "Microsoft Entra ID n’a pas envoyé les groupes de certains utilisateurs, car ils appartiennent à trop de groupes; ils se sont connectés sans appartenance à des groupes (dernière occurrence le {date}). Utilisez le provisionnement SCIM, ou émettez des rôles d’application ou seulement les groupes affectés à l’application.",
+    "Le fournisseur n’a pas envoyé les groupes de certains utilisateurs, car ils appartiennent à trop de groupes; ils se sont connectés sans appartenance à des groupes (dernière occurrence le {date}, au cours des 30 derniers jours). Utilisez le provisionnement SCIM, ou envoyez des rôles d’application ou seulement les groupes affectés à l’application.",
+  "providers.roleMapping":
+    "Correspondance des rôles (remplacée par les groupes d’utilisateurs)",
+  "providers.roleMappingHint":
+    "Associe des valeurs des revendications de rôles ou de groupes à des niveaux de compte. Les groupes d’utilisateurs dotés d’un rôle global remplacent cette correspondance; ne la gardez que le temps de configurer les groupes.",
+  "providers.memberRoles": "Valeurs de revendication des membres",
+  "providers.adminRoles": "Valeurs de revendication des administrateurs",
+  "providers.adminSubjects": "Sujets administrateurs",
   "providers.sloTitle": "La déconnexion unique n’est pas prise en charge",
   "providers.slo":
     "La déconnexion met fin à la session notarx seulement; la session du fournisseur d’identité reste ouverte, et s’y déconnecter ne met pas fin à la session notarx. Une session dure jusqu’à 12 heures. Pour couper l’accès plus tôt, désactivez l’utilisateur ou mettez fin à ses sessions.",
