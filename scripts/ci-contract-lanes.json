@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "$comment": "jobs packs short lanes into one CI job each (docs/ci.md, Contract lane packing); every other lane is a job of its own. images: false marks a lane that loads no prebuilt image, so its jobs start without waiting for build-images. A pack runs its lanes in the listed order on one Docker daemon, so perf-load comes first and measures a daemon no other lane has used.",
+  "$comment": "jobs packs short lanes into one CI job each (docs/ci.md, Contract lane packing); every other lane is a job of its own. images: false marks a lane that loads no prebuilt image, so its jobs start without waiting for build-images. A pack runs its lanes in the listed order on one Docker daemon, so perf-load comes first and measures a daemon on which no other lane has run.",
   "jobs": {
     "packed-checks-backup": [
       "core-checks",

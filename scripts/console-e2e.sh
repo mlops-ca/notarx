@@ -11,7 +11,8 @@ notarx_port=${NOTARX_HTTP_PORT:-8080}
 curl --silent --show-error --fail "http://127.0.0.1:${notarx_port}/readyz" >/dev/null
 console_port=$(python3 -c 'import socket; listener = socket.socket(); listener.bind(("127.0.0.1", 0)); print(listener.getsockname()[1]); listener.close()')
 # CONSOLE_E2E_SPECS (selected specs), CONSOLE_E2E_SHARD (i/N) and CONSOLE_E2E_WORKERS
-# (Playwright workers per shard, default half the CPUs) come from the CI matrix.
+# (Playwright workers per shard, a number or a percentage of the CPUs; Playwright's
+# default is half the CPUs) come from the CI matrix.
 # Specs become anchored, escaped path filters: Playwright treats positional
 # arguments as regular expressions.
 e2e_args=()

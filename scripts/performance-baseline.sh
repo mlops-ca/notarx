@@ -120,8 +120,9 @@ cleanup() {
   if [[ $stack_started == 1 ]]; then
     "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1
   fi
-  if [[ $image_tagged == 1 ]]; then
-    docker image rm "$NOTARX_IMAGE" >/dev/null 2>&1
+  if [[ $image_tagged == 1 ]] && ! docker image rm "$NOTARX_IMAGE" >/dev/null 2>&1; then
+    printf 'Performance baseline could not remove its image tag %s; a container of the project may remain.\n' "$NOTARX_IMAGE" >&2
+    [[ $exit_code != 0 ]] || exit_code=1
   fi
   if [[ -n "$upstream_pid" ]]; then
     kill "$upstream_pid" >/dev/null 2>&1 || true
@@ -306,17 +307,22 @@ expect_http() {
   fi
 }
 
-stack_started=1
 if [[ "${NOTARX_COMPOSE_BUILD_FLAG---build}" == --no-build ]]; then
   # CI lanes load the prebuilt image (docs/ci.md, Shared images): give it this
   # project's name instead of rebuilding it from the same Dockerfile. The cleanup
   # removes only that tag; the loaded image keeps its own.
+  if ! docker image inspect "$loaded_image" >/dev/null 2>&1; then
+    printf 'NOTARX_COMPOSE_BUILD_FLAG=--no-build needs the prebuilt image %s; load it first (docs/ci.md, Shared images).\n' "$loaded_image" >&2
+    exit 1
+  fi
   printf '%s\n' 'Starting the isolated Gateway/PostgreSQL/RustFS core stack from the loaded image...'
   docker image tag "$loaded_image" "$NOTARX_IMAGE"
   image_tagged=1
+  stack_started=1
   "${compose[@]}" up -d --no-build --wait --remove-orphans
 else
   printf '%s\n' 'Building and starting the isolated Gateway/PostgreSQL/RustFS core stack...'
+  stack_started=1
   "${compose[@]}" up -d --build --wait --remove-orphans
 fi
 

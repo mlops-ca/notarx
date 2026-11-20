@@ -40,8 +40,8 @@ skips every contract lane.
 ## Console E2E sharding and spec selection
 
 `console-e2e` is a matrix of two jobs. Shards `1` and `2` each start the
-shared prebuilt gateway images and run `playwright test --shard=i/2 --workers=4`
-(`CONSOLE_E2E_WORKERS`, one worker per CPU of the hosted runner), so every
+shared prebuilt gateway images and run `playwright test --shard=i/2 --workers=100%`
+(`CONSOLE_E2E_WORKERS`, one worker per CPU of the runner), so every
 spec runs in exactly one shard. Until issue #518 there were three shards with
 Playwright's default of two workers (half the CPUs): each shard paid about 1.4 minutes
 of setup (npm install, browser, image load, gateway start) for about 3 minutes of
@@ -210,7 +210,7 @@ on arm64 in that scope.
 | --- | --- | --- |
 | `packed-checks-backup` | `core-checks`, `core-backup` | 1.9 + 4.3 |
 | `packed-email-clients` | `core-email`, `migration-clients` | 5.4 + 0.8 |
-| `packed-perf-native-pypi` | `perf-load`, `core-native-e2e-2`, `pypi-migration` | about 1.0 (2.3 with the image rebuild) + 4.3 + 0.7 |
+| `packed-perf-native-pypi` | `perf-load`, `core-native-e2e-2`, `pypi-migration` | 2.3 with the image rebuild (about 1.0 without it, estimated) + 4.3 + 0.7 |
 | `packed-native-auth-oci` | `core-native-e2e-1`, `six-format-auth`, `oci-migration` | 3.9 + 1.1 + 0.5 |
 | `packed-maven-helm-npm` | `maven-oci-auth`, `helm`, `npm-migration` | 4.5 + 1.7 + 0.6 |
 | `packed-nuget-rubygems` | `nuget`, `rubygems` | 4.2 + 2.7 |
@@ -237,8 +237,8 @@ a job share one runner and Docker daemon: each lane's scripts own their Compose
 projects and tear them down on exit, and a cancelled job stops after the lane that
 was running (the lanes after it are reported as not run). A lane that crashes is
 reported as an error and the next lane runs. The lanes run in the listed order, so
-`perf-load` comes first in its pack and measures a daemon that no other lane
-has used yet; it has no latency threshold, only a zero-failed-requests check, but its
+`perf-load` comes first in its pack and measures a daemon on which no other lane
+has run yet (it holds only the loaded prebuilt images); it has no latency threshold, only a zero-failed-requests check, but its
 evidence numbers stay comparable between runs. Move a lane in or out of a pack by editing `jobs` only; the workflows
 name no lane and no job.
 
@@ -341,7 +341,7 @@ Issue #482 reshaped the pull request suite (ADR 0016 and ADR 0024, amendments of
 | `quality-arm64`: lint, vet, race | `quality-arm64`: vet and race for every Go change; lint with the `arm64` class | `quality-arm64`: lint, vet, race |
 | `console`, `docs`, `image-test-stages`, `console-e2e-report` | unchanged | unchanged |
 | `build-images` (4: two images on two architectures) | `build-images-amd64` and `build-images-arm64`, each building both images of its architecture (issue #500) | the same |
-| `console-e2e` shards `1` to `3` and `cli` | shards `1` and `2` with four Playwright workers each; shard `1` runs the CLI E2E after its specs (issues #500 and #518) | the same |
+| `console-e2e` shards `1` to `3` and `cli` | shards `1` and `2` with one Playwright worker per CPU; shard `1` runs the CLI E2E after its specs (issues #500 and #518) | the same |
 | `object-store-contract` (3 jobs: RustFS, MinIO twice) | one `object-store-contract` job running the three configurations in turn | the same job |
 | `contract (core-backup)` | `core-backup` (in `packed-checks-backup`), `core-integration-1` (a job of its own since issue #518; in `packed-perf-integration` after #500), `core-integration-2`, `core-integration-3`, all in `contract-early` | the same four lanes on both architectures |
 | `contract (core-checks)`, `contract (six-format-auth)` | `core-checks` in `packed-checks-backup` (`contract-early`), `six-format-auth` in `packed-native-auth-oci` (issue #518; `packed-rubygems-discovery-auth` after #500) | the same, both architectures |
