@@ -1,0 +1,46 @@
+# A pod that signs in to notarx with its own projected service account token instead of a stored secret
+# (ADR 0019). The token is audience-bound and short-lived; the kubelet rotates the file before it expires.
+#
+# Register the cluster once, with the key set of a private API server as a static issuer:
+#   kubectl get --raw /openid/v1/jwks > jwks.json
+#   notarxctl workload issuer create cluster --kind kubernetes --issuer "$(kubectl get --raw /.well-known/openid-configuration | jq -r .issuer)" \
+#     --audience https://notarx.example.com --jwks-mode static --static-jwks-file jwks.json
+#   notarxctl workload policy create k8s-builder --issuer ISSUER_ID --service-account ACCOUNT_ID \
+#     --condition sub:eq:system:serviceaccount:team-a:builder
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: builder
+  namespace: team-a
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: builder
+  namespace: team-a
+spec:
+  serviceAccountName: builder
+  automountServiceAccountToken: false
+  containers:
+    - name: build
+      image: registry.example.com/team-a/builder:latest
+      volumeMounts:
+        - name: notarx-token
+          mountPath: /var/run/secrets/notarx
+          readOnly: true
+      command:
+        - sh
+        - -c
+        - |
+          # The file holds a JWT that expires in 10 minutes and is refreshed in place.
+          notarxctl auth login --workload-token-file /var/run/secrets/notarx/token \
+            --workload-policy k8s-builder --secret-output /tmp/notarx-session
+          exec build-and-push
+  volumes:
+    - name: notarx-token
+      projected:
+        sources:
+          - serviceAccountToken:
+              path: token
+              audience: https://notarx.example.com
+              expirationSeconds: 600

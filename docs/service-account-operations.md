@@ -26,6 +26,10 @@ global role. Do not create a human User for unattended automation.
 - Management audit records identify account and credential lifecycle events,
   but never contain the plaintext token.
 
+Prefer [workload identity federation](workload-identity.md) where the CI platform issues
+signed workload tokens (GitHub Actions, GitLab CI, Kubernetes): a trust policy maps the
+platform token to this Service Account, so no stored secret is needed at all.
+
 Store credentials in the CI platform's secret store. Never put them in a
 Jenkinsfile, npm configuration committed to Git, Maven `settings.xml` in the
 repository, a container image, shell tracing, or a release record.
