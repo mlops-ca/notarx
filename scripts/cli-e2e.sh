@@ -934,6 +934,33 @@ curl --silent --show-error --fail --output "$login" -H 'Content-Type: applicatio
 session_token=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["token"])' "$login")
 expect 0 "$out" -- user update "$user_id" --role member --display-name "CLI E2E" --json
 require "$(field "$out" data.role)" member "member role"
+
+# User groups (ADR 0018): a local group is created, renamed, flagged with a global
+# role, given and relieved of a member (both repeatable with exit 0), and deleted.
+expect 2 "$out" -- user-group delete 00000000-0000-4000-8000-000000000001 --json
+expect 0 "$out" -- user-group create "cli-e2e-group-${suffix}" --json
+user_group_id=$(field "$out" data.id)
+require "$(field "$out" data.globalRole)" none "a new user group has no global role"
+expect 0 "$out" -- user-group rename "$user_group_id" "cli-e2e-group-renamed-${suffix}" --json
+require "$(field "$out" data.displayName)" "cli-e2e-group-renamed-${suffix}" "renamed user group"
+expect 7 "$out" -- user-group rename "$user_group_id" "cli-e2e-stale-${suffix}" --if-match stale --json
+expect 2 "$out" -- user-group set-role "$user_group_id" --role admin --json
+expect 0 "$out" -- user-group set-role "$user_group_id" --role member --json
+require "$(field "$out" data.globalRole)" member "flagged user group"
+expect 0 "$out" -- user-group show "$user_group_id" --json
+expect 0 "$out" -- user-group list --all --json
+expect 0 "$out" -- user-group member add "$user_group_id" "$user_id" --json
+require "$(field "$out" data.changed)" true "member added"
+expect 0 "$out" -- user-group member add "$user_group_id" "$user_id" --json
+require "$(field "$out" data.changed)" false "member added again"
+expect 0 "$out" -- user-group member list "$user_group_id" --json
+require "$(field "$out" data.items.0.userId)" "$user_id" "listed member"
+expect 2 "$out" -- user-group member remove "$user_group_id" "$user_id" --json
+expect 0 "$out" -- user-group member remove "$user_group_id" "$user_id" --yes --json
+expect 0 "$out" -- user-group member remove "$user_group_id" "$user_id" --yes --json
+require "$(field "$out" data.changed)" false "member removed again"
+expect 0 "$out" -- user-group delete "$user_group_id" --yes --json
+expect 4 "$out" -- user-group show "$user_group_id" --json
 expect 6 "$out" -- access check --repo "$content_id" --actor "user:$user" --role member --require read --json
 expect 0 "$out" -- grant upsert --repo "$content_id" --principal "user:$user" --scope repositories:read --json
 expect 0 "$out" -- access check --repo "$content_id" --actor "user:$user" --role member --require read --json
