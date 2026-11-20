@@ -253,7 +253,7 @@ the sizes that matter, and two make targets reproduce them.
 
 `make perf-seed PROFILE=tiny|freetier|target NOTARX_DATABASE_URL=...` runs
 `tools/datagen` against a migrated, empty PostgreSQL database. It bulk-loads
-repositories, packages, versions, audit rows and webhook deliveries with `COPY`, draws
+repositories, packages, versions of every hosted format, audit rows and webhook deliveries with `COPY`, draws
 repository, package, actor and subscription popularity from a Zipf distribution so hot
 artifacts exist, and finishes with `ANALYZE`. The generation is deterministic for a seed and start time, and
 runs in one transaction, so a failed run leaves nothing behind and can be repeated.
@@ -268,9 +268,17 @@ Webhook deliveries follow the state mix of a long-running instance: 90 percent
 succeeded, 4 pending, 2 retrying, 3 dead and 1 leased, spread over the profile's time
 window and fanned out to four subscriptions per event.
 
-The seed format is npm. The other formats, the `target` run and the ratification of the
-SLOs are tracked as follow-up slices of ADR 0023 slice 17; the figures of ADR 0023
-section 11 stay estimates until a `target` run replaces them.
+The version budget of a profile is split across the hosted formats by a fixed mix:
+npm 30 percent (the widest per-version rows, and the remainder of the others), OCI 15,
+Maven 15, PyPI 10, Go 8, raw 6, Cargo 4, NuGet 4, Conan 3, Helm 2, RubyGems 2 and
+APT 1. Each format other than npm gets a tenth of the profile's repositories (at least
+one), and its packages are placed in them by popularity. Besides the version tables the
+seed fills the rows they depend on: raw objects, Go assets (info, mod and zip per
+version), Cargo names and reservations, and the NuGet, Helm and RubyGems publication
+sessions. Go assets, Cargo and NuGet and Helm support tables add rows on top of the
+version budget. The `target` run and the ratification of the SLOs are tracked as
+follow-up slices of ADR 0023 slice 17; the figures of ADR 0023 section 11 stay
+estimates until a `target` run replaces them.
 
 ## Mixed load profile
 

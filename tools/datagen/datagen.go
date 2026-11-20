@@ -6,7 +6,8 @@
 // of the traffic, so hot artifacts exist. Generation is deterministic for a given
 // profile, seed and start time (repository identifiers are UUIDv7 values built from the
 // seeded generator and the start time). The seed format is npm because its tables carry the widest
-// per-version rows; further formats join as their catalogue slices land. Webhook deliveries are generated
+// per-version rows; the other hosted formats (formats.go) receive the shares of FormatMix of the version budget when
+// the profile sets AllFormats. Webhook deliveries are generated
 // with the state mix of a long-running instance (mostly succeeded, a tail of pending, retrying, dead and
 // leased rows) so the claim, listing and retention queries meet realistic partial-index populations.
 package datagen
@@ -28,11 +29,13 @@ import (
 // Profile sizes one seeding run.
 type Profile struct {
 	Name string
-	// Versions is the number of native_npm_versions rows.
+	// Versions is the version budget: npm receives what FormatMix leaves of it when AllFormats is set, all of it otherwise.
 	Versions int
+	// AllFormats also seeds the other hosted formats, split by FormatMix; it needs at least minAllFormatsVersions versions.
+	AllFormats bool
 	// AuditRows is the number of resolver_audit_log rows.
 	AuditRows int
-	// Repositories is the number of hosted npm repositories.
+	// Repositories is the number of hosted npm repositories; every other format gets a tenth of it, at least one.
 	Repositories int
 	// AuditWindow is how far back audit rows and webhook deliveries are spread.
 	AuditWindow time.Duration
@@ -51,9 +54,9 @@ const zipfSkew = 1.2
 
 // Profiles are the named sizes of ADR 0023 section 11.
 var Profiles = map[string]Profile{
-	"tiny":     {Name: "tiny", Versions: 100_000, AuditRows: 1_000_000, Repositories: 20, AuditWindow: 30 * 24 * time.Hour, WebhookSubscriptions: 5, WebhookDeliveries: 20_000},
-	"freetier": {Name: "freetier", Versions: 1_000_000, AuditRows: 20_000_000, Repositories: 50, AuditWindow: 7 * 24 * time.Hour, WebhookSubscriptions: 20, WebhookDeliveries: 1_000_000},
-	"target":   {Name: "target", Versions: 10_000_000, AuditRows: 100_000_000, Repositories: 200, AuditWindow: 90 * 24 * time.Hour, WebhookSubscriptions: 200, WebhookDeliveries: 20_000_000},
+	"tiny":     {Name: "tiny", AllFormats: true, Versions: 100_000, AuditRows: 1_000_000, Repositories: 20, AuditWindow: 30 * 24 * time.Hour, WebhookSubscriptions: 5, WebhookDeliveries: 20_000},
+	"freetier": {Name: "freetier", AllFormats: true, Versions: 1_000_000, AuditRows: 20_000_000, Repositories: 50, AuditWindow: 7 * 24 * time.Hour, WebhookSubscriptions: 20, WebhookDeliveries: 1_000_000},
+	"target":   {Name: "target", AllFormats: true, Versions: 10_000_000, AuditRows: 100_000_000, Repositories: 200, AuditWindow: 90 * 24 * time.Hour, WebhookSubscriptions: 200, WebhookDeliveries: 20_000_000},
 }
 
 // ParseProfile returns the named profile.
@@ -104,7 +107,9 @@ type Copier interface {
 
 // Counts reports how many rows Seed wrote per table.
 type Counts struct {
-	Repositories, Packages, Versions, AuditRows            int64
+	Repositories, Packages, Versions, AuditRows int64
+	// FormatRows is the number of rows written for the formats of FormatMix, across their tables.
+	FormatRows                                             int64
 	WebhookSubscriptions, WebhookEvents, WebhookDeliveries int64
 }
 
@@ -145,7 +150,10 @@ func newID(rng *rand.Rand, now time.Time) uuid.UUID {
 func uuidOf(id uuid.UUID) pgtype.UUID { return pgtype.UUID{Bytes: id, Valid: true} }
 
 func repositoryName(i int) string { return fmt.Sprintf("perf-npm-%04d", i) }
-func packageName(i int) string    { return fmt.Sprintf("perf-pkg-%08d", i) }
+
+// formatRepositories is the number of repositories of each format other than npm.
+func formatRepositories(p Profile) int { return max(1, p.Repositories/10) }
+func packageName(i int) string         { return fmt.Sprintf("perf-pkg-%08d", i) }
 
 func digestOf(seed string) string {
 	sum := sha256.Sum256([]byte(seed))
@@ -160,21 +168,40 @@ func Seed(ctx context.Context, db Copier, p Profile, seed int64, now time.Time) 
 		p.WebhookDeliveries > 0 && p.WebhookSubscriptions < 1 {
 		return Counts{}, fmt.Errorf("datagen: profile %q has non-positive sizes", p.Name)
 	}
+	if p.AllFormats && p.Versions < minAllFormatsVersions {
+		return Counts{}, fmt.Errorf("datagen: profile %q has %d versions, fewer than the %d that spreading them across formats needs", p.Name, p.Versions, minAllFormatsVersions)
+	}
 	rng := rand.New(rand.NewSource(seed)) //nolint:gosec // synthetic data, determinism wanted
 	var counts Counts
 
+	npmVersions := p.Versions
+	formatRepoIDs := map[string][]uuid.UUID{}
+	if p.AllFormats {
+		for _, budget := range otherFormatVersions(p.Versions) {
+			npmVersions -= budget
+		}
+	}
 	repositoryIDs := make([]uuid.UUID, p.Repositories)
 	repositoryRows := make([][]any, p.Repositories)
 	for i := range repositoryIDs {
 		repositoryIDs[i] = newID(rng, now)
-		repositoryRows[i] = []any{pgtype.UUID{Bytes: repositoryIDs[i], Valid: true}, repositoryName(i), "npm"}
+		repositoryRows[i] = []any{uuidOf(repositoryIDs[i]), repositoryName(i), "npm"}
+	}
+	if p.AllFormats {
+		for _, share := range FormatMix {
+			for i := range formatRepositories(p) {
+				id := newID(rng, now)
+				formatRepoIDs[share.Format] = append(formatRepoIDs[share.Format], id)
+				repositoryRows = append(repositoryRows, []any{uuidOf(id), fmt.Sprintf("perf-%s-%04d", share.Format, i), share.Format})
+			}
+		}
 	}
 	var err error
 	if counts.Repositories, err = db.CopyFrom(ctx, pgx.Identifier{"hosted_repositories"}, []string{"id", "name", "format"}, pgx.CopyFromRows(repositoryRows)); err != nil {
 		return counts, fmt.Errorf("datagen: copy repositories: %w", err)
 	}
 
-	packages := plan(p, rng)
+	packages := plan(Profile{Versions: npmVersions, Repositories: p.Repositories}, rng)
 	packageIndex := 0
 	counts.Packages, err = db.CopyFrom(ctx, pgx.Identifier{"native_npm_packages"}, []string{"repository_id", "name"},
 		pgx.CopyFromFunc(func() ([]any, error) {
@@ -216,6 +243,12 @@ func Seed(ctx context.Context, db Copier, p Profile, seed int64, now time.Time) 
 		}))
 	if err != nil {
 		return counts, fmt.Errorf("datagen: copy versions: %w", err)
+	}
+
+	if p.AllFormats {
+		if counts.FormatRows, err = seedFormats(ctx, db, p, rng, now, formatRepoIDs); err != nil {
+			return counts, err
+		}
 	}
 
 	repoPop := NewPopularity(rng, p.Repositories)
