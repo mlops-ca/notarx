@@ -101,7 +101,13 @@ func (s *MemoryStore) scimIdentityLocked(providerID, userID string) (UserIdentit
 // scimVisibleIdentityLocked is scimIdentityLocked for the accounts SCIM can see: a link a DELETE removed is hidden.
 func (s *MemoryStore) scimVisibleIdentityLocked(providerID, userID string) (UserIdentity, bool) {
 	identity, ok := s.scimIdentityLocked(providerID, userID)
-	return identity, ok && !scimLinkRemoved(identity.SCIMExternalID)
+	return identity, ok && scimOwned(identity)
+}
+
+// scimOwned reports whether SCIM provisioned the account of an identity row: it has a scim_external_id and the link
+// was not removed. A just-in-time or administrator-linked account has none and is invisible to SCIM.
+func scimOwned(identity UserIdentity) bool {
+	return identity.SCIMExternalID != "" && !scimLinkRemoved(identity.SCIMExternalID)
 }
 
 func (s *MemoryStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, audit ...AuditRecord) (SCIMUser, error) {
@@ -121,10 +127,10 @@ func (s *MemoryStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, aud
 			continue
 		}
 		identity, linked := s.scimIdentityLocked(in.ProviderID, existing.ID)
-		if !linked || !scimLinkRemoved(identity.SCIMExternalID) || existing.Role != "none" || existing.SecretHash != "" || existing.State != UserDisabled || existing.DisabledReason != DisabledBySCIM {
+		if !linked || scimOwned(identity) || !scimClaimable(existing) {
 			return SCIMUser{}, ErrNameExists
 		}
-		return s.reviveSCIMUserLocked(ctx, existing, identity, in, audit)
+		return s.claimSCIMUserLocked(ctx, existing, identity, in, audit)
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return SCIMUser{}, err
@@ -150,9 +156,10 @@ func (s *MemoryStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, aud
 	return SCIMUser{User: user, Identity: identity}, nil
 }
 
-// reviveSCIMUserLocked brings back an account the same provider deleted earlier: the tombstone is replaced by the new
-// key and the account takes the profile of the request. It is active again only when the request says so.
-func (s *MemoryStore) reviveSCIMUserLocked(ctx context.Context, user User, identity UserIdentity, in SCIMUserCreate, audit []AuditRecord) (SCIMUser, error) {
+// claimSCIMUserLocked takes over an account the provider is linked to but SCIM does not own: one it deleted earlier or one
+// a login or an administrator linked. The account keeps its name, takes the profile of the request and is active
+// again only when the request says so; an active account the request deactivates loses its sessions at once.
+func (s *MemoryStore) claimSCIMUserLocked(ctx context.Context, user User, identity UserIdentity, in SCIMUserCreate, audit []AuditRecord) (SCIMUser, error) {
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return SCIMUser{}, err
 	}
@@ -164,10 +171,15 @@ func (s *MemoryStore) reviveSCIMUserLocked(ctx context.Context, user User, ident
 	if !strings.EqualFold(in.Email, user.Email) {
 		user = clearEmailVerification(user)
 	}
+	wasActive := user.State == UserActive
 	user.DisplayName, user.Email = in.DisplayName, in.Email
 	user.State, user.DisabledReason = UserActive, ""
 	if !in.Active {
 		user.State, user.DisabledReason = UserDisabled, DisabledBySCIM
+		if wasActive {
+			user.SessionVersion++
+			s.revokeUserSessionRecordsLocked(user.ID, now)
+		}
 	}
 	user.Version = nextHostedGroupVersion(user.Version)
 	user.UpdatedAt = now
@@ -206,7 +218,7 @@ func (s *MemoryStore) ListSCIMUsers(_ context.Context, query SCIMUserQuery) (SCI
 			continue
 		}
 		user, ok := s.users[identity.UserID]
-		if !ok || scimLinkRemoved(identity.SCIMExternalID) || query.UserName != "" && !strings.EqualFold(user.Name, query.UserName) || query.ExternalID != "" && identity.SCIMExternalID != query.ExternalID {
+		if !ok || !scimOwned(identity) || query.UserName != "" && !strings.EqualFold(user.Name, query.UserName) || query.ExternalID != "" && identity.SCIMExternalID != query.ExternalID {
 			continue
 		}
 		matches = append(matches, SCIMUser{User: user, Identity: identity})
@@ -256,11 +268,7 @@ func (s *MemoryStore) UpdateSCIMUser(ctx context.Context, providerID, userID str
 		return SCIMUser{}, ErrVersionConflict
 	}
 	if change.UserName != nil && !strings.EqualFold(*change.UserName, user.Name) {
-		for _, existing := range s.users {
-			if existing.ID != user.ID && strings.EqualFold(existing.Name, *change.UserName) {
-				return SCIMUser{}, ErrNameExists
-			}
-		}
+		return SCIMUser{}, ErrSCIMUserNameImmutable
 	}
 	if change.ExternalID != nil {
 		if *change.ExternalID == "" && identity.Subject == "" {
@@ -279,9 +287,6 @@ func (s *MemoryStore) UpdateSCIMUser(ctx context.Context, providerID, userID str
 		return SCIMUser{}, err
 	}
 	now := time.Now().UTC()
-	if change.UserName != nil {
-		user.Name = *change.UserName
-	}
 	if change.DisplayName != nil {
 		user.DisplayName, identity.DisplayName = *change.DisplayName, *change.DisplayName
 	}

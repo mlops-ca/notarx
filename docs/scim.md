@@ -40,13 +40,23 @@ curl -sS -X POST "$NOTARX/api/v2/authentication/providers/$PROVIDER_ID/scim-toke
   provider's logins. A peer address whose failures exceed the 120 per minute budget of the anonymous routes gets 429 for
   its further failures; a valid token is never throttled.
 
-Send it as `Authorization: Bearer nxscim_...`.
+Send it as `Authorization: Bearer nxscim_...`; a credential that does not have the shape of an issued token is refused
+without a database read.
 
 ## Accounts and logins
 
 - A created user has level `none` (pending) and a `user_identities` row with the `externalId` and no subject.
-  A `userName` that matches any existing account, local accounts included, is `409 uniqueness`; linking such an
-  account is an administrator action (`POST /authentication/providers/{id}/links`, below).
+  SCIM only sees the accounts it provisioned (the identity rows that carry a SCIM `externalId`): an account a login
+  created (`jit`) or an administrator linked is invisible to it and can never be changed or deactivated by it.
+- A `userName` that matches an existing account is `409 uniqueness`, except for one account the provider is
+  already linked to: a `POST /Users` takes over an account that a login or an administrator linked, or that the
+  provider deleted earlier, as long as it is at level `none`, has no local password and is active or disabled by
+  SCIM (an account an administrator disabled stays a conflict). This is how a provider in `jit` mode correlates its
+  users. The account keeps its name and takes the profile and state of the request.
+- `userName` cannot be changed through SCIM (`400 mutability`; a change of letter case only is ignored). The account
+  name is the identity that grants, sessions and job actors are keyed on, and no other path renames an account: a
+  rename would orphan its grants and hand them to whoever takes the old name. Rename the account in the console, or
+  provision the user again.
 - Provider mode `scim_only`: a login succeeds only for an identity that already exists. The first login binds the
   subject by matching the `externalId` the identity provider asserts (`attributeMapping.externalId`, for example the
   `employee_id` claim or the `employeeNumber` SAML attribute) against the SCIM `externalId`, and never by
@@ -65,10 +75,8 @@ Send it as `Authorization: Bearer nxscim_...`.
   account an administrator disabled stays disabled: re-activating it through SCIM is `409`.
 - `DELETE /Users/{id}` removes the SCIM link and disables the account; it never deletes the account (that stays a
   console action). SCIM no longer sees the account (`404`, not listed, `PATCH active=true` cannot bring it back);
-  the login subject stays bound. The same provider brings it back by creating the user again: a `POST /Users` with
-  the same `userName` re-links and re-activates it as long as it is still at level `none`, has no local password
-  and is still disabled by SCIM (an account an administrator disabled stays disabled), while another provider still
-  gets `409`. Deleting the account also removes the group memberships SCIM wrote for it, so a revived account comes
+  the login subject stays bound. The same provider brings it back by creating the user again (the take-over above),
+  while another provider still gets `409`. Deleting the account also removes the group memberships SCIM wrote for it, so a revived account comes
   back without access the provider has since withdrawn.
 - SCIM can never modify or deactivate a platform administrator: every write answers `403`.
 - Groups are created with source `scim` and global role `none`; a request cannot name a role, and SCIM changes never
@@ -87,7 +95,8 @@ Send it as `Authorization: Bearer nxscim_...`.
 | Unsupported attributes | Logged and ignored with `200`; only `userName`, `externalId`, `active` and `id` answer `400 invalidPath` |
 | ETag | Weak ETags on resources; `If-Match` on PUT, PATCH and DELETE is compared under the row lock, `412` on a mismatch |
 | Bulk, sort, change password | Not supported |
-| Groups | `excludedAttributes=members` is honoured; a group read returns at most 10000 members and a list returns at most 1000 per group (use `excludedAttributes=members`, as Entra ID does, or read the group) |
+| Groups | `excludedAttributes=members` is honoured; a group read returns at most 10000 members, and the groups of one list page share a budget of 1000 members (use `excludedAttributes=members`, as Entra ID does, or read the group) |
+| Locations | `meta.location`, `Location` and member `$ref` are absolute from `NOTARX_PUBLIC_URL`; without it they are paths only, never built from the request's Host header |
 
 The account stores one display name and one email: `name.formatted` and `emails` map to them, the other name
 parts are ignored.

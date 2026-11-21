@@ -151,21 +151,24 @@ func (s *scimServer) listGroups(w http.ResponseWriter, r *http.Request, caller s
 	if parameters.count > 0 {
 		withMembers := !membersExcluded(r)
 		var members map[string][]repository.UserGroupMember
+		perGroup := 0
 		if withMembers && len(page.Items) > 0 {
-			// One query for the whole page, capped per group: a client that needs larger groups reads them one by one
-			// or excludes the members, as Entra ID does.
+			// One query for the whole page. The members of a page share one budget, divided among its groups, so a
+			// page of large groups cannot pull an unbounded response; a client that needs a group's members reads the
+			// group, or excludes the members, as Entra ID does.
+			perGroup = max(scimMaxListedMembers/len(page.Items), 1)
 			groupIDs := make([]string, 0, len(page.Items))
 			for _, group := range page.Items {
 				groupIDs = append(groupIDs, group.ID)
 			}
 			var err error
-			if members, err = s.store.ListSCIMGroupsMembers(r.Context(), caller.ProviderID, groupIDs, scimMaxListedMembers); err != nil {
+			if members, err = s.store.ListSCIMGroupsMembers(r.Context(), caller.ProviderID, groupIDs, perGroup); err != nil {
 				return s.respond(w, r, caller, "scim.group.list", s.storeFailure(err, "Group"))
 			}
 		}
 		for _, group := range page.Items {
-			if len(members[group.ID]) >= scimMaxListedMembers {
-				slog.Warn("a SCIM group list truncated the members of a group", "provider", caller.Slug, "group", group.ID, "limit", scimMaxListedMembers)
+			if perGroup > 0 && len(members[group.ID]) >= perGroup {
+				slog.Warn("a SCIM group list may have truncated the members of a group", "provider", caller.Slug, "group", group.ID, "limit", perGroup)
 			}
 			response.Resources = append(response.Resources, s.groupDocument(r, group, members[group.ID], withMembers))
 		}
@@ -194,14 +197,14 @@ func (s *scimServer) createGroup(w http.ResponseWriter, r *http.Request, caller 
 	}
 	input, failure := scim.ParseGroup(body)
 	if failure == nil {
-		failure = validateScimGroup(input.DisplayName, &input.ExternalID)
+		failure = validateScimGroup(input.DisplayName, input.ExternalID)
 	}
 	if failure != nil {
 		return s.respond(w, r, caller, "scim.group.create", failure)
 	}
 	// The group is created at global role none; the request has no way to name another role.
 	group, err := s.store.CreateSCIMGroup(r.Context(), repository.SCIMGroupCreate{
-		ProviderID: caller.ProviderID, ExternalID: input.ExternalID, DisplayName: input.DisplayName, MemberIDs: input.MemberIDs,
+		ProviderID: caller.ProviderID, ExternalID: stringOrEmpty(input.ExternalID), DisplayName: input.DisplayName, MemberIDs: input.MemberIDs,
 	}, s.writeAudit(r, caller, "scim.group.create", "/Groups", http.StatusCreated, nil)...)
 	if err != nil {
 		return s.respond(w, r, caller, "scim.group.create", s.storeFailure(err, "Group"))
@@ -216,13 +219,17 @@ func (s *scimServer) replaceGroup(w http.ResponseWriter, r *http.Request, caller
 	}
 	input, failure := scim.ParseGroup(body)
 	if failure == nil {
-		failure = validateScimGroup(input.DisplayName, &input.ExternalID)
+		failure = validateScimGroup(input.DisplayName, input.ExternalID)
 	}
 	if failure != nil {
 		return s.respond(w, r, caller, "scim.group.replace", failure)
 	}
-	change := repository.SCIMGroupChange{DisplayName: &input.DisplayName, ExternalID: &input.ExternalID}
-	attributes := []string{"displayName", "externalId"}
+	// An attribute the body leaves out is left alone, except the display name, which is required.
+	change := repository.SCIMGroupChange{DisplayName: &input.DisplayName, ExternalID: input.ExternalID}
+	attributes := []string{"displayName"}
+	if input.ExternalID != nil {
+		attributes = append(attributes, "externalId")
+	}
 	if input.HasMembers {
 		members := input.MemberIDs
 		if members == nil {

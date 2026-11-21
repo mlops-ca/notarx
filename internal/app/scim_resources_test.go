@@ -45,7 +45,7 @@ func TestSCIMUserLifecycle(t *testing.T) {
 	h := newSCIMHarness(t, SCIMOptions{Enabled: true, MaxPage: 50})
 	created := h.scim(http.MethodPost, "/Users", `{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"Ada@Example.com","externalId":"ext-ada","displayName":"Ada Lovelace",
 		"name":{"givenName":"Ada","familyName":"Lovelace"},"emails":[{"value":"ada@example.com","primary":true,"type":"work"}],"active":true}`)
-	if created.Code != http.StatusCreated || !strings.HasPrefix(created.Header().Get("Location"), "https://notarx.example.test/scim/v2/Users/") || created.Header().Get("ETag") != `W/"1"` {
+	if created.Code != http.StatusCreated || !strings.HasPrefix(created.Header().Get("Location"), "/scim/v2/Users/") || created.Header().Get("ETag") != `W/"1"` {
 		t.Fatalf("create = %d %v %s", created.Code, created.Header(), created.Body.String())
 	}
 	user := decodeSCIM(t, created)
@@ -88,10 +88,17 @@ func TestSCIMUserLifecycle(t *testing.T) {
 	}
 
 	// Replace: a missing displayName and email are cleared, an absent externalId and active stay.
-	replaced := h.scim(http.MethodPut, "/Users/"+id, `{"userName":"ada.l@example.com"}`)
+	replaced := h.scim(http.MethodPut, "/Users/"+id, `{"userName":"ADA@example.com"}`)
 	body := decodeSCIM(t, replaced)
-	if replaced.Code != http.StatusOK || body["userName"] != "ada.l@example.com" || body["externalId"] != "ext-ada" || body["active"] != true || body["displayName"] != nil || body["emails"] != nil || replaced.Header().Get("ETag") != `W/"2"` {
+	// A change of letter case only is ignored: the stored name is kept.
+	if replaced.Code != http.StatusOK || body["userName"] != "Ada@Example.com" || body["externalId"] != "ext-ada" || body["active"] != true || body["displayName"] != nil || body["emails"] != nil || replaced.Header().Get("ETag") != `W/"2"` {
 		t.Fatalf("replace = %d %s", replaced.Code, replaced.Body.String())
+	}
+	// The account name is the identity grants and sessions are keyed on: SCIM cannot rename.
+	expectSCIMError(t, h.scim(http.MethodPut, "/Users/"+id, `{"userName":"ada.l@example.com"}`), http.StatusBadRequest, "mutability")
+	expectSCIMError(t, h.scim(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","path":"userName","value":"ada.l@example.com"}]}`), http.StatusBadRequest, "mutability")
+	if user, _ := h.store.GetUser(t.Context(), id); user.Name != "Ada@Example.com" {
+		t.Fatalf("the account was renamed through SCIM: %q", user.Name)
 	}
 	// If-Match guards the write.
 	expectSCIMError(t, h.scimAs(h.token, http.MethodPut, "/Users/"+id, `{"userName":"x"}`, map[string]string{"If-Match": `W/"1"`}), http.StatusPreconditionFailed, "invalidVers")
@@ -181,11 +188,14 @@ func TestSCIMDeactivationRevokesSessionsAndReactivationRules(t *testing.T) {
 
 func TestSCIMCannotTouchAPlatformAdministrator(t *testing.T) {
 	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
-	admin, err := h.store.CreateUser(t.Context(), repository.User{ID: uuid.NewString(), Name: "root", Role: "admin", SecretHash: "bcrypt"})
+	provisioned := h.createUser("root@example.com", "ext-root")
+	current, err := h.store.GetUser(t.Context(), provisioned)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.store.LinkProviderIdentity(t.Context(), repository.ProviderIdentityLink{ProviderID: h.provider.ID, UserID: admin.ID, Subject: "root-sub", Issuer: "https://login.example.test", Kind: repository.UserIdentityOIDC}); err != nil {
+	role := "admin"
+	admin, err := h.store.UpdateUser(t.Context(), repository.UserUpdate{ID: provisioned, Role: &role}, current.Version)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if got := h.scim(http.MethodGet, "/Users/"+admin.ID, ""); got.Code != http.StatusOK {
@@ -194,11 +204,11 @@ func TestSCIMCannotTouchAPlatformAdministrator(t *testing.T) {
 	for name, request := range map[string][3]string{
 		"deactivate": {http.MethodPatch, "/Users/" + admin.ID, `{"Operations":[{"op":"replace","path":"active","value":false}]}`},
 		"rename":     {http.MethodPatch, "/Users/" + admin.ID, `{"Operations":[{"op":"replace","path":"displayName","value":"x"}]}`},
-		"replace":    {http.MethodPut, "/Users/" + admin.ID, `{"userName":"root2"}`},
+		"replace":    {http.MethodPut, "/Users/" + admin.ID, `{"userName":"root@example.com"}`},
 		"delete":     {http.MethodDelete, "/Users/" + admin.ID, ""},
 	} {
 		expectSCIMError(t, h.scim(request[0], request[1], request[2]), http.StatusForbidden, "mutability")
-		if after, _ := h.store.GetUser(t.Context(), admin.ID); after.State != repository.UserActive || after.Name != "root" || after.DisplayName != "" || after.SessionVersion != admin.SessionVersion {
+		if after, _ := h.store.GetUser(t.Context(), admin.ID); after.State != repository.UserActive || after.Name != "root@example.com" || after.DisplayName != admin.DisplayName || after.SessionVersion != admin.SessionVersion {
 			t.Fatalf("%s changed the administrator: %+v", name, after)
 		}
 	}
@@ -351,6 +361,10 @@ func TestSCIMGroupLifecycleAndRoleSafety(t *testing.T) {
 	withMembers := h.scim(http.MethodPut, "/Groups/"+groupID, `{"displayName":"Platform 2","members":[{"value":"`+ada+`"}]}`)
 	if got := members(withMembers); len(got) != 1 || got[0] != ada {
 		t.Fatalf("replace with members = %v", got)
+	}
+	// An externalId the body leaves out is left alone: clearing it would make the IdP's next lookup find nothing.
+	if kept := decodeSCIM(t, withMembers); kept["externalId"] != "g-eng" {
+		t.Fatalf("a replace without externalId cleared it: %v", kept)
 	}
 
 	// The administrator's flag survives SCIM changes; delete and recreate starts at none again.
@@ -747,4 +761,110 @@ func TestSCIMFailureLimiterIgnoresForwardedForHeaders(t *testing.T) {
 			t.Fatalf("an audit resource of %d bytes was written", len(record.Resource))
 		}
 	}
+}
+
+func TestSCIMOnlySeesAccountsItProvisionedAndTakesOverUnprivilegedLinkedOnes(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	link := func(name, role, hash string) string {
+		t.Helper()
+		account, err := h.store.CreateUser(t.Context(), repository.User{ID: uuid.NewString(), Name: name, Role: role, SecretHash: hash})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.store.LinkProviderIdentity(t.Context(), repository.ProviderIdentityLink{ProviderID: h.provider.ID, UserID: account.ID, Subject: "sub-" + name, Issuer: "https://login.example.test", Kind: repository.UserIdentityOIDC}); err != nil {
+			t.Fatal(err)
+		}
+		return account.ID
+	}
+	member, password, jit := link("member-user", "member", ""), link("password-user", "none", "bcrypt"), link("jit-user", "none", "")
+	for name, id := range map[string]string{"member": member, "password": password, "jit": jit} {
+		expectSCIMError(t, h.scim(http.MethodGet, "/Users/"+id, ""), http.StatusNotFound, "")
+		expectSCIMError(t, h.scim(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","path":"active","value":false}]}`), http.StatusNotFound, "")
+		expectSCIMError(t, h.scim(http.MethodDelete, "/Users/"+id, ""), http.StatusNotFound, "")
+		if user, _ := h.store.GetUser(t.Context(), id); user.State != repository.UserActive {
+			t.Fatalf("%s: SCIM changed an account it did not provision: %+v", name, user)
+		}
+	}
+	expectSCIMError(t, h.scim(http.MethodPost, "/Users", `{"userName":"member-user"}`), http.StatusConflict, "uniqueness")
+	expectSCIMError(t, h.scim(http.MethodPost, "/Users", `{"userName":"password-user"}`), http.StatusConflict, "uniqueness")
+	// An unprivileged linked account is how a provider in jit mode correlates its users: the create takes it over.
+	taken := h.scim(http.MethodPost, "/Users", `{"userName":"JIT-user","externalId":"ext-jit","displayName":"JIT"}`)
+	body := decodeSCIM(t, taken)
+	if taken.Code != http.StatusCreated || body["id"] != jit || body["externalId"] != "ext-jit" || body["active"] != true {
+		t.Fatalf("take over = %d %s", taken.Code, taken.Body.String())
+	}
+	if got := h.scim(http.MethodGet, "/Users/"+jit, ""); got.Code != http.StatusOK {
+		t.Fatalf("a taken over account is not visible: %d", got.Code)
+	}
+}
+
+func TestSCIMTokenShapeIsCheckedBeforeAnyLookup(t *testing.T) {
+	valid := scimTokenPrefix + strings.Repeat("A", 43)
+	if !scimTokenShape(valid) || !scimTokenShape(scimTokenPrefix+strings.Repeat("a-_0", 10)+"abc") {
+		t.Fatal("a token of the issued shape was refused")
+	}
+	for _, bad := range []string{"", scimTokenPrefix, scimTokenPrefix + strings.Repeat("A", 42), scimTokenPrefix + strings.Repeat("A", 44), "nxscim" + strings.Repeat("A", 43), scimTokenPrefix + strings.Repeat("A", 42) + "=", scimTokenPrefix + strings.Repeat("A", 42) + " "} {
+		if scimTokenShape(bad) {
+			t.Errorf("%q passed the shape check", bad)
+		}
+	}
+	// A token of the issued shape that is unknown is looked up and refused; anything else never reaches the store.
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	counting := &countingSCIMStore{scimStore: h.store}
+	server := newSCIMServer(SCIMOptions{Enabled: true}, counting, nil)
+	for _, token := range []string{"garbage", scimTokenPrefix + "short"} {
+		request := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusUnauthorized {
+			t.Fatalf("%q = %d", token, recorder.Code)
+		}
+	}
+}
+
+func TestSCIMLocationsNeverTrustTheRequestHost(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	request := httptest.NewRequest(http.MethodPost, "https://attacker.example/scim/v2/Users", strings.NewReader(`{"userName":"host-test"}`))
+	request.Host = "attacker.example"
+	request.Header.Set("Authorization", "Bearer "+h.token)
+	request.Header.Set("Content-Type", "application/scim+json")
+	request.Header.Set("X-Forwarded-Proto", "https")
+	request.Header.Set("X-Forwarded-Host", "attacker.example")
+	recorder := httptest.NewRecorder()
+	h.handler.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusCreated || strings.Contains(recorder.Body.String(), "attacker.example") || strings.Contains(recorder.Header().Get("Location"), "attacker.example") ||
+		!strings.HasPrefix(recorder.Header().Get("Location"), "/scim/v2/Users/") {
+		t.Fatalf("create = %d location=%q body=%s", recorder.Code, recorder.Header().Get("Location"), recorder.Body.String())
+	}
+}
+
+func TestSCIMGroupListSharesOneMemberBudgetAmongItsGroups(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true, MaxPage: 4})
+	members := make([]string, 0, 3)
+	for index := 0; index < 3; index++ {
+		members = append(members, h.createUser("budget"+strconv.Itoa(index)+"@example.com", ""))
+	}
+	for index := 0; index < 4; index++ {
+		h.createGroup("Budget "+strconv.Itoa(index), "b-"+strconv.Itoa(index), members...)
+	}
+	counting := &budgetSCIMStore{scimStore: h.store}
+	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: 4}, counting, nil)
+	request := httptest.NewRequest(http.MethodGet, "/scim/v2/Groups", nil)
+	request.Header.Set("Authorization", "Bearer "+h.token)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK || counting.perGroup != scimMaxListedMembers/4 {
+		t.Fatalf("list = %d with a per-group cap of %d, want %d", recorder.Code, counting.perGroup, scimMaxListedMembers/4)
+	}
+}
+
+type budgetSCIMStore struct {
+	scimStore
+	perGroup int
+}
+
+func (b *budgetSCIMStore) ListSCIMGroupsMembers(ctx context.Context, providerID string, groupIDs []string, perGroup int) (map[string][]repository.UserGroupMember, error) {
+	b.perGroup = perGroup
+	return b.scimStore.ListSCIMGroupsMembers(ctx, providerID, groupIDs, perGroup)
 }

@@ -104,7 +104,7 @@ ScimGroup:
       type: array
       description: >
         Omitted when excludedAttributes=members is sent. Each member carries value, display, type and a $ref link to
-        its User. A group read returns at most 10000 members and a list at most 1000 per group.
+        its User. A group read returns at most 10000 members; the groups of one list page share a budget of 1000.
       items:
         type: object
         properties:
@@ -296,7 +296,10 @@ scim_users:
         "$ref": "#/responses/ScimError"
   post:
     operationId: createSCIMUser
-    description: Creates an account with level none and an identity row that has scim_external_id and no subject. A userName that matches an existing account is 409 uniqueness.
+    description: >
+      Creates an account with level none and an identity row that has scim_external_id and no subject. A userName that
+      matches an existing account is 409 uniqueness, except for an unprivileged account the provider is already linked
+      to (a login or an administrator linked it, or the provider deleted it), which the create takes over.
     security: [{scimBearerAuth: []}]
     requestBody:
       required: true
@@ -351,6 +354,7 @@ scim_users_id:
         "$ref": "#/responses/ScimError"
   put:
     operationId: replaceSCIMUser
+    description: Replaces displayName and the email; userName cannot be changed (400 mutability, letter case aside).
     security: [{scimBearerAuth: []}]
     parameters:
     - {"$ref": "#/parameters/ifMatch"}

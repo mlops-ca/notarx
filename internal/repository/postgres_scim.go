@@ -84,11 +84,12 @@ func (s *PostgresStore) FindActiveSCIMTokenByHash(ctx context.Context, hash stri
 	return token, err
 }
 
-// scimVisible is the condition of the identity rows SCIM can see: a link that DELETE /Users removed carries a
-// tombstone in scim_external_id and is hidden. scimVisibleBare is the same for statements without the i alias.
+// scimVisible is the condition of the identity rows SCIM can see: the accounts it provisioned. A just-in-time or
+// administrator-linked account has no scim_external_id, and a link that DELETE /Users removed carries a tombstone in
+// it; both are hidden. scimVisibleBare is the same for statements without the i alias.
 const (
-	scimVisible     = `(i.scim_external_id IS NULL OR i.scim_external_id NOT LIKE '` + SCIMDeletedExternalIDPrefix + `%')`
-	scimVisibleBare = `(scim_external_id IS NULL OR scim_external_id NOT LIKE '` + SCIMDeletedExternalIDPrefix + `%')`
+	scimVisible     = `(i.scim_external_id IS NOT NULL AND i.scim_external_id NOT LIKE '` + SCIMDeletedExternalIDPrefix + `%')`
+	scimVisibleBare = `(scim_external_id IS NOT NULL AND scim_external_id NOT LIKE '` + SCIMDeletedExternalIDPrefix + `%')`
 )
 
 const scimUserColumns = `u.id::text, u.name, u.display_name, u.email, u.description, u.secret_hash, u.role, u.state, u.last_login_at, u.password_changed_at, u.failed_login_attempts, u.locked_until, u.must_change_password, u.session_version, u.email_verified_by_admin, u.email_verified_at, u.email_verified_by, u.created_at, u.updated_at, u.version::text, COALESCE(u.disabled_reason, ''),
@@ -145,8 +146,8 @@ func (s *PostgresStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, a
 		if !in.Active {
 			state, reason = UserDisabled, DisabledBySCIM
 		}
-		if revived, found, err := reviveSCIMUser(ctx, q, in, state, reason); err != nil || found {
-			return revived, err
+		if claimed, found, err := claimSCIMUser(ctx, q, in, state, reason); err != nil || found {
+			return claimed, err
 		}
 		userID := ids.New()
 		var user User
@@ -179,13 +180,16 @@ func (s *PostgresStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, a
 	return created, err
 }
 
-// reviveSCIMUser brings back an account the same provider deleted earlier (its link carries the tombstone): the
-// account must still be at level none, without a password and disabled by SCIM (an administrator's disable stays), the tombstone is replaced by the new key and the account
-// takes the profile of the request. found is false when no such account exists, and the create goes on.
-func reviveSCIMUser(ctx context.Context, q sqlRunner, in SCIMUserCreate, state, reason string) (SCIMUser, bool, error) {
+// claimSCIMUser takes over an account the provider is linked to but SCIM does not own: one it deleted earlier (its link
+// carries the tombstone) or one a login or an administrator linked (no scim_external_id). The account must be at level
+// none, without a password and active or disabled by SCIM; it keeps its name, takes the profile of the request and is
+// active again only when the request says so, and an active account the request deactivates loses its sessions at once.
+// found is false when no such account exists, and the create goes on.
+func claimSCIMUser(ctx context.Context, q sqlRunner, in SCIMUserCreate, state, reason string) (SCIMUser, bool, error) {
 	var userID, identityID string
 	err := q.QueryRowContext(ctx, `SELECT u.id::text, i.id::text FROM users u JOIN user_identities i ON i.user_id=u.id AND i.provider_id=$1::uuid
-		WHERE lower(u.name)=lower($2) AND i.scim_external_id LIKE '`+SCIMDeletedExternalIDPrefix+`%' AND u.role='none' AND u.secret_hash='' AND u.state='disabled' AND u.disabled_reason='scim' FOR UPDATE OF u, i`, in.ProviderID, in.UserName).Scan(&userID, &identityID)
+		WHERE lower(u.name)=lower($2) AND (i.scim_external_id IS NULL OR i.scim_external_id LIKE '`+SCIMDeletedExternalIDPrefix+`%') AND u.role='none' AND u.secret_hash=''
+		AND (u.state='active' OR (u.state='disabled' AND u.disabled_reason='scim')) FOR UPDATE OF u, i`, in.ProviderID, in.UserName).Scan(&userID, &identityID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SCIMUser{}, false, nil
 	}
@@ -204,9 +208,10 @@ func reviveSCIMUser(ctx context.Context, q sqlRunner, in SCIMUserCreate, state, 
 	if !strings.EqualFold(in.Email, current.User.Email) {
 		verified = clearEmailVerification(current.User)
 	}
+	revoke := current.User.State == UserActive && state == UserDisabled
 	var user User
-	if err = scanUser(q.QueryRowContext(ctx, `UPDATE users SET display_name=$2, email=$3, email_verified_by_admin=$4, email_verified_at=$5, email_verified_by=$6, state=$7, disabled_reason=NULLIF($8,''), version=version+1, updated_at=now() WHERE id=$1::uuid RETURNING `+userColumns,
-		userID, in.DisplayName, in.Email, verified.EmailVerifiedByAdmin, verified.EmailVerifiedAt, verified.EmailVerifiedBy, state, reason), &user); err != nil {
+	if err = scanUser(q.QueryRowContext(ctx, `UPDATE users SET display_name=$2, email=$3, email_verified_by_admin=$4, email_verified_at=$5, email_verified_by=$6, state=$7, disabled_reason=NULLIF($8,''), session_version=session_version+CASE WHEN $9 THEN 1 ELSE 0 END, version=version+1, updated_at=now() WHERE id=$1::uuid RETURNING `+userColumns,
+		userID, in.DisplayName, in.Email, verified.EmailVerifiedByAdmin, verified.EmailVerifiedAt, verified.EmailVerifiedBy, state, reason, revoke), &user); err != nil {
 		return SCIMUser{}, false, err
 	}
 	var identity UserIdentity
@@ -217,6 +222,11 @@ func reviveSCIMUser(ctx context.Context, q sqlRunner, in SCIMUserCreate, state, 
 	}
 	if err != nil {
 		return SCIMUser{}, false, err
+	}
+	if revoke {
+		if _, err = q.ExecContext(ctx, `UPDATE user_sessions SET revoked_at=now() WHERE user_id=$1::uuid AND revoked_at IS NULL`, userID); err != nil {
+			return SCIMUser{}, false, err
+		}
 	}
 	return SCIMUser{User: user, Identity: identity}, true, nil
 }
@@ -321,6 +331,9 @@ func (s *PostgresStore) UpdateSCIMUser(ctx context.Context, providerID, userID s
 		if !scimVersionAllowed(user.Version, change.IfVersions) {
 			return SCIMUser{}, ErrVersionConflict
 		}
+		if change.UserName != nil && !strings.EqualFold(*change.UserName, user.Name) {
+			return SCIMUser{}, ErrSCIMUserNameImmutable
+		}
 		if change.ExternalID != nil && *change.ExternalID == "" && identity.Subject == "" {
 			return SCIMUser{}, ErrSCIMInvalid
 		}
@@ -339,16 +352,12 @@ func (s *PostgresStore) UpdateSCIMUser(ctx context.Context, providerID, userID s
 		if change.Email != nil && !strings.EqualFold(strings.TrimSpace(*change.Email), strings.TrimSpace(user.Email)) {
 			verified = clearEmailVerification(user)
 		}
-		err = scanUser(q.QueryRowContext(ctx, `UPDATE users SET name=CASE WHEN $2 THEN $3 ELSE name END, display_name=CASE WHEN $4 THEN $5 ELSE display_name END, email=CASE WHEN $6 THEN $7 ELSE email END, email_verified_by_admin=$8, email_verified_at=$9, email_verified_by=$10, state=$11, disabled_reason=NULLIF($12,''), session_version=session_version+CASE WHEN $13 THEN 1 ELSE 0 END, version=version+1, updated_at=now() WHERE id=$1::uuid RETURNING `+userColumns,
+		err = scanUser(q.QueryRowContext(ctx, `UPDATE users SET display_name=CASE WHEN $2 THEN $3 ELSE display_name END, email=CASE WHEN $4 THEN $5 ELSE email END, email_verified_by_admin=$6, email_verified_at=$7, email_verified_by=$8, state=$9, disabled_reason=NULLIF($10,''), session_version=session_version+CASE WHEN $11 THEN 1 ELSE 0 END, version=version+1, updated_at=now() WHERE id=$1::uuid RETURNING `+userColumns,
 			userID,
-			change.UserName != nil, stringValue(change.UserName),
 			change.DisplayName != nil, stringValue(change.DisplayName),
 			change.Email != nil, stringValue(change.Email),
 			verified.EmailVerifiedByAdmin, verified.EmailVerifiedAt, verified.EmailVerifiedBy,
 			state, reason, revoke), &user)
-		if isUnique(err) {
-			return SCIMUser{}, ErrNameExists
-		}
 		if err != nil {
 			return SCIMUser{}, err
 		}
@@ -403,6 +412,8 @@ func (s *PostgresStore) DeleteSCIMUser(ctx context.Context, providerID, userID s
 	})
 	if err == nil {
 		s.invalidateLocal(CacheScopeUser, userID)
+		// The memberships SCIM wrote went with the link.
+		s.invalidateLocalScope(CacheScopeUserGroup)
 	}
 	return err
 }

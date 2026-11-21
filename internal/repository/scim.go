@@ -59,6 +59,10 @@ var (
 	ErrSCIMAdminProtected = errors.New("SCIM cannot modify a platform administrator")
 	// ErrSCIMAdminDisabled refuses to re-activate an account that an administrator disabled.
 	ErrSCIMAdminDisabled = errors.New("the account was disabled by an administrator")
+	// ErrSCIMUserNameImmutable refuses a SCIM change of userName: the account name is the identity that grants, sessions
+	// and job actors are keyed on (user:<name>), and no other path renames an account, so a rename through SCIM would
+	// orphan its grants and hand them to whoever takes the old name. A change of letter case only is ignored.
+	ErrSCIMUserNameImmutable = errors.New("SCIM cannot rename an account")
 	// ErrSCIMInvalid reports a SCIM change the stores cannot apply (for example a member that is not a user of the
 	// provider).
 	ErrSCIMInvalid = errors.New("SCIM change is invalid")
@@ -113,6 +117,11 @@ func ReservedSCIMExternalID(externalID string) bool {
 	return strings.HasPrefix(externalID, SCIMGeneratedExternalIDPrefix) || strings.HasPrefix(externalID, SCIMDeletedExternalIDPrefix)
 }
 
+// scimClaimable reports whether a create may take over an account that SCIM does not currently own.
+func scimClaimable(user User) bool {
+	return user.Role == "none" && user.SecretHash == "" && (user.State == UserActive || user.State == UserDisabled && user.DisabledReason == DisabledBySCIM)
+}
+
 // scimLinkRemoved reports the tombstone a DELETE leaves in scim_external_id.
 func scimLinkRemoved(externalID string) bool {
 	return strings.HasPrefix(externalID, SCIMDeletedExternalIDPrefix)
@@ -125,10 +134,12 @@ func scimVersionAllowed(current string, ifVersions []string) bool {
 
 // SCIMUserCreate is a SCIM create. The account gets level none; Active false creates it disabled by SCIM.
 //
-// A user the provider deleted earlier (its link carries the tombstone) is brought back by a create with the same
-// userName: the account must still be at level none, without a password and disabled by SCIM (an account an
-// administrator disabled stays disabled and the create is a conflict), and it is re-activated or left disabled as the
-// request says.
+// SCIM only sees the accounts it provisioned: an identity row with a scim_external_id of the provider. A create whose
+// userName matches an account the provider is linked to but SCIM does not own (a just-in-time or administrator-linked
+// account) or one it deleted earlier (its link carries the tombstone) takes that account over, so a provider in jit
+// mode can correlate its users, but only while the account is at level none, has no local password and is active or
+// disabled by SCIM; an account an administrator disabled, a member, or an account with a password is a conflict.
+// The account keeps its name and takes the profile and state of the request.
 type SCIMUserCreate struct {
 	ProviderID  string
 	UserName    string
@@ -227,6 +238,7 @@ type SCIMStore interface {
 	// its sessions in the same transaction; active=true on an account an administrator disabled is
 	// ErrSCIMAdminDisabled.
 	UpdateSCIMUser(ctx context.Context, providerID, userID string, change SCIMUserChange, audit ...AuditRecord) (SCIMUser, error)
+	// (A change of userName is ErrSCIMUserNameImmutable, except for letter case, which is ignored.)
 	// DeleteSCIMUser removes the SCIM link (the identity row keeps a tombstone, so SCIM no longer sees the account),
 	// removes the account from the SCIM groups of the provider and disables it; it never deletes the account.
 	// ifVersions is the If-Match list (empty: unconditional).

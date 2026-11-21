@@ -158,6 +158,11 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 		h.redirectError(w, r, "invalid_identity")
 		return
 	}
+	if h.identities == nil && provider.provider.ProvisioningMode == identity.ProvisioningSCIMOnly {
+		// scim_only never signs in a subject that has no account, and without an identity store none can be found.
+		h.redirectError(w, r, "identity_unavailable")
+		return
+	}
 	if h.identities != nil {
 		issuer := verified.Issuer
 		if issuer == "" {

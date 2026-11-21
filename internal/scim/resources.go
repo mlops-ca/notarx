@@ -21,8 +21,8 @@ type UserInput struct {
 
 type nameInput struct {
 	Formatted  string `json:"formatted"`
-	GivenName  string `json:"givenName"`
-	FamilyName string `json:"familyName"`
+	GivenName  string `json:"givenName,omitempty"`
+	FamilyName string `json:"familyName,omitempty"`
 }
 
 // ParseUser reads the body of a User create or replace.
@@ -77,8 +77,9 @@ func ParseUser(body []byte) (UserInput, *Error) {
 // GroupInput is a Group as a client writes it.
 type GroupInput struct {
 	DisplayName string
-	ExternalID  string
-	MemberIDs   []string
+	// ExternalID is nil when the body carried none, so a replace leaves the stored one alone.
+	ExternalID *string
+	MemberIDs  []string
 	// HasMembers reports that the body names members, even an empty list: an absent attribute leaves the
 	// memberships of a group alone on replace, a present one replaces them.
 	HasMembers bool
@@ -103,7 +104,8 @@ func ParseGroup(body []byte) (GroupInput, *Error) {
 		if !ok {
 			return GroupInput{}, invalidValue("externalId must be a string")
 		}
-		input.ExternalID = strings.TrimSpace(text)
+		text = strings.TrimSpace(text)
+		input.ExternalID = &text
 	}
 	if hasValue(raw.Members) {
 		members, ok := MemberIDs(raw.Members)

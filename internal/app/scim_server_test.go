@@ -375,7 +375,7 @@ func TestSCIMDiscoveryMatchesTheAdvertisedCapabilities(t *testing.T) {
 		document["filter"].(map[string]any)["maxResults"] != float64(123) {
 		t.Fatalf("config = %s", config.Body.String())
 	}
-	if document["meta"].(map[string]any)["location"] != "https://notarx.example.test/scim/v2/ServiceProviderConfig" {
+	if document["meta"].(map[string]any)["location"] != "/scim/v2/ServiceProviderConfig" {
 		t.Errorf("location = %v", document["meta"])
 	}
 	types := decodeSCIM(t, h.scim(http.MethodGet, "/ResourceTypes", ""))

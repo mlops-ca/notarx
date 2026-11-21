@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -122,7 +123,7 @@ func (s *scimServer) authenticate(r *http.Request) (scimCaller, *scim.Error) {
 	unauthorized := scim.NewError(http.StatusUnauthorized, "", "a valid SCIM bearer token is required")
 	scheme, token, found := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
 	token = strings.TrimSpace(token)
-	if !found || !strings.EqualFold(scheme, "Bearer") || !strings.HasPrefix(token, scimTokenPrefix) || len(token) > 256 {
+	if !found || !strings.EqualFold(scheme, "Bearer") || !scimTokenShape(token) {
 		return scimCaller{}, unauthorized
 	}
 	hash := authorization.HashAPIKey(token)
@@ -154,6 +155,21 @@ func (s *scimServer) authenticate(r *http.Request) (scimCaller, *scim.Error) {
 	return scimCaller{ProviderID: provider.ID, Slug: provider.Slug}, nil
 }
 
+// scimTokenShape reports whether a credential has the shape of a token this server issues (the prefix and 256 bits of
+// base64url), so that arbitrary strings are refused without a database read.
+func scimTokenShape(token string) bool {
+	rest, ok := strings.CutPrefix(token, scimTokenPrefix)
+	if !ok || len(rest) != base64.RawURLEncoding.EncodedLen(scimTokenBytes) {
+		return false
+	}
+	for _, character := range rest {
+		if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '-' || character == '_') {
+			return false
+		}
+	}
+	return true
+}
+
 // route dispatches an authenticated request and returns the status it answered.
 func (s *scimServer) route(w http.ResponseWriter, r *http.Request, caller scimCaller) int {
 	segments := strings.Split(strings.Trim(strings.TrimPrefix(r.URL.Path, scimBasePath), "/"), "/")
@@ -181,16 +197,14 @@ func (s *scimServer) route(w http.ResponseWriter, r *http.Request, caller scimCa
 	return s.respond(w, r, caller, "scim.unknown", scim.NewError(http.StatusNotFound, "", "unknown SCIM resource"))
 }
 
-// base is the absolute SCIM base URL: from NOTARX_PUBLIC_URL, else from the request.
-func (s *scimServer) base(r *http.Request) string {
+// base is the SCIM base URL of the locations in responses: absolute from NOTARX_PUBLIC_URL, and only the path without
+// it. The request's Host and X-Forwarded-Proto are client-controlled, so they never build an absolute URL: an identity
+// provider that follows a location it was handed must not be sent to another host with its bearer token.
+func (s *scimServer) base(*http.Request) string {
 	if s.options.PublicURL != nil {
 		return strings.TrimRight(s.options.PublicURL.String(), "/") + scimBasePath
 	}
-	scheme := "http"
-	if r.TLS != nil || strings.EqualFold(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host + scimBasePath
+	return scimBasePath
 }
 
 // respond writes an error, audits the call and returns the status.
@@ -330,6 +344,8 @@ func (s *scimServer) storeFailure(err error, kind string) *scim.Error {
 		return scim.NewError(http.StatusNotFound, "", kind+" not found")
 	case errors.Is(err, repository.ErrUserGroupProviderNotFound):
 		return scim.NewError(http.StatusNotFound, "", "the identity provider of this token no longer exists")
+	case errors.Is(err, repository.ErrSCIMUserNameImmutable):
+		return scim.NewError(http.StatusBadRequest, scim.TypeMutability, "userName cannot be changed through SCIM: the account name is the identity its grants and sessions are keyed on")
 	case errors.Is(err, repository.ErrSCIMAdminProtected):
 		return scim.NewError(http.StatusForbidden, scim.TypeMutability, "SCIM cannot modify a platform administrator")
 	case errors.Is(err, repository.ErrSCIMAdminDisabled):

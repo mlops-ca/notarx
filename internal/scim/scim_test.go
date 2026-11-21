@@ -184,11 +184,11 @@ func TestParseUserAndGroup(t *testing.T) {
 		}
 	}
 	group, failure := ParseGroup([]byte(`{"displayName":"Eng","externalId":"g","members":[{"value":"u1"}]}`))
-	if failure != nil || group.DisplayName != "Eng" || group.ExternalID != "g" || len(group.MemberIDs) != 1 || !group.HasMembers {
+	if failure != nil || group.DisplayName != "Eng" || stringOrNil(group.ExternalID) != "g" || len(group.MemberIDs) != 1 || !group.HasMembers {
 		t.Fatalf("group = %+v, %v", group, failure)
 	}
-	if bare, _ := ParseGroup([]byte(`{"displayName":"Eng"}`)); bare.HasMembers {
-		t.Fatal("an absent members attribute was reported as present")
+	if bare, _ := ParseGroup([]byte(`{"displayName":"Eng"}`)); bare.HasMembers || bare.ExternalID != nil {
+		t.Fatal("an absent members or externalId attribute was reported as present")
 	}
 	for _, body := range []string{`{}`, `{"displayName":"a","members":"x"}`, `{"displayName":"a","externalId":1}`, `nope`} {
 		if _, failure := ParseGroup([]byte(body)); failure == nil {

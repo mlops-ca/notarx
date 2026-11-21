@@ -158,17 +158,19 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if _, err = store.UpdateUser(ctx, UserUpdate{ID: user.User.ID, EmailVerifiedByAdmin: &verified, EmailVerifiedBy: "admin"}, user.User.Version); err != nil {
 			t.Fatal(err)
 		}
-		renamed := name("david")
+		renamed := name("dave")
 		address, display, external := "david@example.org", "David", name("ext-david")
-		updated, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{UserName: &renamed, DisplayName: &display, Email: &address, ExternalID: &external})
+		// The account name is the identity grants and sessions are keyed on: SCIM cannot rename, and a change of letter
+		// case only is ignored.
+		if _, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{UserName: ptr(name("david"))}); !errors.Is(err, ErrSCIMUserNameImmutable) {
+			t.Errorf("a rename through SCIM: %v", err)
+		}
+		updated, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{UserName: ptr(strings.ToUpper(renamed)), DisplayName: &display, Email: &address, ExternalID: &external})
 		if err != nil || updated.User.Name != renamed || updated.User.DisplayName != "David" || updated.User.Email != address || updated.ExternalID() != external || updated.User.State != UserActive {
 			t.Fatalf("update = %+v, %v", updated, err)
 		}
 		if updated.User.EmailVerifiedByAdmin {
 			t.Error("changing the email through SCIM kept the administrator verification")
-		}
-		if _, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{UserName: ptr(name("alice@example.com"))}); !errors.Is(err, ErrNameExists) {
-			t.Errorf("rename onto another account: %v", err)
 		}
 		if _, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{ExternalID: ptr(name("ext-alice"))}); !errors.Is(err, ErrIdentityExists) {
 			t.Errorf("externalId of another account: %v", err)
@@ -302,13 +304,15 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 	})
 
 	t.Run("a platform administrator is untouchable", func(t *testing.T) {
-		admin, err := store.CreateUser(ctx, User{ID: ids.New(), Name: name("root"), Role: "admin", SecretHash: "bcrypt"})
+		scimAdmin, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: name("root"), Active: true})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := store.LinkProviderIdentity(ctx, ProviderIdentityLink{ProviderID: provider, UserID: admin.ID, Subject: "root-" + suffix, Issuer: "https://idp.example.test", Kind: UserIdentityOIDC}); err != nil {
+		promoted, err := store.UpdateUser(ctx, UserUpdate{ID: scimAdmin.User.ID, Role: ptr("admin")}, scimAdmin.User.Version)
+		if err != nil {
 			t.Fatal(err)
 		}
+		admin := promoted
 		inactive := false
 		if _, err := store.UpdateSCIMUser(ctx, provider, admin.ID, SCIMUserChange{Active: &inactive}); !errors.Is(err, ErrSCIMAdminProtected) {
 			t.Errorf("deactivating an administrator: %v", err)
@@ -512,6 +516,70 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		}
 		if _, err := store.ListSCIMGroupMembers(ctx, other, busy.ID, 10); !errors.Is(err, ErrNotFound) {
 			t.Errorf("another provider's member list: %v", err)
+		}
+	})
+
+	t.Run("accounts SCIM did not provision are invisible and are only taken over while unprivileged", func(t *testing.T) {
+		linkedAccount := func(label, role, hash string) User {
+			t.Helper()
+			account, err := store.CreateUser(ctx, User{ID: ids.New(), Name: name(label), Role: role, SecretHash: hash})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.LinkProviderIdentity(ctx, ProviderIdentityLink{ProviderID: provider, UserID: account.ID, Subject: "sub-" + label + "-" + suffix, Issuer: "https://idp.example.test", Kind: UserIdentityOIDC}); err != nil {
+				t.Fatal(err)
+			}
+			return account
+		}
+		jit := linkedAccount("jit-user", "none", "")
+		member := linkedAccount("jit-member", "member", "")
+		withPassword := linkedAccount("jit-password", "none", "bcrypt")
+		for label, account := range map[string]User{"jit": jit, "member": member, "password": withPassword} {
+			if _, err := store.GetSCIMUser(ctx, provider, account.ID); !errors.Is(err, ErrNotFound) {
+				t.Errorf("%s: SCIM sees an account it did not provision: %v", label, err)
+			}
+			if _, err := store.UpdateSCIMUser(ctx, provider, account.ID, SCIMUserChange{DisplayName: ptr("pwned")}); !errors.Is(err, ErrNotFound) {
+				t.Errorf("%s: SCIM changed an account it did not provision: %v", label, err)
+			}
+			if err := store.DeleteSCIMUser(ctx, provider, account.ID, nil); !errors.Is(err, ErrNotFound) {
+				t.Errorf("%s: SCIM deleted an account it did not provision: %v", label, err)
+			}
+			if page, _ := store.ListSCIMUsers(ctx, SCIMUserQuery{ProviderID: provider, UserName: account.Name}); len(page.Items) != 0 {
+				t.Errorf("%s: listed: %+v", label, page.Items)
+			}
+		}
+		if _, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: member.Name, Active: true}); !errors.Is(err, ErrNameExists) {
+			t.Errorf("a member account was taken over: %v", err)
+		}
+		if _, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: withPassword.Name, Active: true}); !errors.Is(err, ErrNameExists) {
+			t.Errorf("an account with a local password was taken over: %v", err)
+		}
+		session, err := store.CreateUserSession(ctx, UserSession{ID: ids.New(), UserID: jit.ID, Kind: UserSessionOIDC, CreatedAt: time.Now().UTC(), ExpiresAt: time.Now().UTC().Add(time.Hour)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		// A provider in jit mode correlates its user: the create takes the account over, here deactivating it.
+		taken, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: strings.ToUpper(jit.Name), DisplayName: "JIT", ExternalID: name("ext-jit"), Active: false})
+		if err != nil || taken.User.ID != jit.ID || taken.User.Name != jit.Name || taken.ExternalID() != name("ext-jit") || taken.User.State != UserDisabled || taken.User.DisabledReason != DisabledBySCIM || taken.Identity.Subject == "" {
+			t.Fatalf("take over = %+v, %v", taken, err)
+		}
+		if sessions, _ := store.ListUserSessions(ctx, jit.ID, true); len(sessions) != 1 || sessions[0].ID != session.ID || sessions[0].RevokedAt == nil {
+			t.Errorf("an active account the create deactivated kept its sessions: %+v", sessions)
+		}
+		if after, _ := store.GetUser(ctx, jit.ID); after.SessionVersion != jit.SessionVersion+1 {
+			t.Errorf("the session version was not bumped: %d -> %d", jit.SessionVersion, after.SessionVersion)
+		}
+		if seen, err := store.GetSCIMUser(ctx, provider, jit.ID); err != nil || seen.ExternalID() != name("ext-jit") {
+			t.Errorf("the account is not visible after the take over: %+v, %v", seen, err)
+		}
+		// An account an administrator disabled is not taken over.
+		adminDisabled := linkedAccount("jit-disabled", "none", "")
+		disabled := UserDisabled
+		if _, err := store.UpdateUser(ctx, UserUpdate{ID: adminDisabled.ID, State: &disabled}, adminDisabled.Version); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: adminDisabled.Name, Active: true}); !errors.Is(err, ErrNameExists) {
+			t.Errorf("an account an administrator disabled was taken over: %v", err)
 		}
 	})
 
