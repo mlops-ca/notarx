@@ -113,13 +113,29 @@ func TestPostgresSCIMListsMoreThanTenThousandUsersByKeyset(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	plan, err := explaincheck.Plan(ctx, tx, scimUserPageQuery, provider, "", "", nil, nil, SCIMMaxPageSize+1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, relation := range plan.SequentialScans() {
-		if relation == "user_identities" || relation == "users" {
-			t.Fatalf("a SCIM user page scans %s sequentially: %v", relation, plan.Indexes())
+	// Each shape of page (unfiltered, by userName, by externalId, continuing a cursor) is served by an index: no
+	// sequential scan of the identities or the users.
+	for name, shape := range map[string]struct {
+		query SCIMUserQuery
+		after bool
+	}{
+		"unfiltered":   {SCIMUserQuery{ProviderID: provider}, false},
+		"continuation": {SCIMUserQuery{ProviderID: provider}, true},
+		"by userName":  {SCIMUserQuery{ProviderID: provider, UserName: "bulk-1"}, false},
+		"by external":  {SCIMUserQuery{ProviderID: provider, ExternalID: "x-bulk-1"}, false},
+	} {
+		statement, args := scimUserPageSQL(shape.query, shape.after, SCIMMaxPageSize+1)
+		if shape.after {
+			args = append(args, time.Now().UTC(), uuid.NewString())
+		}
+		plan, err := explaincheck.Plan(ctx, tx, statement, args...)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, relation := range plan.SequentialScans() {
+			if relation == "user_identities" || relation == "users" {
+				t.Fatalf("%s: a SCIM user page scans %s sequentially: %v", name, relation, plan.Indexes())
+			}
 		}
 	}
 }

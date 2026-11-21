@@ -287,7 +287,7 @@ func TestSCIMFailedAuthenticationsAreRateLimitedButValidTokensAreNever(t *testin
 		t.Errorf("%d authentication failures were audited, want exactly the %d inside the budget", failures, samlRateBurst)
 	}
 	other := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2/Users", nil)
-	other.Header.Set("X-Forwarded-For", "203.0.113.9")
+	other.RemoteAddr = "203.0.113.9:4000"
 	other.Header.Set("Authorization", "Bearer "+scimTokenPrefix+"guess")
 	recorder := httptest.NewRecorder()
 	h.handler.ServeHTTP(recorder, other)

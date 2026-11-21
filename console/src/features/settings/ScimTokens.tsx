@@ -175,13 +175,17 @@ function ProviderTokens({
       {expiring.map((token) => {
         const days = daysUntilExpiry(token.expiresAt);
         const date = formatDate(token.expiresAt, locale);
+        // A token that lapsed less than a day ago rounds to 0 days, so the instant decides, not the day count.
+        const lapsed =
+          token.state === "expired" ||
+          Date.parse(token.expiresAt) <= Date.now();
         return (
           <Notice
             key={token.id}
             tone="warning"
             closable={false}
             title={
-              days < 0
+              lapsed
                 ? t("scim.tokenExpired", { name: token.name, date })
                 : t("scim.tokenExpiresSoon", { name: token.name, days, date })
             }

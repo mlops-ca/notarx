@@ -66,12 +66,14 @@ Send it as `Authorization: Bearer nxscim_...`.
 - `DELETE /Users/{id}` removes the SCIM link and disables the account; it never deletes the account (that stays a
   console action). SCIM no longer sees the account (`404`, not listed, `PATCH active=true` cannot bring it back);
   the login subject stays bound. The same provider brings it back by creating the user again: a `POST /Users` with
-  the same `userName` re-links and re-activates it as long as it is still unprivileged and has no local password,
-  while another provider still gets `409`.
+  the same `userName` re-links and re-activates it as long as it is still at level `none`, has no local password
+  and is still disabled by SCIM (an account an administrator disabled stays disabled), while another provider still
+  gets `409`. Deleting the account also removes the group memberships SCIM wrote for it, so a revived account comes
+  back without access the provider has since withdrawn.
 - SCIM can never modify or deactivate a platform administrator: every write answers `403`.
 - Groups are created with source `scim` and global role `none`; a request cannot name a role, and SCIM changes never
   touch an administrator's flag. Memberships SCIM writes are authoritative for the SCIM-managed ones; an
-  administrator's own membership of the group stays, and logins never alter either.
+  administrator's own membership of the group stays (SCIM does not show or change it), and logins never alter either.
 
 ## What the server implements
 

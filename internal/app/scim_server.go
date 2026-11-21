@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -36,6 +37,8 @@ const (
 	scimBasePath = "/scim/v2"
 	// scimBodyLimit caps one SCIM request body.
 	scimBodyLimit = 1 << 20
+	// scimMaxAuditResource bounds the resource of an audit record: a request path is client-controlled.
+	scimMaxAuditResource = 256
 	// scimMaxReturnedMembers bounds the members one Group resource returns; clients that need larger groups
 	// exclude the members, as Entra ID does.
 	scimMaxReturnedMembers = 10000
@@ -79,6 +82,17 @@ type scimCaller struct {
 
 func (c scimCaller) actor() string { return "scim:" + c.Slug }
 
+// scimPeer is the address the connection came from. X-Forwarded-For is not used: the caller controls it, so keying
+// the limiter on it would let anyone rotate the header for a fresh budget. Behind a reverse proxy the failures of every
+// client share the proxy's budget, which only ever throttles failed authentications.
+func scimPeer(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 func (s *scimServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !s.options.Enabled {
 		http.NotFound(w, r)
@@ -87,7 +101,7 @@ func (s *scimServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	caller, failure := s.authenticate(r)
 	if failure != nil {
 		if failure.Status == http.StatusUnauthorized {
-			if !s.failures.allow(requestIPAddress(r), time.Now().UTC()) {
+			if !s.failures.allow(scimPeer(r), time.Now().UTC()) {
 				w.Header().Set("Retry-After", strconv.Itoa(int(samlRateWindow.Seconds())))
 				scim.NewError(http.StatusTooManyRequests, "", "too many failed authentications; retry later").Write(w)
 				return
@@ -305,7 +319,7 @@ func scimCursorHop(startIndex int, page func(cursor string, limit int) (count in
 	return cursor, true, nil, nil
 }
 
-// listFailure maps a store error of a list to a response.
+// storeFailure maps a store error to a SCIM response; anything else is a logged 500.
 func (s *scimServer) storeFailure(err error, kind string) *scim.Error {
 	switch {
 	case errors.Is(err, repository.ErrInvalidPageToken):
@@ -314,6 +328,8 @@ func (s *scimServer) storeFailure(err error, kind string) *scim.Error {
 		return s.preconditionFailed()
 	case errors.Is(err, repository.ErrNotFound):
 		return scim.NewError(http.StatusNotFound, "", kind+" not found")
+	case errors.Is(err, repository.ErrUserGroupProviderNotFound):
+		return scim.NewError(http.StatusNotFound, "", "the identity provider of this token no longer exists")
 	case errors.Is(err, repository.ErrSCIMAdminProtected):
 		return scim.NewError(http.StatusForbidden, scim.TypeMutability, "SCIM cannot modify a platform administrator")
 	case errors.Is(err, repository.ErrSCIMAdminDisabled):
@@ -348,10 +364,10 @@ func scimIfMatchVersions(r *http.Request) []string {
 	return versions
 }
 
-// scimVersionMatches reports whether the current version satisfies If-Match: for the writes that change nothing and
-// so never reach the store, whose own check is the authoritative one.
-func scimVersionMatches(r *http.Request, version string) bool {
-	versions := scimIfMatchVersions(r)
+// scimVersionMatches reports whether the current version satisfies the If-Match versions. It is the early 412 of a
+// request that changes nothing or whose resource is already read; the store's check under the row lock is the
+// authoritative one.
+func scimVersionMatches(versions []string, version string) bool {
 	return len(versions) == 0 || slices.Contains(versions, version)
 }
 
@@ -393,7 +409,7 @@ func (s *scimServer) auditRecord(r *http.Request, actor, operation, resource str
 	}
 	return repository.AuditRecord{
 		Class: repository.AuditClassSync, Actor: actor, Outcome: outcome, OccurredAt: time.Now().UTC(), Format: "management",
-		Resource: "scim" + resourcePath(resource), Operation: operation, Status: status, CacheDisposition: "bypass",
+		Resource: boundedString("scim"+resourcePath(resource), scimMaxAuditResource), Operation: operation, Status: status, CacheDisposition: "bypass",
 		AuthorizationSource: "scim", RequestID: r.Header.Get("X-Request-Id"), Evidence: evidence,
 	}
 }

@@ -226,6 +226,14 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 			t.Errorf("an update with the current version = %+v, %v", matched, err)
 		}
 
+		memberOf, err := store.CreateSCIMGroup(ctx, SCIMGroupCreate{ProviderID: provider, DisplayName: "Leavers " + suffix, MemberIDs: []string{user.User.ID}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if memberships, _ := store.ListUserGroupMemberships(ctx, user.User.ID); len(memberships) != 1 || memberships[0].GroupID != memberOf.ID {
+			t.Fatalf("memberships before the delete = %+v", memberships)
+		}
+
 		// Delete hides the account from SCIM and disables it; the account stays.
 		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, nil); err != nil {
 			t.Fatal(err)
@@ -239,6 +247,9 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		}
 		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, nil); !errors.Is(err, ErrNotFound) {
 			t.Errorf("a second delete: %v", err)
+		}
+		if memberships, _ := store.ListUserGroupMemberships(ctx, user.User.ID); len(memberships) != 0 {
+			t.Errorf("a deleted account kept %d group memberships", len(memberships))
 		}
 		active = true
 		if _, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{Active: &active}); !errors.Is(err, ErrNotFound) {
@@ -269,12 +280,24 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, nil); err != nil {
 			t.Fatal(err)
 		}
-		// An account that gained a password or the administrator level in the meantime is not brought back.
-		if _, err := store.UpdateUser(ctx, UserUpdate{ID: user.User.ID, Role: ptr("admin")}, mustVersion(t, store, user.User.ID)); err != nil {
+		// An account an administrator disabled in the meantime, or one that gained a password or a level, is not brought back.
+		if _, err := store.UpdateUser(ctx, UserUpdate{ID: user.User.ID, Role: ptr("member")}, mustVersion(t, store, user.User.ID)); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: renamed, Active: true}); !errors.Is(err, ErrNameExists) {
-			t.Errorf("an administrator was brought back by SCIM: %v", err)
+			t.Errorf("an account that gained a level was brought back by SCIM: %v", err)
+		}
+		if _, err := store.UpdateUser(ctx, UserUpdate{ID: user.User.ID, Role: ptr("none")}, mustVersion(t, store, user.User.ID)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.UpdateUser(ctx, UserUpdate{ID: user.User.ID, State: ptr(UserActive)}, mustVersion(t, store, user.User.ID)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.UpdateUser(ctx, UserUpdate{ID: user.User.ID, State: ptr(UserDisabled)}, mustVersion(t, store, user.User.ID)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: renamed, Active: true}); !errors.Is(err, ErrNameExists) {
+			t.Errorf("an account an administrator disabled was re-activated through DELETE and POST: %v", err)
 		}
 	})
 
@@ -388,8 +411,11 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 			t.Fatal(err) // an administrator's membership of the SCIM group
 		}
 		members, err := store.ListSCIMGroupMembers(ctx, provider, group.ID, 50)
-		if err != nil || len(members) != 2 {
-			t.Fatalf("members = %+v, %v", members, err)
+		if err != nil || len(members) != 1 || members[0].UserID != member.User.ID {
+			t.Fatalf("members = %+v, %v; an administrator's membership of another provider's account is not the provider's to see", members, err)
+		}
+		if all, _, err := store.ListUserGroupMembers(ctx, group.ID, 50, ""); err != nil || len(all) != 2 {
+			t.Fatalf("the group itself has %+v, %v", all, err)
 		}
 		// Replace: only the SCIM-sourced memberships are authoritative; the administrator's stays.
 		second, _ := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: name("heidi"), Active: true})
@@ -404,15 +430,16 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 			ids = append(ids, entry.UserID)
 		}
 		slices.Sort(ids)
-		want := []string{second.User.ID, stranger.User.ID}
-		slices.Sort(want)
-		if !slices.Equal(ids, want) {
-			t.Errorf("members after replace = %v, want %v (the administrator's local membership stays)", ids, want)
+		if !slices.Equal(ids, []string{second.User.ID}) {
+			t.Errorf("members after replace = %v, want only the SCIM-managed one", ids)
+		}
+		if all, _, _ := store.ListUserGroupMembers(ctx, group.ID, 50, ""); len(all) != 2 {
+			t.Errorf("the administrator's local membership was removed by a SCIM replace: %+v", all)
 		}
 		if _, err := store.UpdateSCIMGroup(ctx, provider, group.ID, SCIMGroupChange{AddMembers: []string{member.User.ID, second.User.ID}, RemoveMembers: []string{second.User.ID}}); err != nil {
 			t.Fatal(err)
 		}
-		if members, _ = store.ListSCIMGroupMembers(ctx, provider, group.ID, 50); len(members) != 2 || members[0].UserID == second.User.ID && members[1].UserID == second.User.ID {
+		if members, _ = store.ListSCIMGroupMembers(ctx, provider, group.ID, 50); len(members) != 1 || members[0].UserID != member.User.ID {
 			t.Errorf("members after add and remove = %+v", members)
 		}
 		if _, err := store.UpdateSCIMGroup(ctx, provider, group.ID, SCIMGroupChange{AddMembers: []string{stranger.User.ID}}); !errors.Is(err, ErrSCIMInvalid) {

@@ -136,7 +136,7 @@ func (s *scimServer) listGroups(w http.ResponseWriter, r *http.Request, caller s
 		case err != nil:
 			return s.respond(w, r, caller, "scim.group.list", s.storeFailure(err, "Group"))
 		case !ok:
-			return s.emptyList(w, r, caller, "scim.group.list", "/Groups", query.Limit, startIndex, func() (int64, error) {
+			return s.emptyList(w, r, caller, "scim.group.list", "/Groups", startIndex, func() (int64, error) {
 				page, err := s.store.ListSCIMGroups(r.Context(), repository.SCIMGroupQuery{ProviderID: caller.ProviderID, DisplayName: query.DisplayName, ExternalID: query.ExternalID, Limit: 1})
 				return page.Total.Value, err
 			})
@@ -177,6 +177,8 @@ func (s *scimServer) listGroups(w http.ResponseWriter, r *http.Request, caller s
 
 func validateScimGroup(displayName string, externalID *string) *scim.Error {
 	switch {
+	case externalID != nil && repository.ReservedSCIMExternalID(*externalID):
+		return scim.NewError(http.StatusBadRequest, scim.TypeInvalidValue, "externalId uses a prefix notarx reserves")
 	case len([]rune(displayName)) > 255:
 		return scim.NewError(http.StatusBadRequest, scim.TypeInvalidValue, "displayName is too long")
 	case externalID != nil && !validUserText(*externalID, scimMaxExternalID):
@@ -264,7 +266,8 @@ func (s *scimServer) changeGroup(w http.ResponseWriter, r *http.Request, caller 
 	if err != nil {
 		return s.respond(w, r, caller, operation, s.storeFailure(err, "Group"))
 	}
-	if !scimVersionMatches(r, current.Version) {
+	versions := scimIfMatchVersions(r)
+	if !scimVersionMatches(versions, current.Version) {
 		return s.respond(w, r, caller, operation, s.preconditionFailed())
 	}
 	if len(ignored) > 0 {
@@ -273,7 +276,7 @@ func (s *scimServer) changeGroup(w http.ResponseWriter, r *http.Request, caller 
 	if len(changed) == 0 {
 		return s.writeGroup(w, r, caller, operation, http.StatusOK, current, !membersExcluded(r), true)
 	}
-	change.IfVersions = scimIfMatchVersions(r)
+	change.IfVersions = versions
 	evidence := map[string]string{"attributes": strings.Join(changed, ",")}
 	if len(ignored) > 0 {
 		evidence["ignored"] = strings.Join(ignored, ",")
@@ -290,10 +293,11 @@ func (s *scimServer) deleteGroup(w http.ResponseWriter, r *http.Request, caller 
 	if err != nil {
 		return s.respond(w, r, caller, "scim.group.delete", s.storeFailure(err, "Group"))
 	}
-	if !scimVersionMatches(r, current.Version) {
+	versions := scimIfMatchVersions(r)
+	if !scimVersionMatches(versions, current.Version) {
 		return s.respond(w, r, caller, "scim.group.delete", s.preconditionFailed())
 	}
-	if err := s.store.DeleteSCIMGroup(r.Context(), caller.ProviderID, id, scimIfMatchVersions(r), s.writeAudit(r, caller, "scim.group.delete", "/Groups/"+id, http.StatusNoContent, nil)...); err != nil {
+	if err := s.store.DeleteSCIMGroup(r.Context(), caller.ProviderID, id, versions, s.writeAudit(r, caller, "scim.group.delete", "/Groups/"+id, http.StatusNoContent, nil)...); err != nil {
 		return s.respond(w, r, caller, "scim.group.delete", s.storeFailure(err, "Group"))
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -159,6 +159,14 @@ describe("ScimTokensCard", () => {
     ).toBeInTheDocument();
   });
 
+  it("reports a token that lapsed within the last day as expired, not as expiring in 0 days", async () => {
+    renderCard([provider()], [token("hours-ago", -5 / 24)]);
+    expect(
+      await screen.findByText(/The SCIM token hours-ago expired on/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/expires in 0 days/)).toBeNull();
+  });
+
   it("shows an empty state for a provider without tokens", async () => {
     renderCard([provider()], []);
     expect(

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -179,12 +180,12 @@ func (s *PostgresStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, a
 }
 
 // reviveSCIMUser brings back an account the same provider deleted earlier (its link carries the tombstone): the
-// account must still be unprivileged and without a password, the tombstone is replaced by the new key and the account
+// account must still be at level none, without a password and disabled by SCIM (an administrator's disable stays), the tombstone is replaced by the new key and the account
 // takes the profile of the request. found is false when no such account exists, and the create goes on.
 func reviveSCIMUser(ctx context.Context, q sqlRunner, in SCIMUserCreate, state, reason string) (SCIMUser, bool, error) {
 	var userID, identityID string
 	err := q.QueryRowContext(ctx, `SELECT u.id::text, i.id::text FROM users u JOIN user_identities i ON i.user_id=u.id AND i.provider_id=$1::uuid
-		WHERE lower(u.name)=lower($2) AND i.scim_external_id LIKE '`+SCIMDeletedExternalIDPrefix+`%' AND u.role<>'admin' AND u.secret_hash='' FOR UPDATE OF u, i`, in.ProviderID, in.UserName).Scan(&userID, &identityID)
+		WHERE lower(u.name)=lower($2) AND i.scim_external_id LIKE '`+SCIMDeletedExternalIDPrefix+`%' AND u.role='none' AND u.secret_hash='' AND u.state='disabled' AND u.disabled_reason='scim' FOR UPDATE OF u, i`, in.ProviderID, in.UserName).Scan(&userID, &identityID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SCIMUser{}, false, nil
 	}
@@ -233,11 +234,34 @@ func (s *PostgresStore) GetSCIMUser(ctx context.Context, providerID, userID stri
 	return getSCIMUserOn(ctx, s.db, providerID, userID, false)
 }
 
-// scimUserFilter is the FROM and WHERE of a SCIM user list without the cursor, shared by the count and the page.
-const scimUserFilter = `user_identities i JOIN users u ON u.id=i.user_id WHERE i.provider_id=$1::uuid AND ` + scimVisible + ` AND ($2='' OR lower(u.name)=lower($2)) AND ($3='' OR i.scim_external_id=$3)`
+// scimUserFilterSQL is the FROM and WHERE of a SCIM user list without the cursor, shared by the count and the page. A
+// filter is added to the text only when it is given, so the planner sees a plain equality it can serve from
+// users_name_case_insensitive_idx or the (provider_id, scim_external_id) unique index instead of an OR over a
+// parameter; no client value reaches the text, only placeholders.
+func scimUserFilterSQL(query SCIMUserQuery) (string, []any) {
+	filter := `user_identities i JOIN users u ON u.id=i.user_id WHERE i.provider_id=$1::uuid AND ` + scimVisible
+	args := []any{query.ProviderID}
+	if query.UserName != "" {
+		args = append(args, query.UserName)
+		filter += " AND lower(u.name)=lower($" + strconv.Itoa(len(args)) + ")"
+	}
+	if query.ExternalID != "" {
+		args = append(args, query.ExternalID)
+		filter += " AND i.scim_external_id=$" + strconv.Itoa(len(args))
+	}
+	return filter, args
+}
 
-// scimUserPageQuery is one keyset page of a provider's users, served by user_identities_provider_created_idx.
-const scimUserPageQuery = `SELECT ` + scimUserColumns + ` FROM ` + scimUserFilter + ` AND ($4::timestamptz IS NULL OR (i.created_at,i.id)>($4::timestamptz,$5::uuid)) ORDER BY i.created_at, i.id LIMIT $6`
+// scimUserPageSQL is one keyset page of a provider's users, served by user_identities_provider_created_idx; after is
+// whether the page continues a cursor, whose two key placeholders follow the filter's.
+func scimUserPageSQL(query SCIMUserQuery, after bool, limit int) (string, []any) {
+	filter, args := scimUserFilterSQL(query)
+	statement := "SELECT " + scimUserColumns + " FROM " + filter
+	if after {
+		statement += " AND (i.created_at,i.id)>($" + strconv.Itoa(len(args)+1) + "::timestamptz,$" + strconv.Itoa(len(args)+2) + "::uuid)"
+	}
+	return statement + " ORDER BY i.created_at, i.id LIMIT " + strconv.Itoa(limit), args
+}
 
 func (s *PostgresStore) ListSCIMUsers(ctx context.Context, query SCIMUserQuery) (SCIMUserPage, error) {
 	afterAt, afterID, after, err := decodeSCIMCursor(query.Cursor, query.filterKey())
@@ -250,17 +274,16 @@ func (s *PostgresStore) ListSCIMUsers(ctx context.Context, query SCIMUserQuery) 
 	limit := clampSCIMPage(query.Limit)
 	var total ListTotal
 	if !query.SkipTotal {
-		if total, err = boundedTotal(ctx, s.db, "", scimUserFilter, query.ProviderID, query.UserName, query.ExternalID); err != nil {
+		filter, args := scimUserFilterSQL(query)
+		if total, err = boundedTotal(ctx, s.db, "", filter, args...); err != nil {
 			return SCIMUserPage{}, err
 		}
 	}
-	var cursorAt sql.NullTime
-	var cursorID sql.NullString
+	statement, args := scimUserPageSQL(query, after, limit+1)
 	if after {
-		cursorAt, cursorID = sql.NullTime{Time: afterAt, Valid: true}, sql.NullString{String: afterID, Valid: true}
+		args = append(args, afterAt, afterID)
 	}
-	rows, err := s.db.QueryContext(ctx, scimUserPageQuery,
-		query.ProviderID, query.UserName, query.ExternalID, cursorAt, cursorID, limit+1)
+	rows, err := s.db.QueryContext(ctx, statement, args...)
 	if err != nil {
 		return SCIMUserPage{}, err
 	}
@@ -367,6 +390,11 @@ func (s *PostgresStore) DeleteSCIMUser(ctx context.Context, providerID, userID s
 		if _, err = q.ExecContext(ctx, `UPDATE user_identities SET scim_external_id=$2, updated_at=now() WHERE id=$1::uuid`, current.Identity.ID, SCIMDeletedExternalIDPrefix+userID); err != nil {
 			return struct{}{}, err
 		}
+		// The memberships SCIM wrote go with the link: a revived account must not come back with access the provider
+		// has since withdrawn.
+		if _, err = q.ExecContext(ctx, `DELETE FROM user_group_members m USING user_groups g WHERE m.user_id=$1::uuid AND m.source='scim' AND g.id=m.group_id AND g.provider_id=$2::uuid AND g.source='scim'`, userID, providerID); err != nil {
+			return struct{}{}, err
+		}
 		if _, err = q.ExecContext(ctx, `UPDATE users SET state='disabled', disabled_reason=CASE WHEN state='disabled' THEN disabled_reason ELSE 'scim' END, session_version=session_version+1, version=version+1, updated_at=now() WHERE id=$1::uuid`, userID); err != nil {
 			return struct{}{}, err
 		}
@@ -463,7 +491,21 @@ func (s *PostgresStore) GetSCIMGroup(ctx context.Context, providerID, groupID st
 	return getSCIMGroupOn(ctx, s.db, providerID, groupID, false)
 }
 
-const scimGroupFilter = `user_groups WHERE provider_id=$1::uuid AND source='scim' AND ($2='' OR display_name=$2) AND ($3='' OR external_id=$3)`
+// scimGroupFilterSQL is the FROM and WHERE of a SCIM group list without the cursor; as for users, a filter is added to
+// the text only when it is given.
+func scimGroupFilterSQL(query SCIMGroupQuery) (string, []any) {
+	filter := "user_groups WHERE provider_id=$1::uuid AND source='scim'"
+	args := []any{query.ProviderID}
+	if query.DisplayName != "" {
+		args = append(args, query.DisplayName)
+		filter += " AND display_name=$" + strconv.Itoa(len(args))
+	}
+	if query.ExternalID != "" {
+		args = append(args, query.ExternalID)
+		filter += " AND external_id=$" + strconv.Itoa(len(args))
+	}
+	return filter, args
+}
 
 func (s *PostgresStore) ListSCIMGroups(ctx context.Context, query SCIMGroupQuery) (SCIMGroupPage, error) {
 	afterAt, afterID, after, err := decodeSCIMCursor(query.Cursor, query.filterKey())
@@ -474,19 +516,19 @@ func (s *PostgresStore) ListSCIMGroups(ctx context.Context, query SCIMGroupQuery
 		return SCIMGroupPage{Items: []UserGroup{}, Total: BoundedListTotal(0)}, nil
 	}
 	limit := clampSCIMPage(query.Limit)
+	filter, args := scimGroupFilterSQL(query)
 	var total ListTotal
 	if !query.SkipTotal {
-		if total, err = boundedTotal(ctx, s.db, "", scimGroupFilter, query.ProviderID, query.DisplayName, query.ExternalID); err != nil {
+		if total, err = boundedTotal(ctx, s.db, "", filter, args...); err != nil {
 			return SCIMGroupPage{}, err
 		}
 	}
-	var cursorAt sql.NullTime
-	var cursorID sql.NullString
+	statement := "SELECT " + userGroupColumns + " FROM " + filter
 	if after {
-		cursorAt, cursorID = sql.NullTime{Time: afterAt, Valid: true}, sql.NullString{String: afterID, Valid: true}
+		statement += " AND (user_groups.created_at,user_groups.id)>($" + strconv.Itoa(len(args)+1) + "::timestamptz,$" + strconv.Itoa(len(args)+2) + "::uuid)"
+		args = append(args, afterAt, afterID)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT `+userGroupColumns+` FROM `+scimGroupFilter+` AND ($4::timestamptz IS NULL OR (user_groups.created_at,user_groups.id)>($4::timestamptz,$5::uuid)) ORDER BY user_groups.created_at, user_groups.id LIMIT $6`,
-		query.ProviderID, query.DisplayName, query.ExternalID, cursorAt, cursorID, limit+1)
+	rows, err := s.db.QueryContext(ctx, statement+" ORDER BY user_groups.created_at, user_groups.id LIMIT "+strconv.Itoa(limit+1), args...)
 	if err != nil {
 		return SCIMGroupPage{}, err
 	}
@@ -594,7 +636,7 @@ func (s *PostgresStore) ListSCIMGroupMembers(ctx context.Context, providerID, gr
 	if _, err := getSCIMGroupOn(ctx, s.db, providerID, groupID, false); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT m.group_id::text,m.user_id::text,u.name,m.source,m.created_at FROM user_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1::uuid ORDER BY m.user_id LIMIT $2`, groupID, max(limit, 1))
+	rows, err := s.db.QueryContext(ctx, `SELECT m.group_id::text,m.user_id::text,u.name,m.source,m.created_at FROM user_group_members m JOIN users u ON u.id=m.user_id JOIN user_identities i ON i.user_id=m.user_id AND i.provider_id=$3::uuid WHERE m.group_id=$1::uuid AND m.source='scim' AND `+scimVisible+` ORDER BY m.user_id LIMIT $2`, groupID, max(limit, 1), providerID)
 	if err != nil {
 		return nil, err
 	}
@@ -617,8 +659,8 @@ func (s *PostgresStore) ListSCIMGroupsMembers(ctx context.Context, providerID st
 	rows, err := s.db.QueryContext(ctx, `SELECT group_id, user_id, name, source, created_at FROM (
 		SELECT m.group_id::text AS group_id, m.user_id::text AS user_id, u.name AS name, m.source AS source, m.created_at AS created_at,
 			row_number() OVER (PARTITION BY m.group_id ORDER BY m.user_id) AS position
-		FROM user_group_members m JOIN users u ON u.id=m.user_id JOIN user_groups g ON g.id=m.group_id
-		WHERE g.provider_id=$1::uuid AND g.source='scim' AND m.group_id IN (SELECT x::uuid FROM unnest($2::text[]) AS x)) ranked
+		FROM user_group_members m JOIN users u ON u.id=m.user_id JOIN user_groups g ON g.id=m.group_id JOIN user_identities i ON i.user_id=m.user_id AND i.provider_id=g.provider_id
+		WHERE g.provider_id=$1::uuid AND g.source='scim' AND m.source='scim' AND `+scimVisible+` AND m.group_id IN (SELECT x::uuid FROM unnest($2::text[]) AS x)) ranked
 		WHERE position <= $3 ORDER BY group_id, user_id`, providerID, groupIDs, max(perGroup, 1))
 	if err != nil {
 		return nil, err

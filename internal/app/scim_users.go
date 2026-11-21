@@ -103,7 +103,7 @@ func (s *scimServer) listUsers(w http.ResponseWriter, r *http.Request, caller sc
 		case err != nil:
 			return s.respond(w, r, caller, "scim.user.list", s.storeFailure(err, "User"))
 		case !ok:
-			return s.emptyList(w, r, caller, "scim.user.list", "/Users", query.Limit, startIndex, func() (int64, error) {
+			return s.emptyList(w, r, caller, "scim.user.list", "/Users", startIndex, func() (int64, error) {
 				page, err := s.store.ListSCIMUsers(r.Context(), repository.SCIMUserQuery{ProviderID: caller.ProviderID, UserName: query.UserName, ExternalID: query.ExternalID, Limit: 1})
 				return page.Total.Value, err
 			})
@@ -127,7 +127,7 @@ func (s *scimServer) listUsers(w http.ResponseWriter, r *http.Request, caller sc
 }
 
 // emptyList answers a startIndex past the last row: no resources, and the total of the filter.
-func (s *scimServer) emptyList(w http.ResponseWriter, r *http.Request, caller scimCaller, operation, resource string, _ int, startIndex int, total func() (int64, error)) int {
+func (s *scimServer) emptyList(w http.ResponseWriter, r *http.Request, caller scimCaller, operation, resource string, startIndex int, total func() (int64, error)) int {
 	value, err := total()
 	if err != nil {
 		return s.respond(w, r, caller, operation, s.storeFailure(err, "resource"))
@@ -138,6 +138,8 @@ func (s *scimServer) emptyList(w http.ResponseWriter, r *http.Request, caller sc
 // validateUserInput applies the limits the account fields have.
 func validateScimUser(userName, displayName, email string, externalID *string) *scim.Error {
 	switch {
+	case externalID != nil && repository.ReservedSCIMExternalID(*externalID):
+		return scim.NewError(http.StatusBadRequest, scim.TypeInvalidValue, "externalId uses a prefix notarx reserves")
 	case len([]rune(userName)) > scimMaxUserName || len(userName) > scimMaxUserName*4:
 		return scim.NewError(http.StatusBadRequest, scim.TypeInvalidValue, "userName is too long")
 	case !validUserText(displayName, scimMaxDisplayName):
@@ -233,7 +235,7 @@ func (s *scimServer) changeUser(w http.ResponseWriter, r *http.Request, caller s
 		return s.respond(w, r, caller, operation, s.storeFailure(err, "User"))
 	}
 	versions := scimIfMatchVersions(r)
-	if !scimVersionMatches(r, current.User.Version) {
+	if !scimVersionMatches(versions, current.User.Version) {
 		return s.respond(w, r, caller, operation, s.preconditionFailed())
 	}
 	if len(ignored) > 0 {
@@ -259,10 +261,11 @@ func (s *scimServer) deleteUser(w http.ResponseWriter, r *http.Request, caller s
 	if err != nil {
 		return s.respond(w, r, caller, "scim.user.delete", s.storeFailure(err, "User"))
 	}
-	if !scimVersionMatches(r, current.User.Version) {
+	versions := scimIfMatchVersions(r)
+	if !scimVersionMatches(versions, current.User.Version) {
 		return s.respond(w, r, caller, "scim.user.delete", s.preconditionFailed())
 	}
-	if err := s.store.DeleteSCIMUser(r.Context(), caller.ProviderID, id, scimIfMatchVersions(r), s.writeAudit(r, caller, "scim.user.delete", "/Users/"+id, http.StatusNoContent, nil)...); err != nil {
+	if err := s.store.DeleteSCIMUser(r.Context(), caller.ProviderID, id, versions, s.writeAudit(r, caller, "scim.user.delete", "/Users/"+id, http.StatusNoContent, nil)...); err != nil {
 		return s.respond(w, r, caller, "scim.user.delete", s.storeFailure(err, "User"))
 	}
 	w.WriteHeader(http.StatusNoContent)

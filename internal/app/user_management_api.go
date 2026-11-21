@@ -139,9 +139,10 @@ func userResponse(user repository.User) adminopenapi.User {
 	return response
 }
 
-// visibleSCIMExternalID hides the key the store generates for an account the IdP created without an externalId.
+// visibleSCIMExternalID hides the keys the store writes itself: the one it generates for an account the IdP created
+// without an externalId and the tombstone of a removed link.
 func visibleSCIMExternalID(value string) string {
-	if strings.HasPrefix(value, repository.SCIMGeneratedExternalIDPrefix) {
+	if repository.ReservedSCIMExternalID(value) {
 		return ""
 	}
 	return value

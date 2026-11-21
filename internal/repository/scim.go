@@ -106,6 +106,13 @@ func (u SCIMUser) ExternalID() string {
 	return u.Identity.SCIMExternalID
 }
 
+// ReservedSCIMExternalID reports an externalId that starts with one of the markers the store writes into
+// scim_external_id itself (the generated key and the deletion tombstone). A client cannot choose such a value: it would
+// hide an account from SCIM or collide with a key the store owns.
+func ReservedSCIMExternalID(externalID string) bool {
+	return strings.HasPrefix(externalID, SCIMGeneratedExternalIDPrefix) || strings.HasPrefix(externalID, SCIMDeletedExternalIDPrefix)
+}
+
 // scimLinkRemoved reports the tombstone a DELETE leaves in scim_external_id.
 func scimLinkRemoved(externalID string) bool {
 	return strings.HasPrefix(externalID, SCIMDeletedExternalIDPrefix)
@@ -119,8 +126,9 @@ func scimVersionAllowed(current string, ifVersions []string) bool {
 // SCIMUserCreate is a SCIM create. The account gets level none; Active false creates it disabled by SCIM.
 //
 // A user the provider deleted earlier (its link carries the tombstone) is brought back by a create with the same
-// userName: the account must still be unprivileged and without a password, and it is re-activated or left disabled
-// as the request says.
+// userName: the account must still be at level none, without a password and disabled by SCIM (an account an
+// administrator disabled stays disabled and the create is a conflict), and it is re-activated or left disabled as the
+// request says.
 type SCIMUserCreate struct {
 	ProviderID  string
 	UserName    string
@@ -219,8 +227,9 @@ type SCIMStore interface {
 	// its sessions in the same transaction; active=true on an account an administrator disabled is
 	// ErrSCIMAdminDisabled.
 	UpdateSCIMUser(ctx context.Context, providerID, userID string, change SCIMUserChange, audit ...AuditRecord) (SCIMUser, error)
-	// DeleteSCIMUser removes the SCIM link (the identity row keeps a tombstone, so SCIM no longer sees the account)
-	// and disables the account; it never deletes the account. ifVersions is the If-Match list (empty: unconditional).
+	// DeleteSCIMUser removes the SCIM link (the identity row keeps a tombstone, so SCIM no longer sees the account),
+	// removes the account from the SCIM groups of the provider and disables it; it never deletes the account.
+	// ifVersions is the If-Match list (empty: unconditional).
 	DeleteSCIMUser(ctx context.Context, providerID, userID string, ifVersions []string, audit ...AuditRecord) error
 
 	CreateSCIMGroup(ctx context.Context, in SCIMGroupCreate, audit ...AuditRecord) (UserGroup, error)
@@ -230,7 +239,9 @@ type SCIMStore interface {
 	// DeleteSCIMGroup deletes a group of the provider with its memberships and grants; a group recreated later
 	// starts again at global role none.
 	DeleteSCIMGroup(ctx context.Context, providerID, groupID string, ifVersions []string, audit ...AuditRecord) error
-	// ListSCIMGroupMembers returns at most limit members of a group of the provider, ordered by user id, in one query.
+	// ListSCIMGroupMembers returns at most limit SCIM-sourced members of a group of the provider, ordered by user id, in
+	// one query. Only accounts SCIM can see count: a membership an administrator added, a claims membership and the
+	// membership of a deleted account are not the provider's.
 	ListSCIMGroupMembers(ctx context.Context, providerID, groupID string, limit int) ([]UserGroupMember, error)
 	// ListSCIMGroupsMembers returns at most perGroup members of each of the named groups of the provider, in one
 	// query; a group with no members has no entry.

@@ -1252,10 +1252,10 @@ type OIDCIdentityProvision struct {
 	ExternalID string
 }
 
-// bindsSCIM reports whether the sign-in may bind a SCIM-created identity by its asserted externalId. The key the
-// store generates for an account created without an externalId never matches.
+// bindsSCIM reports whether the sign-in may bind a SCIM-created identity by its asserted externalId. The keys the
+// store writes itself (the generated one and the deletion tombstone) never match.
 func (p OIDCIdentityProvision) bindsSCIM() bool {
-	return p.BindSCIM && p.ExternalID != "" && !strings.HasPrefix(p.ExternalID, SCIMGeneratedExternalIDPrefix)
+	return p.BindSCIM && p.ExternalID != "" && !ReservedSCIMExternalID(p.ExternalID)
 }
 
 // EmailLinkDecision is the outcome of the administrator-verified email-link path of one sign-in.

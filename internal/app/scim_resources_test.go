@@ -611,10 +611,8 @@ func TestSCIMIfMatchHeaderParsing(t *testing.T) {
 			t.Errorf("If-Match %q = %#v, want %#v", header, got, want)
 		}
 	}
-	request := httptest.NewRequest(http.MethodPut, "/scim/v2/Users/x", nil)
-	request.Header.Set("If-Match", `""`)
-	if scimVersionMatches(request, "1") {
-		t.Error("an empty entity tag matched a version")
+	if scimVersionMatches([]string{""}, "1") || !scimVersionMatches(nil, "1") || !scimVersionMatches([]string{"0", "1"}, "1") {
+		t.Error("scimVersionMatches does not follow the If-Match list")
 	}
 }
 
@@ -677,5 +675,76 @@ func TestSCIMListsReadMembersInOnePassAndSkipTheCountWhileHopping(t *testing.T) 
 	// Hops skip the total; the page that is served carries it.
 	if len(counting.userPages) < 2 || !counting.userPages[0] || counting.userPages[len(counting.userPages)-1] {
 		t.Fatalf("user pages read with SkipTotal = %v", counting.userPages)
+	}
+}
+
+func TestSCIMRejectsReservedExternalIDsAndHidesTombstonesFromTheAdminAPI(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	for _, reserved := range []string{repository.SCIMDeletedExternalIDPrefix + "x", repository.SCIMGeneratedExternalIDPrefix + "x"} {
+		expectSCIMError(t, h.scim(http.MethodPost, "/Users", `{"userName":"r1","externalId":"`+reserved+`"}`), http.StatusBadRequest, "invalidValue")
+		expectSCIMError(t, h.scim(http.MethodPost, "/Groups", `{"displayName":"R","externalId":"`+reserved+`"}`), http.StatusBadRequest, "invalidValue")
+	}
+	id := h.createUser("tomb@example.com", "ext-tomb")
+	expectSCIMError(t, h.scim(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","path":"externalId","value":"`+repository.SCIMDeletedExternalIDPrefix+`z"}]}`), http.StatusBadRequest, "invalidValue")
+	if got := h.scim(http.MethodDelete, "/Users/"+id, ""); got.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d", got.Code)
+	}
+	identities := h.admin(http.MethodGet, "/users/"+id+"/identities", "")
+	if identities.Code != http.StatusOK || strings.Contains(identities.Body.String(), "notarx-scim") {
+		t.Fatalf("the admin identities list leaks a store marker: %d %s", identities.Code, identities.Body.String())
+	}
+}
+
+func TestSCIMGroupsShowOnlyTheirSCIMManagedMembersOfTheProvider(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	managed := h.createUser("managed@example.com", "")
+	group := h.createGroup("Mixed", "g-mixed", managed)
+	local, err := h.store.CreateUser(t.Context(), repository.User{ID: uuid.NewString(), Name: "local-member", Role: "member"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.store.AddUserGroupMember(t.Context(), group, local.ID, repository.UserGroupSourceLocal); err != nil {
+		t.Fatal(err)
+	}
+	got := decodeSCIM(t, h.scim(http.MethodGet, "/Groups/"+group, ""))
+	members := got["members"].([]any)
+	if len(members) != 1 || members[0].(map[string]any)["value"] != managed {
+		t.Fatalf("members = %v, want only the SCIM-managed one", members)
+	}
+	if strings.Contains(h.scim(http.MethodGet, "/Groups", "").Body.String(), "local-member") {
+		t.Fatal("a local member of a SCIM group is shown to the identity provider")
+	}
+	// Deleting the account removes the memberships SCIM wrote for it.
+	if got := h.scim(http.MethodDelete, "/Users/"+managed, ""); got.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d", got.Code)
+	}
+	if memberships, _ := h.store.ListUserGroupMemberships(t.Context(), managed); len(memberships) != 0 {
+		t.Fatalf("a deleted account kept its memberships: %+v", memberships)
+	}
+}
+
+func TestSCIMFailureLimiterIgnoresForwardedForHeaders(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	for attempt := 0; attempt <= samlRateBurst; attempt++ {
+		request := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2/Users", nil)
+		request.Header.Set("Authorization", "Bearer "+scimTokenPrefix+"guess")
+		// A rotating forwarded address must not buy a fresh budget.
+		request.Header.Set("X-Forwarded-For", "198.51.100."+strconv.Itoa(attempt%250))
+		recorder := httptest.NewRecorder()
+		h.handler.ServeHTTP(recorder, request)
+		if attempt == samlRateBurst && recorder.Code != http.StatusTooManyRequests {
+			t.Fatalf("after the budget, with a rotating X-Forwarded-For = %d", recorder.Code)
+		}
+	}
+	long := strings.Repeat("a", 5000)
+	h.scimAs("", http.MethodGet, "/Users?x=1", "", nil)
+	request := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2/Unknown/"+long, nil)
+	request.RemoteAddr = "203.0.113.50:1"
+	recorder := httptest.NewRecorder()
+	h.handler.ServeHTTP(recorder, request)
+	for _, record := range h.store.Audits {
+		if len(record.Resource) > scimMaxAuditResource {
+			t.Fatalf("an audit resource of %d bytes was written", len(record.Resource))
+		}
 	}
 }

@@ -121,7 +121,7 @@ func (s *MemoryStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, aud
 			continue
 		}
 		identity, linked := s.scimIdentityLocked(in.ProviderID, existing.ID)
-		if !linked || !scimLinkRemoved(identity.SCIMExternalID) || existing.Role == userRoleAdmin || existing.SecretHash != "" {
+		if !linked || !scimLinkRemoved(identity.SCIMExternalID) || existing.Role != "none" || existing.SecretHash != "" || existing.State != UserDisabled || existing.DisabledReason != DisabledBySCIM {
 			return SCIMUser{}, ErrNameExists
 		}
 		return s.reviveSCIMUserLocked(ctx, existing, identity, in, audit)
@@ -332,6 +332,15 @@ func (s *MemoryStore) DeleteSCIMUser(ctx context.Context, providerID, userID str
 	user, identity := current.User, current.Identity
 	identity.SCIMExternalID, identity.UpdatedAt = SCIMDeletedExternalIDPrefix+user.ID, now
 	s.userIdentities[identity.ID] = identity
+	// The memberships SCIM wrote for the account go with the link: a revived account must not come back with access
+	// the provider has since withdrawn.
+	for groupID, group := range s.userGroupsLocked().groups {
+		if group.Source == UserGroupSourceSCIM && group.ProviderID == providerID {
+			if member, ok := s.userGroupsLocked().members[groupID][user.ID]; ok && member.Source == UserGroupSourceSCIM {
+				delete(s.userGroupsLocked().members[groupID], user.ID)
+			}
+		}
+	}
 	if user.State != UserDisabled {
 		user.State, user.DisabledReason = UserDisabled, DisabledBySCIM
 	}
@@ -585,7 +594,7 @@ func (s *MemoryStore) ListSCIMGroupMembers(_ context.Context, providerID, groupI
 	if _, err := s.scimGroupLocked(providerID, groupID); err != nil {
 		return nil, err
 	}
-	return s.scimMembersLocked(groupID, limit), nil
+	return s.scimMembersLocked(providerID, groupID, limit), nil
 }
 
 func (s *MemoryStore) ListSCIMGroupsMembers(_ context.Context, providerID string, groupIDs []string, perGroup int) (map[string][]UserGroupMember, error) {
@@ -596,20 +605,23 @@ func (s *MemoryStore) ListSCIMGroupsMembers(_ context.Context, providerID string
 		if _, err := s.scimGroupLocked(providerID, groupID); err != nil {
 			continue
 		}
-		if list := s.scimMembersLocked(groupID, perGroup); len(list) > 0 {
+		if list := s.scimMembersLocked(providerID, groupID, perGroup); len(list) > 0 {
 			members[groupID] = list
 		}
 	}
 	return members, nil
 }
 
-// scimMembersLocked returns at most limit members of a group ordered by user id. The caller holds s.mu.
-func (s *MemoryStore) scimMembersLocked(groupID string, limit int) []UserGroupMember {
+// scimMembersLocked returns at most limit SCIM-sourced members of a group ordered by user id, only the accounts the
+// provider's SCIM can see. The caller holds s.mu.
+func (s *MemoryStore) scimMembersLocked(providerID, groupID string, limit int) []UserGroupMember {
 	list := make([]UserGroupMember, 0, len(s.userGroupsLocked().members[groupID]))
 	for _, member := range s.userGroupsLocked().members[groupID] {
-		if user, ok := s.users[member.UserID]; ok {
-			member.UserName = user.Name
+		user, ok := s.users[member.UserID]
+		if _, visible := s.scimVisibleIdentityLocked(providerID, member.UserID); !ok || !visible || member.Source != UserGroupSourceSCIM {
+			continue
 		}
+		member.UserName = user.Name
 		list = append(list, member)
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].UserID < list[j].UserID })
