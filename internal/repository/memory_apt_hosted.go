@@ -718,13 +718,13 @@ func aptSnapshotGeneratedObjects(assets []APTSnapshotAsset) map[string]int64 {
 	return objects
 }
 
-func (s *MemoryStore) PublishAPTRepositorySnapshotWithAudit(_ context.Context, snapshot APTRepositorySnapshot, assets []APTSnapshotAsset, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
+func (s *MemoryStore) PublishAPTRepositorySnapshotWithAudit(ctx context.Context, snapshot APTRepositorySnapshot, assets []APTSnapshotAsset, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.publishAPTRepositorySnapshotLocked(snapshot, assets, release, audit)
+	return s.publishAPTRepositorySnapshotLocked(ctx, snapshot, assets, release, audit)
 }
 
-func (s *MemoryStore) publishAPTRepositorySnapshotLocked(snapshot APTRepositorySnapshot, assets []APTSnapshotAsset, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
+func (s *MemoryStore) publishAPTRepositorySnapshotLocked(ctx context.Context, snapshot APTRepositorySnapshot, assets []APTSnapshotAsset, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
 	existing, ok := s.aptSnapshots[snapshot.ID]
 	if !ok {
 		return APTRepositorySnapshot{}, ErrNotFound
@@ -796,11 +796,20 @@ func (s *MemoryStore) publishAPTRepositorySnapshotLocked(snapshot APTRepositoryS
 	}
 	for _, a := range assets {
 		if strings.HasPrefix(a.Path, "pool/") {
-			s.aptPoolPaths[snapshot.RepositoryID][a.Path] = a
+			s.bindAPTPoolPathLocked(ctx, snapshot.RepositoryID, a)
 		}
 	}
 	s.appendAuditLocked(audit)
 	return snapshot, nil
+}
+
+// bindAPTPoolPathLocked binds a pool path to its asset. The first binding of a path is a new publication and emits
+// artifact.published; a later snapshot that carries the same path again emits nothing.
+func (s *MemoryStore) bindAPTPoolPathLocked(ctx context.Context, repositoryID string, asset APTSnapshotAsset) {
+	if _, bound := s.aptPoolPaths[repositoryID][asset.Path]; !bound {
+		s.emitPublishedLocked(ctx, repositoryID, FormatAPT, asset.Path, asset.Digest)
+	}
+	s.aptPoolPaths[repositoryID][asset.Path] = asset
 }
 
 func (s *MemoryStore) validAPTSnapshotPoolAssetsLocked(snapshot APTRepositorySnapshot, assets []APTSnapshotAsset) bool {

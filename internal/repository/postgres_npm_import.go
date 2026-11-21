@@ -124,6 +124,9 @@ func (s *PostgresStore) publishNPMImportLocked(ctx context.Context, c NPMImportC
 		if err != nil {
 			return err
 		}
+		if err = emitPublishedPostgres(ctx, tx, c.RepositoryID, FormatNPM, c.PackageName+"@"+v.Version, v.Digest); err != nil {
+			return err
+		}
 		if v.ObjectKey != "" {
 			delta.add(c.RepositoryID, v.Size, 1)
 		}

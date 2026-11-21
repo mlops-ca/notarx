@@ -67,6 +67,9 @@ func (s *PostgresStore) PublishNPMVersion(ctx context.Context, version NPMVersio
 	if err = refreshArtifactCatalog(ctx, tx, version.RepositoryID, FormatNPM, version.PackageName); err != nil {
 		return NPMVersion{}, err
 	}
+	if err = emitPublishedPostgres(ctx, tx, version.RepositoryID, FormatNPM, version.PackageName+"@"+version.Version, version.Digest); err != nil {
+		return NPMVersion{}, err
+	}
 	if version.ObjectKey != "" {
 		if err = capacity.Reserve(ctx, tx, version.RepositoryID, version.Size, 1); err != nil {
 			return NPMVersion{}, err

@@ -29,6 +29,7 @@ func TestNativePyPIHostedUploadAndSimpleRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
+	scans := publicationScanDispatcher(t, store, repository.FormatPyPI)
 	wheel := pypiFixtureWheel(t, "notarx_widget", "1.2.3")
 	sum := sha256.Sum256(wheel)
 	digest := hex.EncodeToString(sum[:])
@@ -57,6 +58,9 @@ func TestNativePyPIHostedUploadAndSimpleRead(t *testing.T) {
 	handler.ServeHTTP(uploaded, upload)
 	if uploaded.Code != http.StatusCreated {
 		t.Fatalf("upload=%d body=%s", uploaded.Code, uploaded.Body.String())
+	}
+	if _, err = scans.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	requirePublicationScan(t, store, repo.ID, repository.FormatPyPI, "notarx-widget@1.2.3", "sha256:"+digest)
 	simpleRequest := httptest.NewRequest(http.MethodGet, "/pypi/"+repo.Name+"/simple/notarx-widget/", nil)

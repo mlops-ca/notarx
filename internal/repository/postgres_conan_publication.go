@@ -258,6 +258,8 @@ func (s *PostgresStore) CommitConanPublicationSession(ctx context.Context, id st
 		return ConanPublishSession{}, false, ErrDisabled
 	}
 	var replay bool
+	// The put emits artifact.published in this transaction for a revision it creates; the event names the actor.
+	ctx = WithWriteActor(ctx, actor)
 	if session.Kind == "recipe" {
 		err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM native_conan_recipe_revisions WHERE repository_id=$1 AND reference=$2 AND revision=$3)`, repo.ID, session.Reference, session.RecipeRevision).Scan(&replay)
 		if err == nil {

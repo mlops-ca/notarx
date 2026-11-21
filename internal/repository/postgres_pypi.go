@@ -100,6 +100,11 @@ func (s *PostgresStore) PublishPyPIFile(ctx context.Context, file PyPIFile) (PyP
 	if err = refreshArtifactCatalog(ctx, tx, stored.RepositoryID, FormatPyPI, stored.Project); err != nil {
 		return PyPIFile{}, err
 	}
+	if stored.State == "visible" {
+		if err = emitPublishedPostgres(ctx, tx, stored.RepositoryID, FormatPyPI, stored.Project+"@"+stored.Version, stored.Digest); err != nil {
+			return PyPIFile{}, err
+		}
+	}
 	// A cached or published file with bytes counts; a metadata-only row does not.
 	if stored.State == "visible" && stored.ObjectKey != "" {
 		if err = capacity.Reserve(ctx, tx, stored.RepositoryID, stored.Size, 1); err != nil {
@@ -165,6 +170,9 @@ func (s *PostgresStore) PublishPyPIVersion(ctx context.Context, files []PyPIFile
 			file.RepositoryID, file.Project, file.Version, file.Filename, file.FileType, file.PythonVersion,
 			file.RequiresPython, file.Digest, file.ObjectKey, file.Size, file.Publisher, file.SourceURL, file.CachedAt, file.CreatedAt, file.Yanked, file.YankReason, file.YankRevision), &stored)
 		if err != nil {
+			return nil, err
+		}
+		if err = emitPublishedPostgres(ctx, tx, stored.RepositoryID, FormatPyPI, stored.Project+"@"+stored.Version, stored.Digest); err != nil {
 			return nil, err
 		}
 		delta.add(stored.RepositoryID, stored.Size, 1)

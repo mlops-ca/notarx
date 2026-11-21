@@ -28,15 +28,10 @@ type NexusPyPIMigrationStore interface {
 type NexusPyPIMigrationPublication struct {
 	store   NexusPyPIMigrationStore
 	objects objectstore.Store
-	scanner nexusMigrationPublicationScanner
 }
 
 func NewNexusPyPIMigrationPublication(store NexusPyPIMigrationStore, objects objectstore.Store) *NexusPyPIMigrationPublication {
 	return &NexusPyPIMigrationPublication{store: store, objects: objects}
-}
-func (p *NexusPyPIMigrationPublication) WithPublicationScanner(scanner nexusMigrationPublicationScanner) *NexusPyPIMigrationPublication {
-	p.scanner = scanner
-	return p
 }
 
 var _ NexusFormatMigrationPublication = (*NexusPyPIMigrationPublication)(nil)
@@ -378,7 +373,8 @@ func (p *NexusPyPIMigrationPublication) Publish(ctx context.Context, e nexusmigr
 	if err != nil {
 		return err
 	}
-	if err = p.store.PublishPyPIImport(ctx, c); err != nil {
+	// The import emits artifact.published in its transaction; the event names the migration actor.
+	if err = p.store.PublishPyPIImport(repository.WithWriteActor(ctx, e.Actor), c); err != nil {
 		switch {
 		case errors.Is(err, repository.ErrNameExists):
 			return nexusmigration.Failed("target_conflict")
@@ -390,11 +386,6 @@ func (p *NexusPyPIMigrationPublication) Publish(ctx context.Context, e nexusmigr
 			return nexusmigration.Failed("target_quota_exceeded")
 		}
 		return err
-	}
-	if !nilDependency(p.scanner) {
-		for _, f := range c.Files {
-			_ = p.scanner.ScheduleRepository(ctx, c.RepositoryID, repository.FormatPyPI, e.Identity, f.Digest, e.Actor)
-		}
 	}
 	return nil
 }

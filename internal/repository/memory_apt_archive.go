@@ -77,7 +77,7 @@ func (s *MemoryStore) BeginAPTArchiveRestore(_ context.Context, plan APTArchiveR
 	return nil
 }
 
-func (s *MemoryStore) CommitAPTArchiveRestore(_ context.Context, plan APTArchiveRestorePlan, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
+func (s *MemoryStore) CommitAPTArchiveRestore(ctx context.Context, plan APTArchiveRestorePlan, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	attempt, ok := s.aptArchiveRestores[plan.ID]
@@ -126,7 +126,7 @@ func (s *MemoryStore) CommitAPTArchiveRestore(_ context.Context, plan APTArchive
 		}
 		for _, a := range plan.Assets {
 			if strings.HasPrefix(a.Path, "pool/") {
-				s.aptPoolPaths[snapshot.RepositoryID][a.Path] = a
+				s.bindAPTPoolPathLocked(ctx, snapshot.RepositoryID, a)
 			}
 		}
 	} else {

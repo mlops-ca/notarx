@@ -37,16 +37,10 @@ type NexusConanMigrationPublication struct {
 	store        NexusConanMigrationStore
 	publications repository.ConanPublicationStore
 	objects      objectstore.Store
-	scanner      nexusMigrationPublicationScanner
 }
 
 func NewNexusConanMigrationPublication(store NexusConanMigrationStore, publications repository.ConanPublicationStore, objects objectstore.Store) *NexusConanMigrationPublication {
 	return &NexusConanMigrationPublication{store: store, publications: publications, objects: objects}
-}
-
-func (p *NexusConanMigrationPublication) WithPublicationScanner(scanner nexusMigrationPublicationScanner) *NexusConanMigrationPublication {
-	p.scanner = scanner
-	return p
 }
 
 func (p *NexusConanMigrationPublication) target(ctx context.Context, entry nexusmigration.Entry) error {
@@ -259,7 +253,7 @@ func (p *NexusConanMigrationPublication) Publish(ctx context.Context, entry nexu
 		return err
 	}
 	digest := conanPublishDigest(session.Objects)
-	_, _, err = p.publications.CommitConanPublicationSession(ctx, session.ID, lock.verifiedVersion.Load(), digest, entry.Actor)
+	_, _, err = p.publications.CommitConanPublicationSession(repository.WithWriteActor(ctx, entry.Actor), session.ID, lock.verifiedVersion.Load(), digest, entry.Actor)
 	if errors.Is(err, nexusmigration.ErrLeaseLost) || errors.Is(err, nexusmigration.ErrStopped) || ctx.Err() != nil {
 		return err
 	}
@@ -268,9 +262,6 @@ func (p *NexusConanMigrationPublication) Publish(ctx context.Context, entry nexu
 	}
 	if err != nil {
 		return nexusmigration.Failed("target_conflict")
-	}
-	if !nilDependency(p.scanner) {
-		_ = p.scanner.ScheduleRepository(ctx, entry.TargetRepositoryID, repository.FormatConan, entry.Identity, digest, entry.Actor)
 	}
 	return nil
 }

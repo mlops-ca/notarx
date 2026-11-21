@@ -45,10 +45,6 @@ type NexusMigrationPublicationStore interface {
 	GetRawAsset(context.Context, string, string) (repository.RawAsset, error)
 }
 
-type nexusMigrationPublicationScanner interface {
-	ScheduleRepository(context.Context, string, repository.Format, string, string, string) error
-}
-
 // NexusMigrationPublication uses existing native metadata transactions. It does
 // not create repositories, grant authority or implement a second migration worker.
 type NexusMigrationPublication struct {

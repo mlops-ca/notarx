@@ -81,6 +81,7 @@ func (s *MemoryStore) CommitCargoPublication(ctx context.Context, incoming Cargo
 	publication.UpdatedAt = publication.CreatedAt
 	publication.IndexRow = append([]byte(nil), publication.IndexRow...)
 	s.cargoPublications[key] = publication
+	s.emitPublishedLocked(ctx, publication.RepositoryID, FormatCargo, cargoPublicationCoordinate(publication.Name, publication.Version), publication.Digest)
 	return cloneCargoPublication(publication), false, nil
 }
 
