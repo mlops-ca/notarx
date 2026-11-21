@@ -138,26 +138,58 @@ func (s *PostgresStore) ReconcilePublishedEvents(ctx context.Context, floor time
 	written := 0
 	var failures []error
 	for _, query := range publishedCandidateQueries {
-		candidates, err := s.publishedCandidates(ctx, query, floor, limit)
-		if err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		for _, candidate := range candidates {
-			emitted, err := s.emitPublishedOnce(ctx, candidate, floor)
-			if err != nil {
-				failures = append(failures, fmt.Errorf("%s publication %q in %s: %w", candidate.Format, candidate.Coordinate, candidate.RepositoryID, err))
-				continue
-			}
-			if emitted {
-				written++
-			}
-		}
+		queryWritten, queryFailures := drainPublishedCandidates(ctx, limit,
+			func(pageSize int) ([]publishedCandidate, error) {
+				return s.publishedCandidates(ctx, query, floor, pageSize)
+			},
+			func(candidate publishedCandidate) (bool, error) { return s.emitPublishedOnce(ctx, candidate, floor) })
+		written += queryWritten
+		failures = append(failures, queryFailures...)
 		if ctx.Err() != nil {
 			break
 		}
 	}
 	return written, errors.Join(failures...)
+}
+
+// drainPublishedCandidates emits the missing events of one format, at most limit of them. A candidate that fails keeps
+// matching the query and stays at its head, so each page asks for as many extra candidates as failed in this pass and
+// skips those: a publication that keeps failing never hides the newer ones behind it (keyset paging would need the order
+// key of every format's query; the failures of one pass are few, and the pass stops at limit writes). A page asks for the
+// writes still allowed, so the pass ends once limit events were written or the candidates ran out. Only a cancelled
+// context stops it early.
+func drainPublishedCandidates(ctx context.Context, limit int, fetch func(pageSize int) ([]publishedCandidate, error), emit func(publishedCandidate) (bool, error)) (int, []error) {
+	written := 0
+	failed := map[publishedCandidate]bool{}
+	var failures []error
+	for written < limit && ctx.Err() == nil {
+		pageSize := limit - written + len(failed)
+		candidates, err := fetch(pageSize)
+		if err != nil {
+			return written, append(failures, err)
+		}
+		progressed := false
+		for _, candidate := range candidates {
+			if failed[candidate] {
+				continue
+			}
+			emitted, err := emit(candidate)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("%s publication %q in %s: %w", candidate.Format, candidate.Coordinate, candidate.RepositoryID, err))
+				failed[candidate], progressed = true, true
+				continue
+			}
+			if emitted {
+				written++
+				progressed = true
+			}
+		}
+		// A page that wrote and failed nothing would come back unchanged: stop rather than loop.
+		if len(candidates) < pageSize || !progressed {
+			break
+		}
+	}
+	return written, failures
 }
 
 func (s *PostgresStore) publishedCandidates(ctx context.Context, query string, floor time.Time, limit int) ([]publishedCandidate, error) {

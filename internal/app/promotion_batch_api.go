@@ -81,10 +81,6 @@ func (h generatedRepositoryAPIAdapter) CreatePromotionBatch(w http.ResponseWrite
 // GetPromotionBatch shows a batch with its aggregate state to a caller that may read the target repository.
 func (h generatedRepositoryAPIAdapter) GetPromotionBatch(w http.ResponseWriter, r *http.Request, batchID adminopenapi.PromotionBatchId) {
 	service := newPromotionBatchService(h)
-	if service.batches == nil {
-		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "promotion batches are unavailable")
-		return
-	}
 	principal, ok := h.authenticate(w, r)
 	if !ok {
 		return

@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/events"
-	"github.com/mlops-ca/notarx/internal/partitions"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -26,16 +25,20 @@ type publicationScanScheduler struct {
 	store            publicationScanStore
 	scannerAvailable bool
 	formats          []repository.Format
+	catchUp          time.Duration
 	metrics          *Metrics
 }
 
 const publicationScanAuditTimeout = 2 * time.Second
 
-func NewPublicationScanScheduler(store publicationScanStore, scannerAvailable bool, formats []repository.Format, metrics *Metrics) publicationScanScheduler {
+// NewPublicationScanScheduler builds the scheduler. catchUp is how far back its consumer reads when it first starts:
+// the configured retention of the event log (retention.Config.KeepOrDefault("domain_events")).
+func NewPublicationScanScheduler(store publicationScanStore, scannerAvailable bool, formats []repository.Format, catchUp time.Duration, metrics *Metrics) publicationScanScheduler {
 	return publicationScanScheduler{
 		store:            store,
 		scannerAvailable: scannerAvailable,
 		formats:          append([]repository.Format(nil), formats...),
+		catchUp:          catchUp,
 		metrics:          metrics,
 	}
 }
@@ -70,21 +73,11 @@ const PublicationScanConsumer = "publication-scan"
 // publication schedules its scan when the repository's autoScanOnPublish is on. The scan job key is
 // idempotent, so the at-least-once delivery of the dispatcher cannot enqueue a scan twice.
 //
-// A node that starts the consumer for the first time reads back over the retention window of the event log
-// (partitions.DefaultRegistry) instead of starting at the present, so the publications of an auto-scan repository made
+// A node that starts the consumer for the first time reads back over the configured retention window of the event log
+// (NOTARX_EVENTS_RETENTION) instead of starting at the present, so the publications of an auto-scan repository made
 // while scanning was disabled or during an upgrade gap are scheduled too.
 func (s publicationScanScheduler) Consumer() events.Consumer {
-	return events.Consumer{Name: PublicationScanConsumer, Types: []events.Type{events.ArtifactPublished}, Handler: s, CatchUp: eventLogRetention()}
-}
-
-// eventLogRetention is how long domain_events rows are kept: nothing older can be replayed.
-func eventLogRetention() time.Duration {
-	for _, spec := range partitions.DefaultRegistry() {
-		if spec.Table == "domain_events" {
-			return spec.Retention
-		}
-	}
-	return 0
+	return events.Consumer{Name: PublicationScanConsumer, Types: []events.Type{events.ArtifactPublished}, Handler: s, CatchUp: s.catchUp}
 }
 
 // HandleEvent schedules the scan of a published artifact. An event of a repository that no longer exists is

@@ -105,7 +105,7 @@ func exerciseConanNativeClient(t *testing.T, backend conanClientBackend, reopen 
 	// The scan of a publication is scheduled by the artifact.published consumer, not by the publish request. The first
 	// pass creates the consumer's cursor, so it runs before the first publication. The dispatcher is rebuilt on the current store because the service restarts reopen the backend.
 	scanPass := func() error {
-		dispatcher := &events.Dispatcher{Source: store.(events.Source), Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store.(publicationScanStore), true, []repository.Format{repository.FormatConan}, nil).Consumer()}}
+		dispatcher := &events.Dispatcher{Source: store.(events.Source), Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store.(publicationScanStore), true, []repository.Format{repository.FormatConan}, testEventRetention, nil).Consumer()}}
 		_, runErr := dispatcher.RunOnce(ctx)
 		return runErr
 	}

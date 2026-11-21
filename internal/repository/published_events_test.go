@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"testing"
 	"time"
@@ -189,5 +190,44 @@ func TestMemoryRawRewriteOfTheSameReferenceKeepsTheUpdateTime(t *testing.T) {
 	}
 	if stored, err = store.GetRawAsset(ctx, "r", "a.txt"); err != nil || !stored.UpdatedAt.After(first.UpdatedAt) {
 		t.Fatalf("a content type change kept the update time: %v (%v)", stored.UpdatedAt, err)
+	}
+}
+
+// A publication that keeps failing stays at the head of its candidate query; the pass pages past it so the publications
+// behind it are still reconciled.
+func TestDrainPublishedCandidatesPagesPastFailingCandidates(t *testing.T) {
+	const limit = 3
+	all := make([]publishedCandidate, 0, 8)
+	for _, name := range []string{"bad1", "bad2", "bad3", "good1", "good2", "good3", "good4"} {
+		all = append(all, publishedCandidate{RepositoryID: "r", Format: "raw", Coordinate: name, Digest: "sha256:" + name})
+	}
+	emitted := map[string]bool{}
+	fetch := func(pageSize int) ([]publishedCandidate, error) {
+		var pending []publishedCandidate
+		for _, candidate := range all {
+			if !emitted[candidate.Coordinate] {
+				pending = append(pending, candidate)
+			}
+		}
+		if len(pending) > pageSize {
+			pending = pending[:pageSize]
+		}
+		return pending, nil
+	}
+	emit := func(candidate publishedCandidate) (bool, error) {
+		if len(candidate.Coordinate) > 3 && candidate.Coordinate[:3] == "bad" {
+			return false, errors.New("boom")
+		}
+		emitted[candidate.Coordinate] = true
+		return true, nil
+	}
+	written, failures := drainPublishedCandidates(context.Background(), limit, fetch, emit)
+	if written != limit || len(failures) != 3 || !emitted["good1"] || !emitted["good2"] || !emitted["good3"] || emitted["good4"] {
+		t.Fatalf("written=%d failures=%v emitted=%v, want %d writes behind 3 failing candidates and no more", written, failures, emitted, limit)
+	}
+	// Nothing left but failures: the pass ends instead of looping.
+	written, failures = drainPublishedCandidates(context.Background(), 10, fetch, emit)
+	if written != 1 || len(failures) != 3 {
+		t.Fatalf("second pass written=%d failures=%v", written, failures)
 	}
 }

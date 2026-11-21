@@ -197,9 +197,13 @@ func (r backgroundRuntime) startWorkers(ctx context.Context, cfg config.Config, 
 		app.ArtifactScanWorker{Store: r.store, Scanner: r.scanner, Resolver: r.scanResolver, WorkerFormats: r.scannerFormats, Metrics: r.metrics}.Start(ctx, time.Minute)
 	}
 	if cfg.WorkerKindEnabled("scan") && r.scanner != nil {
-		scheduler := app.NewPublicationScanScheduler(r.store, true, r.scannerFormats, r.metrics)
-		dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default(), ObserveLag: r.metrics.SetEventHorizonLag}
-		background.Go(ctx, func() { dispatcher.Run(ctx) })
+		if catchUp, err := cfg.Retention.KeepOrDefault("domain_events"); err != nil {
+			slog.Error("publication scan consumer not started", "error", err)
+		} else {
+			scheduler := app.NewPublicationScanScheduler(r.store, true, r.scannerFormats, catchUp, r.metrics)
+			dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default(), ObserveLag: r.metrics.SetEventHorizonLag}
+			background.Go(ctx, func() { dispatcher.Run(ctx) })
+		}
 	}
 	if r.promotionEvaluator != nil && cfg.WorkerKindEnabled("evaluator") {
 		r.promotionEvaluator.Start(ctx)

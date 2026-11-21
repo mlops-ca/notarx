@@ -61,6 +61,7 @@ const (
 // evaluator and the fan-out reach it.
 type PromotionEvaluatorStore interface {
 	GatewayStore
+	promotionStores
 	repository.PromotionEvaluationStore
 }
 
@@ -68,7 +69,9 @@ type PromotionEvaluatorStore interface {
 type PromotionEvaluatorOptions struct {
 	Store PromotionEvaluatorStore
 	// Authorizer re-authorizes the run-as service account on the source (read) and the target (write) at every evaluation.
-	Authorizer  RepositoryAuthorizer
+	Authorizer RepositoryAuthorizer
+	// MaxHops is NOTARX_PROMOTION_MAX_HOPS; zero means the default of 8.
+	MaxHops     int
 	Owner       string
 	Interval    time.Duration
 	Concurrency int
@@ -98,7 +101,7 @@ type PromotionEvaluator struct {
 // ones the management API uses, so a rule promotion takes exactly the path of a manual one.
 func NewPromotionEvaluator(options PromotionEvaluatorOptions) *PromotionEvaluator {
 	store := options.Store
-	adapter := generatedRepositoryAPIAdapter{store: store, sessions: nativeMavenHandler{store: store}, securityPolicies: store, intelligence: store, audit: store, quarantine: store, cargo: store}
+	adapter := generatedRepositoryAPIAdapter{store: store, sessions: nativeMavenHandler{store: store}, securityPolicies: store, intelligence: store, audit: store, quarantine: store, cargo: store, promotions: store, promotionMaxHops: promotionMaxHops(options.MaxHops)}
 	service := newPromotionService(adapter)
 	evaluator := &PromotionEvaluator{
 		store: store, service: service, authorizer: options.Authorizer, registry: service.registry,

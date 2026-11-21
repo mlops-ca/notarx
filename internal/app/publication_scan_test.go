@@ -22,6 +22,9 @@ type unavailablePublicationRepositoryStore struct {
 	*repository.MemoryStore
 }
 
+// testEventRetention is the retention window the tests give the scan consumer: the 14 day default of NOTARX_EVENTS_RETENTION.
+const testEventRetention = 14 * 24 * time.Hour
+
 func (unavailablePublicationRepositoryStore) GetHostedRepository(context.Context, string) (repository.HostedRepository, error) {
 	return repository.HostedRepository{}, repository.ErrNotFound
 }
@@ -60,7 +63,7 @@ func publicationScanDispatcher(t *testing.T, store interface {
 	events.Source
 }, format repository.Format) *events.Dispatcher {
 	t.Helper()
-	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{format}, nil).Consumer()}}
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{format}, testEventRetention, nil).Consumer()}}
 	if _, err := dispatcher.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -116,11 +119,11 @@ func TestPublicationScanConsumerCatchesUpOnPublicationsMadeBeforeItStarted(t *te
 			t.Fatal(err)
 		}
 	}
-	if consumer := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, nil).Consumer(); consumer.CatchUp < 24*time.Hour {
-		t.Fatalf("catch-up window = %v, want the retention window of the event log", consumer.CatchUp)
+	if consumer := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, 36*time.Hour, nil).Consumer(); consumer.CatchUp != 36*time.Hour {
+		t.Fatalf("catch-up window = %v, want the configured retention window of the event log (36h)", consumer.CatchUp)
 	}
 	// The scan consumer starts only now, after both publications.
-	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, nil).Consumer()}}
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, testEventRetention, nil).Consumer()}}
 	if _, err = dispatcher.RunOnce(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -150,7 +153,7 @@ func TestPublicationScanSchedulerEnqueuesEachPublishedDigestOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, nil)
+	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, testEventRetention, nil)
 	firstDigest := testScanDigest("first publication")
 	for range 2 {
 		if err = scheduler.Schedule(ctx, repo, "releases/widget.tar.gz", firstDigest, "publisher"); err != nil {
@@ -181,7 +184,7 @@ func TestPublicationScanSchedulerEnqueuesEachPublishedDigestOnce(t *testing.T) {
 func TestPublicationScanSchedulerRecordsRepositoryLookupFailures(t *testing.T) {
 	store := unavailablePublicationRepositoryStore{MemoryStore: repository.NewMemoryStore()}
 	metrics := &Metrics{}
-	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatMaven}, metrics)
+	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatMaven}, testEventRetention, metrics)
 	err := scheduler.ScheduleRepository(context.Background(), "missing-repository", repository.FormatMaven, "org.example:widget:1.0.0", testScanDigest("widget"), "publisher")
 	if err == nil {
 		t.Fatal("ScheduleRepository() error = nil, want repository lookup failure")
@@ -248,7 +251,7 @@ func TestPublicationScanFailureAuditSurvivesRequestCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, nil)
+	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, testEventRetention, nil)
 	if err = scheduler.Schedule(ctx, repo, "releases/widget.tar.gz", testScanDigest("widget"), "publisher"); !errors.Is(err, enqueueErr) {
 		t.Fatalf("Schedule() error = %v, want %v", err, enqueueErr)
 	}
@@ -442,7 +445,7 @@ func TestPublicationScanSchedulerSkipsRepositoriesWithoutEnabledCapability(t *te
 				t.Fatal(err)
 			}
 
-			scheduler := NewPublicationScanScheduler(store, tt.scannerAvailable, tt.formats, nil)
+			scheduler := NewPublicationScanScheduler(store, tt.scannerAvailable, tt.formats, testEventRetention, nil)
 			if err = scheduler.Schedule(ctx, repo, "releases/widget.tar.gz", testScanDigest(tt.name), "publisher"); err != nil {
 				t.Fatal(err)
 			}
@@ -464,7 +467,7 @@ func TestPublicationScanSchedulerConsumesPublishedEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, nil)
+	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, testEventRetention, nil)
 	consumer := scheduler.Consumer()
 	if consumer.Name != PublicationScanConsumer || len(consumer.Types) != 1 || consumer.Types[0] != events.ArtifactPublished {
 		t.Fatalf("consumer = %+v", consumer)

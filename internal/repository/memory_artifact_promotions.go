@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/ids"
@@ -34,6 +35,25 @@ func (s *MemoryStore) insertArtifactPromotionLocked(promotion ArtifactPromotion,
 	}
 	s.artifactPromotions[promotion.ID] = cloneArtifactPromotion(promotion)
 	return nil
+}
+
+// GetImportedArtifactPromotion implements ArtifactPromotionStore.
+func (s *MemoryStore) GetImportedArtifactPromotion(_ context.Context, targetRepositoryID string, format Format, coordinate, digest string) (ArtifactPromotion, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var newest ArtifactPromotion
+	found := false
+	for _, promotion := range s.artifactPromotions {
+		if promotion.TargetRepositoryID == targetRepositoryID && promotion.Format == format && promotion.Coordinate == coordinate && promotion.Digest == digest &&
+			promotion.State == ArtifactPromotionCompleted && strings.HasPrefix(promotion.IdempotencyKey, ImportPromotionKeyPrefix) &&
+			(!found || newerFirst(promotion.CreatedAt, promotion.ID, newest.CreatedAt, newest.ID)) {
+			newest, found = promotion, true
+		}
+	}
+	if !found {
+		return ArtifactPromotion{}, ErrNotFound
+	}
+	return cloneArtifactPromotion(newest), nil
 }
 
 // latestArtifactPromotionLocked returns the newest attempt of the promotion owning the job.

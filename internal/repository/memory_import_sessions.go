@@ -196,7 +196,7 @@ func (s *MemoryStore) BeginImportCommit(_ context.Context, sessionID string, now
 }
 
 // CompleteImportSession implements ImportSessionStore.
-func (s *MemoryStore) CompleteImportSession(_ context.Context, sessionID string, now time.Time) error {
+func (s *MemoryStore) CompleteImportSession(_ context.Context, sessionID string, now time.Time, provenance ArtifactPromotion) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, ok := s.importSessions[sessionID]
@@ -206,6 +206,13 @@ func (s *MemoryStore) CompleteImportSession(_ context.Context, sessionID string,
 	if session.State != ImportSessionCommitting {
 		return ErrImportSessionClosed
 	}
+	provenance = completedImportProvenance(provenance, sessionID, now)
+	if err := s.insertArtifactPromotionLocked(provenance, now); err != nil {
+		return err
+	}
+	stored := s.artifactPromotions[provenance.ID]
+	stored.CompletedAt = now
+	s.artifactPromotions[provenance.ID] = stored
 	session.State, session.UpdatedAt = ImportSessionCommitted, now
 	s.importSessions[sessionID] = session
 	return nil
