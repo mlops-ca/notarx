@@ -87,6 +87,45 @@ func (m npmPromotionModule) Tags(ctx context.Context, repositoryID, coordinate, 
 	return tags, nil
 }
 
+// ociPromotionModule adds the tags that point at a manifest digest.
+type ociPromotionModule struct {
+	promotionModule
+	store interface {
+		ListOCITags(ctx context.Context, repositoryID, name string, limit int, after string) ([]string, error)
+		GetOCIManifest(ctx context.Context, repositoryID, name, reference string) (repository.OCIManifest, error)
+	}
+}
+
+const ociTagPageSize = 100
+
+// Tags implements formatmodule.Tagged: the tags of image name (the coordinate) that resolve to the manifest digest.
+func (m ociPromotionModule) Tags(ctx context.Context, repositoryID, coordinate, digest string) ([]string, error) {
+	tags := []string{}
+	after := ""
+	for {
+		page, err := m.store.ListOCITags(ctx, repositoryID, coordinate, ociTagPageSize, after)
+		if err != nil {
+			return nil, err
+		}
+		for _, tag := range page {
+			manifest, getErr := m.store.GetOCIManifest(ctx, repositoryID, coordinate, tag)
+			if errors.Is(getErr, repository.ErrNotFound) {
+				continue
+			}
+			if getErr != nil {
+				return nil, getErr
+			}
+			if manifest.Digest == digest {
+				tags = append(tags, tag)
+			}
+		}
+		if len(page) < ociTagPageSize {
+			return tags, nil
+		}
+		after = page[len(page)-1]
+	}
+}
+
 // promotionFormatRegistry registers all nine core formats with their promotion capabilities (ADR 0021, Format
 // capabilities and scope). Its identity is fixed in code, so a registration error is a programming bug.
 func promotionFormatRegistry(deps promotionModuleDeps) *formatmodule.Registry {
@@ -102,10 +141,10 @@ func promotionFormatRegistry(deps promotionModuleDeps) *formatmodule.Registry {
 	aptDistribution := aptpublication.Distribution{Store: store}
 	registry, err := formatmodule.New(
 		rawModule,
-		promotionModule{format: repository.FormatOCI,
+		ociPromotionModule{store: store, promotionModule: promotionModule{format: repository.FormatOCI,
 			enqueue: func(ctx context.Context, sourceID, targetID, coordinate, digest, key string, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 				return ociPromotion.Enqueue(ctx, targetID, key, ociprotocol.PromotionPayload{SourceRepositoryID: sourceID, Name: coordinate, Digest: digest}, audit...)
-			}, run: ociPromotion.RunJobs},
+			}, run: ociPromotion.RunJobs}},
 		mavenPromotionModule{store: store, promotionModule: promotionModule{format: repository.FormatMaven,
 			enqueue: func(ctx context.Context, sourceID, targetID, coordinate, digest, key string, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 				promotionID := uuid.NewSHA1(uuid.NameSpaceURL, []byte("maven-promotion:"+targetID+":"+key)).String()
