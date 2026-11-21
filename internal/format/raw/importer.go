@@ -62,6 +62,11 @@ func (m *Module) ImportUnit(ctx context.Context, repositoryID string, unit forma
 	if err != nil {
 		return err
 	}
+	// In a flat repository a name ending in .sha256 or .sha512 is the verification sidecar of a path and is never served as
+	// a file of its own, so an asset stored under it would be unreachable.
+	if rawChecksumExtension(manifest.Path) != "" {
+		return formatmodule.ErrImportInvalidUnit
+	}
 	if len(unit.Blobs) != 1 || unit.Blobs[0].Digest != unit.Digest || unit.Format != repository.FormatRaw {
 		return formatmodule.ErrImportInvalidUnit
 	}

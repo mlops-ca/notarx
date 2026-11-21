@@ -58,7 +58,11 @@ func (s *PostgresStore) CreateImportSession(ctx context.Context, session ImportS
 	switch {
 	case err == nil:
 		if !importSessionDead(existing, session.CreatedAt) {
-			if !equivalentImportRequest(existing, session) {
+			storedBlobs, blobsErr := queryImportBlobsTx(ctx, tx, existing.ID)
+			if blobsErr != nil {
+				return ImportSession{}, false, blobsErr
+			}
+			if !equivalentImportRequest(existing, storedBlobs, session, deduped) {
 				return ImportSession{}, false, ErrIdempotencyConflict
 			}
 			return existing, true, nil
@@ -143,7 +147,17 @@ func (s *PostgresStore) queryImportBlobs(ctx context.Context, sessionID string, 
 	if !exists {
 		return nil, ErrNotFound
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT session_id::text,digest,size,staging_key,verified FROM import_blobs WHERE session_id=$1::uuid AND (NOT $2::boolean OR NOT verified) ORDER BY digest`, sessionID, missingOnly)
+	return scanImportBlobs(s.db.QueryContext(ctx, importBlobsQuery, sessionID, missingOnly))
+}
+
+// queryImportBlobsTx lists every blob of a session inside a transaction.
+func queryImportBlobsTx(ctx context.Context, tx *sql.Tx, sessionID string) ([]ImportBlob, error) {
+	return scanImportBlobs(tx.QueryContext(ctx, importBlobsQuery, sessionID, false))
+}
+
+const importBlobsQuery = `SELECT session_id::text,digest,size,staging_key,verified FROM import_blobs WHERE session_id=$1::uuid AND (NOT $2::boolean OR NOT verified) ORDER BY digest`
+
+func scanImportBlobs(rows *sql.Rows, err error) ([]ImportBlob, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -240,6 +254,19 @@ func (s *PostgresStore) CompleteImportSession(ctx context.Context, sessionID str
 // AbortImportSession implements ImportSessionStore. Aborting an aborted session changes nothing.
 func (s *PostgresStore) AbortImportSession(ctx context.Context, sessionID string, now time.Time) error {
 	err := s.transitionImportSession(ctx, sessionID, now, ImportSessionAborted, ImportSessionOpen)
+	if !errors.Is(err, ErrImportSessionClosed) {
+		return err
+	}
+	session, getErr := s.GetImportSession(ctx, sessionID)
+	if getErr == nil && session.State == ImportSessionAborted {
+		return nil
+	}
+	return err
+}
+
+// FailImportCommit implements ImportSessionStore.
+func (s *PostgresStore) FailImportCommit(ctx context.Context, sessionID string, now time.Time) error {
+	err := s.transitionImportSession(ctx, sessionID, now, ImportSessionAborted, ImportSessionCommitting)
 	if !errors.Is(err, ErrImportSessionClosed) {
 		return err
 	}

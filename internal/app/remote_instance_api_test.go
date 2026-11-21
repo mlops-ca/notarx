@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/remoteinstance"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
@@ -324,7 +325,7 @@ func TestRemoteInstanceAPIListPagesByName(t *testing.T) {
 
 func TestWellKnownInstanceDocumentIsAnonymousAndStable(t *testing.T) {
 	store := repository.NewMemoryStore()
-	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), ImportStaging: objectstore.NewMemoryStore()})
 	get := func() *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/.well-known/notarx", nil))

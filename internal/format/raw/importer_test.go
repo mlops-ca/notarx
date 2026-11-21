@@ -87,6 +87,10 @@ func TestImportUnitPublishesVerifiedBytesAndRefusesWhatTheyContradict(t *testing
 			u.Manifest = []byte(`{"path":"../e.txt"}`)
 			u.Coordinate = "../e.txt"
 		},
+		"checksum sidecar name": func(u *formatmodule.ExportedUnit) {
+			u.Manifest = []byte(`{"path":"e.txt.sha256"}`)
+			u.Coordinate = "e.txt.sha256"
+		},
 		"another format": func(u *formatmodule.ExportedUnit) { u.Format = repository.FormatMaven },
 		"control character in content type": func(u *formatmodule.ExportedUnit) {
 			u.Manifest = []byte(`{"path":"e.txt","contentType":"a\nb"}`)

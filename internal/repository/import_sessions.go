@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
+	"reflect"
 	"regexp"
 	"slices"
 	"time"
@@ -128,6 +129,11 @@ type ImportSessionStore interface {
 	BeginImportCommit(ctx context.Context, sessionID string, now time.Time) error
 	// CompleteImportSession moves a committing session to committed (ErrImportSessionClosed otherwise).
 	CompleteImportSession(ctx context.Context, sessionID string, now time.Time) error
+	// FailImportCommit moves a committing session whose commit the format refused to aborted, so a commit that can never
+	// succeed does not hold its staging capacity and its idempotency key until the expiry: the sender's retry then opens a
+	// new session. An aborted session stays so, any other state is ErrImportSessionClosed. The staging objects are removed
+	// by the reaper.
+	FailImportCommit(ctx context.Context, sessionID string, now time.Time) error
 	// AbortImportSession moves an open session to aborted; an aborted session stays so, any other state is
 	// ErrImportSessionClosed: a committing session is not aborted under its commit, it finishes or expires after
 	// ImportCommitGrace. The staging objects of an aborted session are removed by the reaper.
@@ -197,8 +203,30 @@ func checkImportLimits(blobs []ImportBlob, total int64, limits ImportLimits) err
 func withinStagingQuota(quota, staged, total int64) bool { return quota <= 0 || total <= quota-staged }
 
 // equivalentImportRequest reports whether a stored session is the session a request describes: a replay.
-func equivalentImportRequest(stored, request ImportSession) bool {
-	return stored.Principal == request.Principal && stored.Format == request.Format && stored.Coordinate == request.Coordinate && stored.Digest == request.Digest
+// The principal, format, coordinate, digest, format manifest and claimed blobs must all agree: a sender that reuses a key for
+// a corrected manifest or another blob set gets a conflict, not the session of its first request. The chain path and evidence
+// are not compared: the receiver extends the path with its own hop and evidence is only a claim.
+func equivalentImportRequest(stored ImportSession, storedBlobs []ImportBlob, request ImportSession, requested []ImportBlob) bool {
+	if stored.Principal != request.Principal || stored.Format != request.Format || stored.Coordinate != request.Coordinate || stored.Digest != request.Digest ||
+		!sameJSON(stored.FormatManifest, request.FormatManifest) || len(storedBlobs) != len(requested) {
+		return false
+	}
+	// Both lists are in digest order.
+	for i := range requested {
+		if storedBlobs[i].Digest != requested[i].Digest || storedBlobs[i].Size != requested[i].Size {
+			return false
+		}
+	}
+	return true
+}
+
+// sameJSON reports whether two JSON documents are equal whatever their key order and spacing.
+func sameJSON(a, b json.RawMessage) bool {
+	var left, right any
+	if json.Unmarshal(a, &left) != nil || json.Unmarshal(b, &right) != nil {
+		return false
+	}
+	return reflect.DeepEqual(left, right)
 }
 
 // importSessionDead reports whether a stored session can no longer take blobs or be committed at now: aborted or expired,

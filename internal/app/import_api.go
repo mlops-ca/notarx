@@ -71,11 +71,15 @@ func newImportHandler(options importHandlerOptions) importHandler {
 		registry: options.Registry, staging: options.Staging, limits: options.Config.Limits(), ttl: ttl, maxHops: maxHops, now: func() time.Time { return time.Now().UTC() }}
 }
 
-// importFormats lists the formats of the registry that can take an import, as the instance document advertises them.
-func importFormats(registry *formatmodule.Registry) []string {
+// advertisedFormats lists the formats that can take an import, as the instance document advertises them: none while the
+// endpoints answer 503, so a sender never picks an instance whose pushes cannot succeed.
+func (h importHandler) advertisedFormats() []string {
 	formats := []string{}
-	for _, format := range registry.Formats() {
-		if _, ok := formatmodule.Capability[formatmodule.Importer](registry, format); ok {
+	if h.sessions == nil || h.staging == nil {
+		return formats
+	}
+	for _, format := range h.registry.Formats() {
+		if _, ok := formatmodule.Capability[formatmodule.Importer](h.registry, format); ok {
 			formats = append(formats, string(format))
 		}
 	}
@@ -138,6 +142,9 @@ func (h importHandler) chainPathOf(ctx context.Context, reported *[]adminopenapi
 	}
 	path := make([]repository.PromotionChainHop, 0, len(hops)+1)
 	for _, hop := range hops {
+		if hop.Instance == "" || len(hop.Instance) > 64 || hop.Repository == "" || len(hop.Repository) > 255 || len(hop.RuleId) > 64 {
+			return nil, "invalid_chain_path", "every hop of chainPath needs an instance (at most 64 characters), a repository (at most 255) and a ruleId of at most 64", nil
+		}
 		if strings.EqualFold(hop.Instance, local) && hop.Repository == target.Name {
 			return nil, "chain_loop", "chainPath already contains this instance and the target repository", nil
 		}
@@ -240,9 +247,9 @@ func (h importHandler) CreateRepositoryImport(w http.ResponseWriter, r *http.Req
 	})
 }
 
-// withImportSession loads a session and runs handler when the caller may use it. The caller must hold ImportWrite on the
-// session's target and be the principal that opened it; anyone else is answered 404, so a session id is never confirmed to
-// a principal that did not open it.
+// withImportSession loads a session and runs handler when the caller may use it. The caller must be the principal that
+// opened it (anyone else is answered 404, so a session id is never confirmed to a principal that did not open it) and must
+// still hold ImportWrite on the session's target.
 func (h importHandler) withImportSession(w http.ResponseWriter, r *http.Request, importID adminopenapi.ImportId, handler func(Principal, repository.ImportSession, repository.HostedRepository)) {
 	if !h.ready(w) {
 		return
@@ -269,12 +276,14 @@ func (h importHandler) withImportSession(w http.ResponseWriter, r *http.Request,
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "get repository failed")
 		return
 	}
-	if decision := h.authorizer.Authorize(r.Context(), principal, target, RepositoryImportWrite); !decision.Allowed {
-		h.writeRepositoryDenial(w, r, principal, target, RepositoryImportWrite, decision)
-		return
-	}
+	// The owner is compared before the grant is checked, so a session id is never confirmed, and no denial naming its
+	// repository is recorded, for a principal that did not open it.
 	if session.Principal != principal.Actor {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "import session not found")
+		return
+	}
+	if decision := h.authorizer.Authorize(r.Context(), principal, target, RepositoryImportWrite); !decision.Allowed {
+		h.writeRepositoryDenial(w, r, principal, target, RepositoryImportWrite, decision)
 		return
 	}
 	handler(principal, session, target)
@@ -322,8 +331,11 @@ func (h importHandler) UploadImportBlob(w http.ResponseWriter, r *http.Request, 
 		if err = h.sessions.RecordImportBlob(r.Context(), session.ID, digest, blob.Size, now); err != nil {
 			if errors.Is(err, repository.ErrImportSessionClosed) {
 				// The reaper may already have emptied the staging keys of the session, and nothing else would remove an
-				// object written after that.
-				h.removeStaged(r.Context(), blob.StagingKey)
+				// object written after that. A concurrent upload of the same blob may have recorded it first: the key is
+				// shared, so an object the session holds as verified is left alone.
+				if held, heldErr := h.sessions.GetImportBlob(context.WithoutCancel(r.Context()), session.ID, digest); heldErr == nil && !held.Verified {
+					h.removeStaged(r.Context(), blob.StagingKey)
+				}
 			}
 			if !writeImportStoreError(w, err) {
 				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "record the import blob failed")
@@ -444,7 +456,14 @@ func (h importHandler) CommitImport(w http.ResponseWriter, r *http.Request, impo
 			reader, _, openErr := h.staging.Open(ctx, key)
 			return reader, openErr
 		}
-		if err = importer.ImportUnit(ctx, target.ID, unit, open); err != nil {
+		if err = importer.ImportUnit(repository.WithWriteActor(ctx, principal.Actor), target.ID, unit, open); err != nil {
+			if importRefusal(err) {
+				// A refusal that no retry of this session can change ends the session, so it neither holds its staging
+				// capacity nor keeps the idempotency key: the sender's next request opens a new session.
+				if failErr := h.sessions.FailImportCommit(context.WithoutCancel(ctx), session.ID, h.now()); failErr != nil {
+					slog.Error("fail the import commit failed", "importId", session.ID, "error", failErr)
+				}
+			}
 			h.writeImporterError(w, err)
 			return
 		}
@@ -460,6 +479,13 @@ func (h importHandler) CommitImport(w http.ResponseWriter, r *http.Request, impo
 		}
 		h.writeSession(w, r, http.StatusOK, committed)
 	})
+}
+
+// importRefusal reports whether err is a verdict of the importer on the unit itself, which a retry of the same session
+// cannot change, rather than a failure of storage that a retry may get past.
+func importRefusal(err error) bool {
+	return errors.Is(err, formatmodule.ErrImportInvalidUnit) || errors.Is(err, formatmodule.ErrImportMismatch) || errors.Is(err, formatmodule.ErrImportConflict) ||
+		errors.Is(err, formatmodule.ErrImportUnsupportedLayout)
 }
 
 // writeImporterError answers a refusal of the format's importer.

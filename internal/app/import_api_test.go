@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -268,6 +269,12 @@ func TestImportRejectsLongOrLoopingChainsAndOwnHopIsAppended(t *testing.T) {
 	if w, _ := f.open(claim("a.txt", "a", "h1", chain(hop(peer, "r1"), hop(peer, "r2"), hop(peer, "r3"), hop(peer, "r4")))); w.Code != http.StatusUnprocessableEntity || f.problemCode(w) != "chain_too_long" {
 		t.Fatalf("long chain = %d %s", w.Code, w.Body.String())
 	}
+	if w, _ := f.open(claim("a.txt", "a", "h5", chain(hop("", "r1")))); w.Code != http.StatusUnprocessableEntity || f.problemCode(w) != "invalid_chain_path" {
+		t.Fatalf("hop without an instance = %d %s", w.Code, w.Body.String())
+	}
+	if w, _ := f.open(claim("a.txt", "a", "h6", chain(hop(strings.Repeat("i", 65), "r1")))); w.Code != http.StatusUnprocessableEntity || f.problemCode(w) != "invalid_chain_path" {
+		t.Fatalf("hop with a long instance = %d %s", w.Code, w.Body.String())
+	}
 	if w, _ := f.open(claim("a.txt", "a", "h2", chain(hop(peer, "r1"), hop(f.local, "import-target")))); w.Code != http.StatusUnprocessableEntity || f.problemCode(w) != "chain_loop" {
 		t.Fatalf("looping chain = %d %s", w.Code, w.Body.String())
 	}
@@ -327,7 +334,8 @@ func TestImportNeedsImportWriteAndOnlyTheOpeningPrincipalMayUseASession(t *testi
 	_, session := f.open(claim("a.txt", "a", "a1", ""))
 	id := session["id"].(string)
 	for _, call := range []struct{ method, path string }{{http.MethodPut, "/api/v2/imports/" + id + "/blobs/" + sha("a")}, {http.MethodPost, "/api/v2/imports/" + id + "/commit"}} {
-		if got := f.do(call.method, call.path, "resolver-secret", strings.NewReader("a")); got.Code != http.StatusForbidden {
+		// The session belongs to the administrator: another principal is not even told it exists.
+		if got := f.do(call.method, call.path, "resolver-secret", strings.NewReader("a")); got.Code != http.StatusNotFound {
 			t.Fatalf("resolver %s = %d", call.path, got.Code)
 		}
 		if got := f.do(call.method, call.path, "", nil); got.Code != http.StatusUnauthorized {
@@ -395,5 +403,63 @@ func TestInstanceDocumentListsOnlyFormatsThatImport(t *testing.T) {
 	w := f.do(http.MethodGet, "/.well-known/notarx", "", nil)
 	if !strings.Contains(w.Body.String(), `"formats":["raw"]`) {
 		t.Fatalf("document = %s", w.Body.String())
+	}
+	// No format is advertised while the endpoints cannot take a push.
+	f = newImportFixture(t, func(o *GatewayOptions) { o.ImportStaging = nil })
+	if w = f.do(http.MethodGet, "/.well-known/notarx", "", nil); !strings.Contains(w.Body.String(), `"formats":[]`) {
+		t.Fatalf("document without staging = %s", w.Body.String())
+	}
+}
+
+// A commit the format refuses ends the session, so the sender's retry opens a new one under the same key; a refusal of
+// storage leaves it committing, where the commit can be sent again.
+func TestImportRefusedCommitAbortsTheSessionAndFreesTheKey(t *testing.T) {
+	f := newImportFixture(t)
+	const content = "payload"
+	body := fmt.Sprintf(`{"coordinate":"a.txt","digest":"sha256:%s","formatManifest":{"path":"b.txt"},"blobs":[{"digest":"sha256:%s","size":%d}],"idempotencyKey":"fa1"}`, sha(content), sha(content), len(content))
+	_, session := f.open(body)
+	id := session["id"].(string)
+	if got := f.upload(id, sha(content), content); got.Code != http.StatusNoContent {
+		t.Fatalf("upload = %d", got.Code)
+	}
+	if got := f.commit(id); got.Code != http.StatusUnprocessableEntity || f.problemCode(got) != "import_mismatch" {
+		t.Fatalf("commit = %d %s", got.Code, got.Body.String())
+	}
+	stored, err := f.store.GetImportSession(context.Background(), id)
+	if err != nil || stored.State != repository.ImportSessionAborted {
+		t.Fatalf("session = %+v %v", stored, err)
+	}
+	if got := f.commit(id); got.Code != http.StatusConflict || f.problemCode(got) != "import_session_closed" {
+		t.Fatalf("commit of the aborted session = %d %s", got.Code, got.Body.String())
+	}
+	if again, fresh := f.open(claim("a.txt", content, "fa1", "")); again.Code != http.StatusCreated || fresh["id"] == id {
+		t.Fatalf("retry under the same key = %d %s", again.Code, again.Body.String())
+	}
+}
+
+// The principal that opened the session is the actor of the publication, as for a native Raw PUT.
+func TestImportPublishesAsTheOpeningPrincipal(t *testing.T) {
+	f := newImportFixture(t)
+	var published []events.Event
+	dispatcher := &events.Dispatcher{Source: f.store, Settle: time.Nanosecond, Consumers: []events.Consumer{{Name: "import-test", Types: []events.Type{events.ArtifactPublished},
+		Handler: events.HandlerFunc(func(_ context.Context, event events.Event) error { published = append(published, event); return nil })}}}
+	// The first pass creates the consumer's cursor, so the commit below is after it.
+	if _, err := dispatcher.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	const content = "actor"
+	_, session := f.open(claim("actor.txt", content, "w1", ""))
+	id := session["id"].(string)
+	if got := f.upload(id, sha(content), content); got.Code != http.StatusNoContent {
+		t.Fatalf("upload = %d", got.Code)
+	}
+	if got := f.commit(id); got.Code != http.StatusOK {
+		t.Fatalf("commit = %d %s", got.Code, got.Body.String())
+	}
+	if _, err := dispatcher.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(published) != 1 || published[0].Coordinate != "actor.txt" || !strings.Contains(string(published[0].Payload), `"actor":"alice"`) {
+		t.Fatalf("published events = %+v", published)
 	}
 }
