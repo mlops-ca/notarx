@@ -14,10 +14,12 @@ func TestDurablePrincipalWorkloadFederation(t *testing.T) {
 		active      bool
 		want        bool
 	}{
-		{"active", "service-account:account", enabled, true, true},
-		{"policy, issuer or account ended", "service-account:account", enabled, false, false},
-		{"federation disabled", "service-account:account", Authenticator{}, true, false},
+		{"active", "service-account:11111111-1111-4111-8111-111111111111", enabled, true, true},
+		{"policy, issuer or account ended", "service-account:11111111-1111-4111-8111-111111111111", enabled, false, false},
+		{"federation disabled", "service-account:11111111-1111-4111-8111-111111111111", Authenticator{}, true, false},
 		{"not a service account", "user:operator", enabled, true, false},
+		{"service account id is not a UUID", "service-account:account", enabled, true, false},
+		{"API key actor", "api-key:11111111-1111-4111-8111-111111111111", enabled, true, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			p, ok := tt.auth.DurablePrincipal(tt.actor, AuthenticationWorkloadFederation, "", tt.active, false)
@@ -47,15 +49,15 @@ func TestDurablePrincipalUsesCurrentIdentityAndAuthority(t *testing.T) {
 		{"OIDC missing role", "user:operator", "", AuthenticationOIDC, true, false, false, false},
 		{"OIDC pending", "user:operator", "none", AuthenticationOIDC, true, false, false, false},
 		{"OIDC disabled", "user:operator", "member", AuthenticationOIDC, false, false, false, false},
-		{"repository-only key", "api-key:key", "", AuthenticationAPIKey, true, false, true, false},
-		{"key member", "api-key:key", "member", AuthenticationAPIKey, true, false, true, false},
-		{"key admin", "api-key:key", "admin", AuthenticationAPIKey, true, false, true, true},
-		{"key unknown role", "api-key:key", "unknown", AuthenticationAPIKey, true, false, false, false},
-		{"key pending", "api-key:key", "none", AuthenticationAPIKey, true, false, false, false},
-		{"repository-only key missing or revoked", "api-key:key", "", AuthenticationAPIKey, false, false, false, false},
-		{"repository-only key password reset", "api-key:key", "", AuthenticationAPIKey, true, true, false, false},
-		{"key revoked", "api-key:key", "admin", AuthenticationAPIKey, false, false, false, false},
-		{"service disabled", "service-account:account", "", AuthenticationServiceAccountCredential, false, false, false, false},
+		{"repository-only key", "api-key:11111111-1111-4111-8111-111111111111", "", AuthenticationAPIKey, true, false, true, false},
+		{"key member", "api-key:11111111-1111-4111-8111-111111111111", "member", AuthenticationAPIKey, true, false, true, false},
+		{"key admin", "api-key:11111111-1111-4111-8111-111111111111", "admin", AuthenticationAPIKey, true, false, true, true},
+		{"key unknown role", "api-key:11111111-1111-4111-8111-111111111111", "unknown", AuthenticationAPIKey, true, false, false, false},
+		{"key pending", "api-key:11111111-1111-4111-8111-111111111111", "none", AuthenticationAPIKey, true, false, false, false},
+		{"repository-only key missing or revoked", "api-key:11111111-1111-4111-8111-111111111111", "", AuthenticationAPIKey, false, false, false, false},
+		{"repository-only key password reset", "api-key:11111111-1111-4111-8111-111111111111", "", AuthenticationAPIKey, true, true, false, false},
+		{"key revoked", "api-key:11111111-1111-4111-8111-111111111111", "admin", AuthenticationAPIKey, false, false, false, false},
+		{"service disabled", "service-account:11111111-1111-4111-8111-111111111111", "", AuthenticationServiceAccountCredential, false, false, false, false},
 		{"external unknown", "external-subject", "admin", AuthenticationKind("unknown"), true, false, false, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -80,9 +82,9 @@ func TestDurablePrincipalAcceptsExactlyTheDurableActorKinds(t *testing.T) {
 	auth := Authenticator{AdminToken: "admin-secret", AdminActor: "admin", ResolverToken: "reader-secret", ResolverActor: "reader", Workload: &WorkloadAuthenticator{}}
 	actors := map[durableactor.Class]string{
 		durableactor.ClassUser:                     "user:operator",
-		durableactor.ClassAPIKey:                   "api-key:key",
-		durableactor.ClassServiceAccountCredential: "service-account:account",
-		durableactor.ClassWorkload:                 "service-account:account",
+		durableactor.ClassAPIKey:                   "api-key:11111111-1111-4111-8111-111111111111",
+		durableactor.ClassServiceAccountCredential: "service-account:11111111-1111-4111-8111-111111111111",
+		durableactor.ClassWorkload:                 "service-account:11111111-1111-4111-8111-111111111111",
 	}
 	for _, kind := range durableactor.Kinds() {
 		actor, ok := actors[durableactor.ClassOf(kind)]
@@ -102,5 +104,29 @@ func TestDurablePrincipalAcceptsExactlyTheDurableActorKinds(t *testing.T) {
 	}
 	if _, allowed := auth.DurablePrincipal("user:operator", AuthenticationKind("unknown"), "member", true, false); allowed {
 		t.Error("an unknown kind must be refused")
+	}
+}
+
+// A snapshot whose actor does not have the shape of its kind is refused, whatever the store reported as active.
+func TestDurablePrincipalRefusesMismatchedSnapshot(t *testing.T) {
+	auth := Authenticator{AdminToken: "admin-secret", AdminActor: "admin", Workload: &WorkloadAuthenticator{}}
+	for _, tt := range []struct {
+		name, actor string
+		kind        AuthenticationKind
+	}{
+		{"user kind with an API key actor", "api-key:11111111-1111-4111-8111-111111111111", AuthenticationLocalSession},
+		{"OIDC kind with a service account actor", "service-account:11111111-1111-4111-8111-111111111111", AuthenticationOIDC},
+		{"API key kind with a user actor", "user:operator", AuthenticationAPIKey},
+		{"API key kind with a malformed id", "api-key:key", AuthenticationAPIKey},
+		{"service account credential with a user actor", "user:operator", AuthenticationServiceAccountCredential},
+		{"workload kind with a malformed account id", "service-account:", AuthenticationWorkloadFederation},
+		{"static admin with a NUL in the actor", "admin\x00", AuthenticationStaticAdmin},
+		{"empty kind", "admin", AuthenticationKind("")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if p, ok := auth.DurablePrincipal(tt.actor, tt.kind, "member", true, false); ok {
+				t.Fatalf("mismatched snapshot accepted: %+v", p)
+			}
+		})
 	}
 }

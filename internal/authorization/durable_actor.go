@@ -1,12 +1,16 @@
 package authorization
 
-import "strings"
+import "github.com/mlops-ca/notarx/internal/durableactor"
 
 // DurablePrincipal rebuilds authority from a transaction-locked current
 // subject snapshot. It never restores the submitter's admin/OIDC claims or
 // persists a bearer. Callers must supply a fresh snapshot at every execution.
+//
+// The snapshot invariant is enforced here, not only by the caller: the kind must be a durable actor kind and the
+// actor must have the shape that kind produces (a user, API key or service account prefix followed by the id), so a
+// snapshot of one kind can never be replayed as another.
 func (a Authenticator) DurablePrincipal(actor string, kind AuthenticationKind, role string, active, mustChangePassword bool) (Principal, bool) {
-	if actor == "" || !active {
+	if actor == "" || !active || !durableactor.ActorShapeValid(string(kind), actor) {
 		return Principal{}, false
 	}
 	p := Principal{Actor: actor, AuthenticationKind: kind, RepositoryPatterns: a.RepositoryReaders[actor], MustChangePassword: mustChangePassword}
@@ -34,7 +38,7 @@ func (a Authenticator) DurablePrincipal(actor string, kind AuthenticationKind, r
 	case AuthenticationWorkloadFederation:
 		// The actor is the service account and holds no role; the store revalidated the policy, issuer and
 		// account in the same snapshot. A deployment without workload federation refuses the kind.
-		if a.Workload == nil || !strings.HasPrefix(actor, "service-account:") {
+		if a.Workload == nil {
 			return Principal{}, false
 		}
 	default:
