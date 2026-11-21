@@ -24,6 +24,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/consoletheme"
 	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/evidence"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
 	huggingfaceformat "github.com/mlops-ca/notarx/internal/format/huggingface"
@@ -346,6 +347,18 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	gatewayStore := caches.cachedStore(store)
 	caches.start(notificationPool)
 	defer caches.stop()
+	// The rule fan-out of ADR 0021: events.Emit starts a promotion evaluation for every enabled rule that matches a
+	// publication, in the publishing transaction. Every node that publishes installs it; only a worker evaluates.
+	var promotionEvaluator *app.PromotionEvaluator
+	if cfg.Promotion.Enabled() {
+		events.SetRuleFanout(app.NewPromotionRuleFanout(store, caches.registry))
+		defer events.SetRuleFanout(nil)
+		if cfg.HasRole(config.NodeRoleWorker) {
+			authority := authorization.Authenticator{AdminToken: cfg.AdminToken, AdminActor: cfg.AdminActor, ResolverToken: cfg.ResolverToken, ResolverActor: cfg.ResolverActor, RepositoryReaders: cfg.RepositoryReaders, LegacyReadPermissive: cfg.LegacyReadPermissive}
+			promotionEvaluator = app.NewPromotionEvaluator(app.PromotionEvaluatorOptions{Store: gatewayStore, Authorizer: authorization.RepositoryAuthorizer{Grants: gatewayStore, Legacy: authority},
+				Owner: cfg.InstanceID + "/" + runtimeSessionID, Interval: cfg.Promotion.EvaluatorInterval, Concurrency: cfg.Promotion.EvaluatorConcurrency})
+		}
+	}
 	metrics := (&app.Metrics{}).
 		WithDatabaseStats(databasePool.Stats).
 		WithDatabasePoolStats("artifact-locks", artifactLockPool.Stats).
@@ -549,6 +562,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		helmReplication:     helmReplication,
 		rubyGemsMaintenance: rubyGemsMaintenance,
 		rubyGemsReplication: rubyGemsReplication,
+		promotionEvaluator:  promotionEvaluator,
 	}).Start(runtimeContext, cfg)
 	// Deferred after the stores' closes, so it runs before them on every return: end the runtime context and
 	// wait, bounded, for every background loop to return and for the claim broker to release what it holds

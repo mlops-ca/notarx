@@ -3794,6 +3794,27 @@ func (e PromotionBatchState) Valid() bool {
 	}
 }
 
+// Defines values for PromotionRuleState.
+const (
+	PromotionRuleStateActive            PromotionRuleState = "active"
+	PromotionRuleStateAuthorizationLost PromotionRuleState = "authorization_lost"
+	PromotionRuleStatePaused            PromotionRuleState = "paused"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleState enum.
+func (e PromotionRuleState) Valid() bool {
+	switch e {
+	case PromotionRuleStateActive:
+		return true
+	case PromotionRuleStateAuthorizationLost:
+		return true
+	case PromotionRuleStatePaused:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for PromotionRuleConditionName.
 const (
 	PromotionRuleConditionNameMinAge            PromotionRuleConditionName = "minAge"
@@ -9407,15 +9428,24 @@ type PromotionRule struct {
 	Name string            `json:"name"`
 
 	// RunAsServiceAccountId The service account the rule runs as; source read and target write are authorized for it at every evaluation.
-	RunAsServiceAccountId openapi_types.UUID  `json:"runAsServiceAccountId"`
-	SourceRepositoryId    openapi_types.UUID  `json:"sourceRepositoryId"`
-	Target                PromotionRuleTarget `json:"target"`
-	UpdatedAt             time.Time           `json:"updatedAt"`
-	UpdatedBy             string              `json:"updatedBy"`
+	RunAsServiceAccountId openapi_types.UUID `json:"runAsServiceAccountId"`
+	SourceRepositoryId    openapi_types.UUID `json:"sourceRepositoryId"`
+
+	// State active rules are evaluated. The evaluator parks a rule as authorization_lost when its run-as service account can no longer run it (deleted, disabled, or without source read or target write) and announces promotion.failed; an edit of the rule returns it to active. paused is the state of a rule whose target became public. The state is set by the system and is not part of an update.
+	State PromotionRuleState `json:"state"`
+
+	// StateReason Why the rule is not active; empty while it is active.
+	StateReason *string             `json:"stateReason,omitempty"`
+	Target      PromotionRuleTarget `json:"target"`
+	UpdatedAt   time.Time           `json:"updatedAt"`
+	UpdatedBy   string              `json:"updatedBy"`
 
 	// Version Increments on every edit.
 	Version string `json:"version"`
 }
+
+// PromotionRuleState active rules are evaluated. The evaluator parks a rule as authorization_lost when its run-as service account can no longer run it (deleted, disabled, or without source read or target write) and announces promotion.failed; an edit of the rule returns it to active. paused is the state of a rule whose target became public. The state is set by the system and is not part of an update.
+type PromotionRuleState string
 
 // PromotionRuleConditionName defines model for PromotionRuleConditionName.
 type PromotionRuleConditionName string

@@ -99,6 +99,10 @@ type recorder struct {
 	answer   bool
 	answerAt time.Time
 	fail     error
+	// execs and execArgs record the statements run with Exec (the rule fan-out); failExec makes them fail.
+	execs    []string
+	execArgs [][]driver.Value
+	failExec error
 }
 
 type recorderDriver struct{ r *recorder }
@@ -110,8 +114,11 @@ type recorderConn struct{ r *recorder }
 func (c recorderConn) Prepare(query string) (driver.Stmt, error) {
 	return recorderStmt{c.r, query}, nil
 }
-func (c recorderConn) Close() error              { return nil }
-func (c recorderConn) Begin() (driver.Tx, error) { return nil, errors.New("unused") }
+func (c recorderConn) Close() error { return nil }
+
+// CheckNamedValue lets the fan-out pass its rule list as a slice, which the default converter refuses.
+func (c recorderConn) CheckNamedValue(*driver.NamedValue) error { return nil }
+func (c recorderConn) Begin() (driver.Tx, error)                { return nil, errors.New("unused") }
 
 type recorderStmt struct {
 	r     *recorder
@@ -120,8 +127,15 @@ type recorderStmt struct {
 
 func (s recorderStmt) Close() error  { return nil }
 func (s recorderStmt) NumInput() int { return -1 }
-func (s recorderStmt) Exec([]driver.Value) (driver.Result, error) {
-	return nil, errors.New("unused")
+func (s recorderStmt) Exec(args []driver.Value) (driver.Result, error) {
+	s.r.mu.Lock()
+	defer s.r.mu.Unlock()
+	s.r.execs = append(s.r.execs, s.query)
+	s.r.execArgs = append(s.r.execArgs, args)
+	if s.r.failExec != nil {
+		return nil, s.r.failExec
+	}
+	return driver.RowsAffected(1), nil
 }
 func (s recorderStmt) Query(args []driver.Value) (driver.Rows, error) {
 	s.r.mu.Lock()
@@ -273,5 +287,111 @@ func TestEmitOnceCallsTheGuardedFunctionWithTheFloor(t *testing.T) {
 	r.fail = errors.New("boom")
 	if _, err = EmitOnce(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", ""), floor); err == nil {
 		t.Error("database failure swallowed")
+	}
+}
+
+// fakeFanout is a RuleFanout that returns fixed rules, or an error, and records the events it saw.
+type fakeFanout struct {
+	rules []string
+	err   error
+	seen  []Event
+}
+
+func (f *fakeFanout) MatchingRules(_ context.Context, event Event) ([]string, error) {
+	f.seen = append(f.seen, event)
+	return f.rules, f.err
+}
+
+func installFanout(t *testing.T, f RuleFanout) {
+	t.Helper()
+	SetRuleFanout(f)
+	t.Cleanup(func() { SetRuleFanout(nil) })
+}
+
+func TestEmitFansOutToTheMatchingRulesInTheSameTransaction(t *testing.T) {
+	at := time.Date(2026, 5, 6, 7, 8, 9, 0, time.UTC)
+	r := &recorder{answer: true, answerAt: at}
+	db := openRecorder(t, r)
+	fan := &fakeFanout{rules: []string{"rule-1", "rule-2"}}
+	installFanout(t, fan)
+	event := Published("repo", "raw", "a/b", "sha256:aa", "")
+	event.ID = "0192d9a0-0000-7000-8000-000000000002"
+	result, err := Emit(context.Background(), db, event)
+	if err != nil || !result.Written {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if len(fan.seen) != 1 || fan.seen[0].RepositoryID != "repo" || fan.seen[0].Coordinate != "a/b" || fan.seen[0].ID != event.ID {
+		t.Fatalf("fan-out saw %+v", fan.seen)
+	}
+	if len(r.execs) != 1 || !strings.Contains(r.execs[0], "INSERT INTO promotion_evaluations") || !strings.Contains(r.execs[0], "ON CONFLICT (event_seq,rule_id) DO NOTHING") {
+		t.Fatalf("execs = %v", r.execs)
+	}
+	args := r.execArgs[0]
+	if len(args) != 3 || args[0] != event.ID {
+		t.Fatalf("exec args = %v", args)
+	}
+	if got, ok := args[1].(time.Time); !ok || !got.Equal(at) {
+		t.Errorf("occurred_at = %v", args[1])
+	}
+}
+
+func TestEmitOnceFansOutToo(t *testing.T) {
+	r := &recorder{answer: true, answerAt: time.Now()}
+	db := openRecorder(t, r)
+	fan := &fakeFanout{rules: []string{"rule-1"}}
+	installFanout(t, fan)
+	if _, err := EmitOnce(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", ""), time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.execs) != 1 || len(fan.seen) != 1 {
+		t.Fatalf("execs=%v seen=%v", r.execs, fan.seen)
+	}
+}
+
+func TestFanOutSkipsWhatNoRuleCanWant(t *testing.T) {
+	r := &recorder{answer: true, answerAt: time.Now()}
+	db := openRecorder(t, r)
+	fan := &fakeFanout{}
+	installFanout(t, fan)
+	// No matching rule: nothing is inserted.
+	if _, err := Emit(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", "")); err != nil || len(r.execs) != 0 {
+		t.Fatalf("execs=%v err=%v", r.execs, err)
+	}
+	fan.rules = []string{"rule-1"}
+	// A type that starts no evaluation, an event without a repository, and an event nothing wrote do not ask the fan-out.
+	for _, event := range []Event{{Type: ArtifactReleased, RepositoryID: "repo"}, {Type: ArtifactPublished}} {
+		fan.seen = nil
+		if _, err := Emit(context.Background(), db, event); err != nil || len(fan.seen) != 0 || len(r.execs) != 0 {
+			t.Fatalf("event %+v: seen=%v execs=%v err=%v", event, fan.seen, r.execs, err)
+		}
+	}
+	r.answer = false
+	fan.seen = nil
+	if result, err := Emit(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", "")); err != nil || result.Written || len(fan.seen) != 0 {
+		t.Fatalf("result=%+v seen=%v err=%v", result, fan.seen, err)
+	}
+	// No fan-out installed: the event is written and nothing else happens.
+	SetRuleFanout(nil)
+	r.answer = true
+	if result, err := Emit(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", "")); err != nil || !result.Written || len(r.execs) != 0 {
+		t.Fatalf("result=%+v execs=%v err=%v", result, r.execs, err)
+	}
+}
+
+func TestFanOutFailureFailsTheEmission(t *testing.T) {
+	r := &recorder{answer: true, answerAt: time.Now()}
+	db := openRecorder(t, r)
+	fan := &fakeFanout{err: errors.New("rule set unavailable")}
+	installFanout(t, fan)
+	if result, err := Emit(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", "")); err == nil || result.Written || !strings.Contains(err.Error(), "rule set unavailable") {
+		t.Fatalf("fan-out lookup failure: result=%+v err=%v", result, err)
+	}
+	fan.err, fan.rules = nil, []string{"rule-1"}
+	r.failExec = errors.New("insert refused")
+	if result, err := Emit(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", "")); err == nil || result.Written || !strings.Contains(err.Error(), "insert refused") {
+		t.Fatalf("fan-out insert failure: result=%+v err=%v", result, err)
+	}
+	if _, err := EmitOnce(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", ""), time.Now()); err == nil {
+		t.Fatal("EmitOnce must fail when the fan-out insert fails")
 	}
 }

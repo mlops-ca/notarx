@@ -18,6 +18,7 @@ func buildPostgresNotificationChannels() []string {
 		"notarx_repository_deletions",
 		WebhookDeliveryChannel,
 		QuotaEvaluationChannel,
+		PromotionEvaluationChannel,
 	}
 	for _, kind := range LifecycleJobKinds() {
 		channels = append(channels, LifecycleJobChannel(kind))

@@ -48,6 +48,9 @@ type backgroundRuntime struct {
 	nugetReplication    *dist.Worker
 	rubyGemsMaintenance *rubygemsformat.Maintenance
 	rubyGemsReplication *rubydist.Worker
+	// promotionEvaluator runs the rule evaluations of ADR 0021 on a worker with the evaluator kind; nil when promotion is
+	// disabled.
+	promotionEvaluator *app.PromotionEvaluator
 }
 
 // terminationGrace is the Kubernetes termination grace period of deploy/kubernetes/base/notarx.yaml less a
@@ -195,6 +198,9 @@ func (r backgroundRuntime) startWorkers(ctx context.Context, cfg config.Config, 
 		scheduler := app.NewPublicationScanScheduler(r.store, true, r.scannerFormats, r.metrics)
 		dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default()}
 		background.Go(ctx, func() { dispatcher.Run(ctx) })
+	}
+	if r.promotionEvaluator != nil && cfg.WorkerKindEnabled("evaluator") {
+		r.promotionEvaluator.Start(ctx)
 	}
 	if cfg.WorkerKindEnabled("webhook") {
 		owner := cfg.InstanceID + "/" + r.workerSessionID

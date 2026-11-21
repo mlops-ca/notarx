@@ -34,7 +34,7 @@ func TestRegistryIsValidAndHasNoProvenanceTables(t *testing.T) {
 			t.Errorf("%s holds provenance or aggregates and must not be pruned", table)
 		}
 	}
-	for _, table := range []string{"lifecycle_jobs", "webhook_deliveries", "user_sessions", "runtime_node_sessions", "scheduled_task_runs", "cache_tasks", "audit_cleanup_jobs", "replication_plans", "replication_checkpoints", "nexus_migration_entries", "email_test_deliveries", "repository_quota_alert_events", "repository_request_rollup", "hosted_repository_idempotency", "security_audit_log", "resolver_audit_log", "artifact_scan_history", "domain_events"} {
+	for _, table := range []string{"lifecycle_jobs", "webhook_deliveries", "user_sessions", "runtime_node_sessions", "scheduled_task_runs", "cache_tasks", "audit_cleanup_jobs", "replication_plans", "replication_checkpoints", "nexus_migration_entries", "email_test_deliveries", "repository_quota_alert_events", "repository_request_rollup", "hosted_repository_idempotency", "security_audit_log", "resolver_audit_log", "artifact_scan_history", "domain_events", "promotion_evaluations"} {
 		if !tables[table] {
 			t.Errorf("registry is missing %s", table)
 		}

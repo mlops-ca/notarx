@@ -52,6 +52,7 @@ func (s *MemoryStore) CreatePromotionRule(ctx context.Context, rule PromotionRul
 	now := time.Now().UTC()
 	rule.Version, rule.CreatedAt, rule.UpdatedAt = "1", now, now
 	rule.UpdatedBy = rule.CreatedBy
+	rule.State, rule.StateReason = PromotionRuleActive, ""
 	s.promotionRules[rule.ID] = clonePromotionRule(rule)
 	return clonePromotionRule(rule), nil
 }
@@ -102,6 +103,11 @@ func (s *MemoryStore) UpdatePromotionRule(ctx context.Context, rule PromotionRul
 		return PromotionRule{}, ErrVersionConflict
 	}
 	rule.SourceRepositoryID, rule.CreatedBy, rule.CreatedAt = current.SourceRepositoryID, current.CreatedBy, current.CreatedAt
+	// An edit returns a rule whose run-as account lost its authority to active; any other parked state stays.
+	rule.State, rule.StateReason = current.State, current.StateReason
+	if current.State == PromotionRuleAuthorizationLost {
+		rule.State, rule.StateReason = PromotionRuleActive, ""
+	}
 	if !s.promotionRuleReferencesLocked(rule) {
 		return PromotionRule{}, ErrPromotionRuleReference
 	}
@@ -128,6 +134,11 @@ func (s *MemoryStore) DeletePromotionRule(ctx context.Context, id string, audit 
 		return err
 	}
 	delete(s.promotionRules, id)
+	for evaluationID, evaluation := range s.promotionEvaluations {
+		if evaluation.RuleID == id {
+			delete(s.promotionEvaluations, evaluationID)
+		}
+	}
 	return nil
 }
 

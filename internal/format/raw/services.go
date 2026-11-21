@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strings"
 	"time"
 
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
@@ -132,11 +133,26 @@ func (m *Module) RunPromotionJobs(ctx context.Context, limit int) error {
 	return (rawprotocol.NativePromotion{Store: m.jobs, Intelligence: m.intelligence, Metrics: m.backgroundMetrics}).RunJobs(ctx, limit)
 }
 
-// ReleaseMembers implements formatmodule.ReleaseSet. An unversioned Raw coordinate is one path and its release is that
-// asset; a versioned name@version release is the work of the versioned-layout slice.
+// ReleaseMembers implements formatmodule.ReleaseSet. A name@version coordinate of a versioned repository is the release of
+// that version: every file of it (ADR 0028). Any other coordinate is one path and its release is that asset.
 func (m *Module) ReleaseMembers(ctx context.Context, repositoryID, coordinate string) ([]formatmodule.ReleaseMember, error) {
 	if m.store == nil {
 		return nil, repository.ErrDisabled
+	}
+	if versions, ok := m.store.(repository.NativeRawVersionStore); ok {
+		if at := strings.LastIndex(coordinate, "@"); at > 0 {
+			_, files, err := versions.GetRawVersionWithFiles(ctx, repositoryID, coordinate[:at], coordinate[at+1:])
+			if err == nil {
+				members := make([]formatmodule.ReleaseMember, 0, len(files))
+				for _, file := range files {
+					members = append(members, formatmodule.ReleaseMember{Coordinate: file.Path, Digest: file.Digest})
+				}
+				return members, nil
+			}
+			if !errors.Is(err, repository.ErrNotFound) {
+				return nil, err
+			}
+		}
 	}
 	asset, err := m.store.GetRawAsset(ctx, repositoryID, coordinate)
 	if err != nil {

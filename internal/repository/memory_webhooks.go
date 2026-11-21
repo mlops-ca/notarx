@@ -152,6 +152,9 @@ func (s *MemoryStore) enqueueWebhookEventLocked(event WebhookEvent) WebhookEvent
 		s.eventSeqs = map[string]int64{}
 	}
 	s.eventSeqs[event.ID] = s.eventSeq
+	// The in-memory store is a test double: a matcher that cannot decide writes no evaluation instead of failing the
+	// publication, which the PostgreSQL path does (events.Emit).
+	_ = s.fanOutPromotionEvaluationsLocked(context.Background(), event)
 	for _, subscription := range s.webhookSubscriptions {
 		if !webhookSubscriptionAccepts(subscription, event.Type) {
 			continue

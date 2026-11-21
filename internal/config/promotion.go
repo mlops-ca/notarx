@@ -1,6 +1,9 @@
 package config
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // DefaultPromotionMaxRulesPerRepository is the default of NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY (ADR 0021).
 const DefaultPromotionMaxRulesPerRepository = 32
@@ -9,14 +12,39 @@ const DefaultPromotionMaxRulesPerRepository = 32
 // cap must stay small.
 const MaxPromotionMaxRulesPerRepository = 1024
 
-var errMaxRulesPerRepository = errors.New("NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY must be at most 1024")
+// DefaultPromotionEvaluatorInterval and DefaultPromotionEvaluatorConcurrency are the defaults of
+// NOTARX_PROMOTION_EVALUATOR_INTERVAL and NOTARX_PROMOTION_EVALUATOR_CONCURRENCY (ADR 0021, Evaluator).
+const (
+	DefaultPromotionEvaluatorInterval    = 5 * time.Second
+	DefaultPromotionEvaluatorConcurrency = 4
+)
+
+// MaxPromotionEvaluatorConcurrency bounds the evaluations one node claims at once.
+const MaxPromotionEvaluatorConcurrency = 64
+
+var (
+	errMaxRulesPerRepository = errors.New("NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY must be at most 1024")
+	errEvaluatorConcurrency  = errors.New("NOTARX_PROMOTION_EVALUATOR_CONCURRENCY must be at most 64")
+)
 
 // PromotionConfig holds the promotion rule policy of ADR 0021 ("Configuration").
 type PromotionConfig struct {
 	// MaxRulesPerRepository is the most promotion rules one source repository can have
 	// (NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY, default 32, at most 1024).
 	MaxRulesPerRepository int
+	// Disabled turns the evaluator off (NOTARX_PROMOTION_ENABLED=false): rules stay configuration, publications
+	// write no evaluations and no worker runs. The default is enabled.
+	Disabled bool
+	// EvaluatorInterval is the poll interval of the evaluator worker between wake-ups
+	// (NOTARX_PROMOTION_EVALUATOR_INTERVAL, default 5s).
+	EvaluatorInterval time.Duration
+	// EvaluatorConcurrency is the evaluations one node claims and evaluates at once
+	// (NOTARX_PROMOTION_EVALUATOR_CONCURRENCY, default 4, at most 64).
+	EvaluatorConcurrency int
 }
+
+// Enabled reports whether rules are evaluated.
+func (c PromotionConfig) Enabled() bool { return !c.Disabled }
 
 func promotionConfigFromEnv(current PromotionConfig) (PromotionConfig, error) {
 	if current.MaxRulesPerRepository == 0 {
@@ -30,5 +58,25 @@ func promotionConfigFromEnv(current PromotionConfig) (PromotionConfig, error) {
 		return current, errMaxRulesPerRepository
 	}
 	current.MaxRulesPerRepository = value
+	enabled, err := boolEnv("NOTARX_PROMOTION_ENABLED", !current.Disabled)
+	if err != nil {
+		return current, err
+	}
+	current.Disabled = !enabled
+	if current.EvaluatorInterval == 0 {
+		current.EvaluatorInterval = DefaultPromotionEvaluatorInterval
+	}
+	if current.EvaluatorInterval, err = durationEnv("NOTARX_PROMOTION_EVALUATOR_INTERVAL", current.EvaluatorInterval); err != nil {
+		return current, err
+	}
+	if current.EvaluatorConcurrency == 0 {
+		current.EvaluatorConcurrency = DefaultPromotionEvaluatorConcurrency
+	}
+	if current.EvaluatorConcurrency, err = positiveIntEnv("NOTARX_PROMOTION_EVALUATOR_CONCURRENCY", current.EvaluatorConcurrency, false); err != nil {
+		return current, err
+	}
+	if current.EvaluatorConcurrency > MaxPromotionEvaluatorConcurrency {
+		return current, errEvaluatorConcurrency
+	}
 	return current, nil
 }

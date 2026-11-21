@@ -3,9 +3,9 @@
 [Documentation index](README.md) · [ADR 0021](adr/0021-promotion-rules-and-repository-chains.md) · [Remote instances](remote-instances.md)
 
 A promotion rule says which artifacts of a source repository are promoted, under which conditions, to which target and as
-which service account. This page covers the rule resource and its dry run, `/api/v2/promotion-rules`. The evaluator that
-runs rules when artifacts are published arrives in a later slice of ADR 0021; until then a rule is configuration, and
-the dry run shows what it would select.
+which service account. This page covers the rule resource and its dry run, `/api/v2/promotion-rules`, and the evaluator
+that runs enabled rules when artifacts are published (see [Evaluation](#evaluation)). The dry run shows what a rule
+would select without enqueueing anything.
 
 ## The rule
 
@@ -19,6 +19,7 @@ the dry run shows what it would select.
 | `mode` | `copy`: bytes are reused inside an installation and pushed to a remote one. Move and overwrite are not offered; the source is never changed. |
 | `runAsServiceAccountId` | The service account the rule runs as. |
 | `enabled` | Whether the rule is evaluated. |
+| `state` | `active`, or `authorization_lost` when the evaluator parked the rule because its service account could no longer run it (see [Evaluation](#evaluation)). Read-only. |
 
 Every edit increments `version` (the `ETag` and the `If-Match` of an update), records the editor in `updatedBy` and writes
 an audit record (`promotion_rule.create`, `promotion_rule.update`, `promotion_rule.delete`) with the rule id, the new
@@ -98,8 +99,48 @@ instance and is `not_evaluated`). The outcome is `blocked` when any condition fa
 was not evaluated, and `eligible` otherwise. `limit` (default 100, at most 500) bounds the returned items; at most 5000
 artifacts are examined. `truncated` says whether either bound cut the answer short.
 
+## Evaluation
+
+Publishing an artifact to a source repository writes `artifact.published`. In the transaction of the publication,
+`events.Emit` inserts one pending row of `promotion_evaluations` for every enabled, active rule of that repository whose
+`coordinate` and `version` can match. The rule set comes from an in-process cache that every rule change flushes on every
+node (`NOTARX_AUTHZ_CACHE_TTL` bounds a lost notification), so a created, enabled, disabled, edited or parked rule starts or
+stops fanning out within the TTL. A failure of the fan-out fails the publication, because a silently missed evaluation
+would break the chain; a publication that no rule matches does not touch the rules table in its transaction.
+
+A worker with the `evaluator` kind claims due rows (`FOR UPDATE SKIP LOCKED`, woken by the `notarx_promotion_evaluations`
+channel and by a poll), and for each one:
+
+1. reloads the rule and the artifact and checks the rule is still enabled and active;
+2. re-authorizes the run-as service account: it must exist, be active, be able to read the source and write the target.
+   A refusal parks the rule in state `authorization_lost`, announces `promotion.failed` with the rule id and the reason, and
+   fails the evaluation. Evaluation stops until an edit of the rule returns it to `active`;
+3. re-checks the match against the artifact as it is now (refs, and for a versioned Raw source the properties frozen at
+   seal; a file of a versioned Raw source is evaluated as its version `name@version`, and waits, polling every five
+   minutes for up to a week, while the version is open);
+4. evaluates the conditions with the dry run's verdicts. A failed condition skips the artifact with the reason
+   `condition_failed:<condition>:<reason>`; an age condition waits until `published + minAge` instead. The scan wait and the
+   re-pend on a new scan result belong to a later slice;
+5. for `scope: release` expands the artifact through the format's `ReleaseSet`, admits every member before queueing any,
+   and calls `PromotionService.Request` for each member as the service account. A member whose digest the target already
+   holds (a completed promotion into it) is a no-op; different bytes at its coordinate fail the evaluation with
+   `conflict`. Quarantine and the target's admission policy still apply: a refusal skips with its code.
+
+The outcome of a row is `queued` (promotion requested; the `artifact_promotions` row shows its progress), `waiting`,
+`skipped` or `failed`, with the reason in `last_reason`. Delivery is at least once; the promotion is effectively once because
+its provenance idempotency key is `rule:<ruleId>:<sha256(target|coordinate|digest|generation>`, where the generation is the
+time the target coordinate was tombstoned, so promoting again after a tombstone mints a new key and nothing else does. A
+promotion whose last attempt failed, was rejected, expired or was cancelled is retried by the next request under its key,
+which writes attempt N+1 under the same key with its own job; a request whose last attempt is queued, running or completed
+returns that attempt. Rows of a worker that died become due again when their two-minute lease ends. Terminal rows are pruned
+after 7 days (1 day on the free tier). Remote targets are evaluated by the remote push slice; until then an evaluation for a
+remote rule is skipped with `remote_target_not_supported`.
+
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
+| `NOTARX_PROMOTION_ENABLED` | `true` | `false` turns the evaluator off: publications write no evaluations and no worker runs |
+| `NOTARX_PROMOTION_EVALUATOR_INTERVAL` | `5s` | Poll interval of the evaluator between wake-ups |
+| `NOTARX_PROMOTION_EVALUATOR_CONCURRENCY` | `4` | Evaluations one node claims and evaluates at once (1 to 64) |
 | `NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY` | `32` | The most promotion rules one source repository can have (1 to 1024) |

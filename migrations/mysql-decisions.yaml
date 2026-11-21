@@ -157,6 +157,24 @@ indexes:
       - {name: pending_state, type: "VARCHAR(32)", expression: "IF(`state` IN ('pending_approval', 'queued', 'running'), `state`, NULL)", nullable: true}
     columns: [pending_state]
     reason: "the pending-state sweep reads the unfinished rows only: a virtual column that is the state for a pending_approval, queued or running row and NULL otherwise, indexed, so the index stays as small as the PostgreSQL partial index (ADR 0023 section 5)"
+  promotion_evaluations_claim_idx:
+    action: generated
+    generated:
+      - {name: claimable_at, type: "DATETIME(6)", expression: "IF(`state` IN ('pending', 'waiting'), `next_attempt_at`, NULL)", nullable: true}
+    columns: [claimable_at]
+    reason: "the claim reads the pending and waiting rows by due time: a virtual column that is next_attempt_at for those two states and NULL otherwise, indexed, so the index stays as small as the PostgreSQL partial index (ADR 0023 section 5)"
+  promotion_evaluations_waiting_idx:
+    action: generated
+    generated:
+      - {name: waiting_repository_id, type: "CHAR(36)", expression: "IF(`state` = 'waiting', `repository_id`, NULL)", nullable: true}
+    columns: [waiting_repository_id, digest]
+    reason: "the scan-completed re-pend reads the waiting rows of one repository and digest: a virtual column that is the repository id for a waiting row and NULL otherwise, indexed with the digest (ADR 0023 section 5)"
+  promotion_evaluations_retention_idx:
+    action: generated
+    generated:
+      - {name: terminal_at, type: "DATETIME(6)", expression: "IF(`state` IN ('queued', 'skipped', 'failed'), `updated_at`, NULL)", nullable: true}
+    columns: [terminal_at]
+    reason: "the retention janitor reads the terminal rows by age: a virtual column that is updated_at for a queued, skipped or failed row and NULL otherwise, indexed (ADR 0023 section 5)"
   lifecycle_jobs_actionable_idx:
     action: flag
     flag: actionable
@@ -190,6 +208,18 @@ triggers:
   artifact_promotions_chain_path_append_only:
     disposition: ported
     reason: "the MySQL provenance store refuses a chain_path that is not an append of the stored one; only the application writes this table"
+  promotion_evaluations_notify_insert:
+    disposition: dropped
+    reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
+  promotion_rules_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  promotion_rules_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  promotion_rules_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
   lifecycle_jobs_promotion_state:
     disposition: ported
     reason: "the MySQL lifecycle store updates the provenance row and enqueues artifact.promoted or promotion.failed in the same transaction as the job state change (store group D); only the application writes these tables"

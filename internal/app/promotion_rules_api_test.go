@@ -134,7 +134,7 @@ func TestPromotionRuleLifecycleVersionsAndAudit(t *testing.T) {
 		t.Fatalf("create = %d etag=%q %s", created.Code, created.Header().Get("ETag"), created.Body.String())
 	}
 	rule := decodeRule(t, created)
-	if rule.Version != "1" || rule.CreatedBy != "promoter" || rule.UpdatedBy != "promoter" || rule.Mode != "copy" || !rule.Enabled || rule.Target.Kind != "local" ||
+	if rule.Version != "1" || rule.CreatedBy != "promoter" || rule.UpdatedBy != "promoter" || rule.Mode != "copy" || !rule.Enabled || rule.State != "active" || rule.StateReason != nil || rule.Target.Kind != "local" ||
 		rule.Match.Scope == nil || *rule.Match.Scope != "coordinate" || rule.Conditions.MinAge == nil || *rule.Conditions.MinAge != "72h" || rule.RunAsServiceAccountId.String() != f.account.ID {
 		t.Fatalf("rule = %+v", rule)
 	}

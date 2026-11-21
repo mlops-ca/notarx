@@ -325,6 +325,24 @@ synthetic dedupe keys. It also serves backfill after a rule is created
 (`backfill: true`) and recovery. A rule may be event-driven, scheduled, or
 both.
 
+Slice 3c implementation decisions. Rule fan-out is `events.RuleFanout`, installed once at startup and called by `events.Emit` and
+`EmitOnce` for `artifact.published`: it reads the enabled, active rules of the source repository from an `internal/readcache`
+cache of compiled matches (scope `promotion_rule`, flushed on every node by statement triggers on `promotion_rules`, bounded by
+`NOTARX_AUTHZ_CACHE_TTL`) and offers a rule when its `coordinate` and `version` can match; refs and frozen properties are not
+known at publication, so the evaluator checks them, and a rule whose stored match cannot be compiled is offered to the
+evaluator so that it fails with a reason instead of failing the publication. The insert joins `promotion_rules`, so a rule
+deleted, disabled or parked since the cache was read gets no row and no foreign key violation. The evaluation queue wakes
+on `notarx_promotion_evaluations` (the quota alert evaluator owns `notarx_evaluations`). A claim sets the lease and moves
+`next_attempt_at` to its expiry, so the abandoned row of a dead worker is due again without a recovery sweep; each claim
+counts an attempt, and a transient failure retries with a backoff of 5 seconds doubling to 5 minutes until 8 attempts. A rule has a
+state (`active`, `authorization_lost`, `paused`, column `promotion_rules.state`, read-only in the API) set by the system without
+a version bump; an edit returns `authorization_lost` to `active`. The worker kind is `evaluator`. A rule target is evaluated for local
+targets only; a remote target is skipped with `remote_target_not_supported` until slice 8. A target that already holds the digest is
+detected from completed provenance rows into it that are newer than the target's tombstone; bytes that differ from a completed
+promotion are `conflict`; a direct publication into the target that no promotion made is refused by the format's job, not
+by the evaluator. A versioned Raw file event is evaluated as its version, which must be sealed; `scope: release` on versioned Raw expands to the
+files of the version through `ReleaseSet`.
+
 ### Provenance and approval
 
 ```

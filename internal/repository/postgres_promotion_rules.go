@@ -7,14 +7,14 @@ import (
 	"errors"
 )
 
-const promotionRuleColumns = `id::text,name,source_repository_id::text,target_kind,target_repository_id::text,remote_instance_id::text,remote_repository,match,conditions,approval,schedule,run_as_service_account_id::text,enabled,version::text,created_by,updated_by,created_at,updated_at`
+const promotionRuleColumns = `id::text,name,source_repository_id::text,target_kind,target_repository_id::text,remote_instance_id::text,remote_repository,match,conditions,approval,schedule,run_as_service_account_id::text,enabled,state,state_reason,version::text,created_by,updated_by,created_at,updated_at`
 
 func scanPromotionRule(scanner interface{ Scan(...any) error }) (PromotionRule, error) {
 	var rule PromotionRule
 	var target, remote, remoteRepository sql.NullString
 	var match, conditions, approval, schedule []byte
 	if err := scanner.Scan(&rule.ID, &rule.Name, &rule.SourceRepositoryID, &rule.TargetKind, &target, &remote, &remoteRepository, &match, &conditions,
-		&approval, &schedule, &rule.RunAsServiceAccountID, &rule.Enabled, &rule.Version, &rule.CreatedBy, &rule.UpdatedBy, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
+		&approval, &schedule, &rule.RunAsServiceAccountID, &rule.Enabled, &rule.State, &rule.StateReason, &rule.Version, &rule.CreatedBy, &rule.UpdatedBy, &rule.CreatedAt, &rule.UpdatedAt); err != nil {
 		return PromotionRule{}, err
 	}
 	rule.TargetRepositoryID, rule.RemoteInstanceID, rule.RemoteRepository = target.String, remote.String, remoteRepository.String
@@ -65,6 +65,14 @@ func promotionRuleWriteError(err error) error {
 // CreatePromotionRule counts the rules of the source repository and inserts the new one under an advisory lock of
 // that repository, so two concurrent creates cannot both pass the cap.
 func (s *PostgresStore) CreatePromotionRule(ctx context.Context, rule PromotionRule, maxPerSource int, audit ...AuditRecord) (PromotionRule, error) {
+	created, err := s.createPromotionRule(ctx, rule, maxPerSource, audit)
+	if err == nil {
+		s.invalidateLocalScope(CacheScopePromotionRule)
+	}
+	return created, err
+}
+
+func (s *PostgresStore) createPromotionRule(ctx context.Context, rule PromotionRule, maxPerSource int, audit []AuditRecord) (PromotionRule, error) {
 	return runTransactional(ctx, s, audit, func(q sqlRunner) (PromotionRule, error) {
 		if _, err := q.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended('promotion_rules:'||$1::text,0))`, rule.SourceRepositoryID); err != nil {
 			return PromotionRule{}, err
@@ -135,10 +143,19 @@ func (s *PostgresStore) GetPromotionRule(ctx context.Context, id string) (Promot
 }
 
 func (s *PostgresStore) UpdatePromotionRule(ctx context.Context, rule PromotionRule, expectedVersion string, audit ...AuditRecord) (PromotionRule, error) {
+	updated, err := s.updatePromotionRule(ctx, rule, expectedVersion, audit)
+	if err == nil {
+		s.invalidateLocalScope(CacheScopePromotionRule)
+	}
+	return updated, err
+}
+
+func (s *PostgresStore) updatePromotionRule(ctx context.Context, rule PromotionRule, expectedVersion string, audit []AuditRecord) (PromotionRule, error) {
 	return runAudited(ctx, s, audit, func(q sqlRunner) (PromotionRule, error) {
 		updated, err := scanPromotionRule(q.QueryRowContext(ctx, `UPDATE promotion_rules
 SET name=$2,target_kind=$3,target_repository_id=$4::uuid,remote_instance_id=$5::uuid,remote_repository=$6,match=$7::jsonb,conditions=$8::jsonb,approval=$9::jsonb,schedule=$10::jsonb,
-    run_as_service_account_id=$11::uuid,enabled=$12,updated_by=$13,version=version+1,updated_at=now()
+    run_as_service_account_id=$11::uuid,enabled=$12,updated_by=$13,version=version+1,updated_at=now(),
+    state=CASE WHEN state='authorization_lost' THEN 'active' ELSE state END,state_reason=CASE WHEN state='authorization_lost' THEN '' ELSE state_reason END
 WHERE id=$1::uuid AND version=$14::text::bigint RETURNING `+promotionRuleColumns,
 			rule.ID, rule.Name, rule.TargetKind, nullableText(rule.TargetRepositoryID), nullableText(rule.RemoteInstanceID), nullableText(rule.RemoteRepository),
 			[]byte(rule.Match), emptyObjectIfAbsent(rule.Conditions), nullableJSON(rule.Approval), nullableJSON(rule.Schedule), rule.RunAsServiceAccountID, rule.Enabled, rule.UpdatedBy, expectedVersion))
@@ -157,6 +174,14 @@ WHERE id=$1::uuid AND version=$14::text::bigint RETURNING `+promotionRuleColumns
 }
 
 func (s *PostgresStore) DeletePromotionRule(ctx context.Context, id string, audit ...AuditRecord) error {
+	err := s.deletePromotionRule(ctx, id, audit)
+	if err == nil {
+		s.invalidateLocalScope(CacheScopePromotionRule)
+	}
+	return err
+}
+
+func (s *PostgresStore) deletePromotionRule(ctx context.Context, id string, audit []AuditRecord) error {
 	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
 		result, execErr := q.ExecContext(ctx, `DELETE FROM promotion_rules WHERE id=$1::uuid`, id)
 		if execErr != nil {

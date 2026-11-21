@@ -100,8 +100,8 @@ func (e Entry) Validate() error {
 }
 
 // DefaultRegistry lists every table the janitor prunes.
-// promotion_evaluations and import sessions are added by the slices that create them,
-// because their columns are not part of the schema yet.
+// Import sessions are added by the slice that creates them, because their columns are not
+// part of the schema yet.
 func DefaultRegistry() []Entry {
 	return []Entry{
 		{Table: "resolver_audit_log", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"id"}, Standard: 90 * day, FreeTier: 7 * day, PartitionedOnPostgres: true},
@@ -110,6 +110,10 @@ func DefaultRegistry() []Entry {
 		// The event log of ADR 0021. NOTARX_EVENTS_RETENTION is the documented key of the table; PostgreSQL drops
 		// whole partitions (internal/partitions), MySQL deletes in batches.
 		{Table: "domain_events", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"occurred_at", "seq"}, Standard: 14 * day, FreeTier: 3 * day, PartitionedOnPostgres: true},
+		// Evaluations of promotion rules (ADR 0021): a row is terminal once the promotion was requested (queued), the
+		// artifact was skipped or the evaluation failed; pending and waiting rows are live. The 7 day keep time leaves the
+		// recorded reason inspectable.
+		{Table: "promotion_evaluations", TimeColumn: "updated_at", Terminal: "state IN ('queued','skipped','failed')", KeyColumns: []string{"id"}, Standard: 7 * day, FreeTier: 1 * day},
 		{Table: "repository_request_rollup", TimeColumn: "bucket_start", Terminal: "TRUE", KeyColumns: []string{"repository_id", "bucket_start", "outcome"}, Standard: 400 * day, FreeTier: 400 * day},
 		{Table: "webhook_deliveries", Label: "webhook_deliveries_succeeded", TimeColumn: "updated_at", Terminal: "state = 'succeeded'", KeyColumns: []string{"id"}, Standard: 14 * day, FreeTier: 3 * day},
 		// A dead delivery is inspectable and replayable while its domain event is kept (14 days, 3 on the free tier), so

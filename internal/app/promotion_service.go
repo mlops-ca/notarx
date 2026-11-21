@@ -2,8 +2,11 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +57,27 @@ type PromotionRequest struct {
 	Digest         string
 	AptTargetSuite *string
 	IdempotencyKey string
+	// Rule is set when a promotion rule requests the promotion (ADR 0021, Evaluator); a manual request leaves it nil.
+	Rule *PromotionRuleOrigin
+}
+
+// PromotionRuleOrigin ties a promotion to the rule that requested it. Key is the provenance idempotency key of the rule
+// (RulePromotionKey); the service reads the attempts already recorded under it, so a request for a key whose last
+// attempt failed is the next attempt of that key and a request for a key whose last attempt is queued, running or
+// completed is a replay.
+type PromotionRuleOrigin struct {
+	RuleID      string
+	RuleVersion int64
+	Key         string
+}
+
+// RulePromotionKey is the provenance idempotency key of a rule promotion: rule:<ruleId>:<sha256 of
+// target|coordinate|digest|generation>. The generation is the tombstone time of the target coordinate (empty while it
+// was never tombstoned), so promoting again after the target artifact was tombstoned mints a new key, and nothing else
+// does.
+func RulePromotionKey(ruleID, targetID, coordinate, digest, generation string) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{targetID, coordinate, digest, generation}, "|")))
+	return "rule:" + ruleID + ":" + hex.EncodeToString(sum[:])
 }
 
 // PromotionResult is the accepted promotion: its job and its provenance row. A replay of the same Idempotency-Key
@@ -171,15 +195,33 @@ func (s PromotionService) request(ctx context.Context, in PromotionRequest, reso
 		return PromotionResult{}, perr
 	}
 	source, target, publisher := in.Source, admission.target, admission.publisher
-	promoteAudit := s.auditFor(repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: in.Principal.Actor, Resource: in.Coordinate, Operation: "promote", Status: http.StatusAccepted})
+	audit := repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: in.Principal.Actor, Resource: in.Coordinate, Operation: "promote", Status: http.StatusAccepted}
 	now := time.Now().UTC()
 	provenance := repository.ArtifactPromotion{
 		ID: ids.New(), Format: source.Format, Coordinate: in.Coordinate, Digest: in.Digest, OriginRepository: source.Name,
 		ChainPath:   []repository.PromotionChainHop{{Repository: source.Name, At: now}},
 		RequestedBy: in.Principal.Actor, IdempotencyKey: promotionIdempotencyKey(target.ID, in.IdempotencyKey),
 	}
+	jobKey := in.IdempotencyKey
+	if in.Rule != nil {
+		attempt, replay, perr := s.ruleAttempt(ctx, in)
+		if perr != nil {
+			return PromotionResult{}, perr
+		}
+		if replay != nil {
+			return *replay, nil
+		}
+		provenance.IdempotencyKey, provenance.RuleID, provenance.RuleVersion, provenance.Attempt = in.Rule.Key, in.Rule.RuleID, in.Rule.RuleVersion, attempt
+		provenance.ChainPath[0].RuleID = in.Rule.RuleID
+		jobKey = in.Rule.Key
+		if attempt > 1 {
+			jobKey += "#" + strconv.Itoa(attempt)
+		}
+		audit.Evidence = map[string]string{"ruleId": in.Rule.RuleID, "ruleVersion": strconv.FormatInt(in.Rule.RuleVersion, 10), "attempt": strconv.Itoa(attempt)}
+	}
+	promoteAudit := s.auditFor(audit)
 	enqueueCtx := formatmodule.WithPromotionOptions(repository.WithArtifactPromotion(ctx, provenance), formatmodule.PromotionOptions{Actor: in.Principal.Actor, APTTargetSuite: aptDistributionSuite(in.AptTargetSuite)})
-	job, _, err := publisher.EnqueuePromotion(enqueueCtx, source.ID, target.ID, in.Coordinate, in.Digest, in.IdempotencyKey, promoteAudit...)
+	job, _, err := publisher.EnqueuePromotion(enqueueCtx, source.ID, target.ID, in.Coordinate, in.Digest, jobKey, promoteAudit...)
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
 		if result, replayed := s.replayPruned(ctx, in, admission.target); replayed {
 			return result, nil
@@ -203,6 +245,9 @@ func (s PromotionService) request(ctx context.Context, in PromotionRequest, reso
 // job is rebuilt from the row.
 func (s PromotionService) replayPruned(ctx context.Context, in PromotionRequest, target repository.HostedRepository) (PromotionResult, bool) {
 	key := promotionIdempotencyKey(target.ID, in.IdempotencyKey)
+	if in.Rule != nil {
+		key = in.Rule.Key
+	}
 	rows, err := s.promotions.GetArtifactPromotionsByKeys(ctx, []string{key})
 	row, ok := rows[key]
 	if err != nil || !ok || row.JobID == "" || row.Format != in.Source.Format || row.Coordinate != in.Coordinate || row.Digest != in.Digest || row.OriginRepository != in.Source.Name {
@@ -241,4 +286,25 @@ func (s PromotionService) auditFor(record repository.AuditRecord) []repository.A
 		return nil
 	}
 	return []repository.AuditRecord{managementAudit(record)}
+}
+
+// ruleAttempt decides which attempt of a rule promotion a request is. The newest attempt recorded under the rule's key
+// decides: none means attempt 1; a failed, rejected, expired or cancelled one means the next attempt (a retry, linked to
+// the earlier rows by the shared key and the attempt counter); a queued, running, pending-approval or completed one is a
+// replay, answered with that row and its job so nothing is queued twice.
+func (s PromotionService) ruleAttempt(ctx context.Context, in PromotionRequest) (int, *PromotionResult, *PromotionError) {
+	rows, err := s.promotions.GetArtifactPromotionsByKeys(ctx, []string{in.Rule.Key})
+	if err != nil {
+		return 0, nil, promotionError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
+	}
+	row, found := rows[in.Rule.Key]
+	if !found {
+		return 1, nil, nil
+	}
+	switch row.State {
+	case repository.ArtifactPromotionFailed, repository.ArtifactPromotionRejected, repository.ArtifactPromotionExpired, repository.ArtifactPromotionCancelled:
+		return row.Attempt + 1, nil, nil
+	}
+	return 0, &PromotionResult{Job: repository.LifecycleJob{ID: row.JobID, RepositoryID: row.TargetRepositoryID, Kind: repository.LifecycleJobPromotion,
+		IdempotencyKey: in.Rule.Key, State: lifecycleStateForPromotion(row.State), CreatedAt: row.CreatedAt, CompletedAt: row.CompletedAt}, Promotion: row}, nil
 }
