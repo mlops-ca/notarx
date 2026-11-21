@@ -816,8 +816,12 @@ func TestEvaluationsOfAParkedRuleWaitAndPromoteOnceTheRuleIsEdited(t *testing.T)
 	if _, err := f.store.UpdateServiceAccount(ctx, repository.ServiceAccountUpdate{ID: f.account.ID, State: &disabled}, f.account.Version); err != nil {
 		t.Fatal(err)
 	}
-	f.runOnce()
-	// One evaluation parked the rule, the other found it parked; both wait for it to come back.
+	// The two evaluations run at once: one parks the rule and the other either finds it parked or, having read it active,
+	// loses the park to the first and is decided again (pending, due at once). Run until nothing is pending.
+	for round := 0; round < 3 && (round == 0 || len(f.evaluations(repository.PromotionEvaluationPending)) > 0); round++ {
+		f.runOnce()
+	}
+	// Both wait for the rule to come back.
 	waitingRows := f.evaluations(repository.PromotionEvaluationWaiting)
 	if len(waitingRows) != 2 {
 		t.Fatalf("evaluations = %+v", f.evaluations())
