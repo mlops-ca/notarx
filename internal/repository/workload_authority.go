@@ -77,7 +77,7 @@ func (s *MemoryStore) WorkloadAuthorityLocked(actor, policyID string) WorkloadAu
 	if !found {
 		return WorkloadAuthority{}
 	}
-	account, found := s.serviceAccounts[accountID]
+	account, found := s.serviceAccounts[policy.ServiceAccountID]
 	if !found {
 		return WorkloadAuthority{}
 	}
