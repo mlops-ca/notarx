@@ -44,7 +44,7 @@ CREATE TABLE public.import_sessions (
 
 CREATE INDEX import_sessions_state_expires_idx ON public.import_sessions USING btree (state, expires_at);
 CREATE INDEX import_sessions_principal_state_idx ON public.import_sessions USING btree (principal, state);
-CREATE INDEX import_sessions_updated_at_idx ON public.import_sessions USING btree (updated_at);
+CREATE INDEX import_sessions_retention_idx ON public.import_sessions USING btree (updated_at);
 
 CREATE TABLE public.import_blobs (
     session_id uuid NOT NULL,
