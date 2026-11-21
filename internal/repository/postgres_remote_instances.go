@@ -102,7 +102,7 @@ func (s *PostgresStore) GetRemoteInstance(ctx context.Context, id string) (Remot
 func (s *PostgresStore) UpdateRemoteInstance(ctx context.Context, value RemoteInstance, expectedVersion string, audit ...AuditRecord) (RemoteInstance, error) {
 	return runAudited(ctx, s, audit, func(q sqlRunner) (RemoteInstance, error) {
 		updated, err := scanRemoteInstance(q.QueryRowContext(ctx, `UPDATE remote_instances
-SET name=$2,base_url=$3,instance_id=$4::uuid,auth_kind=$5,audience=$6,token_sealed=$7,trust_evidence=$8,state=$9,last_checked_at=$10,version=version+1,updated_at=now()
+SET name=$2,base_url=$3,instance_id=$4::uuid,auth_kind=$5,audience=$6,token_sealed=CASE WHEN $5='static_token' THEN COALESCE($7,token_sealed) END,trust_evidence=$8,state=$9,last_checked_at=$10,version=version+1,updated_at=now()
 WHERE id=$1::uuid AND version=$11::text::bigint RETURNING `+remoteInstanceColumns,
 			value.ID, value.Name, value.BaseURL, value.InstanceID, value.AuthKind, value.Audience, nullableSealedToken(value.TokenSealed),
 			value.TrustEvidence, value.State, nullableCheckTime(value.LastCheckedAt), expectedVersion))
@@ -142,13 +142,20 @@ func (s *PostgresStore) DeleteRemoteInstance(ctx context.Context, id string, aud
 	return err
 }
 
-func (s *PostgresStore) RecordRemoteInstanceCheck(ctx context.Context, id, state string, checkedAt time.Time) (RemoteInstance, error) {
+func (s *PostgresStore) RecordRemoteInstanceCheck(ctx context.Context, id, state string, checkedAt time.Time, expectedVersion string) (RemoteInstance, error) {
 	value, err := scanRemoteInstance(s.db.QueryRowContext(ctx, `UPDATE remote_instances SET state=$2,last_checked_at=$3,updated_at=now()
-WHERE id=$1::uuid RETURNING `+remoteInstanceColumns, id, state, checkedAt.UTC()))
-	if errors.Is(err, sql.ErrNoRows) {
-		return RemoteInstance{}, ErrNotFound
+WHERE id=$1::uuid AND version=$4::text::bigint RETURNING `+remoteInstanceColumns, id, state, checkedAt.UTC(), expectedVersion))
+	if !errors.Is(err, sql.ErrNoRows) {
+		return value, err
 	}
-	return value, err
+	var exists bool
+	if queryErr := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM remote_instances WHERE id=$1::uuid)`, id).Scan(&exists); queryErr != nil {
+		return RemoteInstance{}, queryErr
+	}
+	if exists {
+		return RemoteInstance{}, ErrVersionConflict
+	}
+	return RemoteInstance{}, ErrNotFound
 }
 
 func (s *PostgresStore) LocalInstanceID(ctx context.Context) (string, error) {

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"net/netip"
 	"time"
 )
 
@@ -19,19 +18,6 @@ var ErrPeerAddressBlocked = errors.New("remote instance address is private or no
 // ErrPeerRedirect reports a redirect answer from a remote instance. Remote instance requests never follow one: a
 // redirect could carry a credential or a request to another host.
 var ErrPeerRedirect = errors.New("remote instance answered with a redirect")
-
-// peerBlockedPrefixes are the ranges besides the private, loopback and link-local ones that are not public
-// destinations, or that embed an arbitrary IPv4 address.
-var peerBlockedPrefixes = []netip.Prefix{
-	netip.MustParsePrefix("100.64.0.0/10"), // carrier-grade NAT
-	netip.MustParsePrefix("198.18.0.0/15"), // benchmarking
-	netip.MustParsePrefix("192.0.0.0/24"),  // IETF protocol assignments
-	netip.MustParsePrefix("240.0.0.0/4"),   // reserved, includes the broadcast address
-	netip.MustParsePrefix("64:ff9b::/96"),  // NAT64
-	netip.MustParsePrefix("2002::/16"),     // 6to4
-	netip.MustParsePrefix("2001::/32"),     // Teredo
-	netip.MustParsePrefix("fec0::/10"),     // deprecated site-local
-}
 
 // PeerOptions configures the client used to talk to a remote notarx instance (ADR 0021, "Remote targets").
 type PeerOptions struct {
@@ -45,24 +31,6 @@ type PeerOptions struct {
 	RootCAs *x509.CertPool
 	// Timeout bounds one request end to end; zero selects 10 seconds.
 	Timeout time.Duration
-}
-
-// PeerAddressBlocked reports whether a remote instance must not be dialled at ip unless private networks are allowed.
-func PeerAddressBlocked(ip net.IP) bool {
-	address, ok := netip.AddrFromSlice(ip)
-	if !ok {
-		return true
-	}
-	address = address.Unmap()
-	if PrivateAddress(ip) || !address.IsGlobalUnicast() {
-		return true
-	}
-	for _, prefix := range peerBlockedPrefixes {
-		if prefix.Contains(address) {
-			return true
-		}
-	}
-	return false
 }
 
 // NewPeerClient returns an HTTP client for remote instance requests: HTTPS only with mandatory certificate
@@ -128,18 +96,10 @@ func dialPeer(ctx context.Context, hooks Hooks, allowPrivate bool, network, addr
 	}
 	if !allowPrivate {
 		for _, ip := range addresses {
-			if PeerAddressBlocked(ip) {
+			if NonPublicAddress(ip) {
 				return nil, ErrPeerAddressBlocked
 			}
 		}
 	}
-	var last error
-	for _, ip := range addresses {
-		connection, dialErr := hooks.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
-		if dialErr == nil {
-			return connection, nil
-		}
-		last = dialErr
-	}
-	return nil, last
+	return dialPinned(ctx, hooks, addresses, network, port)
 }

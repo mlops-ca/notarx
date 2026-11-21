@@ -416,7 +416,7 @@
     "internal/repository.RemoteInstanceStore.GetRemoteInstance func(context.Context, string) (RemoteInstance, error)",
     "internal/repository.RemoteInstanceStore.LocalInstanceID func(context.Context) (string, error)",
     "internal/repository.RemoteInstanceStore.PageRemoteInstances func(context.Context, RemoteInstanceQuery) (RemoteInstancePage, error)",
-    "internal/repository.RemoteInstanceStore.RecordRemoteInstanceCheck func(ctx context.Context, id, state string, checkedAt time.Time) (RemoteInstance, error)",
+    "internal/repository.RemoteInstanceStore.RecordRemoteInstanceCheck func(ctx context.Context, id, state string, checkedAt time.Time, expectedVersion string) (RemoteInstance, error)",
     "internal/repository.RemoteInstanceStore.UpdateRemoteInstance func(context.Context, RemoteInstance, string, ...AuditRecord) (RemoteInstance, error)",
     "internal/repository.ReplicationStore.CancelReplicationPlan func(context.Context, string, string) error",
     "internal/repository.ReplicationStore.ClaimReplicationPlans func(context.Context, int) ([]ReplicationPlan, error)",

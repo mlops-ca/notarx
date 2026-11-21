@@ -124,12 +124,26 @@ func exerciseRemoteInstanceStore(t *testing.T, store RemoteInstanceStore) {
 	}
 
 	later := time.Now().UTC().Add(time.Minute).Truncate(time.Microsecond)
-	recorded, err := store.RecordRemoteInstanceCheck(ctx, workload.ID, RemoteInstanceStateUnreachable, later)
+	recorded, err := store.RecordRemoteInstanceCheck(ctx, workload.ID, RemoteInstanceStateUnreachable, later, "1")
 	if err != nil || recorded.State != RemoteInstanceStateUnreachable || !recorded.LastCheckedAt.Equal(later) || recorded.Version != "1" {
 		t.Fatalf("recorded = %#v err=%v", recorded, err)
 	}
-	if _, err = store.RecordRemoteInstanceCheck(ctx, ids.New(), RemoteInstanceStateActive, later); !errors.Is(err, ErrNotFound) {
+	if _, err = store.RecordRemoteInstanceCheck(ctx, ids.New(), RemoteInstanceStateActive, later, "1"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("record missing err = %v", err)
+	}
+	// A check decided from a stale version must not overwrite a concurrent edit or disable.
+	if _, err = store.RecordRemoteInstanceCheck(ctx, token.ID, RemoteInstanceStateActive, later, "1"); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("stale check err = %v", err)
+	}
+	if got, getErr := store.GetRemoteInstance(ctx, token.ID); getErr != nil || got.State != RemoteInstanceStateDisabled {
+		t.Fatalf("stale check changed the instance: %#v err=%v", got, getErr)
+	}
+	// An update without a new token keeps the stored (possibly rotated) token.
+	keep := updated
+	keep.TokenSealed = ""
+	kept, err := store.UpdateRemoteInstance(ctx, keep, "2")
+	if err != nil || kept.TokenSealed != token.TokenSealed {
+		t.Fatalf("token not carried forward: %#v err=%v", kept, err)
 	}
 
 	for _, id := range []string{token.ID, workload.ID} {

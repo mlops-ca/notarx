@@ -74,11 +74,14 @@ type RemoteInstanceStore interface {
 	CreateRemoteInstance(context.Context, RemoteInstance, ...AuditRecord) (RemoteInstance, error)
 	PageRemoteInstances(context.Context, RemoteInstanceQuery) (RemoteInstancePage, error)
 	GetRemoteInstance(context.Context, string) (RemoteInstance, error)
-	// UpdateRemoteInstance replaces the editable fields when the stored version equals the expected one.
+	// UpdateRemoteInstance replaces the editable fields when the stored version equals the expected one. An empty
+	// TokenSealed on a static_token instance keeps the stored token (decided inside the write, so a concurrent
+	// rotation is never reverted); any other authentication kind clears it.
 	UpdateRemoteInstance(context.Context, RemoteInstance, string, ...AuditRecord) (RemoteInstance, error)
 	DeleteRemoteInstance(context.Context, string, ...AuditRecord) error
-	// RecordRemoteInstanceCheck stores the outcome of a well-known check (state and time) without changing the version.
-	RecordRemoteInstanceCheck(ctx context.Context, id, state string, checkedAt time.Time) (RemoteInstance, error)
+	// RecordRemoteInstanceCheck stores the outcome of a well-known check (state and time) without changing the version,
+	// only while the stored version equals the one the check was decided from; otherwise ErrVersionConflict.
+	RecordRemoteInstanceCheck(ctx context.Context, id, state string, checkedAt time.Time, expectedVersion string) (RemoteInstance, error)
 	// LocalInstanceID returns the id of this deployment, a UUID created on first use and shared by every node.
 	LocalInstanceID(context.Context) (string, error)
 }
