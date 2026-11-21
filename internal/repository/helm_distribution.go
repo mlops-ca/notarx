@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	dist "github.com/mlops-ca/notarx/internal/helmdistribution"
@@ -111,17 +110,4 @@ func helmReplicationRetry(j dist.Job, expected string, indexes []int) (dist.Job,
 }
 func helmReplicationLease(j dist.Job, lease dist.Lease) bool {
 	return j.State == "running" && lease.JobID == j.ID && j.Lease.Owner == lease.Owner && j.Lease.Token == lease.Token && j.Lease.Fence == lease.Fence && j.Lease.Until.After(time.Now())
-}
-func helmReplicationActorValid(j dist.Job) bool {
-	switch j.ActorKind {
-	case "static_admin", "static_resolver":
-		return !strings.Contains(j.Actor, "\x00")
-	case "local_session", "oidc":
-		return strings.HasPrefix(j.Actor, "user:")
-	case "api_key":
-		return strings.HasPrefix(j.Actor, "api-key:")
-	case "service_account_credential", WorkloadActorKind:
-		return strings.HasPrefix(j.Actor, "service-account:") && j.CredentialID != ""
-	}
-	return false
 }

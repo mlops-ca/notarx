@@ -4,6 +4,7 @@ package pgstore_test
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/database"
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/rubygemspublication/pgstore"
 	"github.com/mlops-ca/notarx/internal/testsupport"
@@ -125,6 +127,32 @@ func TestRubyGemsPostgresReplicationStoreContract(t *testing.T) {
 	}
 	f.ReplicationStoreContract(t, store, source, target)
 	f.WorkloadReplicationContract(t, store, repos, source, target)
+	assertReplicationJobActorKindCheck(t, db, source.ID, target.ID)
+}
+
+// assertReplicationJobActorKindCheck inserts a workload_federation job row, as CreateRubyGemsReplication does, under the
+// extended actor_kind CHECK. Each insert runs in a transaction that is always rolled back, so no queued job is ever
+// visible to another test's worker on the shared database.
+func assertReplicationJobActorKindCheck(t *testing.T, db *sql.DB, source, target string) {
+	t.Helper()
+	insert := func(kind string) error {
+		tx, err := db.BeginTx(t.Context(), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = tx.Rollback() }()
+		_, err = tx.ExecContext(t.Context(), `INSERT INTO native_rubygems_replication_jobs(id,plan_digest,source_repository_id,target_repository_id,actor,actor_kind,credential_id,state) VALUES($1,$2,$3,$4,$5,$6,$7,'queued')`,
+			uuid.NewString(), "sha256:"+strings.Repeat("0", 64), source, target, "service-account:"+uuid.NewString(), kind, uuid.NewString())
+		return err
+	}
+	for _, kind := range durableactor.Kinds() {
+		if err := insert(kind); err != nil {
+			t.Errorf("actor_kind %q rejected by the CHECK: %v", kind, err)
+		}
+	}
+	if err := insert("unknown_kind"); err == nil {
+		t.Error("an unknown actor_kind passed the CHECK")
+	}
 }
 
 func TestRubyGemsPostgresReplicationRejectsPublicationExpiryAfterAudit(t *testing.T) {

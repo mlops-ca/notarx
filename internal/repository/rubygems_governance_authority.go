@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/durableactor"
 )
 
 // RubyGemsGovernanceIdentity contains only the already-authenticated subject
@@ -66,10 +68,10 @@ func (s *MemoryStore) rubyGemsGovernanceAuthorityLocked(ctx context.Context, id 
 	for i := range a.Grants.Grants {
 		a.Grants.Grants[i].Scopes = append([]string(nil), a.Grants.Grants[i].Scopes...)
 	}
-	switch in.Kind {
-	case "static_admin", "static_resolver":
+	switch durableactor.ClassOf(in.Kind) {
+	case durableactor.ClassStatic:
 		a.Active = true
-	case "local_session", "oidc":
+	case durableactor.ClassUser:
 		for _, u := range s.users {
 			if !strings.EqualFold(u.Name, strings.TrimPrefix(in.Actor, "user:")) || in.UserID != "" && in.UserID != u.ID {
 				continue
@@ -84,16 +86,16 @@ func (s *MemoryStore) rubyGemsGovernanceAuthorityLocked(ctx context.Context, id 
 			}
 			break
 		}
-	case WorkloadActorKind:
+	case durableactor.ClassWorkload:
 		w := s.WorkloadAuthorityLocked(in.Actor, in.CredentialID)
 		a.Active = w.Active
 		if !w.ValidUntil.IsZero() {
 			a.ValidUntil = RubyGemsEarlierAuthorityExpiry(a.ValidUntil, w.ValidUntil)
 		}
-	case "api_key", "service_account_credential":
+	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
 		keyID := strings.TrimPrefix(in.Actor, "api-key:")
 		accountID := ""
-		if in.Kind == "service_account_credential" {
+		if durableactor.ClassOf(in.Kind) == durableactor.ClassServiceAccountCredential {
 			keyID = in.CredentialID
 			accountID = strings.TrimPrefix(in.Actor, "service-account:")
 			account, ok := s.serviceAccounts[accountID]

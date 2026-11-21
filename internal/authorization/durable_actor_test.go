@@ -1,6 +1,10 @@
 package authorization
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/mlops-ca/notarx/internal/durableactor"
+)
 
 func TestDurablePrincipalWorkloadFederation(t *testing.T) {
 	enabled := Authenticator{Workload: &WorkloadAuthenticator{}}
@@ -68,5 +72,35 @@ func TestDurablePrincipalUsesCurrentIdentityAndAuthority(t *testing.T) {
 		if _, ok := empty.DurablePrincipal("current-admin", AuthenticationStaticAdmin, "admin", true, false); ok {
 			t.Fatal("incomplete administrator identity accepted")
 		}
+	}
+}
+
+// Every kind a durable job may carry must rebuild a principal here, and a kind the job layer does not accept must not.
+func TestDurablePrincipalAcceptsExactlyTheDurableActorKinds(t *testing.T) {
+	auth := Authenticator{AdminToken: "admin-secret", AdminActor: "admin", ResolverToken: "reader-secret", ResolverActor: "reader", Workload: &WorkloadAuthenticator{}}
+	actors := map[durableactor.Class]string{
+		durableactor.ClassUser:                     "user:operator",
+		durableactor.ClassAPIKey:                   "api-key:key",
+		durableactor.ClassServiceAccountCredential: "service-account:account",
+		durableactor.ClassWorkload:                 "service-account:account",
+	}
+	for _, kind := range durableactor.Kinds() {
+		actor, ok := actors[durableactor.ClassOf(kind)]
+		switch kind {
+		case durableactor.StaticAdmin:
+			actor = "admin"
+		case durableactor.StaticResolver:
+			actor = "reader"
+		default:
+			if !ok {
+				t.Fatalf("test has no actor for kind %q", kind)
+			}
+		}
+		if _, allowed := auth.DurablePrincipal(actor, AuthenticationKind(kind), "member", true, false); !allowed {
+			t.Errorf("durable kind %q is refused by DurablePrincipal", kind)
+		}
+	}
+	if _, allowed := auth.DurablePrincipal("user:operator", AuthenticationKind("unknown"), "member", true, false); allowed {
+		t.Error("an unknown kind must be refused")
 	}
 }

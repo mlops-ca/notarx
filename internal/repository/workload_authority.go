@@ -4,12 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"time"
-)
 
-// WorkloadActorKind is the durable actor kind of a workload_federation principal in replication jobs.
-const WorkloadActorKind = "workload_federation"
+	"github.com/mlops-ca/notarx/internal/durableactor"
+)
 
 // WorkloadAuthority is the current authority of a durable workload_federation actor (ADR 0019,
 // "Authentication flow and integration"): the actor is the service account, the credential id the trust policy.
@@ -21,10 +19,7 @@ type WorkloadAuthority struct {
 }
 
 // WorkloadActorAccount returns the service account id of a workload actor and whether the actor has that shape.
-func WorkloadActorAccount(actor string) (string, bool) {
-	id, ok := strings.CutPrefix(actor, "service-account:")
-	return id, ok && id != ""
-}
+func WorkloadActorAccount(actor string) (string, bool) { return durableactor.ServiceAccountID(actor) }
 
 func workloadAuthority(policy WorkloadTrustPolicy, issuerState WorkloadState, accountActive bool, now time.Time) WorkloadAuthority {
 	a := WorkloadAuthority{}

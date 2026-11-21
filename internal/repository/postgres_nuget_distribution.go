@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/mlops-ca/notarx/internal/capacity"
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	"sort"
 	"strings"
 	"time"
@@ -77,15 +78,15 @@ func (s *PostgresStore) nuGetReplicationTransaction(ctx context.Context, lease d
 	return tx, j, nil
 }
 func nuGetReplicationActorTx(ctx context.Context, tx *sql.Tx, j dist.Job, a *dist.Authority) error {
-	if !nuGetReplicationActorValid(j) {
+	if !durableactor.ActorValid(j.ActorKind, j.Actor, j.CredentialID) {
 		return dist.ErrAccessDenied
 	}
 	a.Actor = j.Actor
 	a.Kind = j.ActorKind
-	switch j.ActorKind {
-	case "static_admin", "static_resolver":
+	switch durableactor.ClassOf(j.ActorKind) {
+	case durableactor.ClassStatic:
 		a.Active = true
-	case "local_session", "oidc":
+	case durableactor.ClassUser:
 		var state string
 		err := tx.QueryRowContext(ctx, `SELECT role,state,must_change_password FROM users WHERE lower(name)=lower($1) FOR SHARE`, strings.TrimPrefix(j.Actor, "user:")).Scan(&a.Role, &state, &a.MustChangePassword)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -95,16 +96,16 @@ func nuGetReplicationActorTx(ctx context.Context, tx *sql.Tx, j dist.Job, a *dis
 			return err
 		}
 		a.Active = state == string(UserActive)
-	case WorkloadActorKind:
+	case durableactor.ClassWorkload:
 		w, err := WorkloadAuthorityTx(ctx, tx, j.Actor, j.CredentialID)
 		if err != nil {
 			return err
 		}
 		a.Active, a.ValidUntil = w.Active, w.ValidUntil
-	case "api_key", "service_account_credential":
+	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
 		credential := strings.TrimPrefix(j.Actor, "api-key:")
 		account := ""
-		if j.ActorKind == "service_account_credential" {
+		if durableactor.ClassOf(j.ActorKind) == durableactor.ClassServiceAccountCredential {
 			account = strings.TrimPrefix(j.Actor, "service-account:")
 			credential = j.CredentialID
 			var state string
