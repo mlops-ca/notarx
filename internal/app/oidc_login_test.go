@@ -404,7 +404,6 @@ func corpProviderInput(slug string, idp *stubOIDCProvider) IdentityProviderInput
 		OIDC: identity.OIDCSettings{
 			Issuer: idp.URL, Audience: "notarx-api", ClientID: "notarx-console",
 			RedirectURL: "http://localhost:4173/auth/oidc/" + slug + "/callback", Scopes: []string{"openid", "profile"},
-			MemberRoles: []string{"artifact-member"},
 		},
 	}
 }

@@ -57,3 +57,6 @@ migrations:
   000017_scim_tokens.sql:
     dialect: postgres
     reason: creates identity_provider_scim_tokens and two keyset indexes for the SCIM lists; the catalogue carries them into the MySQL baseline
+  000018_scim_auth_cache_notifications.sql:
+    dialect: postgres
+    reason: statement-level NOTIFY triggers on the SCIM token and identity provider tables; MySQL polls cache_epochs instead

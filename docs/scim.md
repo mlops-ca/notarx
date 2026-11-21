@@ -19,6 +19,14 @@ NOTARX_SCIM_MAX_PAGE=200   # optional: the cap of the count parameter, 1-1000, a
 
 `notarx preflight` reports `scim_enabled` and `scim_max_page`.
 
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `NOTARX_SCIM_ENABLED` | `false` | Mounts the SCIM server; while `false` every `/scim/v2/` route answers 404. |
+| `NOTARX_SCIM_MAX_PAGE` | `200` | The cap of the `count` parameter (1-1000), advertised as `maxResults`. |
+
+The setup of Microsoft Entra ID, Okta and Keycloak, token rotation and the attribute mapping are in the
+[identity provider setup guides](identity-provider-guides.md#scim-provisioning).
+
 ## Create a token
 
 A SCIM token belongs to one identity provider and acts only for it: it sees the accounts linked to that provider and
@@ -37,7 +45,7 @@ curl -sS -X POST "$NOTARX/api/v2/authentication/providers/$PROVIDER_ID/scim-toke
 - `GET` on the same path lists the tokens with their state (`active`, `expired`, `revoked`); `DELETE
   .../scim-tokens/{tokenId}` revokes one at once. Creating and revoking are audited.
 - Every failed authentication is the same 401, and a token of a disabled provider stops authenticating with the
-  provider's logins. A peer address whose failures exceed the 120 per minute budget of the anonymous routes gets 429 for
+  provider's logins. A revoked or expired token, a disabled provider and a deleted provider stop authenticating on the node that handled the change at once and on every other node within `NOTARX_AUTHZ_CACHE_TTL` (default `5s`, shortened by the cache notification; `0` reads the database on every request). A peer address whose failures exceed the 120 per minute budget of the anonymous routes gets 429 for
   its further failures; a valid token is never throttled.
 
 Send it as `Authorization: Bearer nxscim_...`; a credential that does not have the shape of an issued token is refused
@@ -106,7 +114,7 @@ parts are ignored.
 
 Every call is audited with the actor `scim:<provider slug>`, the operation (`scim.user.patch`, ...), the resource
 and the outcome. A PATCH records the names of the attributes it changed and of those it ignored, never their
-values. Writes commit with their audit record.
+values. Writes and refusals commit with their audit record before the response; the audit of a successful read (`GET` or `HEAD`) goes through the tiered audit writer (ADR 0023 section 1), which batches it, so a sync of thousands of resources costs one insert per batch instead of one per call. The writer drops a read record only when its bounded buffer is full, and counts it (`notarx_audit_dropped_total`); `NOTARX_AUDIT_READ_MODE=sync` commits every read audit before the response when no loss is acceptable.
 
 ## Fuzzing
 

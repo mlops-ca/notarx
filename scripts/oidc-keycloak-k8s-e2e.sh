@@ -89,9 +89,7 @@ provider_request=$(jq -n \
       clientId: "notarx-console",
       redirectUrl: $redirect,
       scopes: ["openid", "profile", "email"],
-      adminSubjects: [],
-      memberRoles: ["artifact-member"],
-      adminRoles: ["artifact-admin"]
+      adminSubjects: ["0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d"]
     }
   }')
 provider_id=$(curl --silent --show-error --fail-with-body \

@@ -2,13 +2,6 @@
   "realm": "notarx",
   "enabled": true,
   "displayName": "notarx OIDC Test",
-  "roles": {
-    "realm": [
-      { "name": "artifact-reader" },
-      { "name": "artifact-writer" },
-      { "name": "artifact-admin" }
-    ]
-  },
   "clients": [
     {
       "clientId": "notarx-console",
@@ -27,27 +20,12 @@
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256"
-      },
-      "protocolMappers": [
-        {
-          "name": "realm roles in ID token",
-          "protocol": "openid-connect",
-          "protocolMapper": "oidc-usermodel-realm-role-mapper",
-          "consentRequired": false,
-          "config": {
-            "claim.name": "realm_access.roles",
-            "jsonType.label": "String",
-            "multivalued": "true",
-            "access.token.claim": "true",
-            "id.token.claim": "true",
-            "userinfo.token.claim": "true"
-          }
-        }
-      ]
+      }
     }
   ],
   "users": [
     {
+      "id": "0b1c2d3e-4f50-4a6b-8c7d-9e0f1a2b3c4d",
       "username": "notarx-admin",
       "enabled": true,
       "firstName": "Gateway",
@@ -60,9 +38,6 @@
           "value": "notarx-oidc-test-password",
           "temporary": false
         }
-      ],
-      "realmRoles": [
-        "artifact-admin"
       ]
     }
   ]

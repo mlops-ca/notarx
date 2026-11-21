@@ -15,16 +15,6 @@ import (
 
 const oidcJWKSCacheTTL = 5 * time.Minute
 
-// OIDCRoleMapping maps external realm roles onto the Gateway's account levels.
-// Only the two levels an account can hold are targets: Member approves the
-// account without granting repository capability, and Admin keeps the existing
-// management surface. There is no mapping to editor or reader authority because
-// repository reach comes from per-repository grants, never from a mapped role.
-type OIDCRoleMapping struct {
-	Member []string
-	Admin  []string
-}
-
 // OIDCConfig supplies the immutable issuer trust boundary. Only RS256 is
 // accepted so the configured JWKS cannot negotiate an unexpected algorithm.
 // Verification itself is delegated to internal/jose (ADR 0019).
@@ -47,9 +37,6 @@ type OIDCConfig struct {
 	// ExternalIDClaim names the claim that carries the IdP's externalId of the user (attribute_mapping.externalId);
 	// empty means the token carries none. A scim_only provider binds a SCIM-created account by it.
 	ExternalIDClaim string
-	// Realm-role mappings are opt-in. When a token contains several mapped
-	// roles, the validator grants the most privileged one.
-	Roles OIDCRoleMapping
 }
 
 type OIDCIdentity struct {
@@ -65,7 +52,6 @@ type OIDCIdentity struct {
 	Admin         bool
 	Role          Role
 	AdminSubject  bool
-	RoleMappings  []OIDCRoleMappingMatch
 	// Groups are the group values the token asserts, at most repository.MaxClaimsGroups. They only ever
 	// match claims-sourced groups of this provider by external id (ADR 0018 Decision 5).
 	Groups []string
@@ -95,8 +81,6 @@ func NewOIDCValidator(config OIDCConfig) *OIDCValidator {
 			admins = append(admins, subject)
 		}
 	}
-	config.Roles.Member = normalizedOIDCRoles(config.Roles.Member)
-	config.Roles.Admin = normalizedOIDCRoles(config.Roles.Admin)
 	config.AdminSubjects = admins
 	// The human IdP is configured by an administrator (ADR 0018 owns its registry), so it
 	// keeps the plain client of the original validator: http issuers used by development
@@ -138,20 +122,13 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		return OIDCIdentity{}, false
 	}
 	var claims struct {
-		Issuer        string   `json:"iss"`
-		Subject       string   `json:"sub"`
-		Email         string   `json:"email"`
-		Name          string   `json:"name"`
-		Username      string   `json:"preferred_username"`
-		EmailVerified bool     `json:"email_verified"`
-		Nonce         string   `json:"nonce"`
-		Roles         []string `json:"roles"`
-		RealmAccess   struct {
-			Roles []string `json:"roles"`
-		} `json:"realm_access"`
-		ResourceAccess map[string]struct {
-			Roles []string `json:"roles"`
-		} `json:"resource_access"`
+		Issuer        string `json:"iss"`
+		Subject       string `json:"sub"`
+		Email         string `json:"email"`
+		Name          string `json:"name"`
+		Username      string `json:"preferred_username"`
+		EmailVerified bool   `json:"email_verified"`
+		Nonce         string `json:"nonce"`
 	}
 	// The verified claim map is re-encoded so the typed view below reads the same
 	// fields as before; a claim of an unexpected shape fails closed.
@@ -177,23 +154,10 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 			break
 		}
 	}
-	roles := append([]string(nil), claims.RealmAccess.Roles...)
-	roles = append(roles, claims.Roles...)
-	roles = append(roles, tolerantStrings(verified.Claims["groups"])...)
-	for _, resource := range claims.ResourceAccess {
-		roles = append(roles, resource.Roles...)
-	}
 	if v.config.ExternalIDClaim != "" {
 		identity.ExternalID = externalIDClaim(verified.Claims[v.config.ExternalIDClaim])
 	}
 	identity.Groups, identity.GroupsOverage, identity.GroupsPresent = claimGroupsPresent(verified.Claims, v.config.GroupsClaim)
-	identity.RoleMappings = matchedOIDCRoleMappings(roles, v.config.Roles)
-	if containsMappedGatewayRole(identity.RoleMappings, RoleAdmin) {
-		identity.Admin = true
-		identity.Role = RoleAdmin
-	} else if containsMappedGatewayRole(identity.RoleMappings, RoleMember) {
-		identity.Role = RoleMember
-	}
 	return identity, true
 }
 
@@ -311,47 +275,6 @@ func (v *OIDCValidator) subject(verified map[string]any, standard string) (strin
 		parts = append(parts, value)
 	}
 	return strings.Join(parts, ":"), true
-}
-
-func normalizedOIDCRoles(values []string) []string {
-	roles := make([]string, 0, len(values))
-	for _, role := range values {
-		if role = strings.TrimSpace(role); role != "" {
-			roles = append(roles, role)
-		}
-	}
-	return roles
-}
-
-func matchedOIDCRoleMappings(values []string, mapping OIDCRoleMapping) []OIDCRoleMappingMatch {
-	matches := make([]OIDCRoleMappingMatch, 0)
-	seen := make(map[OIDCRoleMappingMatch]struct{})
-	for _, value := range values {
-		for _, candidate := range []struct {
-			roles []string
-			role  Role
-		}{{mapping.Admin, RoleAdmin}, {mapping.Member, RoleMember}} {
-			match := OIDCRoleMappingMatch{ExternalRole: value, GatewayRole: candidate.role}
-			if !containsRole(candidate.roles, value) {
-				continue
-			}
-			if _, ok := seen[match]; ok {
-				continue
-			}
-			seen[match] = struct{}{}
-			matches = append(matches, match)
-		}
-	}
-	return matches
-}
-
-func containsMappedGatewayRole(mappings []OIDCRoleMappingMatch, expected Role) bool {
-	for _, mapping := range mappings {
-		if mapping.GatewayRole == expected {
-			return true
-		}
-	}
-	return false
 }
 
 // tolerantStrings reads a claim that should be a list of strings. A string is one value and anything else, or a

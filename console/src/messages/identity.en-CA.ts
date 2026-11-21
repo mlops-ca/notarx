@@ -318,8 +318,6 @@ export const identityEnCA = {
   "identity.oIDCMapping": "OIDC mapping",
   "identity.administratorSubjectListAdmin":
     "Administrator subject list → admin",
-  "identity.noConfiguredRoleMappingMatched":
-    "No configured role mapping matched",
   "identity.failedToCreateUser": "Failed to create user",
   "identity.userCreated": "User created",
   "identity.createLocalUser": "Create local user",

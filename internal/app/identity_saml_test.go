@@ -151,7 +151,7 @@ func TestSAMLProviderManagementLifecycle(t *testing.T) {
 	if err := json.Unmarshal(replaced.Body.Bytes(), &view); err != nil || len(view.Saml.SPKeys) != 2 || len(view.Saml.Certificates) != 1 {
 		t.Fatalf("replace must keep the keys and drop the removed certificate: %+v %v", view.Saml, err)
 	}
-	wrong := strings.Replace(replace, `"saml":`, `"oidc":{"issuer":"https://x","audience":"a","clientId":"","redirectUrl":"","scopes":[],"adminSubjects":[],"memberRoles":[],"adminRoles":[]},"saml":`, 1)
+	wrong := strings.Replace(replace, `"saml":`, `"oidc":{"issuer":"https://x","audience":"a","clientId":"","redirectUrl":"","scopes":[],"adminSubjects":[]},"saml":`, 1)
 	if response := callManagement(t, handler, http.MethodPut, "/authentication/providers/"+view.ID, wrong, replaced.Header().Get("ETag")); response.Code != http.StatusBadRequest {
 		t.Fatalf("both settings objects accepted: %d", response.Code)
 	}
@@ -170,7 +170,7 @@ func TestSAMLProviderManagementLifecycle(t *testing.T) {
 		}
 	}
 	// Metadata import and rotation refuse non-SAML providers and bad sources.
-	oidc := callManagement(t, handler, http.MethodPost, "/authentication/providers", `{"slug":"oidc-one","kind":"oidc","displayName":"O","enabled":false,"oidc":{"issuer":"","audience":"","clientId":"","redirectUrl":"","scopes":[],"adminSubjects":[],"memberRoles":[],"adminRoles":[]}}`, "")
+	oidc := callManagement(t, handler, http.MethodPost, "/authentication/providers", `{"slug":"oidc-one","kind":"oidc","displayName":"O","enabled":false,"oidc":{"issuer":"","audience":"","clientId":"","redirectUrl":"","scopes":[],"adminSubjects":[]}}`, "")
 	var oidcView struct {
 		ID string `json:"id"`
 	}

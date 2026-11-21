@@ -321,7 +321,7 @@ func TestSCIMStoreOutagesAre503AndNeverCountAsFailedAuthentications(t *testing.T
 		"token lookup":    failingSCIMStore{scimStore: h.store, tokenErr: outage},
 		"provider lookup": failingSCIMStore{scimStore: h.store, providerErr: outage},
 	} {
-		server := newSCIMServer(SCIMOptions{Enabled: true}, store, nil)
+		server := newSCIMServer(SCIMOptions{Enabled: true}, store, nil, nil)
 		for attempt := 0; attempt < samlRateBurst+5; attempt++ {
 			request := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2/Users", nil)
 			request.Header.Set("Authorization", "Bearer "+h.token)

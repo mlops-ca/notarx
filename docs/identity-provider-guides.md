@@ -132,6 +132,81 @@ assertions must be signed (SHA-1 is refused) and unencrypted. The default NameID
   `NOTARX_SETTINGS_ENCRYPTION_KEY_PREVIOUS`, restart, run `notarxctl secrets reseal --yes`, then drop the previous
   key. Sealed OIDC client secrets and SAML signing keys are rewritten.
 
+## SCIM provisioning
+
+A provider that provisions accounts and groups ahead of the first login uses the SCIM server (ADR 0018; the full
+behaviour is in [SCIM 2.0 provisioning](scim.md)). The steps are the same for every identity provider:
+
+1. Set `NOTARX_SCIM_ENABLED=true` (and `NOTARX_PUBLIC_URL`) and restart. Until then every `/scim/v2/` route answers 404.
+2. Register the provider in notarx with mode `scim_only` (accounts exist only because SCIM created them) or `jit`
+   (accounts are created at the first login and SCIM only correlates them). The modes are exclusive.
+3. Create a SCIM token for that provider (Console, Identity providers, SCIM tokens, or
+   `POST /api/v2/authentication/providers/{id}/scim-tokens`). The plaintext (`nxscim_...`) is shown once; the expiry is
+   mandatory and at most 365 days away.
+4. Enter the base URL and the token at the identity provider, run its connection test, then assign users and groups.
+
+The base URL is `$NOTARX_PUBLIC_URL/scim/v2`. A token acts only for its provider, so register one token per provider.
+
+### Token creation, rotation and revocation
+
+Several tokens of one provider can be valid at once, which makes rotation a switch without a gap: create the new token,
+enter it at the identity provider, run the connection test, then revoke the old one (`DELETE
+/api/v2/authentication/providers/{id}/scim-tokens/{tokenId}`). Plan the rotation before the expiry; the Console warns
+as a token approaches it. A revoked token, a token that expired, a disabled provider and a deleted provider stop
+authenticating on the node that handled the change at once and on every other node within `NOTARX_AUTHZ_CACHE_TTL`
+(default `5s`; the cache notification usually shortens it, and `0` disables the cache). Every call, reads included, is
+audited with the actor `scim:{slug}`.
+
+### Attribute mapping
+
+notarx stores one user name, one display name and one email. `externalId` is the identity provider's stable id of the
+user and is what a `scim_only` provider binds the first login to, so map it to the same value the sign-in asserts and
+set the provider's `attributeMapping.externalId` to the claim or SAML attribute that carries it.
+
+| SCIM attribute | Meaning in notarx |
+| --- | --- |
+| `userName` | The account name. It is unique case-insensitively, a conflict with a local account is `409`, and it cannot be changed through SCIM. |
+| `externalId` | The binding key of the first `scim_only` login; never `userName`. |
+| `displayName`, `name.formatted` | The display name. |
+| `emails[primary eq true].value` | The email. |
+| `active` | `false` disables the account (reason `scim`) and revokes its sessions and tokens. |
+| Group `displayName`, `externalId`, `members` | A SCIM group (level `none`, never `admin`) and its members. |
+
+### Microsoft Entra ID
+
+In the enterprise application, open Provisioning and choose Automatic. Set Tenant URL to
+`https://notarx.example.com/scim/v2` and Secret Token to the `nxscim_...` token, then Test Connection. Adjust the user
+attribute mappings:
+
+- `userPrincipalName` to `userName` (the matching attribute is the one the sign-in asserts).
+- `objectId` to `externalId`, and on the notarx provider set `attributeMapping.externalId` to `oid` (SAML: the
+  object identifier attribute). The default mapping sends `mailNickname`, which is not stable.
+- `Switch([IsSoftDeleted], , "False", "True", "True", "False")` to `active`; Entra sends the strings `"True"` and
+  `"False"`, which notarx accepts.
+- `displayName`, `mail` to `emails[type eq "work"].value`.
+
+Turn on group provisioning and map `displayName`, `objectId` to `externalId` and `members`. Entra reads groups with
+`excludedAttributes=members` and sends member changes as PATCH operations. Start with a small assigned scope and use
+Provision on demand to check one user before enabling the sync. A group claim in the sign-in token is no longer needed
+for these groups, which also removes the groups overage of large directories.
+
+### Okta
+
+Add an application integration that supports SCIM 2.0 (the SCIM 2.0 Test App with header authentication, or a custom
+app integration) and enable provisioning. Set the SCIM connector base URL to `https://notarx.example.com/scim/v2`,
+the unique identifier field for users to `userName`, and the supported actions to Push New Users, Push Profile
+Updates and Push Groups. Authenticate with the HTTP header (or OAuth bearer token) mode and enter the token as a
+bearer credential. Okta sends no `externalId` by default, so link the accounts it creates with the admin link flow
+(`POST /api/v2/authentication/providers/{id}/links`) or keep the provider in `jit` mode. Okta deactivates a user with a
+pathless PATCH that sets `active` to false, and notarx accepts it.
+
+### Keycloak
+
+Keycloak has no built-in SCIM client. Use a SCIM provisioning extension for Keycloak (or another provisioning tool that
+speaks SCIM 2.0) and point it at `https://notarx.example.com/scim/v2` with the bearer token. Map the Keycloak user id
+to `externalId` and the username to `userName`. Without such an extension, keep the provider in `jit` mode and map
+the Keycloak groups claim to claims-sourced groups (see [OIDC SSO](oidc-sso.md#keycloak)).
+
 ## Security notes
 
 ### Sessions and Single Logout
@@ -148,7 +223,7 @@ Entra replaces the `groups` claim with `_claim_names` when the user belongs to t
 call Microsoft Graph: an overage yields no groups at all, never a partial list, writes an
 `auth.oidc.groups_overage` audit event, and the Console shows a warning on the provider. Alternatives:
 
-- SCIM provisioning of groups from Entra (recommended for large directories; follows with the SCIM server).
+- SCIM provisioning of groups from Entra (recommended for large directories; see [SCIM provisioning](#scim-provisioning)).
 - Emit app roles instead of groups, or restrict the claim to groups assigned to the application, and name them in
   the groups attribute mapping.
 - Create local user groups and manage their members in notarx.

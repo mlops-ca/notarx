@@ -9,7 +9,7 @@ notarx supports two OIDC credential paths:
 
 Identity providers live in a registry in PostgreSQL (ADR 0018): any number of OIDC
 providers can be configured and enabled at once, each with its own issuer,
-client, role mapping and provisioning policy. The Console login page reads
+client, group claim and provisioning policy. The Console login page reads
 `GET /auth/idp` at runtime, which lists only the enabled providers (slug,
 display name, kind), and offers one sign-in button per provider. Provider URLs
 and client identifiers are therefore not compiled into the frontend bundle.
@@ -140,25 +140,20 @@ Create an OpenID Connect client, enable Standard Flow, and register the exact
 Gateway callback URL. The browser ID token must include the client ID in its
 `aud` claim; API Bearer tokens may use the separate Gateway API audience.
 
-Realm roles, client roles, top-level `roles`, and `groups` claims can be mapped
-onto Gateway account levels:
-
-```dotenv
-NOTARX_OIDC_MEMBER_ROLES=artifact-member
-NOTARX_OIDC_ADMIN_ROLES=artifact-admin
-```
-
-A mapping approves the account rather than granting repository capability: a
-matched administrator mapping makes the account an administrator, and a matched
-member mapping approves it with no repository access of its own, because reach
-comes from per-repository grants. Administrator wins when both match.
+Keycloak groups reach the Gateway through the `groups` claim (add a Group
+Membership mapper to the client). A claims-sourced group only ever has the
+global role `none`, so no claim, realm role or group value can raise an account
+above its own level. Create the group in the Gateway, reference it as
+`group:<id>` in repository grants, and grant the `member` level through
+`jit_default_role` or the `admin` level through a local group or an
+administrator-flagged SCIM group.
 
 ## GitLab
 
 Register an OAuth/OpenID Connect application with the exact Gateway callback
-URL, then use the GitLab issuer and application ID as the client ID. When role
-mapping is required, include the relevant group claims in the ID token and map
-their exact values through the same member and administrator variables above.
+URL, then use the GitLab issuer and application ID as the client ID. When
+group-based access is required, include the group claim in the ID token; its
+values match claims-sourced groups of the provider by external id.
 
 ## Provider registry and removed endpoints
 
@@ -169,11 +164,6 @@ first IdP-driven login never mints an administrator: the JIT default role is
 `GET /auth/oidc/config`, `/auth/oidc/login` and `/auth/oidc/callback` do not
 exist; register `/auth/oidc/{slug}/callback` as the redirect URI at the identity
 provider. `notarxctl secrets reseal` covers the sealed secret of every provider.
-
-Role mapping uses a single member role list, `NOTARX_OIDC_MEMBER_ROLES`; the
-reader and writer variables of earlier builds (`NOTARX_OIDC_READER_ROLES`,
-`NOTARX_OIDC_WRITER_ROLES`) are no longer supported. An external realm role that used to
-be listed in either has to be listed in the member variable to keep matching.
 
 Databases created before the baseline was re-squashed (ADR 0015 slice 7) must be
 recreated; there is no in-place upgrade path.

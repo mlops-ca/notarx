@@ -81,7 +81,7 @@ func (s *PostgresStore) CreateIdentityProvider(ctx context.Context, provider ide
 	if err != nil {
 		return identity.Provider{}, err
 	}
-	return runAudited(ctx, s, audit, func(q sqlRunner) (identity.Provider, error) {
+	saved, err := runAudited(ctx, s, audit, func(q sqlRunner) (identity.Provider, error) {
 		created, err := scanIdentityProvider(q.QueryRowContext(ctx, `INSERT INTO identity_providers
 			(id,slug,kind,display_name,enabled,settings,secrets_sealed,attribute_mapping,provisioning_mode,email_linking_enabled,jit_default_role)
 			VALUES ($1::uuid,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9,$10,$11) RETURNING `+identityProviderColumns,
@@ -92,6 +92,10 @@ func (s *PostgresStore) CreateIdentityProvider(ctx context.Context, provider ide
 		}
 		return created, err
 	})
+	if err == nil {
+		s.invalidateLocalScope(CacheScopeIdentityProvider)
+	}
+	return saved, err
 }
 
 func (s *PostgresStore) ReplaceIdentityProvider(ctx context.Context, provider identity.Provider, expectedVersion int64, audit ...AuditRecord) (identity.Provider, error) {
@@ -99,7 +103,7 @@ func (s *PostgresStore) ReplaceIdentityProvider(ctx context.Context, provider id
 	if err != nil {
 		return identity.Provider{}, err
 	}
-	return runAudited(ctx, s, audit, func(q sqlRunner) (identity.Provider, error) {
+	saved, err := runAudited(ctx, s, audit, func(q sqlRunner) (identity.Provider, error) {
 		// The kind is immutable: a provider row never changes protocol.
 		replaced, err := scanIdentityProvider(q.QueryRowContext(ctx, `UPDATE identity_providers SET
 			slug=$2, display_name=$3, enabled=$4, settings=$5::jsonb, secrets_sealed=$6, attribute_mapping=$7::jsonb,
@@ -122,6 +126,10 @@ func (s *PostgresStore) ReplaceIdentityProvider(ctx context.Context, provider id
 		}
 		return replaced, err
 	})
+	if err == nil {
+		s.invalidateLocalScope(CacheScopeIdentityProvider)
+	}
+	return saved, err
 }
 
 func (s *PostgresStore) DeleteIdentityProvider(ctx context.Context, id string, expectedVersion int64, audit ...AuditRecord) error {
@@ -153,6 +161,10 @@ func (s *PostgresStore) DeleteIdentityProvider(ctx context.Context, id string, e
 		}
 		return struct{}{}, ErrVersionConflict
 	})
+	if err == nil {
+		s.invalidateLocalScope(CacheScopeIdentityProvider)
+		s.invalidateLocalScope(CacheScopeSCIMToken)
+	}
 	return err
 }
 

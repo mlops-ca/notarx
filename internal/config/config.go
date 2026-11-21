@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/aptpublication"
-	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/database"
 	"github.com/mlops-ca/notarx/internal/emailnotification"
 	"github.com/mlops-ca/notarx/internal/jose"
@@ -204,7 +203,6 @@ type Config struct {
 	OIDCRedirectURL             string
 	OIDCScopes                  []string
 	OIDCAdminSubjects           []string
-	OIDCRoles                   authorization.OIDCRoleMapping
 	OTLPHTTPEndpoint            string
 	OTLPLogsEndpoint            string
 	OTLPLogsHeaders             map[string]string
@@ -330,12 +328,8 @@ func Load() (Config, error) {
 		OIDCRedirectURL:             strings.TrimSpace(os.Getenv("NOTARX_OIDC_REDIRECT_URL")),
 		OIDCScopes:                  oidcScopes(os.Getenv("NOTARX_OIDC_SCOPES")),
 		OIDCAdminSubjects:           splitCSV(os.Getenv("NOTARX_OIDC_ADMIN_SUBJECTS")),
-		OIDCRoles: authorization.OIDCRoleMapping{
-			Member: splitCSV(os.Getenv("NOTARX_OIDC_MEMBER_ROLES")),
-			Admin:  splitCSV(os.Getenv("NOTARX_OIDC_ADMIN_ROLES")),
-		},
-		OTLPHTTPEndpoint:  strings.TrimSpace(os.Getenv("NOTARX_OTLP_HTTP_ENDPOINT")),
-		OTELSamplingRatio: 1,
+		OTLPHTTPEndpoint:            strings.TrimSpace(os.Getenv("NOTARX_OTLP_HTTP_ENDPOINT")),
+		OTELSamplingRatio:           1,
 	}
 	if raw := strings.TrimSpace(os.Getenv("NOTARX_HELM_PREVIEW_ENABLED")); raw != "" {
 		if raw != "true" && raw != "false" {

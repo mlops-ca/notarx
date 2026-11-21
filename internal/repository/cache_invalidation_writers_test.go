@@ -20,7 +20,8 @@ func TestCachedTablesHaveNoOtherWriters(t *testing.T) {
 		"internal/repository/postgres_users.go",                   // every user mutation evicts the user
 		"internal/repository/postgres_user_groups.go",             // DeleteUserGroup drops the grants that name the group and evicts each repository's grant set
 		"internal/repository/postgres_user_identities.go",         // ResolveOIDCIdentity evicts the provisioned or linked user
-		"internal/repository/postgres_scim.go",                    // every SCIM user mutation evicts the user
+		"internal/repository/postgres_scim.go",                    // every SCIM user mutation evicts the user and every token mutation the token scope
+		"internal/repository/postgres_identity_providers.go",      // every provider mutation evicts the provider scope
 		"internal/repository/postgres_authorization_templates.go", // ApplyAuthorizationTemplate evicts the grant set
 		"internal/repository/postgres_quarantine_read_policy.go",  // the quarantine read policy mutations evict their repository
 		"internal/repository/postgres_helm_governance.go",         // idem
@@ -32,7 +33,7 @@ func TestCachedTablesHaveNoOtherWriters(t *testing.T) {
 		"internal/secrets/reseal/reseal.go",                       // notarxctl secrets reseal runs in its own process
 		"internal/testsupport/purge.go",                           // test support
 	}
-	writes := regexp.MustCompile(`(?i)\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+(public\.)?(hosted_repositories|hosted_groups|hosted_group_members|public_access_policy|users|repository_grants|repository_quarantine_read_policies|workload_issuers|workload_trust_policies)\b`)
+	writes := regexp.MustCompile(`(?i)\b(UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+(public\.)?(hosted_repositories|hosted_groups|hosted_group_members|public_access_policy|users|repository_grants|repository_quarantine_read_policies|workload_issuers|workload_trust_policies|identity_providers|identity_provider_scim_tokens)\b`)
 	root := filepath.Join("..", "..")
 	var found []string
 	for _, dir := range []string{"cmd", "internal"} {

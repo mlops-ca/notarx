@@ -129,8 +129,8 @@ func runSettingsAuditRollback(t *testing.T, store settingsRollbackStore, seed de
 			_ = store.DeleteIdentityProvider(ctx, provider.ID, current.Version)
 		}
 	})
-	providerBody := `{"slug":"new-` + suffix + `","kind":"oidc","displayName":"New","enabled":false,"oidc":{"issuer":"","audience":"","clientId":"","redirectUrl":"","scopes":["openid"],"adminSubjects":[],"memberRoles":[],"adminRoles":[]}}`
-	providerReplace := `{"displayName":"Changed","enabled":false,"oidc":{"issuer":"https://issuer-` + suffix + `.example","audience":"","clientId":"","redirectUrl":"","scopes":["openid"],"adminSubjects":[],"memberRoles":[],"adminRoles":[]},"attributeMapping":{},"provisioningMode":"disabled","emailLinkingEnabled":false,"jitDefaultRole":"none"}`
+	providerBody := `{"slug":"new-` + suffix + `","kind":"oidc","displayName":"New","enabled":false,"oidc":{"issuer":"","audience":"","clientId":"","redirectUrl":"","scopes":["openid"],"adminSubjects":[]}}`
+	providerReplace := `{"displayName":"Changed","enabled":false,"oidc":{"issuer":"https://issuer-` + suffix + `.example","audience":"","clientId":"","redirectUrl":"","scopes":["openid"],"adminSubjects":[]},"attributeMapping":{},"provisioningMode":"disabled","emailLinkingEnabled":false,"jitDefaultRole":"none"}`
 	themeBody := strings.Replace(acmeDarkTheme, `"id":"acme-dark"`, `"id":"acme-new-`+suffix+`"`, 1)
 	replaceThemeBody := strings.Replace(fixtureTheme, `"name":"Acme Dark"`, `"name":"Acme Changed"`, 1)
 	siteBody := `{"siteName":"changed-` + suffix + `","logoUrl":"","brandMark":"AG","enabledThemeIds":["notarx-dark"],"defaultThemeId":"notarx-dark"}`

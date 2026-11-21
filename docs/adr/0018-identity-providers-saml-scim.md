@@ -332,7 +332,12 @@ management API (`/api/v2`), with its own generated OpenAPI contract
   SCIM-managed memberships (they may populate `jit` groups only).
 - Audit: every SCIM write emits an audit event (actor `scim:<provider slug>`,
   operation, resource id, outcome, request id) through the existing audit
-  recorder; PATCH bodies are not logged verbatim, only changed attribute names.
+  recorder; PATCH bodies are not logged verbatim, only changed attribute names. Every read
+  is audited too: a successful `GET` or `HEAD` goes through the tiered writer's batched path
+  (ADR 0023 section 1), while writes and refusals commit synchronously. The token and the
+  provider lookups of a request are cached for `NOTARX_AUTHZ_CACHE_TTL` (ADR 0023 section 6)
+  and evicted by the cache notifications of migration 000018, so a revoked token, a disabled
+  provider or a deleted provider stops authenticating within that revocation window.
 
 ### 5. User groups and grants
 
@@ -381,6 +386,13 @@ explicitly flagged `global_role='admin'`; the default for any provisioned group
 is `none`. SCIM can never create a group with, or set, `global_role='admin'`; a
 local administrator may flag an existing SCIM group (audited), and the flag is
 cleared if that group is deleted or recreated.
+
+The provider settings `member_roles` and `admin_roles` and the realm-role/`groups` claim
+role matching are removed outright (owner decision 2026-11-21, issue #556): there is no
+migration of their values, so no login claim, directly or through a claims group, raises
+an account above its own `users.role`. Elevation goes only through `jit_default_role`
+(`none` or `member`), local groups and administrator-flagged SCIM groups. `adminSubjects`
+stays as the explicit subject allow-list for bootstrap administrators.
 
 Grants: `repository_grants.principal` accepts `group:<uuid>` in addition to the
 existing actor string. `Principal` gains `GroupIDs []string`, loaded by one
@@ -435,9 +447,8 @@ reuse it). Secrets are sealed with `NOTARX_SETTINGS_ENCRYPTION_KEY` through
 - Multi-IdP tenants and SAML-only enterprises become servable; Entra ID, Okta and
   Keycloak are first-class via templates in the console.
 - `oidc_settings`, `/authentication/oidc` and `OIDCRoleMapping` disappear; the
-  console OIDC settings page is rewritten. The migration copies an existing
-  `oidc_settings` row into a `default` provider so upgrades from 0.1.0 keep
-  working.
+  console OIDC settings page is rewritten. The `member_roles`/`admin_roles` settings and
+  claim-role matching are gone with them (section 5).
 - Group principals add one query per request; mitigated by indexes and the
   per-request cache, and measured in slice 5.
 - New dependency tree (`gosaml2`, `goxmldsig`, `etree`) increases the audit

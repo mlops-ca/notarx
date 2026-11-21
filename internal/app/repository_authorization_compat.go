@@ -8,7 +8,6 @@ type Principal = authorization.Principal
 type Role = authorization.Role
 type Authenticator = authorization.Authenticator
 type OIDCConfig = authorization.OIDCConfig
-type OIDCRoleMapping = authorization.OIDCRoleMapping
 type OIDCIdentity = authorization.OIDCIdentity
 type OIDCValidator = authorization.OIDCValidator
 type OIDCClient = authorization.OIDCClient

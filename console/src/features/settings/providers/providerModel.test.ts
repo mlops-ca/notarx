@@ -34,8 +34,6 @@ const oidcProvider: IdentityProvider = {
     redirectUrl: "https://notarx.example.test/auth/oidc/entra/callback",
     scopes: ["openid"],
     adminSubjects: ["legacy-admin"],
-    memberRoles: ["legacy-member"],
-    adminRoles: ["legacy-admin-role"],
     algorithms: ["ES256"],
   },
 };
@@ -93,7 +91,6 @@ describe("provider request bodies", () => {
         issuer: "https://login.microsoftonline.com/t/v2.0",
         audience: "client",
         clientSecret: "secret",
-        memberRoles: [],
       },
     });
     expect(body.saml).toBeUndefined();
@@ -123,8 +120,6 @@ describe("provider request bodies", () => {
     const body = toReplaceBody(draft, oidcProvider);
     expect(body.oidc).toMatchObject({
       adminSubjects: ["legacy-admin"],
-      memberRoles: ["legacy-member"],
-      adminRoles: ["legacy-admin-role"],
       algorithms: ["ES256"],
       clearClientSecret: true,
     });

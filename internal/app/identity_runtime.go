@@ -34,7 +34,6 @@ type OIDCRuntimeConfig struct {
 	RedirectURL   string
 	Scopes        []string
 	AdminSubjects []string
-	Roles         authorization.OIDCRoleMapping
 }
 
 // IdentityProviderInput is the administrator-editable part of a provider.
@@ -255,7 +254,6 @@ func (s *oidcProviderState) validatorConfig(audience, discoveredJWKS string) aut
 		SubjectClaims:   s.provider.AttributeMapping.SubjectClaims(),
 		GroupsClaim:     s.provider.AttributeMapping.Groups,
 		ExternalIDClaim: s.provider.AttributeMapping.ExternalID,
-		Roles:           authorization.OIDCRoleMapping{Member: s.settings.MemberRoles, Admin: s.settings.AdminRoles},
 	}
 }
 
@@ -528,7 +526,6 @@ func seedProvider(config OIDCRuntimeConfig) (identity.Provider, error) {
 	provider, err := provider.WithOIDC(identity.OIDCSettings{
 		Issuer: config.Issuer, Audience: config.Audience, JWKSURL: config.JWKSURL, ClientID: config.ClientID,
 		RedirectURL: config.RedirectURL, Scopes: config.Scopes, AdminSubjects: config.AdminSubjects,
-		MemberRoles: config.Roles.Member, AdminRoles: config.Roles.Admin,
 	})
 	if err != nil {
 		return provider, err

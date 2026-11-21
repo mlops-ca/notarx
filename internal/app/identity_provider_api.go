@@ -382,7 +382,7 @@ func (h identityManagementHandler) providerResponse(provider identity.Provider) 
 func oidcSettingsFromInput(input adminopenapi.IdentityProviderOIDCInput) identity.OIDCSettings {
 	settings := identity.OIDCSettings{
 		Issuer: input.Issuer, Audience: input.Audience, ClientID: input.ClientId, RedirectURL: input.RedirectUrl,
-		Scopes: input.Scopes, AdminSubjects: input.AdminSubjects, MemberRoles: input.MemberRoles, AdminRoles: input.AdminRoles,
+		Scopes: input.Scopes, AdminSubjects: input.AdminSubjects,
 	}
 	if input.JwksUrl != nil {
 		settings.JWKSURL = *input.JwksUrl
@@ -435,8 +435,8 @@ func identityProviderResponse(provider identity.Provider) adminopenapi.IdentityP
 			response.Oidc = &adminopenapi.IdentityProviderOIDCSettings{
 				Issuer: settings.Issuer, Audience: settings.Audience, JwksUrl: optionalString(settings.JWKSURL),
 				ClientId: settings.ClientID, ClientSecretConfigured: provider.SecretsSealed != "", RedirectUrl: settings.RedirectURL,
-				Scopes: nonNil(settings.Scopes), AdminSubjects: nonNil(settings.AdminSubjects), MemberRoles: nonNil(settings.MemberRoles),
-				AdminRoles: nonNil(settings.AdminRoles), Algorithms: algorithms,
+				Scopes: nonNil(settings.Scopes), AdminSubjects: nonNil(settings.AdminSubjects),
+				Algorithms: algorithms,
 			}
 		}
 	}

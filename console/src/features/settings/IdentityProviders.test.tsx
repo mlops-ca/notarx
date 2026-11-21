@@ -70,8 +70,6 @@ const entra: IdentityProvider = {
     redirectUrl: "https://notarx.example.test/auth/oidc/entra/callback",
     scopes: ["openid"],
     adminSubjects: [],
-    memberRoles: [],
-    adminRoles: [],
     algorithms: ["RS256"],
   },
 };

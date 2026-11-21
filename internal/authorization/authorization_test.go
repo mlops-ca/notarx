@@ -556,30 +556,14 @@ func TestRemovedLegacyRoleValuesNeverAuthenticateOrAuthorize(t *testing.T) {
 	if _, ok := authenticator.Authenticate("Bearer " + webSession); ok {
 		t.Fatal("a web session carrying a removed role authenticated")
 	}
-	// A session claim that names a removed role as an OIDC mapping target is
-	// refused, so the mapping cannot be replayed into a capability.
-	staleMapping := authenticator.IssueWebSession(Principal{
-		Actor: "user:stale", Role: RoleMember, AuthenticationKind: AuthenticationOIDC,
-		OIDCRoleMappings: []OIDCRoleMappingMatch{{ExternalRole: "artifact-writer", GatewayRole: "writer"}},
-	})
-	if _, ok := authenticator.Authenticate("Bearer " + staleMapping); ok {
-		t.Fatal("a session carrying a removed mapping target authenticated")
-	}
 	// The recorders accept the levels that still exist.
 	for _, role := range []Role{RoleNone, RoleMember, RoleAdmin} {
 		if !validGatewayRole(role) {
 			t.Fatalf("validGatewayRole(%q)=false", role)
 		}
 	}
-	for _, mapping := range []OIDCRoleMappingMatch{{ExternalRole: "artifact-member", GatewayRole: RoleMember}, {ExternalRole: "artifact-admin", GatewayRole: RoleAdmin}} {
-		if !validOIDCMetadata(AuthenticationOIDC, false, []OIDCRoleMappingMatch{mapping}) {
-			t.Fatalf("valid mapping %+v was refused", mapping)
-		}
-	}
-	for _, mapping := range []OIDCRoleMappingMatch{{ExternalRole: "artifact-reader", GatewayRole: "reader"}, {ExternalRole: "artifact-writer", GatewayRole: "writer"}} {
-		if validOIDCMetadata(AuthenticationOIDC, false, []OIDCRoleMappingMatch{mapping}) {
-			t.Fatalf("removed mapping target %+v was accepted", mapping)
-		}
+	if !validOIDCMetadata(AuthenticationOIDC, true) || !validOIDCMetadata(AuthenticationAPIKey, false) || validOIDCMetadata(AuthenticationAPIKey, true) {
+		t.Fatal("the OIDC admin-subject flag is only valid on an OIDC credential")
 	}
 }
 
@@ -718,13 +702,10 @@ func TestAuthenticatorWebSessionPreservesBoundedOIDCIdentity(t *testing.T) {
 		Role:               RoleAdmin,
 		AuthenticationKind: AuthenticationOIDC,
 		OIDCAdminSubject:   true,
-		OIDCRoleMappings: []OIDCRoleMappingMatch{
-			{ExternalRole: "platform-admin", GatewayRole: RoleAdmin},
-		},
 	}
 	token := authenticator.IssueWebSession(expected)
 	principal, ok := authenticator.Authenticate("Bearer " + token)
-	if !ok || principal.Actor != expected.Actor || !principal.Admin || principal.Role != RoleAdmin || principal.AuthenticationKind != AuthenticationOIDC || !principal.OIDCAdminSubject || len(principal.OIDCRoleMappings) != 1 || len(principal.RepositoryPatterns) != 1 {
+	if !ok || principal.Actor != expected.Actor || !principal.Admin || principal.Role != RoleAdmin || principal.AuthenticationKind != AuthenticationOIDC || !principal.OIDCAdminSubject || len(principal.RepositoryPatterns) != 1 {
 		t.Fatalf("web session principal=%#v ok=%t", principal, ok)
 	}
 

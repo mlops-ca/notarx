@@ -351,3 +351,23 @@ on a table the seed leaves empty only asserts that the plan scans some index and
 the table sequentially, because the planner's choice among equivalent indexes there depends on
 the rows other tests leave behind. To register a query, add an entry to the registry; the unit test rejects duplicates,
 `OFFSET`, `COUNT(*)` and a placeholder count that does not match the arguments.
+
+## SCIM authentication
+
+Entra ID and Okta poll `GET /scim/v2/Users` and `/Groups` continuously, and every request authenticated with one token
+lookup and one provider lookup and recorded one synchronous audit insert (issue #562). The token and provider lookups are
+now cached for `NOTARX_AUTHZ_CACHE_TTL` (the revocation window, `5s` by default) and evicted by the statement triggers
+of migration `000018` and by the local store eviction, and the audit of a successful read goes to the batched path of
+the tiered audit writer; writes and refusals stay synchronous in their own transaction.
+
+`go test ./internal/app -run XXX -bench SCIMAuthenticate` measures the authentication step of a request against a store
+that costs a fixed 200 microsecond round trip per lookup (Apple M4 Pro, Go 1.27, in-memory store behind the delay):
+
+| Authentication | Time per request | Database lookups per request |
+| --- | --- | --- |
+| Before (no cache) | about 502 microseconds | 2 |
+| After (warm cache) | about 0.55 microseconds | 0.001 (one per window per node) |
+
+The audit insert is a third serialized round trip per read that the numbers above do not include: before the change a read
+cost three, after it a warm read costs none and its audit joins the next batch. Absolute end-to-end latency of a full
+sync depends on the database round trip; run `make perf-load` on `target` hardware to record it with a SCIM scenario.

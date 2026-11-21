@@ -3512,24 +3512,6 @@ func (e NuGetPublicationSessionState) Valid() bool {
 	}
 }
 
-// Defines values for OIDCRoleMappingMatchGatewayRole.
-const (
-	OIDCRoleMappingMatchGatewayRoleAdmin  OIDCRoleMappingMatchGatewayRole = "admin"
-	OIDCRoleMappingMatchGatewayRoleMember OIDCRoleMappingMatchGatewayRole = "member"
-)
-
-// Valid indicates whether the value is a known member of the OIDCRoleMappingMatchGatewayRole enum.
-func (e OIDCRoleMappingMatchGatewayRole) Valid() bool {
-	switch e {
-	case OIDCRoleMappingMatchGatewayRoleAdmin:
-		return true
-	case OIDCRoleMappingMatchGatewayRoleMember:
-		return true
-	default:
-		return false
-	}
-}
-
 // Defines values for PreviewWorkerFormat.
 const (
 	PreviewWorkerFormatHelm     PreviewWorkerFormat = "helm"
@@ -7789,7 +7771,6 @@ type IdentityProviderList struct {
 
 // IdentityProviderOIDCInput defines model for IdentityProviderOIDCInput.
 type IdentityProviderOIDCInput struct {
-	AdminRoles        []string                               `json:"adminRoles"`
 	AdminSubjects     []string                               `json:"adminSubjects"`
 	Algorithms        *[]IdentityProviderOIDCInputAlgorithms `json:"algorithms,omitempty"`
 	Audience          string                                 `json:"audience"`
@@ -7798,7 +7779,6 @@ type IdentityProviderOIDCInput struct {
 	ClientSecret      *string                                `json:"clientSecret,omitempty"`
 	Issuer            string                                 `json:"issuer"`
 	JwksUrl           *string                                `json:"jwksUrl,omitempty"`
-	MemberRoles       []string                               `json:"memberRoles"`
 	RedirectUrl       string                                 `json:"redirectUrl"`
 	Scopes            []string                               `json:"scopes"`
 }
@@ -7808,7 +7788,6 @@ type IdentityProviderOIDCInputAlgorithms string
 
 // IdentityProviderOIDCSettings defines model for IdentityProviderOIDCSettings.
 type IdentityProviderOIDCSettings struct {
-	AdminRoles    []string `json:"adminRoles"`
 	AdminSubjects []string `json:"adminSubjects"`
 
 	// Algorithms Allow-list of ID token signature algorithms. The default is RS256.
@@ -7818,7 +7797,6 @@ type IdentityProviderOIDCSettings struct {
 	ClientSecretConfigured bool                                     `json:"clientSecretConfigured"`
 	Issuer                 string                                   `json:"issuer"`
 	JwksUrl                *string                                  `json:"jwksUrl,omitempty"`
-	MemberRoles            []string                                 `json:"memberRoles"`
 	RedirectUrl            string                                   `json:"redirectUrl"`
 	Scopes                 []string                                 `json:"scopes"`
 }
@@ -8845,18 +8823,8 @@ type OIDCConnectionTest struct {
 
 // OIDCIdentityDetails defines model for OIDCIdentityDetails.
 type OIDCIdentityDetails struct {
-	AdminSubject bool                   `json:"adminSubject"`
-	RoleMappings []OIDCRoleMappingMatch `json:"roleMappings"`
+	AdminSubject bool `json:"adminSubject"`
 }
-
-// OIDCRoleMappingMatch defines model for OIDCRoleMappingMatch.
-type OIDCRoleMappingMatch struct {
-	ExternalRole string                          `json:"externalRole"`
-	GatewayRole  OIDCRoleMappingMatchGatewayRole `json:"gatewayRole"`
-}
-
-// OIDCRoleMappingMatchGatewayRole defines model for OIDCRoleMappingMatch.GatewayRole.
-type OIDCRoleMappingMatchGatewayRole string
 
 // OverviewRepositoryStatistics defines model for OverviewRepositoryStatistics.
 type OverviewRepositoryStatistics struct {
