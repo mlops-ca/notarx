@@ -57,8 +57,10 @@ CREATE INDEX promotion_evaluations_retention_idx ON public.promotion_evaluations
 CREATE TRIGGER promotion_evaluations_notify_insert AFTER INSERT ON public.promotion_evaluations FOR EACH ROW WHEN ((new.state = 'pending'::text)) EXECUTE FUNCTION public.notarx_notify_queue('notarx_promotion_evaluations');
 
 -- A rule is parked when its run-as service account loses the authority to run it (ADR 0021, Rules): authorization_lost,
--- with the reason the evaluator recorded. paused is the state of a rule whose target became public (ADR 0029). Only an
--- active, enabled rule fans out; an edit of a rule whose account is valid again returns authorization_lost to active.
+-- with the reason the evaluator recorded. paused is the state of a rule whose target became public (ADR 0029). An enabled rule
+-- fans out in any state: a parked rule gets evaluations that hold until the rule is restored, and only an active rule
+-- promotes. An edit of an authorization_lost rule returns it to active (the evaluator parks it again if the account is
+-- still unauthorized) and makes what waited for it due at once.
 ALTER TABLE public.promotion_rules
     ADD COLUMN state text DEFAULT 'active'::text NOT NULL,
     ADD COLUMN state_reason text DEFAULT ''::text NOT NULL,

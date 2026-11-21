@@ -136,7 +136,8 @@ channel and by a poll), and for each one:
    hour, and is dropped with the reason `condition_failed:<condition>:<reason>` a week after the age condition was met (or
    after publication, without one). The re-pend on a new scan result, which makes the recheck immediate, belongs to a
    later slice;
-5. admits every member against a target resolved once before queueing any, and calls `PromotionService.Request` for each
+5. takes the members of a release as the format returns them, so a `ReleaseSet` must return a complete release (a Maven GAV is
+   committed atomically; a versioned Raw version is promoted only once it is sealed), and admits every member against a target resolved once before queueing any, and calls `PromotionService.Request` for each
    member as the service account (admission is not repeated inside the request). Every file of a release announces
    itself, so a release is evaluated once per file: the evaluation of a file whose own attempt already exists under its key
    returns it without checking the release again. A release of more than 1000 members fails with `release_too_large`, one
@@ -153,8 +154,10 @@ The outcome of a row is `queued` (promotion requested; the `artifact_promotions`
 least once; the promotion is effectively once because
 its provenance idempotency key is `rule:<ruleId>:<sha256(target|coordinate|digest|generation>`, where the generation is the
 time the target coordinate was tombstoned, so promoting again after a tombstone mints a new key and nothing else does. A
-promotion whose last attempt failed, was rejected, expired or was cancelled is retried by the next request under its key,
-which writes attempt N+1 under the same key with its own job; a request whose last attempt is queued, running or completed
+promotion whose last attempt failed, was rejected, expired or was cancelled is retried by the next request under its key
+(an operator's retry, or a new evaluation of the artifact such as a backfill), which writes attempt N+1 under the same key
+with its own job; the evaluation row itself stays `queued`, the provenance row shows the promotion's progress and
+`promotion.failed` announces its failure; a request whose last attempt is queued, running or completed
 returns that attempt. Rows of a worker that died become due again when their two-minute lease ends. Terminal rows are pruned
 after 7 days (1 day on the free tier), and a pending or waiting row that was due 30 days ago (7 on the free tier) is dropped too: it
 means no node runs the evaluator, so a deployment that sets `NOTARX_WORKER_KINDS` must include `evaluator` on at least one

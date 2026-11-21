@@ -100,8 +100,9 @@ type PromotionEvaluator struct {
 func NewPromotionEvaluator(options PromotionEvaluatorOptions) *PromotionEvaluator {
 	store := options.Store
 	adapter := generatedRepositoryAPIAdapter{store: store, sessions: nativeMavenHandler{store: store}, securityPolicies: store, intelligence: store, audit: store, quarantine: store, cargo: store}
+	service := newPromotionService(adapter)
 	evaluator := &PromotionEvaluator{
-		store: store, service: newPromotionService(adapter), authorizer: options.Authorizer, registry: promotionFormatRegistry(promotionModuleDeps{Store: store}),
+		store: store, service: service, authorizer: options.Authorizer, registry: service.registry,
 		ports: promotionDryRunPorts{securityPolicies: store, intelligence: store, quarantine: store, distributionDigests: adapter.artifactDistributionDigests},
 		owner: options.Owner, interval: options.Interval, concurrency: options.Concurrency, releaseMax: promotionReleaseMaxMembers, now: options.Now,
 	}
@@ -153,17 +154,22 @@ func (e *PromotionEvaluator) RunOnce(ctx context.Context) (int, error) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() {
-				if recovered := recover(); recovered != nil {
-					slog.Error("promotion evaluation panicked", "component", "promotion_evaluator", "evaluationId", evaluation.ID, "ruleId", evaluation.RuleID, "attempt", evaluation.Attempts, "panic", fmt.Sprint(recovered))
-					e.finish(ctx, evaluation, e.retryOutcome(evaluation, reasonEvaluationPanic))
-				}
-			}()
-			e.handle(ctx, evaluation)
+			e.run(ctx, evaluation)
 		}()
 	}
 	wg.Wait()
 	return len(claimed), nil
+}
+
+// run evaluates one claimed row; a panic is recorded as a failed attempt instead of taking the node down.
+func (e *PromotionEvaluator) run(ctx context.Context, evaluation repository.PromotionEvaluation) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			slog.Error("promotion evaluation panicked", "component", "promotion_evaluator", "evaluationId", evaluation.ID, "ruleId", evaluation.RuleID, "attempt", evaluation.Attempts, "panic", fmt.Sprint(recovered))
+			e.finish(ctx, evaluation, e.retryOutcome(evaluation, reasonEvaluationPanic))
+		}
+	}()
+	e.handle(ctx, evaluation)
 }
 
 // handle evaluates one claimed row and records the outcome. A transient error leaves the row pending with a backoff
@@ -543,16 +549,18 @@ func (e *PromotionEvaluator) conditionOutcome(run ruleRun, published time.Time, 
 		}
 	}
 	switch {
-	case first != nil:
-		// The give-up clock of a condition that can still change starts when the age wait is over, so a long minAge does not
-		// use up the week the artifact has to pass it.
-		return true, e.later(published.Add(run.minAge), reasonConditionPrefix+first.Condition+":"+first.Reason)
 	case waitsForAge:
+		// Nothing can promote the artifact before it is old enough, whatever else fails, so the wait is for the age: the
+		// other conditions are looked at when it is reached.
 		deadline := published.Add(run.minAge)
 		if floor := e.now().Add(waitFloor); deadline.Before(floor) {
 			deadline = floor // a clock behind the database's must not turn the wait into a spin
 		}
 		return true, repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationWaiting, Reason: reasonConditionPrefix + "minAge:younger_than_min_age", NextAttemptAt: deadline}
+	case first != nil:
+		// The give-up clock of a condition that can still change starts when the age wait is over, so a long minAge does not
+		// use up the week the artifact has to pass it.
+		return true, e.later(published.Add(run.minAge), reasonConditionPrefix+first.Condition+":"+first.Reason)
 	}
 	return false, repository.PromotionEvaluationOutcome{}
 }
@@ -697,6 +705,10 @@ func (e *PromotionEvaluator) promotionRefusal(perr *PromotionError) (repository.
 	return failed(perr.Code), nil
 }
 
+// targetStateRows is how many of the newest completed promotions into a target coordinate targetState reads: a coordinate is
+// promoted once per generation, so a handful covers the ones a tombstone has not retired.
+const targetStateRows = 8
+
 // targetState reports what the target holds at a coordinate, from the newest completed promotion into it that is newer than
 // the target's tombstone: the generation (the tombstone time of the coordinate, empty if never tombstoned), whether it
 // already holds this digest, and, when it holds different bytes, which digest.
@@ -710,7 +722,7 @@ func (e *PromotionEvaluator) targetState(ctx context.Context, target repository.
 	case !errors.Is(tombstoneErr, repository.ErrNotFound):
 		return "", false, "", tombstoneErr
 	}
-	query := repository.ArtifactPromotionQuery{RepositoryIDs: []string{target.ID}, TargetRepositoryID: target.ID, Format: format, State: repository.ArtifactPromotionCompleted, Coordinate: coordinate, Limit: 1}
+	query := repository.ArtifactPromotionQuery{RepositoryIDs: []string{target.ID}, TargetRepositoryID: target.ID, Format: format, State: repository.ArtifactPromotionCompleted, Coordinate: coordinate, Limit: targetStateRows}
 	if format == repository.FormatOCI {
 		// An image name holds many digests (a moved tag is a new manifest), so a different digest is no conflict: only the
 		// exact manifest decides.
@@ -720,6 +732,9 @@ func (e *PromotionEvaluator) targetState(ctx context.Context, target repository.
 	if err != nil {
 		return "", false, "", err
 	}
+	// The rows come newest created first, which is not the order they completed in: look at a few, and let the exact digest
+	// win over a different one.
+	other := ""
 	for _, row := range page.Items {
 		if row.Coordinate != coordinate || row.CompletedAt.Before(tombstoned) {
 			continue
@@ -727,30 +742,55 @@ func (e *PromotionEvaluator) targetState(ctx context.Context, target repository.
 		if row.Digest == digest {
 			return generation, true, "", nil
 		}
-		return generation, false, row.Digest, nil
+		if other == "" {
+			other = row.Digest
+		}
 	}
-	return generation, false, "", nil
+	return generation, false, other, nil
 }
 
-// Start runs the evaluator until ctx ends: a loop that drains the due evaluations, then sleeps until the next interval or
-// a wake-up from the evaluation channel.
+// Start runs the evaluator until ctx ends: it keeps up to the configured concurrency of evaluations in flight and claims again as
+// slots free up, so one slow evaluation does not hold back the others; when nothing is due it sleeps until the next
+// interval, a wake-up from the evaluation channel or a finished evaluation.
 func (e *PromotionEvaluator) Start(ctx context.Context) {
 	background.Go(ctx, func() {
 		wake := notificationWake(ctx, e.store, repository.PromotionEvaluationChannel)
 		ticker := time.NewTicker(e.interval)
 		defer ticker.Stop()
+		slots := make(chan struct{}, e.concurrency)
+		freed := make(chan struct{}, e.concurrency)
+		var inFlight sync.WaitGroup
+		defer inFlight.Wait()
 		for {
-			handled, err := e.RunOnce(ctx)
-			if err != nil && ctx.Err() == nil {
-				slog.Warn("promotion evaluator iteration failed", "component", "promotion_evaluator", "error", err)
-			}
-			if err == nil && handled > 0 {
-				continue
+			if free := cap(slots) - len(slots); free > 0 {
+				claimed, err := e.store.ClaimPromotionEvaluations(readcache.Bypass(ctx), e.owner, promotionEvaluationLease, free)
+				if err != nil && ctx.Err() == nil {
+					slog.Warn("promotion evaluator claim failed", "component", "promotion_evaluator", "error", err)
+				}
+				for _, evaluation := range claimed {
+					slots <- struct{}{}
+					inFlight.Add(1)
+					go func() {
+						defer inFlight.Done()
+						defer func() {
+							<-slots
+							select {
+							case freed <- struct{}{}:
+							default:
+							}
+						}()
+						e.run(ctx, evaluation)
+					}()
+				}
+				if err == nil && len(claimed) > 0 {
+					continue
+				}
 			}
 			select {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+			case <-freed:
 			case _, ok := <-wake:
 				if !ok {
 					wake = nil

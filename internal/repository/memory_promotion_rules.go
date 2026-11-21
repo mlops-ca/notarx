@@ -107,14 +107,6 @@ func (s *MemoryStore) UpdatePromotionRule(ctx context.Context, rule PromotionRul
 	rule.State, rule.StateReason = current.State, current.StateReason
 	if current.State == PromotionRuleAuthorizationLost {
 		rule.State, rule.StateReason = PromotionRuleActive, ""
-		// An edit is the operator's statement that the rule is ready again; the evaluator parks it again if it is not. What
-		// waited for the rule is due now.
-		for id, evaluation := range s.promotionEvaluations {
-			if evaluation.RuleID == rule.ID && evaluation.State == PromotionEvaluationWaiting && evaluation.LeaseToken == "" {
-				evaluation.NextAttemptAt, evaluation.UpdatedAt = time.Now().UTC(), time.Now().UTC()
-				s.promotionEvaluations[id] = evaluation
-			}
-		}
 	}
 	if !s.promotionRuleReferencesLocked(rule) {
 		return PromotionRule{}, ErrPromotionRuleReference
@@ -129,6 +121,16 @@ func (s *MemoryStore) UpdatePromotionRule(ctx context.Context, rule PromotionRul
 	}
 	rule.Version, rule.UpdatedAt = nextHostedGroupVersion(current.Version), time.Now().UTC()
 	s.promotionRules[rule.ID] = clonePromotionRule(rule)
+	if rule.State == PromotionRuleActive && current.State != PromotionRuleActive {
+		// An edit is the operator's statement that the rule is ready again; the evaluator parks it again if it is not. What
+		// waited for the rule is due now, except a row a worker holds.
+		for id, evaluation := range s.promotionEvaluations {
+			if evaluation.RuleID == rule.ID && evaluation.State == PromotionEvaluationWaiting && evaluation.LeaseToken == "" {
+				evaluation.NextAttemptAt, evaluation.UpdatedAt = rule.UpdatedAt, rule.UpdatedAt
+				s.promotionEvaluations[id] = evaluation
+			}
+		}
+	}
 	return clonePromotionRule(rule), nil
 }
 

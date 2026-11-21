@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/promotionrules"
@@ -1097,5 +1098,39 @@ func TestHoldForAParkedRuleIsDueAtOnceWhenTheRuleIsActiveAgain(t *testing.T) {
 	}
 	if again, claimErr := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Hour, 1); claimErr != nil || len(again) != 1 || again[0].ID != claimed[0].ID {
 		t.Fatalf("a hold for a rule that is active again must be due at once: %+v, %v", again, claimErr)
+	}
+}
+
+func TestAgeWaitComesBeforeOtherFailingConditions(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), json.RawMessage(`{"minAge":"72h","scan":{"completed":true}}`))
+	asset := f.publishRaw(f.source, "releases/widget.txt", "widget")
+	fresh := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: asset.Path, Digest: asset.Digest, EventOccurredAt: f.now}
+	outcome, err := f.evaluator.evaluate(ctx, fresh)
+	if err != nil || outcome.State != repository.PromotionEvaluationWaiting || !outcome.NextAttemptAt.Equal(f.now.Add(72*time.Hour)) {
+		t.Fatalf("an artifact that is too young waits for its age, not for the scan: %+v, %v", outcome, err)
+	}
+}
+
+// The evaluator keeps its slots full: a slow evaluation does not hold back the rows behind it, and Start claims again as
+// slots free up.
+func TestStartEvaluatesEveryDueRowAndStopsWithItsContext(t *testing.T) {
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	for _, name := range []string{"a", "b", "c", "d", "e"} {
+		f.publishRaw(f.source, "releases/"+name+".txt", name)
+	}
+	evaluator := NewPromotionEvaluator(PromotionEvaluatorOptions{Store: f.store, Authorizer: RepositoryAuthorizer{Grants: f.store, Legacy: testAuthenticator()}, Owner: "started", Interval: 10 * time.Millisecond, Concurrency: 2})
+	ctx, cancel := context.WithCancel(background.WithGroup(context.Background(), &background.Group{}))
+	evaluator.Start(ctx)
+	deadline := time.Now().Add(10 * time.Second)
+	for len(f.evaluations(repository.PromotionEvaluationQueued)) < 5 {
+		if time.Now().After(deadline) {
+			t.Fatalf("the evaluator did not finish the due rows: %+v", f.evaluations())
+		}
+		<-time.After(5 * time.Millisecond)
+	}
+	cancel()
+	if !background.GroupOf(ctx).Wait(5 * time.Second) {
+		t.Fatal("the evaluator did not stop with its context")
 	}
 }

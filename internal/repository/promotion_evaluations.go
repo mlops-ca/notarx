@@ -19,7 +19,8 @@ const CacheScopePromotionRule = "promotion_rule"
 // owns notarx_evaluations (ADR 0023 section 7 names one channel per kind), so this one carries the kind in its name.
 const PromotionEvaluationChannel = "notarx_promotion_evaluations"
 
-// Promotion rule states (ADR 0021, Rules): only an active, enabled rule evaluates publications.
+// Promotion rule states (ADR 0021, Rules): only an active, enabled rule promotes. An enabled rule in any state receives the
+// evaluations of what is published; a parked rule's evaluations hold until the rule is restored.
 const (
 	PromotionRuleActive            = "active"
 	PromotionRuleAuthorizationLost = "authorization_lost"

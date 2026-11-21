@@ -164,7 +164,7 @@ WHERE id=$1::uuid AND version=$14::text::bigint RETURNING `+promotionRuleColumns
 			rule.ID, rule.Name, rule.TargetKind, nullableText(rule.TargetRepositoryID), nullableText(rule.RemoteInstanceID), nullableText(rule.RemoteRepository),
 			[]byte(rule.Match), emptyObjectIfAbsent(rule.Conditions), nullableJSON(rule.Approval), nullableJSON(rule.Schedule), rule.RunAsServiceAccountID, rule.Enabled, rule.UpdatedBy, expectedVersion))
 		if !errors.Is(err, sql.ErrNoRows) {
-			if err == nil && previous.String == PromotionRuleAuthorizationLost {
+			if err == nil && updated.State == PromotionRuleActive && previous.Valid && previous.String != PromotionRuleActive {
 				// An edit is the operator's statement that the rule is ready again; the evaluator parks it again if it is not. What
 				// waited for the rule is due now.
 				_, err = q.ExecContext(ctx, `UPDATE promotion_evaluations SET next_attempt_at=clock_timestamp(),updated_at=clock_timestamp() WHERE rule_id=$1::uuid AND state='waiting' AND lease_token IS NULL`, rule.ID)
