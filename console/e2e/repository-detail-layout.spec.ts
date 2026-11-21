@@ -883,6 +883,9 @@ test("repository grants tab manages rows in a table", async ({
       return route.fulfill({ json: grants });
     },
   );
+  await page.route("**/api/v2/user-groups**", (route) =>
+    route.fulfill({ json: { items: [], limit: 100 } }),
+  );
   await page.route("**/api/v2/users**", (route) =>
     route.fulfill({
       json: {
@@ -1582,6 +1585,9 @@ for (const delayedMotion of [false, true]) {
     await page.route(
       `**/api/v2/repositories/${repositoryId}/grants**`,
       (route) => route.fulfill({ json: [] }),
+    );
+    await page.route("**/api/v2/user-groups**", (route) =>
+      route.fulfill({ json: { items: [], limit: 100 } }),
     );
     await page.route("**/api/v2/users**", (route) =>
       route.fulfill({

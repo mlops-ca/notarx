@@ -812,6 +812,9 @@ test("management tables keep action columns opaque and cards separated", async (
       ]),
     }),
   );
+  await page.route("**/api/v2/user-groups**", (route) =>
+    route.fulfill({ json: { items: [], limit: 100 } }),
+  );
   await page.route("**/api/v2/users**", (route) =>
     route.fulfill({
       status: 200,

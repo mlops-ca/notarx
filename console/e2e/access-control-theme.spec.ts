@@ -36,6 +36,9 @@ async function mockAccessControl(page: Page) {
   await page.route("**/api/v2/public-access-policy**", (route) =>
     route.fulfill({ json: { enabled: true, version: "7" } }),
   );
+  await page.route("**/api/v2/user-groups**", (route) =>
+    route.fulfill({ json: { items: [], limit: 100 } }),
+  );
   await page.route("**/api/v2/users**", (route) =>
     route.fulfill({ json: { items: [] } }),
   );
