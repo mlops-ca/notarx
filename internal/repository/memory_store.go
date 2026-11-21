@@ -47,6 +47,7 @@ type MemoryStore struct {
 	authorizationTemplates map[string]AuthorizationTemplate
 	authorizationRoles     map[string]AuthorizationRole
 	userGroupState         *memoryUserGroupState
+	scimTokens             map[string]SCIMToken
 	retentionPolicies      map[string]RepositoryRetentionPolicy
 	securityPolicies       map[string]RepositorySecurityPolicy
 	quarantineReadPolicies map[string]RepositoryQuarantineReadPolicy

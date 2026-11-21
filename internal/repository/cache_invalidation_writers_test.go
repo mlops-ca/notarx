@@ -20,6 +20,7 @@ func TestCachedTablesHaveNoOtherWriters(t *testing.T) {
 		"internal/repository/postgres_users.go",                   // every user mutation evicts the user
 		"internal/repository/postgres_user_groups.go",             // DeleteUserGroup drops the grants that name the group and evicts each repository's grant set
 		"internal/repository/postgres_user_identities.go",         // ResolveOIDCIdentity evicts the provisioned or linked user
+		"internal/repository/postgres_scim.go",                    // every SCIM user mutation evicts the user
 		"internal/repository/postgres_authorization_templates.go", // ApplyAuthorizationTemplate evicts the grant set
 		"internal/repository/postgres_quarantine_read_policy.go",  // the quarantine read policy mutations evict their repository
 		"internal/repository/postgres_helm_governance.go",         // idem

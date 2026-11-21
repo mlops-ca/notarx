@@ -6415,6 +6415,167 @@
         }
       }
     },
+    "/authentication/providers/{providerId}/scim-tokens": {
+      "parameters": [
+        {
+          "name": "providerId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "listSCIMTokens",
+        "description": "Lists the SCIM bearer tokens of one provider, oldest first, with their expiry and revoked state. The secret is never returned. Admin only.\n",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SCIMTokenList"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSCIMToken",
+        "description": "Creates a SCIM bearer token for this provider only (ADR 0018 section 4). The plaintext token is returned once in this response and is never stored or logged; only its hash is kept. expiresAt is mandatory, in the future and at most 365 days ahead. Admin only.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSCIMToken"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/CreatedSCIMToken"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/authentication/providers/{providerId}/scim-tokens/{tokenId}": {
+      "parameters": [
+        {
+          "name": "providerId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        {
+          "name": "tokenId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "revokeSCIMToken",
+        "description": "Revokes the token; it stops authenticating at once. The record stays in the list as revoked. Revoking a revoked token keeps the first revocation time. Admin only.\n",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SCIMToken"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/authentication/providers/{providerId}/links": {
+      "parameters": [
+        {
+          "name": "providerId",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "linkIdentityProviderAccount",
+        "description": "Binds a login subject of this provider to a notarx account (ADR 0018 section 4): the admin link flow for a provider that does not assert externalId. It completes the identity row a SCIM create left without a subject, or creates the row for an account the provider never provisioned. A subject already bound to another account, or an account already bound to another subject at this provider, is 409. Audited. Admin only.\n",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProviderLink"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/UserIdentity"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/webhook-subscriptions": {
       "get": {
         "operationId": "listWebhookSubscriptions",
@@ -22980,6 +23141,198 @@
           }
         }
       },
+      "SCIMToken": {
+        "type": "object",
+        "required": [
+          "id",
+          "providerId",
+          "name",
+          "state",
+          "createdAt",
+          "expiresAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "providerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "expired",
+              "revoked"
+            ],
+            "description": "Revoked wins over expired."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revokedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SCIMTokenList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SCIMToken"
+            }
+          }
+        }
+      },
+      "CreateSCIMToken": {
+        "type": "object",
+        "required": [
+          "name",
+          "expiresAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Mandatory; in the future and at most 365 days from now."
+          }
+        }
+      },
+      "CreatedSCIMToken": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SCIMToken"
+          },
+          {
+            "type": "object",
+            "required": [
+              "token"
+            ],
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "The plaintext bearer token. It is shown once and cannot be recovered."
+              }
+            }
+          }
+        ]
+      },
+      "CreateProviderLink": {
+        "type": "object",
+        "required": [
+          "userId",
+          "subject"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "The login subject the provider asserts (OIDC sub, Entra tid:oid, SAML NameID)."
+          }
+        }
+      },
+      "UserIdentity": {
+        "type": "object",
+        "required": [
+          "id",
+          "userId",
+          "kind",
+          "providerId",
+          "issuer",
+          "subject",
+          "email",
+          "displayName",
+          "emailVerified",
+          "createdAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "oidc",
+              "saml"
+            ]
+          },
+          "providerId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "issuer": {
+            "type": "string",
+            "format": "uri"
+          },
+          "subject": {
+            "type": "string",
+            "description": "The login subject; empty while a SCIM-provisioned account has not signed in or been linked."
+          },
+          "scimExternalId": {
+            "type": "string",
+            "description": "The externalId the provider set through SCIM, when there is one."
+          },
+          "email": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "emailVerified": {
+            "type": "boolean"
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "WebhookEventType": {
         "type": "string",
         "enum": [
@@ -24267,72 +24620,6 @@
             "items": {
               "$ref": "#/components/schemas/UserSession"
             }
-          }
-        }
-      },
-      "UserIdentity": {
-        "type": "object",
-        "required": [
-          "id",
-          "userId",
-          "kind",
-          "providerId",
-          "issuer",
-          "subject",
-          "email",
-          "displayName",
-          "emailVerified",
-          "createdAt"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "userId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "oidc",
-              "saml"
-            ]
-          },
-          "providerId": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "issuer": {
-            "type": "string",
-            "format": "uri"
-          },
-          "subject": {
-            "type": "string",
-            "minLength": 1
-          },
-          "email": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "emailVerified": {
-            "type": "boolean"
-          },
-          "lastLoginAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         }
       },
@@ -28300,6 +28587,54 @@
           }
         }
       },
+      "SCIMTokenList": {
+        "description": "The SCIM tokens of one provider",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SCIMTokenList"
+            }
+          }
+        }
+      },
+      "CreatedSCIMToken": {
+        "description": "The created token with its plaintext secret, returned this once",
+        "headers": {
+          "Cache-Control": {
+            "description": "Always no-store, so no intermediary keeps the secret.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/CreatedSCIMToken"
+            }
+          }
+        }
+      },
+      "SCIMToken": {
+        "description": "A SCIM bearer token without its secret",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/SCIMToken"
+            }
+          }
+        }
+      },
+      "UserIdentity": {
+        "description": "External identity linked to a local user",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/UserIdentity"
+            }
+          }
+        }
+      },
       "WebhookSubscriptionList": {
         "description": "Webhook subscriptions",
         "content": {
@@ -28434,16 +28769,6 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/UserIdentityList"
-            }
-          }
-        }
-      },
-      "UserIdentity": {
-        "description": "External identity linked to a local user",
-        "content": {
-          "application/json": {
-            "schema": {
-              "$ref": "#/components/schemas/UserIdentity"
             }
           }
         }

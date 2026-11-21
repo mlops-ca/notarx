@@ -1,0 +1,434 @@
+{
+  "description": "Microsoft Entra ID provisioning without the aadOptscim062020 flag: capitalized op names, string booleans, an unquoted-free selector path and an extension attribute that is not stored. Entra ID treats any 400 as a sync failure, so unsupported attributes must answer 200.",
+  "steps": [
+    {
+      "name": "correlation lookup finds nothing",
+      "request": {
+        "method": "GET",
+        "path": "/Users?filter=userName eq \"alice@contoso.onmicrosoft.com\""
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:ListResponse"
+          ],
+          "totalResults": 0,
+          "startIndex": 1,
+          "itemsPerPage": 0,
+          "Resources": []
+        }
+      }
+    },
+    {
+      "name": "create the user",
+      "request": {
+        "method": "POST",
+        "path": "/Users",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User",
+            "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+          ],
+          "externalId": "a1b2c3d4-0000-4000-8000-000000000001",
+          "userName": "alice@contoso.onmicrosoft.com",
+          "active": true,
+          "displayName": "Alice Doe",
+          "meta": {
+            "resourceType": "User"
+          },
+          "name": {
+            "formatted": "Alice Doe",
+            "familyName": "Doe",
+            "givenName": "Alice"
+          },
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "alice@contoso.onmicrosoft.com"
+            }
+          ],
+          "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User": {
+            "manager": {
+              "value": "m-1"
+            }
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "ETag": "W/\"1\""
+        },
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "id": "<any>",
+          "externalId": "a1b2c3d4-0000-4000-8000-000000000001",
+          "userName": "alice@contoso.onmicrosoft.com",
+          "active": true,
+          "displayName": "Alice Doe",
+          "name": {
+            "formatted": "Alice Doe"
+          },
+          "emails": [
+            {
+              "value": "alice@contoso.onmicrosoft.com",
+              "primary": true,
+              "type": "work"
+            }
+          ],
+          "meta": {
+            "resourceType": "User",
+            "version": "W/\"1\"",
+            "location": "<any>"
+          }
+        }
+      },
+      "capture": {
+        "user": "id"
+      }
+    },
+    {
+      "name": "correlation by externalId",
+      "request": {
+        "method": "GET",
+        "path": "/Users?filter=externalId eq \"a1b2c3d4-0000-4000-8000-000000000001\""
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "totalResults": 1,
+          "Resources": [
+            {
+              "id": "${user}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "the same userName conflicts",
+      "request": {
+        "method": "POST",
+        "path": "/Users",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "externalId": "a1b2c3d4-0000-4000-8000-000000000002",
+          "userName": "ALICE@contoso.onmicrosoft.com",
+          "active": true
+        }
+      },
+      "response": {
+        "status": 409,
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:Error"
+          ],
+          "status": "409",
+          "scimType": "uniqueness"
+        }
+      }
+    },
+    {
+      "name": "profile update with a selector path, an unstored name part and an extension attribute",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "Replace",
+              "path": "displayName",
+              "value": "Alice D. Doe"
+            },
+            {
+              "op": "Replace",
+              "path": "emails[type eq \"work\"].value",
+              "value": "alice.doe@contoso.com"
+            },
+            {
+              "op": "Add",
+              "path": "name.givenName",
+              "value": "Alicia"
+            },
+            {
+              "op": "Replace",
+              "path": "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager",
+              "value": "m-2"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "displayName": "Alice D. Doe",
+          "emails": [
+            {
+              "value": "alice.doe@contoso.com",
+              "primary": true
+            }
+          ],
+          "active": true,
+          "meta": {
+            "version": "W/\"2\""
+          }
+        }
+      }
+    },
+    {
+      "name": "deactivate with a string boolean",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "Replace",
+              "path": "active",
+              "value": "False"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "active": false,
+          "meta": {
+            "version": "W/\"3\""
+          }
+        }
+      }
+    },
+    {
+      "name": "reactivate with a string boolean",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "Replace",
+              "path": "active",
+              "value": "True"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "active": true
+        }
+      }
+    },
+    {
+      "name": "removing userName is an invalid path",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "Remove",
+              "path": "userName"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 400,
+        "body": {
+          "scimType": "invalidPath"
+        }
+      }
+    },
+    {
+      "name": "create the group without members",
+      "request": {
+        "method": "POST",
+        "path": "/Groups",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "externalId": "g0000000-0000-4000-8000-000000000001",
+          "displayName": "Engineers",
+          "meta": {
+            "resourceType": "Group"
+          }
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "id": "<any>",
+          "displayName": "Engineers",
+          "members": []
+        }
+      },
+      "capture": {
+        "group": "id"
+      }
+    },
+    {
+      "name": "add the member",
+      "request": {
+        "method": "PATCH",
+        "path": "/Groups/${group}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "Add",
+              "path": "members",
+              "value": [
+                {
+                  "value": "${user}"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "members": [
+            {
+              "value": "${user}",
+              "type": "User"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "group lookup excluding members",
+      "request": {
+        "method": "GET",
+        "path": "/Groups?filter=displayName eq \"Engineers\"&excludedAttributes=members"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "totalResults": 1,
+          "Resources": [
+            {
+              "id": "${group}",
+              "displayName": "Engineers",
+              "members": null
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "remove the member with a selector",
+      "request": {
+        "method": "PATCH",
+        "path": "/Groups/${group}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "Remove",
+              "path": "members[value eq \"${user}\"]"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "members": []
+        }
+      }
+    },
+    {
+      "name": "rename the group",
+      "request": {
+        "method": "PATCH",
+        "path": "/Groups/${group}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "Replace",
+              "path": "displayName",
+              "value": "Platform Engineers"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "displayName": "Platform Engineers"
+        }
+      }
+    },
+    {
+      "name": "delete the group",
+      "request": {
+        "method": "DELETE",
+        "path": "/Groups/${group}"
+      },
+      "response": {
+        "status": 204
+      }
+    },
+    {
+      "name": "soft-deleted users stay readable as inactive",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "Replace",
+              "path": "active",
+              "value": "False"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "active": false
+        }
+      }
+    }
+  ]
+}

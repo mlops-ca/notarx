@@ -236,6 +236,9 @@ type GatewayStore interface {
 	repository.ServiceAccountStore
 	repository.UserStore
 	repository.UserGroupStore
+	repository.SCIMStore
+	repository.SCIMTokenStore
+	repository.UserIdentityLinker
 	repository.UserIdentityStore
 	repository.UserSessionStore
 	repository.RuntimeNodeStore
@@ -459,7 +462,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	if workloadStore != nil {
 		workloadIssuers = workloadStore
 	}
-	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, IdentityProviders: identityProviders, WorkloadIssuers: workloadIssuers, Issuer: options.Issuer})
+	identityAPI := newIdentityManagementHandler(identityManagementOptions{Scope: scope, Users: store, APIKeys: store, ServiceAccounts: store, IdentityProviders: identityProviders, WorkloadIssuers: workloadIssuers, Issuer: options.Issuer, SCIMTokens: store, Links: store})
 	var humanProviders workloadHumanProviders
 	if dependencies.IdentityRuntime != nil {
 		humanProviders = dependencies.IdentityRuntime
@@ -573,6 +576,10 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /auth/saml/{slug}/login", samlLogin.start)
 	mux.HandleFunc("POST /auth/saml/{slug}/acs", samlLogin.acs)
 	mux.HandleFunc("GET /auth/saml/{slug}/metadata", samlLogin.metadata)
+	// The SCIM server owns its subtree; it answers 404 for every route while NOTARX_SCIM_ENABLED is false.
+	scimServer := newSCIMServer(options.SCIM, store, store)
+	mux.Handle(scimBasePath, scimServer)
+	mux.Handle(scimBasePath+"/", scimServer)
 	mux.HandleFunc("GET /auth/session", oidcLogin.session)
 	mux.HandleFunc("POST /auth/logout", oidcLogin.logout)
 	return readThroughManagement(sessionCookieAuthentication(tracedHTTPHandler(dependencies.requestObservability(openAPIServeMux{mux: mux})))), nil

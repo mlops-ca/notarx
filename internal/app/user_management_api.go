@@ -139,12 +139,22 @@ func userResponse(user repository.User) adminopenapi.User {
 	return response
 }
 
+// visibleSCIMExternalID hides the keys the store writes itself: the one it generates for an account the IdP created
+// without an externalId and the tombstone of a removed link.
+func visibleSCIMExternalID(value string) string {
+	if repository.ReservedSCIMExternalID(value) {
+		return ""
+	}
+	return value
+}
+
 func userIdentityResponse(identity repository.UserIdentity) adminopenapi.UserIdentity {
 	response := adminopenapi.UserIdentity{
 		Id: uuid.MustParse(identity.ID), UserId: uuid.MustParse(identity.UserID),
 		Kind: adminopenapi.UserIdentityKind(identity.Kind), ProviderId: uuid.MustParse(identity.ProviderID), Issuer: identity.Issuer,
 		Subject: identity.Subject, Email: identity.Email, DisplayName: identity.DisplayName,
 		EmailVerified: identity.EmailVerified, CreatedAt: identity.CreatedAt,
+		ScimExternalId: optionalString(visibleSCIMExternalID(identity.SCIMExternalID)),
 	}
 	if identity.LastLoginAt != nil {
 		lastLogin := *identity.LastLoginAt

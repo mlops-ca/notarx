@@ -1156,6 +1156,9 @@ type User struct {
 	LockedUntil         *time.Time
 	MustChangePassword  bool
 	SessionVersion      int64
+	// DisabledReason says who disabled the account while State is disabled: DisabledByAdmin or DisabledBySCIM
+	// (ADR 0018 section 4). An account an administrator disabled is never re-activated by SCIM.
+	DisabledReason string
 	// EmailVerifiedByAdmin records that an administrator verified Email. A SAML assertion never carries
 	// a provider-verified email, so this is the only basis on which a SAML login may link the account by
 	// email (ADR 0018 Decision 3). Changing the email clears it. EmailVerifiedAt and EmailVerifiedBy are
@@ -1241,6 +1244,18 @@ type OIDCIdentityProvision struct {
 	// EmailLink is an optional out parameter: the store fills it with the decision of the email-link
 	// path (linked, or refused and why) so the caller can audit it. It stays nil when the path is off.
 	EmailLink *EmailLinkDecision
+	// BindSCIM is set for a provider in scim_only mode (ADR 0018 section 4): an unknown subject is matched
+	// against the scim_external_id of the identities SCIM created for the provider, and ExternalID is the
+	// externalId the identity provider asserted (attribute_mapping.externalId). The subject is bound only on that
+	// match, never by userName, and only to a row that has no subject yet.
+	BindSCIM   bool
+	ExternalID string
+}
+
+// bindsSCIM reports whether the sign-in may bind a SCIM-created identity by its asserted externalId. The keys the
+// store writes itself (the generated one and the deletion tombstone) never match.
+func (p OIDCIdentityProvision) bindsSCIM() bool {
+	return p.BindSCIM && p.ExternalID != "" && !ReservedSCIMExternalID(p.ExternalID)
 }
 
 // EmailLinkDecision is the outcome of the administrator-verified email-link path of one sign-in.
@@ -1305,6 +1320,10 @@ func decideEmailLink(email string, matches []User, hasIdentityAtProvider func(Us
 const (
 	UserActive   = "active"
 	UserDisabled = "disabled"
+
+	// DisabledByAdmin and DisabledBySCIM are the values of users.disabled_reason.
+	DisabledByAdmin = "admin"
+	DisabledBySCIM  = "scim"
 )
 
 type MavenPublishSession struct {

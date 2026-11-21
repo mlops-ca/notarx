@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -43,6 +44,9 @@ type OIDCConfig struct {
 	SubjectClaims []string
 	// GroupsClaim names the claim that carries the user's groups; empty means "groups" (ADR 0018 Decision 2).
 	GroupsClaim string
+	// ExternalIDClaim names the claim that carries the IdP's externalId of the user (attribute_mapping.externalId);
+	// empty means the token carries none. A scim_only provider binds a SCIM-created account by it.
+	ExternalIDClaim string
 	// Realm-role mappings are opt-in. When a token contains several mapped
 	// roles, the validator grants the most privileged one.
 	Roles OIDCRoleMapping
@@ -65,6 +69,8 @@ type OIDCIdentity struct {
 	// Groups are the group values the token asserts, at most repository.MaxClaimsGroups. They only ever
 	// match claims-sourced groups of this provider by external id (ADR 0018 Decision 5).
 	Groups []string
+	// ExternalID is the value of the configured externalId claim, empty when none is configured or the token lacks it.
+	ExternalID string
 	// GroupsPresent reports that the token carries the groups claim (or its overage markers). A sign-in ID token is
 	// authoritative for the groups of its provider, absent claim included; an API bearer token that does not carry
 	// the claim says nothing about groups and leaves the memberships as they are.
@@ -177,6 +183,9 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 	for _, resource := range claims.ResourceAccess {
 		roles = append(roles, resource.Roles...)
 	}
+	if v.config.ExternalIDClaim != "" {
+		identity.ExternalID = externalIDClaim(verified.Claims[v.config.ExternalIDClaim])
+	}
 	identity.Groups, identity.GroupsOverage, identity.GroupsPresent = claimGroupsPresent(verified.Claims, v.config.GroupsClaim)
 	identity.RoleMappings = matchedOIDCRoleMappings(roles, v.config.Roles)
 	if containsMappedGatewayRole(identity.RoleMappings, RoleAdmin) {
@@ -186,6 +195,20 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		identity.Role = RoleMember
 	}
 	return identity, true
+}
+
+// externalIDClaim reads the claim that carries the IdP's externalId of the user. An IdP may emit an employee number as
+// a JSON number, so a number is read as its integer or decimal text; any other shape yields no externalId.
+func externalIDClaim(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case json.Number:
+		return typed.String()
+	case float64:
+		return strconv.FormatFloat(typed, 'f', -1, 64)
+	}
+	return ""
 }
 
 // claimGroups reads the group values of a verified token. Microsoft Entra ID replaces the groups claim with

@@ -134,6 +134,29 @@ func (s *PostgresStore) resolveOIDCIdentityMutation(ctx context.Context, provisi
 		return User{}, UserIdentity{}, false, err
 	}
 
+	if provision.bindsSCIM() {
+		// The first login of an account SCIM created: the asserted externalId finds the row that has no subject
+		// yet, and only that match binds the subject. A row already bound to another subject is left alone.
+		err = scanUserIdentity(tx.QueryRowContext(ctx, `UPDATE user_identities SET subject=$3, issuer=$4, updated_at=$5 WHERE provider_id=$1::uuid AND scim_external_id=$2 AND subject IS NULL RETURNING `+userIdentityColumns,
+			provision.ProviderID, provision.ExternalID, provision.Subject, provision.Issuer, now), &identity)
+		switch {
+		case err == nil:
+			user, err := updateOIDCLogin(ctx, tx, identity, provision, now)
+			if err != nil {
+				return User{}, UserIdentity{}, false, err
+			}
+			identity = refreshUserIdentity(identity, provision, now)
+			if err = tx.Commit(); err != nil {
+				return User{}, UserIdentity{}, false, err
+			}
+			return user, identity, false, nil
+		case isUnique(err):
+			return User{}, UserIdentity{}, false, ErrIdentityExists
+		case !errors.Is(err, sql.ErrNoRows):
+			return User{}, UserIdentity{}, false, err
+		}
+	}
+
 	var user User
 	if provision.LinkAdminVerifiedEmail {
 		linked, err := postgresAdminVerifiedEmailLink(ctx, tx, provision)

@@ -1,0 +1,2 @@
+go test fuzz v1
+string("emails[type eq \"work\"].value eq \"a@b.c\"")

@@ -388,6 +388,25 @@ OIDCConnectionTest:
   content:
     application/json:
       schema: {"$ref": "../components/schemas.yaml#/OIDCConnectionTest"}
+SCIMToken:
+  description: A SCIM bearer token without its secret
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/SCIMToken"}
+SCIMTokenList:
+  description: The SCIM tokens of one provider
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/SCIMTokenList"}
+CreatedSCIMToken:
+  description: The created token with its plaintext secret, returned this once
+  headers:
+    Cache-Control:
+      description: Always no-store, so no intermediary keeps the secret.
+      schema: {type: string}
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/CreatedSCIMToken"}
 UserIdentityList:
   description: External identities linked to a local user
   content:

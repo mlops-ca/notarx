@@ -22,6 +22,7 @@ import { workloadEnCA } from "./workload.en-CA";
 import { assertionsEnCA } from "./assertions.en-CA";
 import { userGroupsEnCA } from "./user-groups.en-CA";
 import { providersEnCA } from "./providers.en-CA";
+import { scimEnCA } from "./scim.en-CA";
 
 /** The typed reference: every Console message, merged from the feature dictionaries (ADR 0014). */
 export const enCA = {
@@ -49,6 +50,7 @@ export const enCA = {
   ...assertionsEnCA,
   ...userGroupsEnCA,
   ...providersEnCA,
+  ...scimEnCA,
 };
 
 export type MessageKey = keyof typeof enCA;

@@ -194,3 +194,110 @@ identity_providers_providerId_rotate_sp_key:
         "$ref": "../components/responses.yaml#/Problem"
       '503':
         "$ref": "../components/responses.yaml#/Problem"
+identity_providers_providerId_scim_tokens:
+  parameters:
+  - name: providerId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  get:
+    operationId: listSCIMTokens
+    description: >
+      Lists the SCIM bearer tokens of one provider, oldest first, with their expiry and revoked state. The secret is
+      never returned. Admin only.
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/SCIMTokenList"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"
+  post:
+    operationId: createSCIMToken
+    description: >
+      Creates a SCIM bearer token for this provider only (ADR 0018 section 4). The plaintext token is returned once
+      in this response and is never stored or logged; only its hash is kept. expiresAt is mandatory, in the future
+      and at most 365 days ahead. Admin only.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/CreateSCIMToken"
+    responses:
+      '201':
+        "$ref": "../components/responses.yaml#/CreatedSCIMToken"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"
+identity_providers_providerId_scim_tokens_tokenId:
+  parameters:
+  - name: providerId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  - name: tokenId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  delete:
+    operationId: revokeSCIMToken
+    description: >
+      Revokes the token; it stops authenticating at once. The record stays in the list as revoked. Revoking a
+      revoked token keeps the first revocation time. Admin only.
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/SCIMToken"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"
+identity_providers_providerId_links:
+  parameters:
+  - name: providerId
+    in: path
+    required: true
+    schema: {type: string, format: uuid}
+  post:
+    operationId: linkIdentityProviderAccount
+    description: >
+      Binds a login subject of this provider to a notarx account (ADR 0018 section 4): the admin link flow for a
+      provider that does not assert externalId. It completes the identity row a SCIM create left without a subject,
+      or creates the row for an account the provider never provisioned. A subject already bound to another account,
+      or an account already bound to another subject at this provider, is 409. Audited. Admin only.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/CreateProviderLink"
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/UserIdentity"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"

@@ -986,6 +986,27 @@ func (e CreatedAPIKeyRoles) Valid() bool {
 	}
 }
 
+// Defines values for CreatedSCIMTokenState.
+const (
+	CreatedSCIMTokenStateActive  CreatedSCIMTokenState = "active"
+	CreatedSCIMTokenStateExpired CreatedSCIMTokenState = "expired"
+	CreatedSCIMTokenStateRevoked CreatedSCIMTokenState = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the CreatedSCIMTokenState enum.
+func (e CreatedSCIMTokenState) Valid() bool {
+	switch e {
+	case CreatedSCIMTokenStateActive:
+		return true
+	case CreatedSCIMTokenStateExpired:
+		return true
+	case CreatedSCIMTokenStateRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CurrentIdentityRole.
 const (
 	CurrentIdentityRoleAdmin  CurrentIdentityRole = "admin"
@@ -4814,6 +4835,27 @@ func (e RuntimeNodeListReleaseSource) Valid() bool {
 	}
 }
 
+// Defines values for SCIMTokenState.
+const (
+	SCIMTokenStateActive  SCIMTokenState = "active"
+	SCIMTokenStateExpired SCIMTokenState = "expired"
+	SCIMTokenStateRevoked SCIMTokenState = "revoked"
+)
+
+// Valid indicates whether the value is a known member of the SCIMTokenState enum.
+func (e SCIMTokenState) Valid() bool {
+	switch e {
+	case SCIMTokenStateActive:
+		return true
+	case SCIMTokenStateExpired:
+		return true
+	case SCIMTokenStateRevoked:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ScheduledTaskKind.
 const (
 	ScheduledTaskKindAuditRetention      ScheduledTaskKind = "audit-retention"
@@ -6496,6 +6538,13 @@ type CreateMavenPublishSession struct {
 // CreateMavenPublishSessionFormat defines model for CreateMavenPublishSession.Format.
 type CreateMavenPublishSessionFormat string
 
+// CreateProviderLink defines model for CreateProviderLink.
+type CreateProviderLink struct {
+	// Subject The login subject the provider asserts (OIDC sub, Entra tid:oid, SAML NameID).
+	Subject string             `json:"subject"`
+	UserId  openapi_types.UUID `json:"userId"`
+}
+
 // CreatePublishSession Maven-only management publish session. Raw Hosted writes use PUT /raw/{repository}/{path}; OCI Hosted writes use Registry V2 upload and manifest routes.
 type CreatePublishSession struct {
 	union json.RawMessage
@@ -6541,6 +6590,13 @@ type CreateRepository struct {
 
 // CreateRepositoryType APT hosted is accepted as a management-only preview repository; it is not advertised as protocol-capable until signed snapshots are implemented.
 type CreateRepositoryType string
+
+// CreateSCIMToken defines model for CreateSCIMToken.
+type CreateSCIMToken struct {
+	// ExpiresAt Mandatory; in the future and at most 365 days from now.
+	ExpiresAt time.Time `json:"expiresAt"`
+	Name      string    `json:"name"`
+}
 
 // CreateScheduledTask defines model for CreateScheduledTask.
 type CreateScheduledTask struct {
@@ -6675,6 +6731,25 @@ type CreatedAPIKey struct {
 
 // CreatedAPIKeyRoles defines model for CreatedAPIKey.Roles.
 type CreatedAPIKeyRoles string
+
+// CreatedSCIMToken defines model for CreatedSCIMToken.
+type CreatedSCIMToken struct {
+	CreatedAt  time.Time          `json:"createdAt"`
+	ExpiresAt  time.Time          `json:"expiresAt"`
+	Id         openapi_types.UUID `json:"id"`
+	Name       string             `json:"name"`
+	ProviderId openapi_types.UUID `json:"providerId"`
+	RevokedAt  *time.Time         `json:"revokedAt,omitempty"`
+
+	// State Revoked wins over expired.
+	State CreatedSCIMTokenState `json:"state"`
+
+	// Token The plaintext bearer token. It is shown once and cannot be recovered.
+	Token string `json:"token"`
+}
+
+// CreatedSCIMTokenState Revoked wins over expired.
+type CreatedSCIMTokenState string
 
 // CreatedServiceAccountCredential defines model for CreatedServiceAccountCredential.
 type CreatedServiceAccountCredential struct {
@@ -9897,6 +9972,27 @@ type RuntimeNodeList struct {
 // RuntimeNodeListReleaseSource No GitHub Release or desired-version source is connected. This does not assert that the running build is latest.
 type RuntimeNodeListReleaseSource string
 
+// SCIMToken defines model for SCIMToken.
+type SCIMToken struct {
+	CreatedAt  time.Time          `json:"createdAt"`
+	ExpiresAt  time.Time          `json:"expiresAt"`
+	Id         openapi_types.UUID `json:"id"`
+	Name       string             `json:"name"`
+	ProviderId openapi_types.UUID `json:"providerId"`
+	RevokedAt  *time.Time         `json:"revokedAt,omitempty"`
+
+	// State Revoked wins over expired.
+	State SCIMTokenState `json:"state"`
+}
+
+// SCIMTokenState Revoked wins over expired.
+type SCIMTokenState string
+
+// SCIMTokenList defines model for SCIMTokenList.
+type SCIMTokenList struct {
+	Items []SCIMToken `json:"items"`
+}
+
 // ScheduledTask defines model for ScheduledTask.
 type ScheduledTask struct {
 	CreatedAt       time.Time                  `json:"createdAt"`
@@ -10334,9 +10430,14 @@ type UserIdentity struct {
 	Kind          UserIdentityKind   `json:"kind"`
 	LastLoginAt   *time.Time         `json:"lastLoginAt,omitempty"`
 	ProviderId    openapi_types.UUID `json:"providerId"`
-	Subject       string             `json:"subject"`
-	UpdatedAt     *time.Time         `json:"updatedAt,omitempty"`
-	UserId        openapi_types.UUID `json:"userId"`
+
+	// ScimExternalId The externalId the provider set through SCIM, when there is one.
+	ScimExternalId *string `json:"scimExternalId,omitempty"`
+
+	// Subject The login subject; empty while a SCIM-provisioned account has not signed in or been linked.
+	Subject   string             `json:"subject"`
+	UpdatedAt *time.Time         `json:"updatedAt,omitempty"`
+	UserId    openapi_types.UUID `json:"userId"`
 }
 
 // UserIdentityKind defines model for UserIdentity.Kind.
@@ -11559,6 +11660,12 @@ type CreateIdentityProviderJSONRequestBody = CreateIdentityProvider
 // ReplaceIdentityProviderJSONRequestBody defines body for ReplaceIdentityProvider for application/json ContentType.
 type ReplaceIdentityProviderJSONRequestBody = ReplaceIdentityProvider
 
+// LinkIdentityProviderAccountJSONRequestBody defines body for LinkIdentityProviderAccount for application/json ContentType.
+type LinkIdentityProviderAccountJSONRequestBody = CreateProviderLink
+
+// CreateSCIMTokenJSONRequestBody defines body for CreateSCIMToken for application/json ContentType.
+type CreateSCIMTokenJSONRequestBody = CreateSCIMToken
+
 // ImportIdentityProviderMetadataJSONRequestBody defines body for ImportIdentityProviderMetadata for application/json ContentType.
 type ImportIdentityProviderMetadataJSONRequestBody = ImportIdentityProviderMetadata
 
@@ -12704,6 +12811,18 @@ type ServerInterface interface {
 
 	// (PUT /authentication/providers/{providerId})
 	ReplaceIdentityProvider(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID, params ReplaceIdentityProviderParams)
+
+	// (POST /authentication/providers/{providerId}/links)
+	LinkIdentityProviderAccount(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
+
+	// (GET /authentication/providers/{providerId}/scim-tokens)
+	ListSCIMTokens(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
+
+	// (POST /authentication/providers/{providerId}/scim-tokens)
+	CreateSCIMToken(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
+
+	// (DELETE /authentication/providers/{providerId}/scim-tokens/{tokenId})
+	RevokeSCIMToken(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID, tokenId openapi_types.UUID)
 
 	// (POST /authentication/providers/{providerId}:import-metadata)
 	ImportIdentityProviderMetadata(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID)
@@ -14266,6 +14385,119 @@ func (siw *ServerInterfaceWrapper) ReplaceIdentityProvider(w http.ResponseWriter
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReplaceIdentityProvider(w, r, providerId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// LinkIdentityProviderAccount operation middleware
+func (siw *ServerInterfaceWrapper) LinkIdentityProviderAccount(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.LinkIdentityProviderAccount(w, r, providerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListSCIMTokens operation middleware
+func (siw *ServerInterfaceWrapper) ListSCIMTokens(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListSCIMTokens(w, r, providerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateSCIMToken operation middleware
+func (siw *ServerInterfaceWrapper) CreateSCIMToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateSCIMToken(w, r, providerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RevokeSCIMToken operation middleware
+func (siw *ServerInterfaceWrapper) RevokeSCIMToken(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "providerId" -------------
+	var providerId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "providerId", r.PathValue("providerId"), &providerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "providerId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "tokenId" -------------
+	var tokenId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "tokenId", r.PathValue("tokenId"), &tokenId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "tokenId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RevokeSCIMToken(w, r, providerId, tokenId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -25898,6 +26130,10 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}:test", wrapper.TestIdentityProvider)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}:import-metadata", wrapper.ImportIdentityProviderMetadata)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}:rotate-sp-key", wrapper.RotateIdentityProviderSPKey)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/authentication/providers/{providerId}/scim-tokens", wrapper.ListSCIMTokens)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}/scim-tokens", wrapper.CreateSCIMToken)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/authentication/providers/{providerId}/scim-tokens/{tokenId}", wrapper.RevokeSCIMToken)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/authentication/providers/{providerId}/links", wrapper.LinkIdentityProviderAccount)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-subscriptions", wrapper.ListWebhookSubscriptions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/webhook-subscriptions", wrapper.CreateWebhookSubscription)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-subscriptions/{subscriptionId}", wrapper.GetWebhookSubscription)
@@ -26137,6 +26373,15 @@ type ConanReferenceListJSONResponse ConanReferencePage
 
 type CreatedAPIKeyJSONResponse CreatedAPIKey
 
+type CreatedSCIMTokenResponseHeaders struct {
+	CacheControl *string
+}
+type CreatedSCIMTokenJSONResponse struct {
+	Body CreatedSCIMToken
+
+	Headers CreatedSCIMTokenResponseHeaders
+}
+
 type CreatedServiceAccountCredentialJSONResponse CreatedServiceAccountCredential
 
 type CurrentIdentityJSONResponse CurrentIdentity
@@ -26254,6 +26499,10 @@ type RetentionPolicyJSONResponse RetentionPolicy
 type RuntimeLogPageJSONResponse RuntimeLogPage
 
 type RuntimeNodeListJSONResponse RuntimeNodeList
+
+type SCIMTokenJSONResponse SCIMToken
+
+type SCIMTokenListJSONResponse SCIMTokenList
 
 type SecurityPolicyResponseHeaders struct {
 	ETag string
@@ -27189,6 +27438,374 @@ func (response ReplaceIdentityProvider412ApplicationProblemPlusJSONResponse) Vis
 type ReplaceIdentityProvider503ApplicationProblemPlusJSONResponse Problem
 
 func (response ReplaceIdentityProvider503ApplicationProblemPlusJSONResponse) VisitReplaceIdentityProviderResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkIdentityProviderAccountRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+	Body       *LinkIdentityProviderAccountJSONRequestBody
+}
+
+type LinkIdentityProviderAccountResponseObject interface {
+	VisitLinkIdentityProviderAccountResponse(w http.ResponseWriter) error
+}
+
+type LinkIdentityProviderAccount200JSONResponse struct{ UserIdentityJSONResponse }
+
+func (response LinkIdentityProviderAccount200JSONResponse) VisitLinkIdentityProviderAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkIdentityProviderAccount400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response LinkIdentityProviderAccount400ApplicationProblemPlusJSONResponse) VisitLinkIdentityProviderAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkIdentityProviderAccount401ApplicationProblemPlusJSONResponse Problem
+
+func (response LinkIdentityProviderAccount401ApplicationProblemPlusJSONResponse) VisitLinkIdentityProviderAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkIdentityProviderAccount403ApplicationProblemPlusJSONResponse Problem
+
+func (response LinkIdentityProviderAccount403ApplicationProblemPlusJSONResponse) VisitLinkIdentityProviderAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkIdentityProviderAccount404ApplicationProblemPlusJSONResponse Problem
+
+func (response LinkIdentityProviderAccount404ApplicationProblemPlusJSONResponse) VisitLinkIdentityProviderAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkIdentityProviderAccount409ApplicationProblemPlusJSONResponse Problem
+
+func (response LinkIdentityProviderAccount409ApplicationProblemPlusJSONResponse) VisitLinkIdentityProviderAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type LinkIdentityProviderAccount503ApplicationProblemPlusJSONResponse Problem
+
+func (response LinkIdentityProviderAccount503ApplicationProblemPlusJSONResponse) VisitLinkIdentityProviderAccountResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSCIMTokensRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+}
+
+type ListSCIMTokensResponseObject interface {
+	VisitListSCIMTokensResponse(w http.ResponseWriter) error
+}
+
+type ListSCIMTokens200JSONResponse struct{ SCIMTokenListJSONResponse }
+
+func (response ListSCIMTokens200JSONResponse) VisitListSCIMTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSCIMTokens401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListSCIMTokens401ApplicationProblemPlusJSONResponse) VisitListSCIMTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSCIMTokens403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListSCIMTokens403ApplicationProblemPlusJSONResponse) VisitListSCIMTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSCIMTokens404ApplicationProblemPlusJSONResponse Problem
+
+func (response ListSCIMTokens404ApplicationProblemPlusJSONResponse) VisitListSCIMTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListSCIMTokens503ApplicationProblemPlusJSONResponse Problem
+
+func (response ListSCIMTokens503ApplicationProblemPlusJSONResponse) VisitListSCIMTokensResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSCIMTokenRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+	Body       *CreateSCIMTokenJSONRequestBody
+}
+
+type CreateSCIMTokenResponseObject interface {
+	VisitCreateSCIMTokenResponse(w http.ResponseWriter) error
+}
+
+type CreateSCIMToken201JSONResponse struct{ CreatedSCIMTokenJSONResponse }
+
+func (response CreateSCIMToken201JSONResponse) VisitCreateSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.CacheControl != nil {
+		w.Header().Set("Cache-Control", fmt.Sprint(*response.Headers.CacheControl))
+	}
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSCIMToken400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreateSCIMToken400ApplicationProblemPlusJSONResponse) VisitCreateSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSCIMToken401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateSCIMToken401ApplicationProblemPlusJSONResponse) VisitCreateSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSCIMToken403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateSCIMToken403ApplicationProblemPlusJSONResponse) VisitCreateSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSCIMToken404ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateSCIMToken404ApplicationProblemPlusJSONResponse) VisitCreateSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateSCIMToken503ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateSCIMToken503ApplicationProblemPlusJSONResponse) VisitCreateSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeSCIMTokenRequestObject struct {
+	ProviderId openapi_types.UUID `json:"providerId"`
+	TokenId    openapi_types.UUID `json:"tokenId"`
+}
+
+type RevokeSCIMTokenResponseObject interface {
+	VisitRevokeSCIMTokenResponse(w http.ResponseWriter) error
+}
+
+type RevokeSCIMToken200JSONResponse struct{ SCIMTokenJSONResponse }
+
+func (response RevokeSCIMToken200JSONResponse) VisitRevokeSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeSCIMToken401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response RevokeSCIMToken401ApplicationProblemPlusJSONResponse) VisitRevokeSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeSCIMToken403ApplicationProblemPlusJSONResponse Problem
+
+func (response RevokeSCIMToken403ApplicationProblemPlusJSONResponse) VisitRevokeSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeSCIMToken404ApplicationProblemPlusJSONResponse Problem
+
+func (response RevokeSCIMToken404ApplicationProblemPlusJSONResponse) VisitRevokeSCIMTokenResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RevokeSCIMToken503ApplicationProblemPlusJSONResponse Problem
+
+func (response RevokeSCIMToken503ApplicationProblemPlusJSONResponse) VisitRevokeSCIMTokenResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(response); err != nil {
@@ -50481,6 +51098,18 @@ type StrictServerInterface interface {
 	// (PUT /authentication/providers/{providerId})
 	ReplaceIdentityProvider(ctx context.Context, request ReplaceIdentityProviderRequestObject) (ReplaceIdentityProviderResponseObject, error)
 
+	// (POST /authentication/providers/{providerId}/links)
+	LinkIdentityProviderAccount(ctx context.Context, request LinkIdentityProviderAccountRequestObject) (LinkIdentityProviderAccountResponseObject, error)
+
+	// (GET /authentication/providers/{providerId}/scim-tokens)
+	ListSCIMTokens(ctx context.Context, request ListSCIMTokensRequestObject) (ListSCIMTokensResponseObject, error)
+
+	// (POST /authentication/providers/{providerId}/scim-tokens)
+	CreateSCIMToken(ctx context.Context, request CreateSCIMTokenRequestObject) (CreateSCIMTokenResponseObject, error)
+
+	// (DELETE /authentication/providers/{providerId}/scim-tokens/{tokenId})
+	RevokeSCIMToken(ctx context.Context, request RevokeSCIMTokenRequestObject) (RevokeSCIMTokenResponseObject, error)
+
 	// (POST /authentication/providers/{providerId}:import-metadata)
 	ImportIdentityProviderMetadata(ctx context.Context, request ImportIdentityProviderMetadataRequestObject) (ImportIdentityProviderMetadataResponseObject, error)
 
@@ -51789,6 +52418,125 @@ func (sh *strictHandler) ReplaceIdentityProvider(w http.ResponseWriter, r *http.
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReplaceIdentityProviderResponseObject); ok {
 		if err := validResponse.VisitReplaceIdentityProviderResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// LinkIdentityProviderAccount operation middleware
+func (sh *strictHandler) LinkIdentityProviderAccount(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID) {
+	var request LinkIdentityProviderAccountRequestObject
+
+	request.ProviderId = providerId
+
+	var body LinkIdentityProviderAccountJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.LinkIdentityProviderAccount(ctx, request.(LinkIdentityProviderAccountRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "LinkIdentityProviderAccount")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(LinkIdentityProviderAccountResponseObject); ok {
+		if err := validResponse.VisitLinkIdentityProviderAccountResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListSCIMTokens operation middleware
+func (sh *strictHandler) ListSCIMTokens(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID) {
+	var request ListSCIMTokensRequestObject
+
+	request.ProviderId = providerId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListSCIMTokens(ctx, request.(ListSCIMTokensRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListSCIMTokens")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListSCIMTokensResponseObject); ok {
+		if err := validResponse.VisitListSCIMTokensResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateSCIMToken operation middleware
+func (sh *strictHandler) CreateSCIMToken(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID) {
+	var request CreateSCIMTokenRequestObject
+
+	request.ProviderId = providerId
+
+	var body CreateSCIMTokenJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateSCIMToken(ctx, request.(CreateSCIMTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateSCIMToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateSCIMTokenResponseObject); ok {
+		if err := validResponse.VisitCreateSCIMTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RevokeSCIMToken operation middleware
+func (sh *strictHandler) RevokeSCIMToken(w http.ResponseWriter, r *http.Request, providerId openapi_types.UUID, tokenId openapi_types.UUID) {
+	var request RevokeSCIMTokenRequestObject
+
+	request.ProviderId = providerId
+	request.TokenId = tokenId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RevokeSCIMToken(ctx, request.(RevokeSCIMTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RevokeSCIMToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RevokeSCIMTokenResponseObject); ok {
+		if err := validResponse.VisitRevokeSCIMTokenResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

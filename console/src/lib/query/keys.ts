@@ -135,6 +135,8 @@ export const authKeys = {
 export const settingsKeys = {
   all: ["settings"] as const,
   identityProviders: () => [...settingsKeys.all, "identity-providers"] as const,
+  scimTokens: (providerId: string) =>
+    [...settingsKeys.all, "scim-tokens", providerId] as const,
   security: () => [...settingsKeys.all, "security"] as const,
 };
 

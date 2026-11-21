@@ -1,0 +1,297 @@
+{
+  "description": "Okta SCIM 2.0 provisioning: no externalId, pathless replace objects, PUT with the whole profile, and group push with add, replace and remove member operations.",
+  "steps": [
+    {
+      "name": "correlation lookup",
+      "request": {
+        "method": "GET",
+        "path": "/Users?filter=userName eq \"bob@okta.example.com\"&startIndex=1&count=100"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "totalResults": 0,
+          "startIndex": 1,
+          "Resources": []
+        }
+      }
+    },
+    {
+      "name": "create without an externalId",
+      "request": {
+        "method": "POST",
+        "path": "/Users",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "userName": "bob@okta.example.com",
+          "name": {
+            "givenName": "Bob",
+            "familyName": "Smith"
+          },
+          "emails": [
+            {
+              "primary": true,
+              "value": "bob@okta.example.com",
+              "type": "work"
+            }
+          ],
+          "displayName": "Bob Smith",
+          "active": true
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "<any>",
+          "userName": "bob@okta.example.com",
+          "displayName": "Bob Smith",
+          "externalId": null,
+          "active": true
+        }
+      },
+      "capture": {
+        "user": "id"
+      }
+    },
+    {
+      "name": "lookup by userName finds it",
+      "request": {
+        "method": "GET",
+        "path": "/Users?filter=userName eq \"bob@okta.example.com\"&startIndex=1&count=100"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "totalResults": 1,
+          "Resources": [
+            {
+              "id": "${user}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "profile update with PUT",
+      "request": {
+        "method": "PUT",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "id": "${user}",
+          "userName": "bob@okta.example.com",
+          "name": {
+            "givenName": "Robert",
+            "familyName": "Smith"
+          },
+          "emails": [
+            {
+              "primary": true,
+              "value": "robert@okta.example.com",
+              "type": "work"
+            }
+          ],
+          "displayName": "Robert Smith",
+          "active": true
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "displayName": "Robert Smith",
+          "emails": [
+            {
+              "value": "robert@okta.example.com"
+            }
+          ],
+          "active": true,
+          "externalId": null
+        }
+      }
+    },
+    {
+      "name": "deactivate with a pathless replace",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "value": {
+                "active": false
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "active": false
+        }
+      }
+    },
+    {
+      "name": "reactivate with a pathless replace",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "value": {
+                "active": true
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "active": true
+        }
+      }
+    },
+    {
+      "name": "group push",
+      "request": {
+        "method": "POST",
+        "path": "/Groups",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "displayName": "Okta Eng",
+          "members": []
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "displayName": "Okta Eng",
+          "members": []
+        }
+      },
+      "capture": {
+        "group": "id"
+      }
+    },
+    {
+      "name": "add members",
+      "request": {
+        "method": "PATCH",
+        "path": "/Groups/${group}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "add",
+              "path": "members",
+              "value": [
+                {
+                  "value": "${user}",
+                  "display": "bob@okta.example.com"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "members": [
+            {
+              "value": "${user}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "rename with a pathless replace",
+      "request": {
+        "method": "PATCH",
+        "path": "/Groups/${group}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "value": {
+                "displayName": "Okta Engineering"
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "displayName": "Okta Engineering",
+          "members": [
+            {
+              "value": "${user}"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "remove members by value array",
+      "request": {
+        "method": "PATCH",
+        "path": "/Groups/${group}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "remove",
+              "path": "members",
+              "value": [
+                {
+                  "value": "${user}"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "members": []
+        }
+      }
+    },
+    {
+      "name": "delete the group",
+      "request": {
+        "method": "DELETE",
+        "path": "/Groups/${group}"
+      },
+      "response": {
+        "status": 204
+      }
+    }
+  ]
+}

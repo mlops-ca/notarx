@@ -158,6 +158,11 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 		h.redirectError(w, r, "invalid_identity")
 		return
 	}
+	if h.identities == nil && provider.provider.ProvisioningMode == identity.ProvisioningSCIMOnly && !verified.AdminSubject {
+		// scim_only never signs in a subject that has no account, and without an identity store none can be found.
+		h.redirectError(w, r, "identity_unavailable")
+		return
+	}
 	if h.identities != nil {
 		issuer := verified.Issuer
 		if issuer == "" {
@@ -168,6 +173,7 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 			DisplayName: verified.DisplayName, PreferredUsername: verified.Username,
 			EmailVerified: verified.EmailVerified, Role: string(verified.Role),
 			Provision: provider.provider.ProvisioningMode == identity.ProvisioningJIT, MatchEmail: provider.provider.EmailLinkingEnabled,
+			BindSCIM: provider.provider.ProvisioningMode == identity.ProvisioningSCIMOnly, ExternalID: verified.ExternalID,
 			DefaultRole: provider.provider.JITDefaultRole, OccurredAt: time.Now().UTC(),
 		})
 		switch {
@@ -203,6 +209,15 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/login?"+values.Encode(), http.StatusFound)
 			return
 		case errors.Is(resolveErr, repository.ErrNotFound):
+			if provider.provider.ProvisioningMode == identity.ProvisioningSCIMOnly && !verified.AdminSubject {
+				// scim_only (ADR 0018 section 4): a login succeeds only for an identity SCIM provisioned or an
+				// administrator linked, so an unknown subject is refused and never falls through to an
+				// external principal that has no account. The subjects an administrator listed in the provider's
+				// admin subjects keep the break-glass sign-in they have in every other mode; a role mapped from
+				// the identity provider's claims does not, because the identity provider controls it.
+				h.redirectError(w, r, "account_not_linked")
+				return
+			}
 			// Provisioning is disabled and the subject is not manually linked;
 			// preserve the existing external-principal behavior.
 		case errors.Is(resolveErr, repository.ErrIdentityAmbiguous):

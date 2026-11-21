@@ -130,6 +130,7 @@
         { "id": "oidc-sso", "title": { "en": "OIDC SSO", "zh-CN": "OIDC 单点登录" }, "en": "docs/oidc-sso.md", "zh-CN": "docs/oidc-sso.zh-CN.md" },
         { "id": "saml-sso", "title": { "en": "SAML SSO" }, "en": "docs/saml-sso.md" },
         { "id": "identity-provider-guides", "title": { "en": "Identity provider setup guides" }, "en": "docs/identity-provider-guides.md" },
+        { "id": "scim", "title": { "en": "SCIM provisioning" }, "en": "docs/scim.md" },
         { "id": "oidc-keycloak", "title": { "en": "Keycloak on Kubernetes", "zh-CN": "Kubernetes 上的 Keycloak" }, "en": "docs/oidc-keycloak-k8s.md", "zh-CN": "docs/oidc-keycloak-k8s.zh-CN.md" },
         { "id": "repository-grants", "title": { "en": "Repository grant authorization", "zh-CN": "仓库授权" }, "en": "docs/repository-grant-authorization-plan.md", "zh-CN": "docs/repository-grant-authorization-plan.zh-CN.md" },
         { "id": "workload-identity", "title": { "en": "Workload identity federation" }, "en": "docs/workload-identity.md" },

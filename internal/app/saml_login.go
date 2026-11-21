@@ -283,6 +283,7 @@ func samlProvision(provider identity.Provider, settings identity.SAMLSettings, c
 		Email: claims.Email, DisplayName: claims.DisplayName, PreferredUsername: claims.Username,
 		EmailVerified: false, MatchEmail: false, LinkAdminVerifiedEmail: provider.EmailLinkingEnabled, EmailLink: link,
 		Provision: provider.ProvisioningMode == identity.ProvisioningJIT, DefaultRole: provider.JITDefaultRole, OccurredAt: now,
+		BindSCIM: provider.ProvisioningMode == identity.ProvisioningSCIMOnly, ExternalID: claims.ExternalID,
 	}
 }
 

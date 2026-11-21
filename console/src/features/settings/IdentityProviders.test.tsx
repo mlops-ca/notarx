@@ -15,6 +15,7 @@ import {
   importIdentityProviderMetadata,
   listAudits,
   listIdentityProviders,
+  listScimTokens,
   replaceIdentityProvider,
   rotateIdentityProviderSpKey,
   testIdentityProvider,
@@ -36,6 +37,7 @@ vi.mock("../../client", async () => {
     importIdentityProviderMetadata: vi.fn(),
     listAudits: vi.fn(),
     listIdentityProviders: vi.fn(),
+    listScimTokens: vi.fn(),
     replaceIdentityProvider: vi.fn(),
     rotateIdentityProviderSpKey: vi.fn(),
     testIdentityProvider: vi.fn(),
@@ -102,6 +104,7 @@ function mockReads(providers: IdentityProvider[], overage: object[] = []) {
     data: { items: providers },
   } as never);
   vi.mocked(listAudits).mockResolvedValue({ data: overage } as never);
+  vi.mocked(listScimTokens).mockResolvedValue({ data: { items: [] } } as never);
   vi.mocked(getSecuritySettings).mockResolvedValue({
     data: { authorizationCacheEnabled: true, authorizationCacheTtlSeconds: 5 },
   } as never);

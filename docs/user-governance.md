@@ -109,6 +109,17 @@ group (audited), and deleting a group clears the flag. At most 512 groups count 
 The effective-access simulation of a `user:<name>` actor includes the groups of that
 account.
 
+## SCIM Provisioning
+
+An identity provider can provision accounts and groups through the SCIM server (see [SCIM 2.0
+provisioning](scim.md)). A SCIM-created account has level `none` and an identity row with the provider's
+`externalId` and no subject; on a `scim_only` provider its first login binds the subject by that `externalId`, never
+by `userName`. `users.disabled_reason` records who disabled an account: `active=false` from SCIM sets `scim`, bumps the
+session version and revokes the account's sessions in one transaction, and only an account disabled by `scim` is
+re-activated by `active=true`; an administrator's disable (`admin`) stays until an administrator lifts it. SCIM
+never modifies, deactivates or deletes a platform administrator, and `DELETE` removes only the SCIM link and
+disables the account.
+
 ## Lockout Policy
 
 `NOTARX_LOCAL_AUTH_MAX_FAILED_ATTEMPTS` controls consecutive failures before a

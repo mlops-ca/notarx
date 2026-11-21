@@ -118,6 +118,8 @@ type Config struct {
 	Workload WorkloadConfig
 	// SAML is the SAML service provider policy (NOTARX_SAML_*, ADR 0018 section 3).
 	SAML SAMLConfig
+	// SCIM is the SCIM 2.0 server policy (NOTARX_SCIM_*, ADR 0018 section 4).
+	SCIM SCIMConfig
 	// QuotaReconcileInterval is how often the quota reconciler recomputes every
 	// repository's usage counter (NOTARX_QUOTA_RECONCILE_INTERVAL, ADR 0023 section 3).
 	QuotaReconcileInterval time.Duration
@@ -268,6 +270,7 @@ func Load() (Config, error) {
 			ExchangeMaxTTL: DefaultWorkloadExchangeMaxTTL, ExchangeRate: DefaultWorkloadExchangeRate,
 		},
 		SAML:                        DefaultSAMLConfig(),
+		SCIM:                        DefaultSCIMConfig(),
 		QuotaReconcileInterval:      6 * time.Hour,
 		PartitionAhead:              3,
 		Retention:                   retention.DefaultConfig(),
@@ -611,6 +614,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.SAML = saml
+	}
+	if scim, err := scimConfigFromEnv(cfg.SCIM); err != nil {
+		return Config{}, err
+	} else {
+		cfg.SCIM = scim
 	}
 	if interval, err := durationEnv("NOTARX_RUNTIME_NODE_PRUNE_INTERVAL", cfg.RuntimeNodePruneInterval); err != nil {
 		return Config{}, err
