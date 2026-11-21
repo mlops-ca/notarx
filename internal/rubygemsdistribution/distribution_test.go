@@ -201,13 +201,9 @@ func TestValidSubjectWorkloadCarriesNoBearerExpiry(t *testing.T) {
 	}
 }
 
-func TestNewJobDropsWorkloadBearerExpiry(t *testing.T) {
+func TestNewJobRefusesWorkloadBearerExpiry(t *testing.T) {
 	s := dist.Subject{Actor: "service-account:" + uuid.NewString(), Kind: "workload_federation", CredentialID: uuid.NewString(), ValidUntil: time.Now().Add(5 * time.Minute)}
-	j, err := dist.NewJob(plan(), s, "key")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !j.ValidUntil.IsZero() {
-		t.Fatalf("job carries the bearer expiry %v", j.ValidUntil)
+	if _, err := dist.NewJob(plan(), s, "key"); !errors.Is(err, dist.ErrInvalid) {
+		t.Fatalf("a workload job must not carry the bearer expiry: %v", err)
 	}
 }

@@ -146,7 +146,7 @@ func NewJob(plan Plan, actor, kind, credential, key string) (Job, error) {
 	if err != nil || actor == "" || len(actor) > 512 || strings.ContainsAny(actor, "\x00\r\n") || key == "" || len(key) > 200 || strings.ContainsAny(key, "\x00\r\n") {
 		return Job{}, ErrInvalid
 	}
-	if !durableactor.ValidCredential(kind, credential) {
+	if !durableactor.ActorValid(kind, actor, credential) {
 		return Job{}, ErrInvalid
 	}
 	j := Job{ID: uuid.NewSHA1(uuid.NameSpaceURL, []byte("helm-replication\x00"+actor+"\x00"+kind+"\x00"+key)).String(), PlanDigest: d, SourceRepositoryID: p.SourceRepositoryID, TargetRepositoryID: p.TargetRepositoryID, Actor: actor, ActorKind: kind, CredentialID: credential}

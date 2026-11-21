@@ -110,8 +110,7 @@ func ValidCredential(kind, credential string) bool {
 		return false
 	}
 	if CredentialRequired(kind) {
-		_, err := uuid.Parse(credential)
-		return err == nil
+		return canonicalUUID(credential)
 	}
 	return credential == ""
 }
@@ -141,18 +140,21 @@ func ActorValid(kind, actor, credential string) bool {
 // ServiceAccountID returns the service account id of a service-account or workload actor.
 func ServiceAccountID(actor string) (string, bool) {
 	id, ok := strings.CutPrefix(actor, ServiceAccountActorPrefix)
-	if !ok {
+	if !ok || !canonicalUUID(id) {
 		return "", false
 	}
-	_, err := uuid.Parse(id)
-	return id, err == nil
+	return id, true
 }
 
 func prefixedUUID(actor, prefix string) bool {
 	id, ok := strings.CutPrefix(actor, prefix)
-	if !ok {
-		return false
-	}
-	_, err := uuid.Parse(id)
-	return err == nil
+	return ok && canonicalUUID(id)
+}
+
+// canonicalUUID reports whether s is a UUID in its canonical lower-case hyphenated form. uuid.Parse alone also
+// accepts braced, urn and hyphenless spellings that PostgreSQL resolves to the same row but the memory store's map
+// lookups and the job id derived from the actor string would treat as different subjects.
+func canonicalUUID(s string) bool {
+	u, err := uuid.Parse(s)
+	return err == nil && u.String() == s
 }

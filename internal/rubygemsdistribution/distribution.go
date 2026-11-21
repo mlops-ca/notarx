@@ -156,17 +156,9 @@ func CanonicalPlan(in Plan) (Plan, string, error) {
 	return in, "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 func NewJob(plan Plan, subject Subject, key string) (Job, error) {
-	if durableactor.ClassOf(subject.Kind) == durableactor.ClassWorkload {
-		// A workload job lives as long as its trust policy, re-read at every commit, not as long as the
-		// short-lived bearer that submitted it.
-		subject.ValidUntil = time.Time{}
-	}
 	actor, kind, credential := subject.Actor, subject.Kind, subject.CredentialID
 	p, d, err := CanonicalPlan(plan)
 	if err != nil || !ValidSubject(subject) || actor == "" || len(actor) > 512 || strings.ContainsAny(actor, "\x00\r\n") || key == "" || len(key) > 200 || strings.ContainsAny(key, "\x00\r\n") {
-		return Job{}, ErrInvalid
-	}
-	if !durableactor.ValidCredential(kind, credential) {
 		return Job{}, ErrInvalid
 	}
 	j := Job{ID: uuid.NewSHA1(uuid.NameSpaceURL, []byte("rubygems-replication\x00"+actor+"\x00"+kind+"\x00"+key)).String(), PlanDigest: d, SourceRepositoryID: p.SourceRepositoryID, TargetRepositoryID: p.TargetRepositoryID, Actor: actor, ActorKind: kind, CredentialID: credential, UserID: subject.UserID, SessionID: subject.SessionID, SessionVersion: subject.SessionVersion, ValidUntil: subject.ValidUntil}

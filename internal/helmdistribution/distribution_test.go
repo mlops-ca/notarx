@@ -53,6 +53,12 @@ func TestHelmReplicationCanonicalPlanIdentityAndBounds(t *testing.T) {
 	if _, err = dist.NewJob(p, "service-account:"+uuid.NewString(), "service_account_credential", "", "key"); !errors.Is(err, dist.ErrInvalid) {
 		t.Fatal("service actor without revocable credential accepted")
 	}
+	if _, err = dist.NewJob(p, "user:", "oidc", "", "key"); !errors.Is(err, dist.ErrInvalid) {
+		t.Fatal("malformed user actor accepted")
+	}
+	if _, err = dist.NewJob(p, "api-key:not-a-uuid", "api_key", "", "key"); !errors.Is(err, dist.ErrInvalid) {
+		t.Fatal("malformed api key actor accepted")
+	}
 	if _, err = dist.NewJob(p, "service-account:"+uuid.NewString(), "workload_federation", "", "key"); !errors.Is(err, dist.ErrInvalid) {
 		t.Fatal("workload actor without a trust policy accepted")
 	}
