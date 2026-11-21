@@ -13,7 +13,7 @@ import {
 import type { ListUsersData, ListUsersResponse, User } from "../../client";
 import { unwrap } from "../../lib/query/client";
 import { accessKeys, identityKeys } from "../../lib/query/keys";
-import { pickOidcProvider } from "../settings/settingsQueries";
+import { pickOidcProvider } from "../settings/providers/providerQueries";
 
 export type UserListQuery = NonNullable<ListUsersData["query"]>;
 

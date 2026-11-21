@@ -407,6 +407,8 @@ export const users = {
   limit: 50,
 } satisfies ListUsersResponses[200];
 
+export const userGroups = { items: [], limit: 100 };
+
 export const identityProviders = {
   items: [],
 } satisfies ListIdentityProvidersResponses[200];

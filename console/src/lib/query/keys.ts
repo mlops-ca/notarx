@@ -56,6 +56,9 @@ export const identityKeys = {
       "assertion-audiences",
     ] as const,
   users: () => [...identityKeys.all, "users"] as const,
+  userGroups: () => [...identityKeys.all, "user-groups"] as const,
+  userGroupMembers: (groupId: string) =>
+    [...identityKeys.all, "user-groups", groupId, "members"] as const,
   userSessions: (userId: string) =>
     [...identityKeys.all, "user-sessions", userId] as const,
   userIdentities: (userId: string) =>
@@ -78,8 +81,9 @@ export const accessKeys = {
   repositoryGrants: (repositoryId: string) =>
     [...accessKeys.all, "repository-grants", repositoryId] as const,
   /** Single 200-item pages used to choose principals and repositories. */
-  directory: (source: "users" | "service-accounts" | "repositories") =>
-    [...accessKeys.all, "directory", source] as const,
+  directory: (
+    source: "users" | "service-accounts" | "repositories" | "user-groups",
+  ) => [...accessKeys.all, "directory", source] as const,
   /** One submitted effective-access evaluation. */
   evaluation: (
     repositoryId: string,
@@ -123,10 +127,14 @@ export const auditKeys = {
   retentionJobs: () => [...auditKeys.all, "retention-jobs"] as const,
 };
 
+/** The enabled providers of the sign-in page (GET /auth/idp), cached apart from the admin registry. */
+export const authKeys = {
+  identityProviders: () => ["auth", "identity-providers"] as const,
+};
+
 export const settingsKeys = {
   all: ["settings"] as const,
   identityProviders: () => [...settingsKeys.all, "identity-providers"] as const,
-  samlProviders: () => [...settingsKeys.all, "saml-providers"] as const,
   security: () => [...settingsKeys.all, "security"] as const,
 };
 

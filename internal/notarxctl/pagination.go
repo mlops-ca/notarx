@@ -1,6 +1,7 @@
 package notarxctl
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"flag"
@@ -43,9 +44,11 @@ type cursorList[T any] struct {
 	scope   func(raw json.RawMessage) map[string]any
 
 	pageSize int
-	maxPages int
-	cursor   string
-	all      bool
+	// sizeParam names the page size query parameter; empty means pageSize.
+	sizeParam string
+	maxPages  int
+	cursor    string
+	all       bool
 }
 
 func (l *cursorList[T]) setFlags(fs *flag.FlagSet) {
@@ -91,7 +94,7 @@ func (l *cursorList[T]) run(ctx context.Context, env *commandContext) error {
 		for key, values := range filters {
 			query[key] = values
 		}
-		query.Set("pageSize", strconv.Itoa(l.pageSize))
+		query.Set(cmp.Or(l.sizeParam, "pageSize"), strconv.Itoa(l.pageSize))
 		if next != "" {
 			query.Set("pageToken", next)
 		}

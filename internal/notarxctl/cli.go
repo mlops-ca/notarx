@@ -564,6 +564,8 @@ var groupSynopses = map[string]string{
 	"overview":              "request and capacity overview",
 	"runtime":               "Gateway runtime processes",
 	"group members":         "list or replace a Group's members",
+	"user-group":            "list, inspect, create, rename, flag with a global role, and delete user groups (sets of accounts that grants can name)",
+	"user-group member":     "list, add, and remove the members of a user group",
 	"quota-alert":           "repository quota alert rules and their events",
 	"publish":               "publish Raw files and Maven coordinates with verified digests",
 	"role":                  "read authorization roles",

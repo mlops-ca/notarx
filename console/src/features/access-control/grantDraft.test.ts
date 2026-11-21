@@ -9,6 +9,7 @@ import {
   grantRowKey,
   permissionSelection,
   principalEditorKind,
+  principalOptions,
   scopesForLevel,
   scopesForRole,
   type DraftGrant,
@@ -211,5 +212,30 @@ describe("grantRowKey", () => {
     expect(grantRowKey("repo-1", "user:alice", "releases/")).not.toBe(
       grantRowKey("repo-2", "user:alice", "releases/"),
     );
+  });
+});
+
+describe("user group principals", () => {
+  it("names a group as group:<id> and reads it back as a group", () => {
+    const id = "00000000-0000-4000-8000-000000000001";
+    const options = principalOptions([], [], [], text, [
+      {
+        id,
+        displayName: "release-managers",
+        source: "local",
+        globalRole: "member",
+        version: "v1",
+        createdAt: "2026-11-01T00:00:00Z",
+        updatedAt: "2026-11-01T00:00:00Z",
+      },
+    ]);
+    expect(options).toEqual([
+      {
+        value: `group:${id}`,
+        label: "User group · release-managers",
+        detail: "Global role member",
+      },
+    ]);
+    expect(principalEditorKind(`group:${id}`)).toBe("group");
   });
 });

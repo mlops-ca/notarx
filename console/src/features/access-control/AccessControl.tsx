@@ -154,6 +154,7 @@ export function AccessControlPage() {
                     users={users}
                     apiKeys={apiKeys}
                     serviceAccounts={serviceAccounts}
+                    userGroups={directory.userGroups}
                     repositories={directory.repositories}
                     directoryError={directory.error}
                     onRetry={() => {

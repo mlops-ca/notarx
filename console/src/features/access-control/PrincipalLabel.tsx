@@ -18,11 +18,13 @@ export function Principal({ value }: { value: string }) {
       </div>
     );
   }
-  const kind = value.startsWith("service-account:")
-    ? t("access.serviceAccount")
-    : value.startsWith("api-key:")
-      ? "API Key"
-      : null;
+  const kind = value.startsWith("group:")
+    ? t("userGroups.principalGroup")
+    : value.startsWith("service-account:")
+      ? t("access.serviceAccount")
+      : value.startsWith("api-key:")
+        ? "API Key"
+        : null;
   if (!kind) {
     return (
       <div>

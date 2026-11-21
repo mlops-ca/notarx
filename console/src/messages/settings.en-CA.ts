@@ -1,111 +1,6 @@
 export const settingsEnCA = {
-  "settings.requiredWhenOIDCIsEnabled": "Required when OIDC is enabled",
-  "settings.clientIDAndRedirectURLMustBeConfigured":
-    "Client ID and Redirect URL must be configured together",
-  "settings.clientIDIsRequiredWhenAClientSecret":
-    "Client ID is required when a client secret is configured",
-  "settings.providerConnection": "Provider connection",
-  "settings.forExampleAKeycloakRealmOrGitLabOIDC":
-    "For example, a Keycloak realm or GitLab OIDC issuer.",
-  "settings.aPIAudience": "API audience",
-  "settings.redirectURL": "Redirect URL",
-  "settings.leaveEmptyToUseProviderDiscovery":
-    "Leave empty to use provider discovery.",
-  "settings.discoveredAutomatically": "Discovered automatically",
-  "settings.roleMapping": "Role mapping",
-  "settings.supportsCommonKeycloakRealmClientRolesTopLevel":
-    "Supports common Keycloak realm/client roles, top-level roles, and groups claims. A matched admin mapping makes the account an administrator; a matched member mapping approves it without repository access, which always comes from per-repository grants. Admin wins when both match.",
-  "settings.administratorSubjectAllowlist": "Administrator subject allowlist",
-  "settings.useOnlyForAccountsThatRequireAdministratorAccess":
-    "Use only for accounts that require administrator access by stable sub claim.",
-  "settings.unlinkedIdentities": "Unlinked identities",
-  "settings.whenDisabledOnlyAdministratorLinkedIdentitiesCanEnter":
-    "When disabled, only administrator-linked identities can enter local accounts. JIT creates an account on first sign-in.",
-  "settings.keepExternalPrincipal": "Keep external principal",
-  "settings.provisionOnFirstSignIn": "Provision on first sign-in",
-  "settings.jITDefaultRole": "JIT default role",
-  "settings.usedOnlyWhenNoExternalRoleMappingMatches":
-    "Used only when no external role mapping matches; none registers new users without access, member registers them with no repository access until granted.",
-  "settings.noneAwaitingApproval": "none · awaiting approval",
-  "settings.memberNoRepositoryAccess": "member · no repository access",
-  "settings.verifiedEmailLinking": "Verified email linking",
-  "settings.onlyEmailVerifiedTrueClaimsAreUsedMultiple":
-    "Only email_verified=true claims are used; multiple matching accounts reject sign-in.",
-  "settings.on": "On",
-  "settings.off": "Off",
-  "settings.enterpriseIdentityProvider": "Enterprise identity provider",
-  "settings.usesAuthorizationCodePKCESessionsRetainOnlyThe":
-    "Uses Authorization Code + PKCE; sessions retain only the validated bounded identity.",
-  "settings.on2": "On",
-  "settings.off2": "Off",
-  "settings.clientCredentials": "Client credentials",
-  "settings.theCurrentSecretWillBeRemovedOnSave":
-    "The current secret will be removed on save. Enter a new value to replace it.",
-  "settings.configuredLeaveEmptyToRetainTheCurrentSecret":
-    "Configured. Leave empty to retain the current secret.",
-  "settings.publicPKCEClientsMayOmitASecret":
-    "Public PKCE clients may omit a secret.",
-  "settings.keepExistingSecret": "Keep existing secret",
-  "settings.optional": "Optional",
-  "settings.undoRemoval": "Undo removal",
-  "settings.removeClientSecret": "Remove client secret?",
-  "settings.theSecretIsNotRemovedUntilSettingsAre":
-    "The secret is not removed until settings are saved.",
-  "settings.markForRemoval": "Mark for removal",
   "settings.cancel": "Cancel",
-  "settings.removeSecret": "Remove secret",
-  "settings.pendingSave": "Pending save",
-  "settings.encryptedAtRest": "Encrypted at rest",
-  "settings.effectiveContext": "Effective context",
-  "settings.source": "Source",
-  "settings.version": "Version",
-  "settings.otherNodes": "Other nodes",
-  "settings.convergeWithin5s": "Converge within 5s",
-  "settings.existingSessions": "Existing sessions",
-  "settings.remainValidUntilLogoutOrExpiry":
-    "Remain valid until logout or expiry",
-  "settings.currentCallback": "Current callback: ",
-  "settings.testSavedSettings": "Test saved settings",
   "settings.saveAndApply": "Save and apply",
-  "settings.settingsSynchronized": "Settings synchronized",
-  "settings.failedToLoadAuthenticationSettings":
-    "Failed to load authentication settings",
-  "settings.failedToSaveAuthenticationSettings":
-    "Failed to save authentication settings",
-  "settings.settingsSavedAndActiveOnThisNode":
-    "Settings saved and active on this node",
-  "settings.identityProviderConnectionFailed":
-    "Identity provider connection failed",
-  "settings.authentication": "Authentication",
-  "settings.runtimeSettings": "Runtime settings",
-  "settings.configureAnExternalOIDCProviderBrowserSignIn":
-    "Configure an external OIDC provider, browser sign-in, and role mapping",
-  "settings.runtimeStatus": "Runtime status",
-  "settings.enabled": "Enabled",
-  "settings.disabled": "Disabled",
-  "settings.configurationSource": "Configuration source",
-  "settings.version2": "Version {version}",
-  "settings.versionUnknown": "Version unknown",
-  "settings.clientSecret": "Client secret",
-  "settings.configured": "Configured",
-  "settings.notConfigured": "Not configured",
-  "settings.neverReturnedByTheAPI": "Never returned by the API",
-  "settings.samlProviders": "SAML providers",
-  "settings.samlProvidersDescription":
-    "Register the service provider details below at each identity provider. The pinned signing certificates verify sign-in responses; add a new certificate as next before the identity provider cuts over.",
-  "settings.samlMetadataURL": "Service provider metadata URL",
-  "settings.samlAssertionConsumerURL": "Assertion consumer service URL",
-  "settings.samlPinnedCertificates": "Pinned signing certificates",
-  "settings.samlNoCertificates": "No certificate is pinned yet.",
-  "settings.samlCertificateActive": "Active",
-  "settings.samlCertificateNext": "Next (rollover)",
-  "settings.samlCertificateExpires": "Expires {date}",
-  "settings.samlCertificateExpiresSoon":
-    "A certificate of {name} expires in {days} days ({date}). Add the new certificate before the identity provider cuts over.",
-  "settings.samlCertificateExpired":
-    "A certificate of {name} expired on {date}. Remove it or replace it with the current one.",
-  "settings.samlServiceProviderKeys":
-    "Service provider signing keys published: {count}",
   "settings.authorizationCache": "Authorization cache",
   "settings.authorizationCacheDescription":
     "Each node caches API keys and service-account state in memory. A revoked API key, a disabled service account or a revoked service-account credential is effective on every node within this window, even when a change notification is lost.",
@@ -115,10 +10,6 @@ export const settingsEnCA = {
     "Caching disabled: effective immediately",
   "settings.authorizationCacheRegulatedProfile":
     "Regulated profile: set NOTARX_AUTHZ_CACHE_TTL=1s, or 0 where no staleness is acceptable, at the cost of more database queries per request. The setting changes only by restarting the node.",
-  "settings.lastUpdated": "Last updated",
-  "settings.notPersisted": "Not persisted",
-  "settings.databaseSettingsAreShared": "Database settings are shared",
-  "settings.connectionSucceededInMs": "Connection succeeded in {latencyMs} ms",
   "settings.brandPreview": "Brand preview",
   "settings.livePreview": "Live preview",
   "settings.untitledSite": "Untitled site",

@@ -60,6 +60,20 @@ export function IdentitySummary({ identity }: { identity: CurrentIdentity }) {
             ),
           },
           {
+            key: "groups",
+            label: t("userGroups.identityGroups"),
+            children:
+              identity.groupIds && identity.groupIds.length > 0 ? (
+                <span className="font-mono text-xs text-fg">
+                  {identity.groupIds.join(", ")}
+                </span>
+              ) : (
+                <span className="text-xs text-fg-tertiary">
+                  {t("userGroups.identityNoGroups")}
+                </span>
+              ),
+          },
+          {
             key: "administrator",
             label: t("identity.administrator2"),
             children: identity.administrator ? (

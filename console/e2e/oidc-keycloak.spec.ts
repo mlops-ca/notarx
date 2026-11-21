@@ -55,12 +55,10 @@ test.describe("Keycloak OIDC browser sign-in", () => {
 
     await page.goto("/identity-providers");
     await expect(
-      page.getByRole("heading", { name: /Authentication|Authentication/ }),
+      page.getByRole("heading", { name: "Identity providers" }),
     ).toBeVisible();
     await expect(
-      page
-        .getByText(/Runtime settings|Runtime settings/, { exact: true })
-        .first(),
+      page.getByRole("row", { name: /default/ }).first(),
     ).toBeVisible();
 
     await page.getByRole("button", { name: /Sign out|Sign out/ }).click();

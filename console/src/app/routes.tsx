@@ -14,6 +14,7 @@ import {
   SyncOutlined,
   TeamOutlined,
   UserOutlined,
+  UsergroupAddOutlined,
 } from "@ant-design/icons";
 import type { ComponentType, ReactNode } from "react";
 import type { MessageKey } from "../messages";
@@ -166,8 +167,8 @@ export const consoleRoutes: readonly ConsoleRoute[] = [
     path: "/identity-providers",
     access: "admin",
     lazy: async () => ({
-      Component: (await import("../features/settings/Authentication"))
-        .AuthenticationPage,
+      Component: (await import("../features/settings/IdentityProviders"))
+        .IdentityProvidersPage,
     }),
     nav: {
       label: "nav.authentication",
@@ -229,6 +230,19 @@ export const consoleRoutes: readonly ConsoleRoute[] = [
       Component: (await import("../features/identity/Users")).UsersPage,
     }),
     nav: { label: "nav.users", icon: <UserOutlined />, group: "management" },
+  },
+  {
+    path: "/user-groups",
+    access: "admin",
+    lazy: async () => ({
+      Component: (await import("../features/identity/userGroups/UserGroups"))
+        .UserGroupsPage,
+    }),
+    nav: {
+      label: "nav.userGroups",
+      icon: <UsergroupAddOutlined />,
+      group: "management",
+    },
   },
 ];
 

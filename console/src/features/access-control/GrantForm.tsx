@@ -107,6 +107,15 @@ export function GrantForm({
                     })),
                 },
                 {
+                  label: t("userGroups.principalGroups"),
+                  options: principalOptions
+                    .filter((choice) => choice.value.startsWith("group:"))
+                    .map((choice) => ({
+                      value: choice.value,
+                      label: `${choice.label} · ${choice.detail}`,
+                    })),
+                },
+                {
                   label: "API Keys",
                   options: principalOptions
                     .filter((choice) => choice.value.startsWith("api-key:"))

@@ -6,6 +6,7 @@ import type {
   Repository,
   ServiceAccount,
   User,
+  UserGroup,
 } from "../../client";
 import type { BadgeTone } from "../../components/ui/Badge";
 import {
@@ -41,10 +42,12 @@ export interface PrincipalOption {
   detail: string;
 }
 
-type PrincipalKind = "user" | "api-key" | "service-account" | "custom";
+type PrincipalKind =
+  "user" | "group" | "api-key" | "service-account" | "custom";
 
 function principalKind(principal: string): PrincipalKind {
   if (principal.startsWith("user:")) return "user";
+  if (principal.startsWith("group:")) return "group";
   if (principal.startsWith("api-key:")) return "api-key";
   if (principal.startsWith("service-account:")) return "service-account";
   return "custom";
@@ -131,6 +134,7 @@ export function principalOptions(
   apiKeys: ApiKey[],
   serviceAccounts: ServiceAccount[],
   t: Translate,
+  userGroups: UserGroup[] = [],
 ): PrincipalOption[] {
   return [
     ...users.filter(isActiveUserPrincipal).map((user) => ({
@@ -152,5 +156,10 @@ export function principalOptions(
         label: `${t("access.serviceAccount")} · ${account.name}`,
         detail: t("access.noGlobalRoleRepositoryGrantsDecideAccess"),
       })),
+    ...userGroups.map((group) => ({
+      value: `group:${group.id}`,
+      label: `${t("userGroups.principalGroup")} · ${group.displayName}`,
+      detail: `${t("access.globalRole")} ${group.globalRole}`,
+    })),
   ];
 }

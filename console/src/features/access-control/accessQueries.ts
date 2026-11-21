@@ -13,6 +13,7 @@ import {
   listRepositories,
   listRepositoryGrants,
   listServiceAccounts,
+  listUserGroups,
   listUsers,
   replacePublicAccessPolicy,
 } from "../../client";
@@ -146,7 +147,14 @@ export function usePrincipalDirectory({ enabled = true } = {}) {
     staleTime: ALWAYS_REVALIDATE,
     enabled,
   });
-  return { users, apiKeys, serviceAccounts };
+  const userGroups = useQuery({
+    queryKey: accessKeys.directory("user-groups"),
+    queryFn: ({ signal }) =>
+      unwrap(listUserGroups({ query: { limit: 200 }, signal })),
+    staleTime: ALWAYS_REVALIDATE,
+    enabled,
+  });
+  return { users, apiKeys, serviceAccounts, userGroups };
 }
 
 /**
@@ -154,7 +162,8 @@ export function usePrincipalDirectory({ enabled = true } = {}) {
  * repositories are required; service accounts degrade to a notice.
  */
 export function useAccessDirectory() {
-  const { users, apiKeys, serviceAccounts } = usePrincipalDirectory();
+  const { users, apiKeys, serviceAccounts, userGroups } =
+    usePrincipalDirectory();
   const repositories = useAccessRepositories({ activeOnly: true });
 
   const required = [users, apiKeys, repositories];
@@ -162,12 +171,14 @@ export function useAccessDirectory() {
     users: users.data?.items ?? [],
     apiKeys: apiKeys.data?.items ?? [],
     serviceAccounts: serviceAccounts.data?.items ?? [],
+    userGroups: userGroups.data?.items ?? [],
     repositories: repositories.data?.items ?? [],
     repositoryError: repositories.error,
     recoveryKeys: [
       users.data,
       apiKeys.data,
       serviceAccounts.data,
+      userGroups.data,
       repositories.data,
     ],
     loading: required.some((query) => query.isPending),
@@ -175,7 +186,7 @@ export function useAccessDirectory() {
     serviceAccountsError: serviceAccounts.error ?? null,
     retry: () =>
       refetchAccessSources(
-        [...required, serviceAccounts].map((query) =>
+        [...required, serviceAccounts, userGroups].map((query) =>
           query.refetch({ throwOnError: true }),
         ),
       ),

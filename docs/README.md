@@ -119,6 +119,7 @@ agree with executable tests and the
 - [Anonymous access operations](anonymous-access-operations.md) — default-deny global, Group, and Repository gates.
 - [Local user governance](user-governance.md) — accounts, sessions, lockout, OIDC linkage, and audit.
 - [OIDC browser SSO](oidc-sso.md) — Code + PKCE, runtime configuration, role mapping, and session behaviour.
+- [Identity provider setup guides](identity-provider-guides.md) — Entra ID, Okta and Keycloak over OIDC and SAML, SAML configuration keys, key rotation, Single Logout and groups-overage notes.
 - [SAML browser SSO](saml-sso.md) — SP-initiated Web SSO, metadata import, certificate rollover, signing keys and the response checks.
 - [Keycloak on Kubernetes](oidc-keycloak-k8s.md) — real browser callback acceptance.
 - [Repository Grant authorization](repository-grant-authorization-plan.md) — scoped runtime decisions and rollout.

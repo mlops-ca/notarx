@@ -784,6 +784,33 @@ grants; applying a template remains a separate, explicit operation.
   retried. Enabling needs `--yes`, because it applies to every repository
   and Group that allows anonymous reads.
 
+### User groups
+
+A user group is a set of accounts that a repository grant can name as the
+principal `group:ID` (ADR 0018). The command is `user-group` because `group`
+already manages repository Groups. Every command needs an active platform
+administrator.
+
+- `notarxctl user-group list|show ID` read groups; `list` pages like the other
+  collections (`--page-size`, `--cursor`, `--all`).
+- `notarxctl user-group create NAME` makes a local group, or with
+  `--source claims --provider ID --external-id VALUE` a group that a login's
+  `groups` claim fills. SCIM groups are made by the SCIM server only. A new
+  group has global role `none`.
+- `notarxctl user-group rename ID NAME` and `user-group set-role ID --role
+  none|member|admin` send the version they just read as `If-Match` (or
+  `--if-match VERSION`); a stale version exits 7 and nothing is overwritten.
+  Setting `admin` raises every member to platform administrator and needs
+  `--yes`.
+- `notarxctl user-group delete ID --yes` deletes the group and its memberships.
+- `notarxctl user-group member list ID` lists members; `member add ID USER_ID`
+  and `member remove ID USER_ID --yes` change them. Repeating either exits 0
+  with `data.changed: false`.
+
+The writes are not retried automatically; an uncertain one returns
+`data.outcome: "unknown"` with the read-back command. `--dry-run` shows the
+request without sending it.
+
 ### Least-privilege service-account check
 
 Use an existing active service account and its credential: credential issuance

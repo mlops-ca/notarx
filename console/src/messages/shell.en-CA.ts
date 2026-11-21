@@ -45,6 +45,7 @@ export const shellEnCA = {
   "nav.apiKeys": "API Keys",
   "nav.serviceAccounts": "Service Accounts",
   "nav.users": "Users",
+  "nav.userGroups": "User Groups",
   "nav.authentication": "Authentication",
   "nav.siteSettings": "Site Settings",
   "nav.workloadIdentity": "Workload Identity",
