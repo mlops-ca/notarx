@@ -34,7 +34,7 @@ func TestRegistryIsValidAndHasNoProvenanceTables(t *testing.T) {
 			t.Errorf("%s holds provenance or aggregates and must not be pruned", table)
 		}
 	}
-	for _, table := range []string{"lifecycle_jobs", "webhook_deliveries", "user_sessions", "runtime_node_sessions", "scheduled_task_runs", "cache_tasks", "audit_cleanup_jobs", "replication_plans", "replication_checkpoints", "nexus_migration_entries", "email_test_deliveries", "repository_quota_alert_events", "repository_request_rollup", "hosted_repository_idempotency", "security_audit_log", "resolver_audit_log", "artifact_scan_history"} {
+	for _, table := range []string{"lifecycle_jobs", "webhook_deliveries", "user_sessions", "runtime_node_sessions", "scheduled_task_runs", "cache_tasks", "audit_cleanup_jobs", "replication_plans", "replication_checkpoints", "nexus_migration_entries", "email_test_deliveries", "repository_quota_alert_events", "repository_request_rollup", "hosted_repository_idempotency", "security_audit_log", "resolver_audit_log", "artifact_scan_history", "domain_events"} {
 		if !tables[table] {
 			t.Errorf("registry is missing %s", table)
 		}
@@ -46,11 +46,12 @@ func TestProfileDefaults(t *testing.T) {
 	free.Profile = FreeTier
 	want := map[string][2]time.Duration{
 		"resolver_audit_log":               {90 * day, 7 * day},
+		"domain_events":                    {14 * day, 3 * day},
 		"security_audit_log":               {730 * day, 90 * day},
 		"artifact_scan_history":            {180 * day, 180 * day},
 		"repository_request_rollup":        {400 * day, 400 * day},
 		"webhook_deliveries_succeeded":     {14 * day, 3 * day},
-		"webhook_deliveries_dead":          {90 * day, 30 * day},
+		"webhook_deliveries_dead":          {14 * day, 3 * day},
 		"lifecycle_jobs_done":              {7 * day, 1 * day},
 		"lifecycle_jobs_failed":            {30 * day, 7 * day},
 		"replication_plans":                {30 * day, 7 * day},

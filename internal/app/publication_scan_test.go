@@ -9,8 +9,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/scanning"
@@ -382,5 +384,53 @@ func TestPublicationScanSchedulerSkipsRepositoriesWithoutEnabledCapability(t *te
 				t.Fatalf("scan jobs = %d, want 0", len(jobs))
 			}
 		})
+	}
+}
+
+func TestPublicationScanSchedulerConsumesPublishedEvents(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: "raw-events", Name: "raw-events", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scheduler := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, nil)
+	consumer := scheduler.Consumer()
+	if consumer.Name != PublicationScanConsumer || len(consumer.Types) != 1 || consumer.Types[0] != events.ArtifactPublished {
+		t.Fatalf("consumer = %+v", consumer)
+	}
+	digest := testScanDigest("event publication")
+	published := events.Event{Type: events.ArtifactPublished, RepositoryID: repo.ID, Format: "raw", Coordinate: "releases/a.tgz", Digest: digest, Payload: []byte(`{"actor":"publisher"}`)}
+
+	// autoScanOnPublish is off by default: the event is consumed and nothing is scheduled.
+	if err = consumer.Handler.HandleEvent(ctx, published); err != nil {
+		t.Fatal(err)
+	}
+	if jobs, _ := store.ListLifecycleJobs(ctx, repo.ID, 10); len(jobs) != 0 {
+		t.Fatalf("scan scheduled with autoScanOnPublish off: %v", jobs)
+	}
+	enablePublicationScan(t, store, repo.ID)
+	for range 2 {
+		if err = consumer.Handler.HandleEvent(ctx, published); err != nil {
+			t.Fatal(err)
+		}
+	}
+	requirePublicationScan(t, store, repo.ID, repository.FormatRaw, "releases/a.tgz", digest)
+	if jobs, _ := store.ListLifecycleJobs(ctx, repo.ID, 10); len(jobs) != 1 {
+		t.Fatalf("re-delivery of an event enqueued %d scans", len(jobs))
+	}
+	// Other types are ignored; a missing repository is skipped for good rather than retried.
+	if err = consumer.Handler.HandleEvent(ctx, events.Event{Type: events.ArtifactReleased}); err != nil {
+		t.Fatal(err)
+	}
+	missing := published
+	missing.RepositoryID = "gone"
+	err = consumer.Handler.HandleEvent(ctx, missing)
+	if err == nil || !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("missing repository error = %v", err)
+	}
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{consumer}}
+	if _, err = dispatcher.RunOnce(ctx); err != nil {
+		t.Fatal(err)
 	}
 }

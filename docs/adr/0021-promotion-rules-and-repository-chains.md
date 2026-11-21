@@ -174,6 +174,21 @@ transaction that persists the vulnerability summary.
 `publicationScanScheduler` becomes an event consumer instead of a
 post-commit call site.
 
+Slice 1a implementation decisions. The subscription set is not cached: `events.Emit`
+calls the database function `emit_domain_event`, which reads the (tiny, administrator-managed)
+`webhook_subscriptions` table in the same statement that inserts the event, so the gate and
+the delivery fan-out see one consistent set and a new subscription never misses an event; the
+`internal/readcache` rule set is used by the evaluator slice, where the set is large. The
+Cargo triggers call the same function, so there is one emission rule. Internal consumers
+(`events.Dispatcher`) read the log by `(occurred_at, seq)` from a per-consumer row in
+`domain_event_cursors`, ignore events younger than five seconds so a transaction that commits
+late is not skipped, start at the present when they have no cursor, and are at least once.
+`webhook_deliveries` carries `event_occurred_at` so its join to `domain_events` is pruned to one
+partition, and its terminal rows are pruned on the event retention (14 d, 3 d free tier) because a
+delivery cannot be shown or replayed once its event is gone. `artifact.scan.completed` carries
+`newFindings` as a count of distinct unsuppressed vulnerability ids that the previous result did
+not have.
+
 ### Rules
 
 ```

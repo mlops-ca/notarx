@@ -499,6 +499,38 @@ tables:
       console_theme_packages_id_valid: (id ~ '^[a-z0-9][a-z0-9-]{1,63}$'::text)
       console_theme_packages_payload_object: (jsonb_typeof(payload) = 'object'::text)
       console_theme_packages_version_check: (version > 0)
+  domain_event_cursors:
+    columns:
+      consumer: text
+      occurred_at: timestamp
+      seq: int64
+      updated_at: timestamp
+    primaryKey: [consumer]
+    defaults:
+      updated_at: now()
+  domain_events:
+    columns:
+      coordinate: text?
+      dedupe_key: text
+      digest: text?
+      format: text?
+      id: uuid
+      occurred_at: timestamp
+      payload: json
+      repository_id: uuid?
+      seq: int64
+      type: text
+    primaryKey: [occurred_at, seq]
+    partitioned: true
+    defaults:
+      occurred_at: now()
+      payload: '''{}'''
+      seq: identity
+    indexes:
+      - dedupe_key,occurred_at
+      - id,occurred_at
+    checks:
+      domain_events_payload_check: (jsonb_typeof(payload) = 'object'::text)
   email_targets:
     columns:
       created_at: timestamp
@@ -4095,6 +4127,7 @@ tables:
       created_at: timestamp
       delivered_at: timestamp?
       event_id: uuid
+      event_occurred_at: timestamp
       id: uuid
       last_error: text
       last_status: int32?
@@ -4108,7 +4141,6 @@ tables:
     primaryKey: [id]
     unique: [[event_id, subscription_id]]
     foreignKeys:
-      - event_id -> webhook_events(id) on delete cascade
       - subscription_id -> webhook_subscriptions(id) on delete cascade
     defaults:
       attempts: "0"
@@ -4130,19 +4162,6 @@ tables:
       webhook_deliveries_last_error_check: (length(last_error) <= 1024)
       webhook_deliveries_last_status_check: ((last_status IS NULL) OR ((last_status >= 100) AND (last_status <= 599)))
       webhook_deliveries_state_check: (state = ANY (ARRAY['pending'::text, 'delivering'::text, 'retrying'::text, 'succeeded'::text, 'dead'::text]))
-  webhook_events:
-    columns:
-      created_at: timestamp
-      event_type: text
-      id: uuid
-      occurred_at: timestamp
-      payload: json
-    primaryKey: [id]
-    defaults:
-      created_at: now()
-    checks:
-      webhook_events_event_type_check: (event_type = ANY (ARRAY['artifact.quarantined'::text, 'artifact.released'::text, 'cargo.promotion.completed'::text, 'cargo.promotion.failed'::text, 'cargo.replication.completed'::text, 'cargo.replication.failed'::text]))
-      webhook_events_payload_check: (jsonb_typeof(payload) = 'object'::text)
   webhook_subscriptions:
     columns:
       created_at: timestamp

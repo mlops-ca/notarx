@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/ids"
 )
 
@@ -19,7 +20,8 @@ func artifactQuarantineWebhookEvent(value ArtifactQuarantine) WebhookEvent {
 		RepositoryID: value.RepositoryID, Format: value.Format, Coordinate: value.Coordinate,
 		Digest: value.Digest, State: value.State, Reason: value.Reason, Actor: value.UpdatedBy, Version: value.Version,
 	})
-	return WebhookEvent{ID: ids.New(), Type: eventType, OccurredAt: value.UpdatedAt, Data: data}
+	return WebhookEvent{ID: ids.New(), Type: eventType, RepositoryID: value.RepositoryID, Format: string(value.Format), Coordinate: value.Coordinate,
+		Digest: value.Digest, Version: value.Version, OccurredAt: value.UpdatedAt, Data: data}
 }
 
 func cloneWebhookSubscription(value WebhookSubscription) WebhookSubscription {
@@ -119,6 +121,9 @@ func webhookSubscriptionAccepts(value WebhookSubscription, eventType WebhookEven
 }
 
 func (s *MemoryStore) EnqueueWebhookEvent(_ context.Context, event WebhookEvent) (WebhookEvent, error) {
+	if err := event.domainEvent().Validate(); err != nil {
+		return WebhookEvent{}, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.enqueueWebhookEventLocked(event), nil
@@ -131,7 +136,22 @@ func (s *MemoryStore) enqueueWebhookEventLocked(event WebhookEvent) WebhookEvent
 	if event.OccurredAt.IsZero() {
 		event.OccurredAt = time.Now().UTC()
 	}
+	if len(event.Data) == 0 {
+		event.Data = []byte("{}")
+	}
+	subscribed := false
+	for _, subscription := range s.webhookSubscriptions {
+		subscribed = subscribed || webhookSubscriptionAccepts(subscription, event.Type)
+	}
+	if !subscribed && !events.HasInternalConsumer(event.Type) {
+		return cloneWebhookEvent(event)
+	}
 	s.webhookEvents[event.ID] = cloneWebhookEvent(event)
+	s.eventSeq++
+	if s.eventSeqs == nil {
+		s.eventSeqs = map[string]int64{}
+	}
+	s.eventSeqs[event.ID] = s.eventSeq
 	for _, subscription := range s.webhookSubscriptions {
 		if !webhookSubscriptionAccepts(subscription, event.Type) {
 			continue

@@ -7,7 +7,7 @@ import (
 
 func TestDefaultRegistryMatchesADR(t *testing.T) {
 	registry := DefaultRegistry()
-	if len(registry) != 3 {
+	if len(registry) != 4 {
 		t.Fatalf("registry = %+v", registry)
 	}
 	type expectation struct {
@@ -18,6 +18,7 @@ func TestDefaultRegistryMatchesADR(t *testing.T) {
 		"resolver_audit_log":    {"occurred_at", 90 * 24 * time.Hour},
 		"security_audit_log":    {"occurred_at", 730 * 24 * time.Hour},
 		"artifact_scan_history": {"scanned_at", 180 * 24 * time.Hour},
+		"domain_events":         {"occurred_at", 14 * 24 * time.Hour},
 	}
 	for _, spec := range registry {
 		if err := spec.Validate(); err != nil {

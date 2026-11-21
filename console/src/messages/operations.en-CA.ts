@@ -121,7 +121,7 @@ export const operationsEnCA = {
     "Production delivery rejects private, loopback, and redirect targets.",
   "operations.events": "Events",
   "operations.supportsArtifactQuarantineAndReleasePlusFinalCargo":
-    "Supports artifact quarantine and release, plus final Cargo promotion and replication outcomes.",
+    "Supports publication, scan, quarantine, release, promotion and replication events.",
   "operations.hMACSigningSecret": "HMAC signing secret",
   "operations.leaveBlankToKeepTheCurrentSecretEntering":
     "Leave blank to keep the current secret; entering one rotates it immediately.",

@@ -6,39 +6,76 @@ Status: normative contract for durable operational webhook delivery.
 
 ## Event Catalog
 
-Security-governance events:
+Every event is a row of the `domain_events` log (ADR 0021), written in the same
+database transaction as the state change that causes it, together with one
+delivery per matching enabled subscription. No audit-log poller reconstructs
+events after the fact. `format` is a payload field: every format emits the same
+set of types.
 
-- `artifact.quarantined`
-- `artifact.released`
+| Type | Emitted when |
+| --- | --- |
+| `artifact.published` | a publication of a digest becomes visible |
+| `artifact.scan.completed` | a scan result replaces the vulnerability summary of a digest |
+| `artifact.quarantined` | an Artifact enters quarantine |
+| `artifact.released` | an Artifact is released from quarantine |
+| `artifact.promoted` | a promotion completes |
+| `promotion.pending_approval` | a promotion waits for approval |
+| `promotion.approved` | a pending promotion is approved |
+| `promotion.rejected` | a pending promotion is rejected |
+| `promotion.failed` | a promotion reaches its final failed state |
+| `replication.completed` | a replication plan completes |
+| `replication.failed` | a replication plan reaches its final failed state |
+| `repository.visibility_changed` | a repository changes visibility; payload `{repositoryId, from, to, groups}` |
 
-The Artifact Quarantine state transition, immutable event, and one delivery
-per matching enabled subscription commit in the same database transaction.
-No audit-log poller is allowed to reconstruct these events after the fact.
+The Cargo-specific names (`cargo.promotion.*`, `cargo.replication.*`) no longer
+exist. Today the database emits `artifact.promoted`, `promotion.failed`,
+`replication.completed` and `replication.failed` for Cargo with `format`
+`cargo`, and `artifact.quarantined` and `artifact.released` for every format;
+the remaining types are emitted by the slices of ADR 0021 that own their state
+changes, and a subscription may already list them.
 
-Each event carries a stable UUID and this immutable data:
+Each event carries a stable UUIDv7, the repository id, format, coordinate and
+digest when it has them, a type-specific `version` that forms its dedupe key
+`type|repository|coordinate|digest|version`, and an immutable payload:
 
-- Repository ID and format
-- canonical Artifact coordinate and digest
-- quarantine state, reason, actor, and version
-- event occurrence time
+- `version` is the scan result id for `artifact.scan.completed` (so a re-scan
+  is a new event), the transition version for quarantine and release, the
+  operation id for promotion and replication events (a replication plan adds its
+  attempt count, because an explicit replay is a new run), and empty for
+  `artifact.published`.
+- `artifact.quarantined` and `artifact.released` carry the repository ID and
+  format, the canonical coordinate and digest, the quarantine state, reason,
+  actor and version.
+- `artifact.scan.completed` carries `{repositoryId, format, digest, previous,
+  current, newFindings}`. `current` and `previous` (null for the first scan of
+  the digest) are summaries `{id, status, critical, high, medium, low, unknown,
+  scannedAt}`; `newFindings` counts the distinct unsuppressed vulnerability ids
+  of `current` that `previous` did not have.
+- Cargo operation events carry `operationId`, `kind` (`promotion` or
+  `replication`), `format` (`cargo`), `sourceRepositoryId`,
+  `targetRepositoryId`, `coordinate` (`crate@version`), `digest`, final `state`
+  and `attempts`. They exclude raw worker error messages and credentials. They are
+  emitted only when the operation reaches its final completed or failed state: an
+  attempt scheduled for automatic retry does not emit a failure event, a parked
+  replication plan emits a failed event, and an explicit later replay can emit a
+  later outcome. An expired worker lease that exhausts attempts follows the same
+  rule.
 
-Cargo distribution events:
+The envelope `occurredAt` field records the time of the state transition.
 
-- `cargo.promotion.completed` and `cargo.promotion.failed`
-- `cargo.replication.completed` and `cargo.replication.failed`
+An event is written only when something consumes it: an enabled subscription for
+its type, or an internal consumer (the publication scan scheduler reads
+`artifact.published`). Otherwise the state change commits without an event row.
+Internal consumers read the log with a durable cursor, in order and at least once.
 
-These are emitted only when a Cargo promotion job or replication plan reaches
-its final completed or failed state. An attempt scheduled for automatic retry
-does not emit a failure event. A parked replication plan emits a failed event;
-an explicit later replay is a new run of that plan and can emit a later outcome.
-The operation state, event, and matching deliveries commit together. An
-expired worker lease that exhausts attempts follows the same rule.
+### Retention
 
-Cargo event `data` includes `operationId`, `kind` (`promotion` or
-`replication`), `format` (`cargo`), `sourceRepositoryId`,
-`targetRepositoryId`, `coordinate` (`crate@version`), `digest`, final `state`,
-and `attempts`. It excludes raw worker error messages and credentials. The
-`occurredAt` envelope field records the final state transition time.
+`domain_events` is range-partitioned monthly and a partition is dropped once it
+is entirely older than `NOTARX_EVENTS_RETENTION` (default 14 days, 3 on the
+free-tier profile). A delivery is inspectable and replayable while its event is
+kept, so `webhook_deliveries` rows are pruned on the same schedule. The table
+that records promotions (`artifact_promotions`) is the long-lived provenance
+record, not the event log.
 
 Delivery is **at least once**. Consumers must deduplicate by event ID. Ordering
 between different Artifacts or subscriptions is not guaranteed.

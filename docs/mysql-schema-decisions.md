@@ -361,6 +361,7 @@ Partitioning is PostgreSQL only (ADR 0023): the keys are the same.
 | Table | PostgreSQL | MySQL |
 | --- | --- | --- |
 | artifact_scan_history | range-partitioned | plain InnoDB table, pruned by primary-key range deletes |
+| domain_events | range-partitioned | plain InnoDB table, pruned by primary-key range deletes |
 | resolver_audit_log | range-partitioned | plain InnoDB table, pruned by primary-key range deletes |
 | security_audit_log | range-partitioned | plain InnoDB table, pruned by primary-key range deletes |
 

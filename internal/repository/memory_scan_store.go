@@ -155,6 +155,11 @@ func (s *MemoryStore) SwapScanResult(_ context.Context, result ScanResult) (Scan
 		s.scan.history = append(s.scan.history, scanHistoryEntry(result, ids.New()))
 		swap.HistoryAppended = true
 	}
+	var replaced *ScanResult
+	if existed {
+		replaced = &previous
+	}
+	s.enqueueWebhookEventLocked(scanCompletedEvent(result, replaced, s.hostedRepositories[result.RepositoryID].Format, s.newScanFindingsLocked(result, replaced)))
 	return swap, nil
 }
 
@@ -390,4 +395,23 @@ func (s *MemoryStore) ScanSBOMBody(_ context.Context, sbom ScanSBOM) ([]byte, er
 		return nil, ErrPayloadStoreUnavailable
 	}
 	return append([]byte(nil), sbom.Body...), nil
+}
+
+// newScanFindingsLocked counts the distinct unsuppressed vulnerability ids of result that previous did not have.
+func (s *MemoryStore) newScanFindingsLocked(result ScanResult, previous *ScanResult) int {
+	known := map[string]bool{}
+	if previous != nil {
+		for _, f := range s.scan.findings[previous.ID] {
+			if f.Status != "suppressed" {
+				known[f.VulnID] = true
+			}
+		}
+	}
+	fresh := map[string]bool{}
+	for _, f := range s.scan.findings[result.ID] {
+		if f.Status != "suppressed" && !known[f.VulnID] {
+			fresh[f.VulnID] = true
+		}
+	}
+	return len(fresh)
 }

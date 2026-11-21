@@ -17,6 +17,21 @@ import { usePreferences } from "../../lib/preferences";
 import { DEFAULT_FORM, type SubscriptionForm } from "./webhookModel";
 import { useInvalidateWebhooks } from "./webhookQueries";
 
+const WEBHOOK_EVENT_TYPES: WebhookEventType[] = [
+  "artifact.published",
+  "artifact.scan.completed",
+  "artifact.quarantined",
+  "artifact.released",
+  "artifact.promoted",
+  "promotion.pending_approval",
+  "promotion.approved",
+  "promotion.rejected",
+  "promotion.failed",
+  "replication.completed",
+  "replication.failed",
+  "repository.visibility_changed",
+];
+
 function formFor(subscription: WebhookSubscription | null): SubscriptionForm {
   return subscription
     ? {
@@ -164,29 +179,7 @@ export function SubscriptionEditorDialog({
             mode="multiple"
             className="w-full"
             value={form.eventTypes}
-            options={[
-              {
-                value: "artifact.quarantined",
-                label: "artifact.quarantined",
-              },
-              { value: "artifact.released", label: "artifact.released" },
-              {
-                value: "cargo.promotion.completed",
-                label: "cargo.promotion.completed",
-              },
-              {
-                value: "cargo.promotion.failed",
-                label: "cargo.promotion.failed",
-              },
-              {
-                value: "cargo.replication.completed",
-                label: "cargo.replication.completed",
-              },
-              {
-                value: "cargo.replication.failed",
-                label: "cargo.replication.failed",
-              },
-            ]}
+            options={WEBHOOK_EVENT_TYPES.map((value) => ({ value, label: value }))}
             onChange={(eventTypes) =>
               setForm((current) => ({ ...current, eventTypes }))
             }

@@ -119,7 +119,7 @@ func TestWebhookDeliveryWorkerSendsCargoPromotionOutcome(t *testing.T) {
 	}
 	if _, err := store.CreateWebhookSubscription(ctx, repository.WebhookSubscription{
 		ID: subscriptionID, Name: "cargo-promotion", EndpointURL: server.URL,
-		SecretCiphertext: ciphertext, EventTypes: []repository.WebhookEventType{repository.WebhookEventCargoPromotionCompleted}, Enabled: true,
+		SecretCiphertext: ciphertext, EventTypes: []repository.WebhookEventType{repository.WebhookEventArtifactPromoted}, Enabled: true,
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestWebhookDeliveryWorkerSendsCargoPromotionOutcome(t *testing.T) {
 	if err != nil || len(deliveries) != 1 || deliveries[0].State != repository.WebhookDeliverySucceeded {
 		t.Fatalf("deliveries=%+v err=%v", deliveries, err)
 	}
-	if receivedType != string(repository.WebhookEventCargoPromotionCompleted) || !strings.Contains(string(receivedBody), `"operationId":"`+job.ID+`"`) || !strings.Contains(string(receivedBody), `"coordinate":"demo@1.0.0"`) {
+	if receivedType != string(repository.WebhookEventArtifactPromoted) || !strings.Contains(string(receivedBody), `"operationId":"`+job.ID+`"`) || !strings.Contains(string(receivedBody), `"coordinate":"demo@1.0.0"`) {
 		t.Fatalf("type=%s body=%s", receivedType, receivedBody)
 	}
 }

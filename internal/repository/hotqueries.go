@@ -187,7 +187,7 @@ var hotQueries = []hotQuery{
 	{
 		name:      "webhook.deliveryByID",
 		build:     fixed(getWebhookDeliveryQuery, func(f hotQueryFixture) []any { return []any{f.repositoryID} }),
-		noSeqScan: []string{"webhook_deliveries", "webhook_events"},
+		noSeqScan: []string{"webhook_deliveries", "domain_events"},
 	},
 	{
 		name:          "webhook.claim",

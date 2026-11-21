@@ -41,8 +41,8 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 		ID: uuid.NewString(), Name: "cargo-wh-" + suffix, EndpointURL: "https://events.example.test/cargo",
 		SecretCiphertext: "encrypted-secret", Enabled: true,
 		EventTypes: []WebhookEventType{
-			WebhookEventCargoPromotionCompleted, WebhookEventCargoPromotionFailed,
-			WebhookEventCargoReplicationCompleted, WebhookEventCargoReplicationFailed,
+			WebhookEventArtifactPromoted, WebhookEventPromotionFailed,
+			WebhookEventReplicationCompleted, WebhookEventReplicationFailed,
 		},
 	})
 	if err != nil {
@@ -52,7 +52,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	t.Cleanup(func() {
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM webhook_subscriptions WHERE id=$1`, subscription.ID)
 		for _, operationID := range operationIDs {
-			_, _ = first.db.ExecContext(context.Background(), `DELETE FROM webhook_events WHERE payload->>'operationId'=$1`, operationID)
+			_, _ = first.db.ExecContext(context.Background(), `DELETE FROM domain_events WHERE payload->>'operationId'=$1`, operationID)
 		}
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM replication_plans WHERE source_repository_id=$1 OR target_repository_id=$2`, source.ID, target.ID)
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM lifecycle_jobs WHERE repository_id=$1`, target.ID)
@@ -94,7 +94,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 			t.Fatalf("deliveries=%+v err=%v want=%d", deliveries, listErr, total)
 		}
 		var eventCount int
-		if err := second.db.QueryRowContext(ctx, `SELECT count(*) FROM webhook_events WHERE payload->>'operationId'=$1 AND event_type=$2`, operationID, eventType).Scan(&eventCount); err != nil || eventCount != 1 {
+		if err := second.db.QueryRowContext(ctx, `SELECT count(*) FROM domain_events WHERE payload->>'operationId'=$1 AND type=$2`, operationID, eventType).Scan(&eventCount); err != nil || eventCount != 1 {
 			t.Fatalf("event count=%d err=%v", eventCount, err)
 		}
 		for _, delivery := range deliveries {
@@ -102,7 +102,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 				continue
 			}
 			var raw []byte
-			if err := second.db.QueryRowContext(ctx, `SELECT payload FROM webhook_events WHERE id=$1`, delivery.EventID).Scan(&raw); err != nil {
+			if err := second.db.QueryRowContext(ctx, `SELECT payload FROM domain_events WHERE id=$1`, delivery.EventID).Scan(&raw); err != nil {
 				t.Fatal(err)
 			}
 			var data CargoDistributionWebhookData
@@ -135,7 +135,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	if err := first.CompleteLifecycleJob(ctx, completedJob.ID, jobs[0].LeaseToken); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("stale completion=%v", err)
 	}
-	assert(WebhookEventCargoPromotionCompleted, completedJob.ID, "completed", 1, 1)
+	assert(WebhookEventArtifactPromoted, completedJob.ID, "completed", 1, 1)
 
 	failedJob := newJob("promotion-failed-"+suffix, 1)
 	jobs, err = first.ClaimLifecycleJobsByKindAndFormat(ctx, LifecycleJobPromotion, FormatCargo, 1)
@@ -145,7 +145,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	if err := first.FailLifecycleJob(ctx, failedJob.ID, jobs[0].LeaseToken, "private failure detail"); err != nil {
 		t.Fatal(err)
 	}
-	assert(WebhookEventCargoPromotionFailed, failedJob.ID, "failed", 1, 2)
+	assert(WebhookEventPromotionFailed, failedJob.ID, "failed", 1, 2)
 
 	completedPlan := newPlan("replication-success-"+suffix, 1)
 	plans, err := first.ClaimReplicationPlansByFormat(ctx, FormatCargo, 1)
@@ -155,7 +155,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	if err := first.CompleteReplicationPlanWithLease(ctx, completedPlan.ID, plans[0].LeaseToken); err != nil {
 		t.Fatal(err)
 	}
-	assert(WebhookEventCargoReplicationCompleted, completedPlan.ID, "completed", 1, 3)
+	assert(WebhookEventReplicationCompleted, completedPlan.ID, "completed", 1, 3)
 
 	failedPlan := newPlan("replication-failed-"+suffix, 2)
 	plans, err = first.ClaimReplicationPlansByFormat(ctx, FormatCargo, 1)
@@ -173,5 +173,5 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	if err := first.FailReplicationPlanWithLease(ctx, failedPlan.ID, "private failure detail", plans[0].LeaseToken); err != nil {
 		t.Fatal(err)
 	}
-	assert(WebhookEventCargoReplicationFailed, failedPlan.ID, "failed", 2, 4)
+	assert(WebhookEventReplicationFailed, failedPlan.ID, "failed", 2, 4)
 }

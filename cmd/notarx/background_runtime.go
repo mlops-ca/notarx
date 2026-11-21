@@ -11,6 +11,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/emailnotification"
+	"github.com/mlops-ca/notarx/internal/events"
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
@@ -189,6 +190,11 @@ func (r backgroundRuntime) startWorkers(ctx context.Context, cfg config.Config, 
 	}
 	if cfg.WorkerKindEnabled("scan") && r.scanner != nil && r.scanResolver != nil {
 		app.ArtifactScanWorker{Store: r.store, Scanner: r.scanner, Resolver: r.scanResolver, WorkerFormats: r.scannerFormats, Metrics: r.metrics}.Start(ctx, time.Minute)
+	}
+	if cfg.WorkerKindEnabled("scan") && r.scanner != nil {
+		scheduler := app.NewPublicationScanScheduler(r.store, true, r.scannerFormats, r.metrics)
+		dispatcher := &events.Dispatcher{Source: r.store, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default()}
+		background.Go(ctx, func() { dispatcher.Run(ctx) })
 	}
 	if cfg.WorkerKindEnabled("webhook") {
 		owner := cfg.InstanceID + "/" + r.workerSessionID

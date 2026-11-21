@@ -100,16 +100,21 @@ func (e Entry) Validate() error {
 }
 
 // DefaultRegistry lists every table the janitor prunes.
-// promotion_evaluations, domain_events and import sessions are added by the slices
-// that create them, because their columns are not part of the schema yet.
+// promotion_evaluations and import sessions are added by the slices that create them,
+// because their columns are not part of the schema yet.
 func DefaultRegistry() []Entry {
 	return []Entry{
 		{Table: "resolver_audit_log", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"id"}, Standard: 90 * day, FreeTier: 7 * day, PartitionedOnPostgres: true},
 		{Table: "security_audit_log", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"id"}, Standard: 730 * day, FreeTier: 90 * day, PartitionedOnPostgres: true},
 		{Table: "artifact_scan_history", TimeColumn: "scanned_at", Terminal: "TRUE", KeyColumns: []string{"scanned_at", "id"}, Standard: 180 * day, FreeTier: 180 * day, PartitionedOnPostgres: true},
+		// The event log of ADR 0021. NOTARX_EVENTS_RETENTION is the documented key of the table; PostgreSQL drops
+		// whole partitions (internal/partitions), MySQL deletes in batches.
+		{Table: "domain_events", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"occurred_at", "seq"}, Standard: 14 * day, FreeTier: 3 * day, PartitionedOnPostgres: true},
 		{Table: "repository_request_rollup", TimeColumn: "bucket_start", Terminal: "TRUE", KeyColumns: []string{"repository_id", "bucket_start", "outcome"}, Standard: 400 * day, FreeTier: 400 * day},
 		{Table: "webhook_deliveries", Label: "webhook_deliveries_succeeded", TimeColumn: "updated_at", Terminal: "state = 'succeeded'", KeyColumns: []string{"id"}, Standard: 14 * day, FreeTier: 3 * day},
-		{Table: "webhook_deliveries", Label: "webhook_deliveries_dead", TimeColumn: "updated_at", Terminal: "state = 'dead'", KeyColumns: []string{"id"}, Standard: 90 * day, FreeTier: 30 * day},
+		// A dead delivery is inspectable and replayable while its domain event is kept (14 days, 3 on the free tier), so
+		// it is pruned on the same schedule; a longer keep time would list rows whose event is gone.
+		{Table: "webhook_deliveries", Label: "webhook_deliveries_dead", TimeColumn: "updated_at", Terminal: "state = 'dead'", KeyColumns: []string{"id"}, Standard: 14 * day, FreeTier: 3 * day},
 		{Table: "lifecycle_jobs", Label: "lifecycle_jobs_done", TimeColumn: "completed_at", Terminal: "state IN ('completed','cancelled')", KeyColumns: []string{"id"}, Standard: 7 * day, FreeTier: 1 * day},
 		{Table: "lifecycle_jobs", Label: "lifecycle_jobs_failed", TimeColumn: "completed_at", Terminal: "state = 'failed'", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},
 		{Table: "replication_plans", TimeColumn: "completed_at", Terminal: "state IN ('completed','failed','cancelled')", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},

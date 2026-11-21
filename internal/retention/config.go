@@ -81,7 +81,7 @@ func ParseProfile(value string) (Profile, error) {
 
 // envAliases names the documented override key of a table whose ADR gave it a name other than
 // NOTARX_RETENTION_<TABLE>; the generic key wins when both are set.
-var envAliases = map[string]string{"artifact_scan_history": "NOTARX_SCAN_HISTORY_RETENTION"}
+var envAliases = map[string]string{"artifact_scan_history": "NOTARX_SCAN_HISTORY_RETENTION", "domain_events": "NOTARX_EVENTS_RETENTION"}
 
 // LoadConfig reads the profile, the run budget and the overrides for every table and
 // every entry label of the registry from lookup (os.LookupEnv in production). A label
