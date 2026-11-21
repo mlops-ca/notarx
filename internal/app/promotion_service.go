@@ -30,7 +30,7 @@ type PromotionService struct {
 // newPromotionService wires the service from the management adapter's stores.
 func newPromotionService(h generatedRepositoryAPIAdapter) PromotionService {
 	return PromotionService{
-		store: h.sessions.store, securityPolicies: h.securityPolicies, intelligence: h.intelligence, audit: h.audit, promotions: h.sessions.store,
+		store: h.sessions.store, securityPolicies: h.securityPolicies, intelligence: h.intelligence, audit: h.audit, promotions: promotionStore(h.sessions.store),
 		registry: promotionFormatRegistry(promotionModuleDeps{Store: h.sessions.store}),
 		quarantine: func(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest string) *PromotionError {
 			return h.checkQuarantinedDistribution(ctx, principal, source, target, coordinate, digest, "promote")
@@ -130,6 +130,9 @@ func (s PromotionService) Request(ctx context.Context, in PromotionRequest) (Pro
 	if err != nil {
 		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "enqueue promotion job failed")
 	}
+	if s.promotions == nil {
+		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "promotion provenance is unavailable")
+	}
 	row, err := s.promotions.GetArtifactPromotionByJob(ctx, job.ID)
 	if err != nil {
 		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
@@ -147,4 +150,11 @@ func (s PromotionService) auditFor(record repository.AuditRecord) []repository.A
 		return nil
 	}
 	return []repository.AuditRecord{managementAudit(record)}
+}
+
+// promotionStore returns the provenance port of the gateway store. The durable and in-memory stores implement it; a
+// store that does not leaves the service without provenance, which Request reports as an internal error.
+func promotionStore(store any) repository.ArtifactPromotionStore {
+	promotions, _ := store.(repository.ArtifactPromotionStore)
+	return promotions
 }

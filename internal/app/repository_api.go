@@ -219,7 +219,6 @@ type GatewayStore interface {
 	repository.ArtifactQuarantineStore
 	repository.AuditRetentionStore
 	repository.LifecycleJobStore
-	repository.ArtifactPromotionStore
 	repository.ReplicationStore
 	repository.NativeMavenStore
 	repository.NativeOCIStore

@@ -4,9 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 
@@ -272,5 +274,35 @@ func TestEveryRegisteredFormatEnqueuesAPromotionWithProvenance(t *testing.T) {
 		if err != nil || row.Format != format || row.Coordinate != coordinates[format] || row.State != repository.ArtifactPromotionQueued {
 			t.Fatalf("%s row=%+v err=%v", format, row, err)
 		}
+	}
+}
+
+func TestNPMAndMavenModulesDeclareTheirOptionalCapabilities(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	registry := promotionFormatRegistry(promotionModuleDeps{Store: store})
+	repositoryID := uuid.NewString()
+	digest := "sha256:" + strings.Repeat("c", 64)
+	if _, err := store.PublishNPMVersion(ctx, repository.NPMVersion{RepositoryID: repositoryID, PackageName: "left-pad", Version: "1.0.0", Digest: digest, ObjectKey: "native/npm/c"}, map[string]string{"latest": "1.0.0", "stable": "1.0.0"}); err != nil {
+		t.Fatal(err)
+	}
+	tagged, ok := formatmodule.Capability[formatmodule.Tagged](registry, repository.FormatNPM)
+	if !ok {
+		t.Fatal("npm does not declare Tagged")
+	}
+	tags, err := tagged.Tags(ctx, repositoryID, "left-pad@1.0.0", digest)
+	sort.Strings(tags)
+	if err != nil || strings.Join(tags, ",") != "latest,stable" {
+		t.Fatalf("tags=%v err=%v", tags, err)
+	}
+	if _, err = tagged.Tags(ctx, repositoryID, "not a coordinate", digest); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("invalid coordinate err=%v", err)
+	}
+	releases, ok := formatmodule.Capability[formatmodule.ReleaseSet](registry, repository.FormatMaven)
+	if !ok {
+		t.Fatal("Maven does not declare ReleaseSet")
+	}
+	if _, err = releases.ReleaseMembers(ctx, repositoryID, "com.example:lib:1.0.0"); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("unknown release err=%v", err)
 	}
 }
