@@ -490,6 +490,12 @@ RepositoryLifecycleJobList:
     application/json:
       schema:
         "$ref": "../components/schemas.yaml#/RepositoryLifecycleJobPage"
+ArtifactPromotionList:
+  description: A page of artifact promotions (provenance rows), newest first
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/ArtifactPromotionPage"
 ArtifactTombstoneList:
   description: Tombstoned artifacts for one repository
   content:
@@ -769,3 +775,41 @@ IssuerRotation:
     application/json:
       schema:
         "$ref": "../components/schemas.yaml#/IssuerRotation"
+RemoteInstance:
+  description: Remote notarx instance with the token redacted
+  headers:
+    ETag:
+      required: true
+      schema: {type: string}
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/RemoteInstance"}
+RemoteInstanceList:
+  description: Remote notarx instances
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/RemoteInstancePage"}
+RemoteInstanceTest:
+  description: Outcome of the well-known check
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/RemoteInstanceTestResult"}
+PromotionRule:
+  description: Promotion rule
+  headers:
+    ETag:
+      required: true
+      schema: {type: string}
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/PromotionRule"}
+PromotionRuleList:
+  description: Promotion rules
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/PromotionRulePage"}
+PromotionRuleDryRun:
+  description: Matched artifacts with a verdict per condition; nothing was enqueued
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/PromotionRuleDryRun"}

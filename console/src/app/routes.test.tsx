@@ -58,6 +58,7 @@ describe("console route table", () => {
       "/site-settings",
       "/keys",
       "/workload-identity",
+      "/remote-instances",
       "/service-accounts",
       "/users",
       "/user-groups",

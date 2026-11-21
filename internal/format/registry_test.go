@@ -1,6 +1,8 @@
 package format_test
 
 import (
+	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -98,5 +100,60 @@ func TestRegistryZeroValueAndMissingTarget(t *testing.T) {
 	}
 	if err := registry.Mount(nil); err == nil {
 		t.Fatal("nil mux accepted")
+	}
+}
+
+type declaresEverything struct{ identityOnly }
+
+func (declaresEverything) EnqueuePromotion(context.Context, string, string, string, string, string, ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
+	return repository.LifecycleJob{}, false, nil
+}
+func (declaresEverything) RunPromotionJobs(context.Context, int) error { return nil }
+func (declaresEverything) ExportUnit(context.Context, string, string, string) (formatmodule.ExportedUnit, error) {
+	return formatmodule.ExportedUnit{}, nil
+}
+func (declaresEverything) ImportUnit(context.Context, string, formatmodule.ExportedUnit, func(formatmodule.BlobDescriptor) (io.ReadCloser, error)) error {
+	return nil
+}
+func (declaresEverything) TagName(string) (string, bool) { return "", false }
+
+func (declaresEverything) TagsOfName(context.Context, string, string) (formatmodule.TagLookup, error) {
+	return nil, nil
+}
+func (declaresEverything) ReleaseMembers(context.Context, string, string) ([]formatmodule.ReleaseMember, error) {
+	return nil, nil
+}
+
+func TestRegistryReportsTheOptionalCapabilitiesAModuleDeclares(t *testing.T) {
+	registry, err := formatmodule.New(declaresEverything{identityOnly{"full"}}, identityOnly{"bare"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"promotion", "promotion-publisher", "exporter", "importer", "tagged", "release-set"}
+	if got := registry.Capabilities("full"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("full declares %v, want %v", got, want)
+	}
+	if got := registry.Capabilities("bare"); len(got) != 0 {
+		t.Fatalf("bare declares %v", got)
+	}
+	if got := registry.Capabilities("missing"); got != nil {
+		t.Fatalf("missing declares %v", got)
+	}
+	var none *formatmodule.Registry
+	if none.Capabilities("full") != nil {
+		t.Fatal("a nil registry declares capabilities")
+	}
+	if _, ok := formatmodule.Capability[formatmodule.PromotionPublisher](registry, "bare"); ok {
+		t.Fatal("invented promotion publisher")
+	}
+}
+
+func TestPromotionOptionsTravelInTheContext(t *testing.T) {
+	if got := formatmodule.PromotionOptionsFrom(context.Background()); got != (formatmodule.PromotionOptions{}) {
+		t.Fatalf("empty context carries %+v", got)
+	}
+	options := formatmodule.PromotionOptions{Actor: "alice", APTTargetSuite: "stable"}
+	if got := formatmodule.PromotionOptionsFrom(formatmodule.WithPromotionOptions(context.Background(), options)); got != options {
+		t.Fatalf("options=%+v", got)
 	}
 }

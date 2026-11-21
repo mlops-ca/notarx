@@ -124,9 +124,6 @@ func (h ConanHandler) uploadNativeConan(w http.ResponseWriter, r *http.Request) 
 		writeConanPublicationError(w, err)
 		return
 	}
-	if h.PublicationScanner != nil {
-		_ = h.PublicationScanner.Schedule(r.Context(), repo, conanSessionCoordinate(committed), digest, principal.Actor)
-	}
 	w.Header().Set("X-Notarx-Publish-State", committed.State)
 	w.WriteHeader(http.StatusCreated)
 }

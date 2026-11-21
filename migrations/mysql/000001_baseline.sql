@@ -91,6 +91,39 @@ CREATE TABLE `artifact_license` (
   CONSTRAINT `artifact_license_confidence_check` CHECK (((`confidence` >= 0) AND (`confidence` <= 1)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `artifact_promotions` (
+  `approvals` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
+  `attempt` INT NOT NULL DEFAULT 1,
+  `chain_path` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
+  `completed_at` DATETIME(6) NULL,
+  `coordinate` TEXT NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `digest` VARCHAR(144) NOT NULL,
+  `format` TEXT NOT NULL,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `idempotency_key` VARCHAR(255) NOT NULL,
+  `job_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `origin_instance_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `origin_repository` TEXT NOT NULL DEFAULT (''),
+  `requested_by` TEXT NOT NULL,
+  `rule_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `rule_version` BIGINT NULL,
+  `state` TEXT NOT NULL,
+  `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `coordinate_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`coordinate`, 256))) STORED NOT NULL,
+  `pending_state` VARCHAR(32) GENERATED ALWAYS AS (IF(`state` IN ('pending_approval', 'queued', 'running'), `state`, NULL)) VIRTUAL NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_artifact_promotions_idempotency_key_attempt` (`idempotency_key`, `attempt`),
+  KEY `ix_artifact_promotions_created_at_desc_id_desc` (`created_at` DESC, `id` DESC),
+  KEY `ix_artifact_promotions_target_repository_id_coordinate__180c8a63` (`target_repository_id`, `coordinate_sha256`, `digest`),
+  KEY `ix_artifact_promotions_job_idx` (`job_id`),
+  KEY `ix_artifact_promotions_pending_idx` (`pending_state`),
+  CONSTRAINT `artifact_promotions_approvals_check` CHECK ((JSON_TYPE(`approvals`) = 'ARRAY')),
+  CONSTRAINT `artifact_promotions_attempt_check` CHECK ((`attempt` >= 1)),
+  CONSTRAINT `artifact_promotions_chain_path_check` CHECK ((JSON_TYPE(`chain_path`) = 'ARRAY')),
+  CONSTRAINT `artifact_promotions_state_check` CHECK ((`state` IN ('pending_approval', 'queued', 'running', 'completed', 'failed', 'rejected', 'expired', 'cancelled')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `artifact_quarantines` (
   `coordinate` TEXT NOT NULL,
   `digest` VARCHAR(144) NOT NULL,
@@ -681,6 +714,14 @@ CREATE TABLE `installation_repository_presets` (
   CONSTRAINT `installation_repository_presets_repositories_created_check` CHECK ((`repositories_created` >= 0)),
   CONSTRAINT `installation_repository_presets_singleton_check` CHECK ((`singleton` <> 0)),
   CONSTRAINT `installation_repository_presets_state_check` CHECK ((`state` IN ('pending', 'applied', 'skipped_existing')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `instance_identity` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `instance_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `singleton` TINYINT(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`singleton`),
+  CONSTRAINT `instance_identity_singleton_check` CHECK ((`singleton` <> 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `lifecycle_jobs` (
@@ -2463,6 +2504,55 @@ CREATE TABLE `oci_subject_bindings` (
   CONSTRAINT `oci_subject_bindings_subject_check` CHECK (REGEXP_LIKE(`subject`, '^sha256:[a-f0-9]{64}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `promotion_batches` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `idempotency_key` VARCHAR(255) NOT NULL,
+  `items` JSON NOT NULL,
+  `request_hash` TEXT NOT NULL,
+  `requested_by` TEXT NOT NULL,
+  `source_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_promotion_batches_target_repository_id_idempotency_key` (`target_repository_id`, `idempotency_key`),
+  CONSTRAINT `promotion_batches_items_check` CHECK ((((JSON_TYPE(`items`) = 'ARRAY') AND (JSON_LENGTH(`items`) >= 1)) AND (JSON_LENGTH(`items`) <= 100)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `promotion_rules` (
+  `approval` JSON NULL,
+  `conditions` JSON NOT NULL DEFAULT (CAST('{}' AS JSON)),
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `created_by` TEXT NOT NULL,
+  `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `match` JSON NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `remote_instance_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `remote_repository` TEXT NULL,
+  `run_as_service_account_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `schedule` JSON NULL,
+  `source_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `target_kind` TEXT NOT NULL,
+  `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_by` TEXT NOT NULL,
+  `version` BIGINT NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_promotion_rules_name` (`name`),
+  KEY `ix_promotion_rules_remote_instance_id` (`remote_instance_id`),
+  KEY `ix_promotion_rules_run_as_service_account_id` (`run_as_service_account_id`),
+  KEY `ix_promotion_rules_source_repository_id_enabled` (`source_repository_id`, `enabled`),
+  KEY `ix_promotion_rules_target_repository_id` (`target_repository_id`),
+  KEY `ix_promotion_rules_name_bytes_idx` (`name`),
+  CONSTRAINT `promotion_rules_actor_check` CHECK (((((CHAR_LENGTH(`created_by`) >= 1) AND (CHAR_LENGTH(`created_by`) <= 255)) AND (CHAR_LENGTH(`updated_by`) >= 1)) AND (CHAR_LENGTH(`updated_by`) <= 255))),
+  CONSTRAINT `promotion_rules_approval_check` CHECK (((`approval` IS NULL) OR (JSON_TYPE(`approval`) = 'OBJECT'))),
+  CONSTRAINT `promotion_rules_conditions_check` CHECK ((JSON_TYPE(`conditions`) = 'OBJECT')),
+  CONSTRAINT `promotion_rules_match_check` CHECK ((JSON_TYPE(`match`) = 'OBJECT')),
+  CONSTRAINT `promotion_rules_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
+  CONSTRAINT `promotion_rules_schedule_check` CHECK (((`schedule` IS NULL) OR (JSON_TYPE(`schedule`) = 'OBJECT'))),
+  CONSTRAINT `promotion_rules_version_check` CHECK ((`version` >= 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `public_access_policy` (
   `enabled` TINYINT(1) NOT NULL DEFAULT 0,
   `singleton` TINYINT(1) NOT NULL DEFAULT 1,
@@ -2495,6 +2585,32 @@ CREATE TABLE `raw_groups` (
   `name` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`name`),
   CONSTRAINT `raw_groups_cache_quota_bytes_check` CHECK ((`cache_quota_bytes` > 0))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `remote_instances` (
+  `audience` TEXT NOT NULL DEFAULT (''),
+  `auth_kind` TEXT NOT NULL,
+  `base_url` TEXT NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `instance_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `last_checked_at` DATETIME(6) NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `state` TEXT NOT NULL DEFAULT ('active'),
+  `token_sealed` TEXT NULL,
+  `trust_evidence` TINYINT(1) NOT NULL DEFAULT 0,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `version` BIGINT NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_remote_instances_name` (`name`),
+  KEY `ix_remote_instances_name_bytes_idx` (`name`),
+  CONSTRAINT `remote_instances_audience_check` CHECK (((CHAR_LENGTH(`audience`) <= 512) AND ((`auth_kind` <> 'workload_identity') OR (`audience` <> '')))),
+  CONSTRAINT `remote_instances_auth_kind_check` CHECK ((`auth_kind` IN ('workload_identity', 'static_token'))),
+  CONSTRAINT `remote_instances_base_url_check` CHECK (((CHAR_LENGTH(`base_url`) >= 1) AND (CHAR_LENGTH(`base_url`) <= 2048))),
+  CONSTRAINT `remote_instances_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
+  CONSTRAINT `remote_instances_state_check` CHECK ((`state` IN ('active', 'unreachable', 'disabled'))),
+  CONSTRAINT `remote_instances_token_check` CHECK (((((`auth_kind` = 'static_token') AND (`token_sealed` IS NOT NULL)) AND (`token_sealed` <> '')) OR ((`auth_kind` = 'workload_identity') AND (`token_sealed` IS NULL)))),
+  CONSTRAINT `remote_instances_version_check` CHECK ((`version` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `replication_checkpoints` (
@@ -3323,6 +3439,10 @@ ALTER TABLE `oci_bound_objects` ADD CONSTRAINT `fk_oci_bound_objects_source_id` 
 ALTER TABLE `oci_group_members` ADD CONSTRAINT `fk_oci_group_members_group_name` FOREIGN KEY (`group_name`) REFERENCES `oci_groups` (`name`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `oci_group_members` ADD CONSTRAINT `fk_oci_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `oci_subject_bindings` ADD CONSTRAINT `fk_oci_subject_bindings_source_id` FOREIGN KEY (`source_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_remote_instance_id` FOREIGN KEY (`remote_instance_id`) REFERENCES `remote_instances` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_run_as_service_account_id` FOREIGN KEY (`run_as_service_account_id`) REFERENCES `service_accounts` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_source_repository_id` FOREIGN KEY (`source_repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_target_repository_id` FOREIGN KEY (`target_repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `raw_group_members` ADD CONSTRAINT `fk_raw_group_members_group_name` FOREIGN KEY (`group_name`) REFERENCES `raw_groups` (`name`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `raw_group_members` ADD CONSTRAINT `fk_raw_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `replication_checkpoints` ADD CONSTRAINT `fk_replication_checkpoints_plan_id` FOREIGN KEY (`plan_id`) REFERENCES `replication_plans` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;

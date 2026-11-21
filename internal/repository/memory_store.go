@@ -133,6 +133,8 @@ type MemoryStore struct {
 	artifactIntelligence   map[string]ArtifactIntelligence
 	artifactQuarantines    map[string]ArtifactQuarantine
 	lifecycleJobs          map[string]LifecycleJob
+	artifactPromotions     map[string]ArtifactPromotion
+	promotionBatches       map[string]PromotionBatch
 	artifactScanLocks      map[string]*sync.Mutex
 	lifecycleCreatedAt     time.Time
 	replicationPlans       map[string]ReplicationPlan
@@ -158,6 +160,9 @@ type MemoryStore struct {
 	eventSeqs              map[string]int64
 	eventCursors           map[string]events.Cursor
 	webhookDeliveries      map[string]WebhookDelivery
+	remoteInstances        map[string]RemoteInstance
+	promotionRules         map[string]PromotionRule
+	localInstanceID        string
 }
 
 type mavenObjectIntent struct {

@@ -55,6 +55,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 			_, _ = first.db.ExecContext(context.Background(), `DELETE FROM domain_events WHERE payload->>'operationId'=$1`, operationID)
 		}
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM replication_plans WHERE source_repository_id=$1 OR target_repository_id=$2`, source.ID, target.ID)
+		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM artifact_promotions WHERE target_repository_id=$1::uuid`, target.ID)
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM lifecycle_jobs WHERE repository_id=$1`, target.ID)
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM hosted_repositories WHERE id IN ($1,$2)`, source.ID, target.ID)
 		_ = first.Close()
@@ -64,7 +65,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	digest := "sha256:" + strings.Repeat("a", 64)
 	payload, _ := json.Marshal(map[string]string{"format": "cargo", "sourceRepositoryId": source.ID, "name": "demo", "version": "1.0.0", "digest": digest})
 	newJob := func(key string, maxAttempts int) LifecycleJob {
-		job, replayed, createErr := first.EnqueueLifecycleJob(ctx, LifecycleJob{
+		job, replayed, createErr := first.EnqueueLifecycleJob(promotionProvenance(ctx, FormatCargo, "demo@1.0.0", digest, key), LifecycleJob{
 			ID: uuid.NewString(), RepositoryID: target.ID, Kind: LifecycleJobPromotion,
 			IdempotencyKey: key, Payload: payload, MaxAttempts: maxAttempts,
 		})

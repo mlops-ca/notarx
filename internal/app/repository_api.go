@@ -24,6 +24,7 @@ import (
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
+	"github.com/mlops-ca/notarx/internal/remoteinstance"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -244,6 +245,8 @@ type GatewayStore interface {
 	repository.RuntimeNodeStore
 	repository.ScheduledTaskStore
 	repository.WebhookStore
+	repository.RemoteInstanceStore
+	repository.PromotionRuleStore
 	repository.EmailStore
 	repository.RepositoryQuotaAlertStore
 	repository.BackgroundOperationQueueStore
@@ -257,6 +260,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
+	if _, ok := options.Store.(promotionStores); !ok {
+		return nil, errors.New("gateway store must implement the artifact promotion and promotion batch stores")
+	}
 	options.Storage = maps.Clone(options.Storage)
 	dependencies, store := options.Dependencies, options.Store
 	adapter, authenticator := options.Adapter, options.Authenticator
@@ -267,6 +273,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("GET /readyz", dependencies.ready)
 	registerIssuerRoutes(mux, options.Issuer)
+	registerInstanceRoutes(mux, newInstanceDocumentHandler(store))
 	if metrics == nil {
 		metrics = &Metrics{}
 	}
@@ -313,7 +320,6 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		goClient = client
 	}
 	oci := OCIHandler{Resolver: resolver, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Client: upstreamClient, Authenticator: authenticator, Cache: cache}
-	publicationScanner := NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics)
 	nativeOCI := newNativeOCIHandler(store, options.Storage[repository.FormatOCI], authenticator).withMetrics(metrics).withProxy(oci)
 	nativeOCI.discovery, nativeOCI.groups = options.OCIDiscoveryStore, store
 	rawLegacy := RawHandler{Store: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: rawClient, Metrics: metrics, Cache: rawCache}
@@ -400,9 +406,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mavenProxyOperations := mavenProxyOperationsHandler{store: store, authenticator: authenticator, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, client: mavenClient, cache: mavenCache, maintenance: maintenance}
 	proxyCacheBrowse := proxyCacheBrowseHandler{store: store, entriesStore: store, audit: store, maintenance: maintenance, authenticator: authenticator, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}}
 	nativeConanObjects := options.Storage[repository.FormatConan]
-	nativeConanPublish := newNativeConanPublishHandler(store, options.ConanPublications, nativeConanObjects, authenticator).withPublicationScanner(publicationScanner)
+	nativeConanPublish := newNativeConanPublishHandler(store, options.ConanPublications, nativeConanObjects, authenticator)
 	nativeNPMObjects := options.Storage[repository.FormatNPM]
-	nativeNPM := newNativeNPMHandler(store, options.NPMMetadata, nativeNPMObjects, authenticator).withMetrics(metrics).withProxy(npmClient).withPublicationScanner(publicationScanner)
+	nativeNPM := newNativeNPMHandler(store, options.NPMMetadata, nativeNPMObjects, authenticator).withMetrics(metrics).withProxy(npmClient)
 	if dependencies.NPMMetadataTTL > 0 {
 		nativeNPM.metadataTTL = dependencies.NPMMetadataTTL
 	}
@@ -411,10 +417,10 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	}
 	nativeNPM.protection = newNPMProxyProtection(dependencies.NPMProxyCoordinator, dependencies.NPMBreakerTTL)
 	nativePyPIObjects := options.Storage[repository.FormatPyPI]
-	nativePyPI := newNativePyPIHandler(store, nativePyPIObjects, authenticator).withMetrics(metrics).withProxy(pypiClient).withPublicationScanner(publicationScanner)
+	nativePyPI := newNativePyPIHandler(store, nativePyPIObjects, authenticator).withMetrics(metrics).withProxy(pypiClient)
 	nativeGoObjects := options.Storage[repository.FormatGo]
-	nativeGo := newNativeGoHandler(store, nativeGoObjects, authenticator).withMetrics(metrics).withProxy(goClient).withPublicationScanner(publicationScanner)
-	nativeCargo := newNativeCargoHandler(store, options.Storage[repository.FormatCargo], authenticator).withPublicationScanner(publicationScanner)
+	nativeGo := newNativeGoHandler(store, nativeGoObjects, authenticator).withMetrics(metrics).withProxy(goClient)
+	nativeCargo := newNativeCargoHandler(store, options.Storage[repository.FormatCargo], authenticator)
 	nativeCargo.upstream = UpstreamClient{HTTPClient: dependencies.CargoUpstreamClient}
 	nativeAPTObjects := options.Storage[repository.FormatAPT]
 	aptClient := APTClient(UpstreamClient{})
@@ -429,7 +435,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	}
 	var aptSnapshotPublisher *aptpublication.Publisher
 	if dependencies.APTSigner != nil {
-		aptSnapshotPublisher = aptpublication.NewPublisher(store, nativeAPTObjects, dependencies.APTSigner).WithMetrics(metrics).WithPublicationScanner(publicationScanner)
+		aptSnapshotPublisher = aptpublication.NewPublisher(store, nativeAPTObjects, dependencies.APTSigner).WithMetrics(metrics)
 	}
 	publishRouter := nativePublishRouter{maven: nativeMaven, conan: nativeConanPublish}
 	hostedRepositories := hostedRepositoryAPIHandler{store: store, groups: store, authenticator: authenticator, groupMode: options.GroupVisibilityMode}
@@ -468,8 +474,14 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		humanProviders = dependencies.IdentityRuntime
 	}
 	workloadAPI := newWorkloadIdentityHandler(workloadIdentityOptions{Scope: scope, Store: workloadStore, Providers: humanProviders, AllowPrivateNetwork: options.WorkloadAllowPrivateNetwork})
+	remoteDiscoverer := options.RemoteDiscoverer
+	if remoteDiscoverer == nil {
+		remoteDiscoverer = remoteinstance.NewDiscoverer(remoteinstance.Options{AllowPrivateNetworks: options.RemoteAllowPrivateNetworks})
+	}
+	remoteAPI := newRemoteInstanceHandler(scope, store, remoteDiscoverer)
 	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, overview: newOverviewCache(options.ReadCache, options.OverviewCacheTTL), authzCacheTTL: options.AuthzCacheTTL, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
-	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, workloadIdentityHandler: workloadAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
+	promotionRulesAPI := newPromotionRuleHandler(scope, store, legacyAPI, options.PromotionMaxRulesPerRepository)
+	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, workloadIdentityHandler: workloadAPI, remoteInstanceHandler: remoteAPI, promotionRuleHandler: promotionRulesAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
 		BaseURL:    "/api/v2",
 		BaseRouter: openAPIServeMux{mux: mux, authorize: hostedRepositories.authenticateManagementRequest},
 		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
@@ -556,7 +568,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 			}}}
 	mux.Handle("/apt/", aptGroupRouter)
 	conan := ConanHandler{Store: store, NativeStore: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: conanClient, Metrics: metrics, Cache: conanCache, NativeObjects: nativeConanObjects, ReadPolicies: store, Quarantine: store}
-	conan.Publications, conan.PublicationScanner = options.ConanPublications, &publicationScanner
+	conan.Publications = options.ConanPublications
 	conanGroupRouter := v2GroupRouter{format: repository.FormatConan, groups: store, repos: store, audit: store, auth: authenticator,
 		conan: &v2GroupConanHandler{conan: &conan, auth: authenticator},
 		next:  conan}

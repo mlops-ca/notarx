@@ -201,6 +201,18 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `POST /webhook-subscriptions`<br>`createWebhookSubscription` | `webhook create` | #137 | M2 | A | W |
 | `GET /webhook-subscriptions/{subscriptionId}`<br>`getWebhookSubscription` | `webhook show <id>` | #137 | M2 | A | Q |
 | `PUT /webhook-subscriptions/{subscriptionId}`<br>`updateWebhookSubscription` | `webhook update <id>` | #137 | M2 | A | C |
+| `GET /remote-instances`<br>`listRemoteInstances` | `remote list` | #98 | M2 | A | Q |
+| `POST /remote-instances`<br>`createRemoteInstance` | `remote add` | #98 | M2 | A | W |
+| `GET /remote-instances/{remoteInstanceId}`<br>`getRemoteInstance` | `remote show <id>` | #98 | M2 | A | Q |
+| `PUT /remote-instances/{remoteInstanceId}`<br>`updateRemoteInstance` | `remote update <id>` | #98 | M2 | A | C |
+| `DELETE /remote-instances/{remoteInstanceId}`<br>`deleteRemoteInstance` | `remote delete <id>` | #98 | M2 | A | W |
+| `POST /remote-instances/{remoteInstanceId}/test`<br>`testRemoteInstance` | `remote test <id>` | #98 | M2 | A | W |
+| `GET /promotion-rules`<br>`listPromotionRules` | `promotion rule list` | #98 | M2 | FA | Q |
+| `POST /promotion-rules`<br>`createPromotionRule` | `promotion rule create` | #98 | M2 | RA×2 | W |
+| `GET /promotion-rules/{ruleId}`<br>`getPromotionRule` | `promotion rule show <id>` | #98 | M2 | RA | Q |
+| `PUT /promotion-rules/{ruleId}`<br>`updatePromotionRule` | `promotion rule update <id>` | #98 | M2 | RA×2 | C |
+| `DELETE /promotion-rules/{ruleId}`<br>`deletePromotionRule` | `promotion rule delete <id>` | #98 | M2 | RA | W |
+| `POST /promotion-rules/{ruleId}/dry-run`<br>`dryRunPromotionRule` | `promotion rule dry-run <id>` | #98 | M2 | RA×2 | D |
 | `GET /webhook-deliveries`<br>`listWebhookDeliveries` | `webhook delivery list` | #137 | M2 | A | Q |
 | `GET /webhook-deliveries/{deliveryId}`<br>`getWebhookDelivery` | `webhook delivery show <id>` | #137 | M2 | A | Q |
 | `POST /webhook-deliveries/{deliveryId}:replay`<br>`replayWebhookDelivery` | `webhook delivery replay <id>` | #137 | M2 | A | W |
@@ -269,6 +281,9 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `DELETE /user-groups/{groupId}/members/{userId}`<br>`removeUserGroupMember` | `user-group member remove <id> <user>` | #557 | M2 implemented | A | W |
 | `GET /repository-capacities`<br>`listRepositoryCapacities` | `capacity list` | #138 | M2 | FA | Q |
 | `GET /lifecycle-jobs`<br>`listLifecycleJobs` | `lifecycle-job list --all-repositories` | #135 | M1 implemented | FA | Q |
+| `GET /artifact-promotions`<br>`listArtifactPromotions` | `promotion list` | #138 | M2 | FA | Q |
+| `POST /promotion-batches`<br>`createPromotionBatch` | `promotion batch create --repo <source> --target <target>` | #98 | M2 | RA×2 | W |
+| `GET /promotion-batches/{batchId}`<br>`getPromotionBatch` | `promotion batch show <id>` | #98 | M2 | R | Q |
 | `GET /scheduled-tasks`<br>`listScheduledTasks` | `scheduled-task list` | #137 | M2 | ST | Q |
 | `POST /scheduled-tasks`<br>`createScheduledTask` | `scheduled-task create` | #137 | M2 | ST | W |
 | `GET /scheduled-tasks/{taskId}`<br>`getScheduledTask` | `scheduled-task show <id>` | #137 | M2 | ST | Q |
@@ -457,6 +472,7 @@ real routes and must not be joined to `/api/v2` blindly. Retired Nexus repositor
 | `HEAD /go/{repository}/{modulePath}`<br>`headGoModuleRepresentation` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `PUT /go/{repository}/{modulePath}`<br>`publishGoHostedModule` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `GET /.well-known/openid-configuration`<br>`getOpenIDConfiguration` | no separate CLI protocol client; anonymous OIDC discovery for verifiers (ADR 0020) | #71 | N/A | anonymous | N: the CLI neither registers nor sends this protocol action |
+| `GET /.well-known/notarx`<br>`getInstanceDocument` | no separate CLI protocol client; anonymous instance document read by senders through `remote add` and `remote test` (ADR 0021) | #83 | N/A | anonymous | N: the CLI neither registers nor sends this protocol action |
 | `GET /.well-known/jwks.json`<br>`getIssuerJWKS` | no separate CLI protocol client; anonymous key set for verifiers (ADR 0020) | #71 | N/A | anonymous | N: the CLI neither registers nor sends this protocol action |
 | `GET /cargo/{repository}/{path}`<br>`getCargoRegistryRepresentation` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |
 | `HEAD /cargo/{repository}/{path}`<br>`headCargoRegistryRepresentation` | no separate CLI protocol client; native client and onboarding configuration | #130 | N/A | native-format authorization | N: the CLI neither registers nor sends this protocol action |

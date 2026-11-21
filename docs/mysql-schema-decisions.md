@@ -115,6 +115,7 @@ Long text keys: the value stays in TEXT and a stored SHA-256 column carries the 
 | --- | --- |
 | artifact_catalog.coordinate | package coordinates are up to 1024 characters (artifact checks), above the 759 a key can hold next to a repository id |
 | artifact_intelligence.coordinate | package coordinates are up to 1024 characters (artifact checks), above the 759 a key can hold next to a repository id |
+| artifact_promotions.coordinate | package coordinates are up to 1024 characters (artifact checks), above the 759 a key can hold next to a repository id |
 | artifact_quarantines.coordinate | package coordinates are up to 1024 characters (artifact checks), above the 759 a key can hold next to a repository id |
 | artifact_tombstones.coordinate | package coordinates are up to 1024 characters (artifact checks), above the 759 a key can hold next to a repository id |
 | artifact_usage_stats.resource | usage statistics are keyed by an artifact resource name that embeds a coordinate |
@@ -146,6 +147,8 @@ Every PostgreSQL partial, expression, trigram or operator-class index and what M
 | api_keys | api_keys_service_account_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
 | artifact_catalog | artifact_catalog_coordinate_trgm_idx | drop | the column is keyed by its SHA-256, so prefix and ordered scans have no index; the owning store port adds a prefix index where a query needs it |
 | artifact_intelligence | artifact_intelligence_body_key_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
+| artifact_promotions | artifact_promotions_job_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
+| artifact_promotions | artifact_promotions_pending_idx | generated | the pending-state sweep reads the unfinished rows only: a virtual column that is the state for a pending_approval, queued or running row and NULL otherwise, indexed, so the index stays as small as the PostgreSQL partial index (ADR 0023 section 5) |
 | artifact_sbom | artifact_sbom_body_key_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
 | artifact_usage_stats | artifact_usage_stats_repository_address_idx | drop | the column is keyed by its SHA-256, so prefix and ordered scans have no index; the owning store port adds a prefix index where a query needs it |
 | audit_cleanup_jobs | audit_cleanup_jobs_claim_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
@@ -249,6 +252,8 @@ Every PostgreSQL partial, expression, trigram or operator-class index and what M
 | nexus_migration_batches | nexus_migration_schedule_occurrence | unique-flag | a unique index over a predicate becomes a generated column that is NULL outside it (ADR 0022) |
 | nexus_migration_schedules | nexus_migration_schedules_due | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
 | oci_discovery_snapshots | oci_discovery_snapshots_body_key_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
+| promotion_rules | promotion_rules_name_bytes_idx | full | an operator class or collation PostgreSQL needs for prefix search: MySQL's bin collation serves LIKE 'x%' from a plain index |
+| remote_instances | remote_instances_name_bytes_idx | full | an operator class or collation PostgreSQL needs for prefix search: MySQL's bin collation serves LIKE 'x%' from a plain index |
 | replication_checkpoints | replication_checkpoints_updated_at_brin_idx | drop | BRIN has no MySQL form: time-ordered scans use the primary key and the retention indexes |
 | replication_plans | replication_plans_claim_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
 | replication_plans | replication_plans_retention_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
@@ -285,6 +290,7 @@ MySQL rejects a CHECK on a column that a foreign key action rewrites, so the gen
 
 | Table | Constraint | Reason |
 | --- | --- | --- |
+| promotion_rules | promotion_rules_target_check | the column is in the referential action of the foreign key `target_repository_id -> hosted_repositories(id) on delete cascade`; MySQL refuses a CHECK on it (error 3823); the store validates it |
 | scheduled_tasks | scheduled_tasks_check | the column is in the referential action of the foreign key `repository_id -> hosted_repositories(id) on delete cascade`; MySQL refuses a CHECK on it (error 3823); the store validates it |
 
 ## Triggers
@@ -293,6 +299,7 @@ Each PostgreSQL trigger is dropped (polling or counters replace it), ported to a
 
 | Table | Trigger | Disposition | Reason |
 | --- | --- | --- | --- |
+| artifact_promotions | artifact_promotions_chain_path_append_only | ported | the MySQL provenance store refuses a chain_path that is not an append of the stored one; only the application writes this table |
 | audit_cleanup_jobs | audit_cleanup_jobs_notify_insert | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
 | audit_cleanup_jobs | audit_cleanup_jobs_notify_update | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
 | hosted_group_members | hosted_group_members_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
@@ -311,9 +318,9 @@ Each PostgreSQL trigger is dropped (polling or counters replace it), ported to a
 | identity_providers | identity_providers_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | identity_providers | identity_providers_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | identity_providers | identity_providers_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
-| lifecycle_jobs | cargo_promotion_state_webhook_after_update | ported | the MySQL lifecycle and replication stores enqueue the webhook event in the same transaction as the state change (store group D); only the application writes these tables |
 | lifecycle_jobs | lifecycle_jobs_notify_insert | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
 | lifecycle_jobs | lifecycle_jobs_notify_update | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
+| lifecycle_jobs | lifecycle_jobs_promotion_state | ported | the MySQL lifecycle store updates the provenance row and enqueues artifact.promoted or promotion.failed in the same transaction as the job state change (store group D); only the application writes these tables |
 | public_access_policy | public_access_policy_notify_cache | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | replication_plans | cargo_replication_state_webhook_after_update | ported | the MySQL lifecycle and replication stores enqueue the webhook event in the same transaction as the state change (store group D); only the application writes these tables |
 | replication_plans | replication_plans_notify_insert | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |

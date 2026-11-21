@@ -1,0 +1,30 @@
+---
+x-gateway-protocol-overlay:
+  gatewayDecision: >
+    A notarx instance describes itself to peers at a fixed root path so that a sender can
+    register it as a remote promotion target and check it again later (ADR 0021, "Remote
+    targets"). The route is mounted at the server root, is anonymous and read-only, and is
+    outside the /api/v2 management contract. It exposes no credential and no repository data.
+notarx_instance:
+  servers:
+  - url: https://gateway.example.com
+  get:
+    operationId: getInstanceDocument
+    summary: notarx instance document
+    description: >
+      Returns the instance id of this deployment, the version of the instance protocol, the
+      formats it accepts as import targets and the import limits a sender must respect.
+    security:
+    - {}
+    responses:
+      '200':
+        description: Instance document
+        headers:
+          Cache-Control:
+            schema:
+              type: string
+              const: no-store
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/schemas.yaml#/InstanceDocument"

@@ -359,14 +359,12 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		metrics = metrics.WithObjectStoreCapacity(fileStore.Capacity)
 	}
 	migrationTargetID := nexusmigration.TargetBinding(cfg.ObjectStore.Binding())
-	migrationScanner := app.NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics)
-	// Raw, Maven and OCI publications emit artifact.published in their own transaction and the scan consumer schedules
-	// the scan; the other formats are still scheduled here.
+	// Every publication emits artifact.published in its own transaction and the scan consumer schedules the scan.
 	migrationPublication := app.NewNexusMigrationPublication(store, app.SharedObjectStores(objectStore), migrationTargetID, cfg.MigrationStoragePoolID).
 		WithOCI(app.NewNexusOCIMigrationPublication(store, objectStore)).
-		WithConan(app.NewNexusConanMigrationPublication(store, store, objectStore).WithPublicationScanner(migrationScanner)).
-		WithNPM(app.NewNexusNPMMigrationPublication(store, objectStore).WithPublicationScanner(migrationScanner)).
-		WithPyPI(app.NewNexusPyPIMigrationPublication(store, objectStore).WithPublicationScanner(migrationScanner))
+		WithConan(app.NewNexusConanMigrationPublication(store, store, objectStore)).
+		WithNPM(app.NewNexusNPMMigrationPublication(store, objectStore)).
+		WithPyPI(app.NewNexusPyPIMigrationPublication(store, objectStore))
 	migrationLedger := migrationpg.New(databasePool)
 	dependencies.MigrationService = nexusmigration.New(migrationLedger, dependencies.SourceService, migrationPublication, nexusmigration.Options{TargetID: migrationTargetID, PoolID: cfg.MigrationStoragePoolID})
 	dependencies.MigrationSchedules = nexusmigration.NewSchedules(migrationLedger, dependencies.MigrationService)
@@ -464,7 +462,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	heartbeatDone := heartbeat.Start(runtimeContext, 10*time.Second)
 	var aptPublisher *aptpublication.Publisher
 	if dependencies.APTSigner != nil {
-		aptPublisher = aptpublication.NewPublisher(store, objectStore, dependencies.APTSigner).WithMetrics(metrics).WithPublicationScanner(app.NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics))
+		aptPublisher = aptpublication.NewPublisher(store, objectStore, dependencies.APTSigner).WithMetrics(metrics)
 	}
 	var helmMaintenance *helmformat.Maintenance
 	var helmReplication *helmdist.Worker
@@ -590,14 +588,16 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			OCIDiscoveryStore: store,
 			Storage:           app.SharedObjectStores(objectStore),
 			// Load validated the mode; an unreadable value stays strict.
-			GroupVisibilityMode:         access.GroupMode(cfg.GroupVisibilityMode),
-			OverviewCacheTTL:            cfg.OverviewCacheTTL,
-			ReadCache:                   caches.registry,
-			AuthzCacheTTL:               cfg.AuthzCacheTTL,
-			WorkloadAllowPrivateNetwork: cfg.Workload.AllowPrivateNetwork,
-			WorkloadExchange:            app.WorkloadExchangeOptions{MaxTTL: cfg.Workload.ExchangeMaxTTL, Rate: cfg.Workload.ExchangeRate},
-			SCIM:                        app.SCIMOptions{Enabled: cfg.SCIM.Enabled, MaxPage: cfg.SCIM.MaxPage, PublicURL: publicURL},
-			Adapter:                     app.TestAdapter{},
+			GroupVisibilityMode:            access.GroupMode(cfg.GroupVisibilityMode),
+			OverviewCacheTTL:               cfg.OverviewCacheTTL,
+			ReadCache:                      caches.registry,
+			AuthzCacheTTL:                  cfg.AuthzCacheTTL,
+			WorkloadAllowPrivateNetwork:    cfg.Workload.AllowPrivateNetwork,
+			WorkloadExchange:               app.WorkloadExchangeOptions{MaxTTL: cfg.Workload.ExchangeMaxTTL, Rate: cfg.Workload.ExchangeRate},
+			RemoteAllowPrivateNetworks:     cfg.Remote.AllowPrivateNetworks,
+			PromotionMaxRulesPerRepository: cfg.Promotion.MaxRulesPerRepository,
+			SCIM:                           app.SCIMOptions{Enabled: cfg.SCIM.Enabled, MaxPage: cfg.SCIM.MaxPage, PublicURL: publicURL},
+			Adapter:                        app.TestAdapter{},
 			Authenticator: app.Authenticator{
 				AdminToken:           cfg.AdminToken,
 				ResolverToken:        cfg.ResolverToken,

@@ -71,6 +71,34 @@ func Capability[T any](r *Registry, name repository.Format) (T, bool) {
 	return capability, ok
 }
 
+// Capabilities names the optional capabilities a registered module declares, in a fixed order: the registry is how
+// rule creation, the console and the acceptance checks learn what a format can do.
+func (r *Registry) Capabilities(name repository.Format) []string {
+	module, ok := r.Lookup(name)
+	if !ok {
+		return nil
+	}
+	declared := []string{}
+	add := func(capability string, has bool) {
+		if has {
+			declared = append(declared, capability)
+		}
+	}
+	_, promotion := module.(Promotion)
+	_, publisher := module.(PromotionPublisher)
+	_, exporter := module.(Exporter)
+	_, importer := module.(Importer)
+	_, tagged := module.(Tagged)
+	_, releaseSet := module.(ReleaseSet)
+	add("promotion", promotion)
+	add("promotion-publisher", publisher)
+	add("exporter", exporter)
+	add("importer", importer)
+	add("tagged", tagged)
+	add("release-set", releaseSet)
+	return declared
+}
+
 func (r *Registry) Formats() []repository.Format {
 	if r == nil {
 		return nil

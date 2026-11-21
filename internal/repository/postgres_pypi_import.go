@@ -116,6 +116,9 @@ func (s *PostgresStore) PublishPyPIImport(ctx context.Context, c PyPIImportClosu
 		if err != nil {
 			return err
 		}
+		if err = emitPublishedPostgres(ctx, tx, c.RepositoryID, FormatPyPI, coordinate, f.Digest); err != nil {
+			return err
+		}
 		if f.ObjectKey != "" {
 			delta.add(c.RepositoryID, f.Size, 1)
 		}

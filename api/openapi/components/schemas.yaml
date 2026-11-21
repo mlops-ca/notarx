@@ -2838,6 +2838,133 @@ PromotionRequest:
       minLength: 1
       maxLength: 128
       description: Required only for APT Hosted operator preview. Appends the immutable pool package to this target suite using the target signer. The pool coordinate preserves its component.
+PromotionBatchItemRequest:
+  type: object
+  required: [coordinate, digest]
+  additionalProperties: false
+  properties:
+    coordinate: {type: string, minLength: 1, maxLength: 1024}
+    digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+    aptTargetSuite:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: Required only for APT, as on a single promotion.
+PromotionBatchRequest:
+  type: object
+  required: [sourceRepositoryId, targetRepositoryId, items]
+  additionalProperties: false
+  properties:
+    sourceRepositoryId: {type: string, format: uuid}
+    targetRepositoryId: {type: string, format: uuid}
+    items:
+      type: array
+      minItems: 1
+      maxItems: 100
+      items: {"$ref": "#/PromotionBatchItemRequest"}
+PromotionBatchState:
+  type: string
+  enum: [pending, running, completed, partially_failed, failed]
+PromotionBatchItemState:
+  type: string
+  description: The state of the item's provenance row, or pending while the item has no row yet.
+  enum: [pending, pending_approval, queued, running, completed, failed, rejected, expired, cancelled]
+PromotionBatchItem:
+  type: object
+  required: [index, coordinate, digest, state]
+  properties:
+    index: {type: integer, minimum: 0, maximum: 99}
+    coordinate: {type: string}
+    digest: {type: string}
+    state: {"$ref": "#/PromotionBatchItemState"}
+    promotionId: {type: string, format: uuid}
+    jobId: {type: string, format: uuid}
+PromotionBatch:
+  type: object
+  required: [id, sourceRepositoryId, targetRepositoryId, requestedBy, state, items, createdAt]
+  properties:
+    id: {type: string, format: uuid}
+    sourceRepositoryId: {type: string, format: uuid}
+    targetRepositoryId: {type: string, format: uuid}
+    requestedBy: {type: string}
+    state: {"$ref": "#/PromotionBatchState"}
+    items:
+      type: array
+      items: {"$ref": "#/PromotionBatchItem"}
+    createdAt: {type: string, format: date-time}
+PromotionBatchItemProblem:
+  type: object
+  required: [index, coordinate, digest, status, code, message]
+  properties:
+    index: {type: integer, minimum: 0}
+    coordinate: {type: string}
+    digest: {type: string}
+    status: {type: integer}
+    code: {type: string}
+    message: {type: string}
+ArtifactPromotionState:
+  type: string
+  enum: [pending_approval, queued, running, completed, failed, rejected, expired, cancelled]
+PromotionChainHop:
+  type: object
+  required: [instance, repository, ruleId, at]
+  description: One step of the path an artifact took to its repository. The list is appended to and never rewritten.
+  properties:
+    instance:
+      type: string
+      description: The remote instance the artifact came from; empty for this instance.
+    repository:
+      type: string
+      description: The repository the artifact was promoted from.
+    ruleId:
+      type: string
+      description: The promotion rule that promoted it; empty for a manual promotion.
+    at: {type: string, format: date-time}
+PromotionApproval:
+  type: object
+  required: [approver, at]
+  properties:
+    approver: {type: string}
+    at: {type: string, format: date-time}
+ArtifactPromotion:
+  type: object
+  required: [id, targetRepositoryId, format, coordinate, digest, originRepository, chainPath, requestedBy, state, attempt, idempotencyKey, approvals, createdAt]
+  properties:
+    id: {type: string, format: uuid}
+    targetRepositoryId: {type: string, format: uuid}
+    format: {"$ref": "#/Format"}
+    coordinate: {type: string}
+    digest: {type: string}
+    originInstanceId: {type: string, format: uuid}
+    originRepository: {type: string}
+    ruleId: {type: string, format: uuid}
+    ruleVersion: {type: integer, format: int64}
+    chainPath:
+      type: array
+      items: {"$ref": "#/PromotionChainHop"}
+    requestedBy: {type: string}
+    state: {"$ref": "#/ArtifactPromotionState"}
+    attempt:
+      type: integer
+      minimum: 1
+      description: The try of the idempotencyKey this row records.
+    idempotencyKey: {type: string}
+    jobId: {type: string, format: uuid}
+    approvals:
+      type: array
+      items: {"$ref": "#/PromotionApproval"}
+    createdAt: {type: string, format: date-time}
+    completedAt: {type: string, format: date-time}
+ArtifactPromotionPage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items: {"$ref": "#/ArtifactPromotion"}
+    nextPageToken:
+      type: string
+      description: Present while older promotions follow; pass it as pageToken for the next page.
 ReplicationRequest:
   type: object
   required: [targetRepositoryId, coordinate, digest]
@@ -4189,10 +4316,16 @@ Problem:
       - version_not_sealed
       - version_empty
       - checksum_mismatch
+      - promotion_batch_rejected
     message:
       type: string
     requestId:
       type: string
+    items:
+      type: array
+      description: Present on promotion_batch_rejected. The refused items, each with the problem that refused it; nothing was queued.
+      items:
+        "$ref": "#/PromotionBatchItemProblem"
     members:
       type: array
       description: Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
@@ -5060,3 +5193,242 @@ RawVersionManifest:
   type: object
   additionalProperties: true
   description: The canonical manifest, keys sorted and without insignificant whitespace. `name`, `version`, `files` (`path`, `sha256`, `size`, sorted by path) and `properties`.
+RemoteInstanceAuthKind:
+  type: string
+  enum: [workload_identity, static_token]
+RemoteInstanceState:
+  type: string
+  enum: [active, unreachable, disabled]
+RemoteInstance:
+  type: object
+  required: [id, name, baseUrl, instanceId, authKind, audience, tokenConfigured, trustEvidence, state, version, createdAt, updatedAt]
+  properties:
+    id: {type: string, format: uuid}
+    name: {type: string, minLength: 1, maxLength: 128}
+    baseUrl: {type: string, format: uri, maxLength: 2048}
+    instanceId: {type: string, format: uuid, description: The instance id the remote reported when it was registered or last changed.}
+    authKind: {"$ref": "#/RemoteInstanceAuthKind"}
+    audience: {type: string, maxLength: 512, description: Audience of the workload assertion minted for this remote; empty for a static token.}
+    tokenConfigured: {type: boolean, description: True when a static token is stored. The token itself is never returned.}
+    trustEvidence: {type: boolean}
+    state: {"$ref": "#/RemoteInstanceState"}
+    lastCheckedAt: {type: string, format: date-time}
+    version: {type: string}
+    createdAt: {type: string, format: date-time}
+    updatedAt: {type: string, format: date-time}
+CreateRemoteInstance:
+  type: object
+  required: [name, baseUrl, authKind]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    baseUrl: {type: string, format: uri, maxLength: 2048}
+    authKind: {"$ref": "#/RemoteInstanceAuthKind"}
+    audience: {type: string, maxLength: 512, description: Required for workload_identity.}
+    token: {type: string, minLength: 8, maxLength: 4096, writeOnly: true, description: Required for static_token; forbidden for workload_identity.}
+    trustEvidence: {type: boolean, default: false}
+UpdateRemoteInstance:
+  type: object
+  required: [name, baseUrl, authKind, enabled]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    baseUrl: {type: string, format: uri, maxLength: 2048}
+    authKind: {"$ref": "#/RemoteInstanceAuthKind"}
+    audience: {type: string, maxLength: 512}
+    token: {type: string, minLength: 8, maxLength: 4096, writeOnly: true, description: "Replaces the sealed token. Omit it to keep the stored one, which is allowed only while baseUrl and audience are unchanged; a changed destination needs a new token (422 token_required)."}
+    trustEvidence: {type: boolean, default: false}
+    enabled: {type: boolean}
+RemoteInstancePage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/RemoteInstance"
+    nextPageToken:
+      type: string
+      description: Present while more instances follow; pass it as pageToken for the next page.
+InstanceLimits:
+  type: object
+  required: [maxBlobBytes, maxSessionBytes, maxBlobsPerSession, maxOpenSessionsPerPrincipal]
+  properties:
+    maxBlobBytes: {type: integer, format: int64, minimum: 1}
+    maxSessionBytes: {type: integer, format: int64, minimum: 1}
+    maxBlobsPerSession: {type: integer, format: int32, minimum: 1}
+    maxOpenSessionsPerPrincipal: {type: integer, format: int32, minimum: 1}
+InstanceDocument:
+  type: object
+  required: [instanceId, apiVersion, formats, limits]
+  properties:
+    instanceId: {type: string, format: uuid}
+    apiVersion: {type: string, minLength: 1, maxLength: 16, description: Version of the instance protocol; a sender requires "1".}
+    formats:
+      type: array
+      uniqueItems: true
+      description: Artifact formats this instance accepts as import targets.
+      items: {type: string, minLength: 1, maxLength: 32}
+    limits: {"$ref": "#/InstanceLimits"}
+RemoteInstanceTestResult:
+  type: object
+  required: [reachable, state, checkedAt, formats]
+  properties:
+    reachable: {type: boolean}
+    state: {"$ref": "#/RemoteInstanceState"}
+    checkedAt: {type: string, format: date-time}
+    instanceId: {type: string, format: uuid}
+    apiVersion: {type: string, maxLength: 16}
+    formats:
+      type: array
+      items: {type: string, maxLength: 32}
+    limits: {"$ref": "#/InstanceLimits"}
+    error: {type: string, maxLength: 1024, description: Why the check failed; never contains a credential.}
+PromotionRuleTargetKind:
+  type: string
+  enum: [local, remote]
+PromotionRuleMode:
+  type: string
+  enum: [copy]
+  description: Promotion copies; move and overwrite are not offered and the source is never changed.
+PromotionRuleTarget:
+  type: object
+  required: [kind]
+  properties:
+    kind: {"$ref": "#/PromotionRuleTargetKind"}
+    repositoryId: {type: string, format: uuid, description: Required for a local target; forbidden for a remote one.}
+    remoteInstanceId: {type: string, format: uuid, description: Required for a remote target; the id of a registered remote instance.}
+    remoteRepository: {type: string, minLength: 1, maxLength: 255, description: Required for a remote target; the repository name on the remote instance.}
+PromotionRuleCoordinate:
+  type: object
+  description: Exactly one of glob and regex. A glob matches the whole canonical coordinate; * does not cross a slash and ** does. A regex is Go RE2, anchored to the whole coordinate.
+  properties:
+    glob: {type: string, minLength: 1, maxLength: 512}
+    regex: {type: string, minLength: 1, maxLength: 512}
+PromotionRuleVersionRange:
+  type: object
+  required: [range]
+  properties:
+    range: {type: string, minLength: 1, maxLength: 256, description: A semantic version range such as ">=1.2.0 <2.0.0". A version that is not a semantic version never matches.}
+PromotionRuleMatch:
+  type: object
+  required: [coordinate]
+  properties:
+    coordinate: {"$ref": "#/PromotionRuleCoordinate"}
+    version: {"$ref": "#/PromotionRuleVersionRange"}
+    refs:
+      type: array
+      maxItems: 32
+      description: Globs over the mutable refs (OCI tags, npm dist-tags) that point at the artifact; only for formats with tags.
+      items: {type: string, minLength: 1, maxLength: 512}
+    properties:
+      type: object
+      maxProperties: 32
+      description: Property key to a glob over its value; only for a versioned generic repository, where properties are frozen when a version is sealed.
+      additionalProperties: {type: string, minLength: 1, maxLength: 512}
+    scope:
+      type: string
+      enum: [coordinate, release]
+      default: coordinate
+      description: release promotes the whole release of a matching coordinate and is available only for formats with the ReleaseSet capability.
+PromotionRuleScanCondition:
+  type: object
+  required: [completed]
+  properties:
+    completed: {type: boolean}
+    maxSeverity: {type: string, enum: [none, low, medium, high, critical], description: Highest severity a finding may have; requires completed.}
+PromotionRuleConditions:
+  type: object
+  description: All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.
+  properties:
+    securityPolicy: {type: string, enum: [pass], description: The target repository's admission policy admits the artifact.}
+    scan: {"$ref": "#/PromotionRuleScanCondition"}
+    minAge: {type: string, maxLength: 16, description: Minimum time since publication as a duration such as 72h.}
+    requireSignature: {type: boolean}
+    requireSbom: {type: boolean}
+    requireProvenance: {type: boolean}
+PromotionRule:
+  type: object
+  required: [id, name, sourceRepositoryId, target, match, conditions, mode, runAsServiceAccountId, enabled, version, createdBy, updatedBy, createdAt, updatedAt]
+  properties:
+    id: {type: string, format: uuid}
+    name: {type: string, minLength: 1, maxLength: 128}
+    sourceRepositoryId: {type: string, format: uuid}
+    target: {"$ref": "#/PromotionRuleTarget"}
+    match: {"$ref": "#/PromotionRuleMatch"}
+    conditions: {"$ref": "#/PromotionRuleConditions"}
+    mode: {"$ref": "#/PromotionRuleMode"}
+    runAsServiceAccountId: {type: string, format: uuid, description: The service account the rule runs as; source read and target write are authorized for it at every evaluation.}
+    enabled: {type: boolean}
+    version: {type: string, description: Increments on every edit.}
+    createdBy: {type: string}
+    updatedBy: {type: string}
+    createdAt: {type: string, format: date-time}
+    updatedAt: {type: string, format: date-time}
+CreatePromotionRule:
+  type: object
+  required: [name, sourceRepositoryId, target, match, runAsServiceAccountId]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    sourceRepositoryId: {type: string, format: uuid}
+    target: {"$ref": "#/PromotionRuleTarget"}
+    match: {"$ref": "#/PromotionRuleMatch"}
+    conditions: {"$ref": "#/PromotionRuleConditions"}
+    mode: {"$ref": "#/PromotionRuleMode"}
+    runAsServiceAccountId: {type: string, format: uuid}
+    enabled: {type: boolean, default: true}
+UpdatePromotionRule:
+  type: object
+  required: [name, target, match, runAsServiceAccountId, enabled]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    target: {"$ref": "#/PromotionRuleTarget"}
+    match: {"$ref": "#/PromotionRuleMatch"}
+    conditions: {"$ref": "#/PromotionRuleConditions"}
+    mode: {"$ref": "#/PromotionRuleMode"}
+    runAsServiceAccountId: {type: string, format: uuid}
+    enabled: {type: boolean}
+PromotionRulePage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/PromotionRule"
+    nextPageToken:
+      type: string
+      description: Present while more rules follow; pass it as pageToken for the next page.
+PromotionRuleConditionName:
+  type: string
+  enum: [notQuarantined, securityPolicy, scan, minAge, requireSignature, requireSbom, requireProvenance]
+PromotionRuleConditionVerdict:
+  type: object
+  required: [condition, verdict]
+  properties:
+    condition: {"$ref": "#/PromotionRuleConditionName"}
+    verdict: {type: string, enum: [pass, fail, not_evaluated]}
+    reason: {type: string, maxLength: 256, description: A stable code or a short explanation; present for fail and not_evaluated.}
+PromotionRuleDryRunItem:
+  type: object
+  required: [coordinate, digest, outcome, conditions]
+  properties:
+    coordinate: {type: string}
+    version: {type: string}
+    digest: {type: string}
+    outcome: {type: string, enum: [eligible, blocked, undetermined], description: "blocked when a condition fails, undetermined when none fails but one was not evaluated."}
+    conditions:
+      type: array
+      items:
+        "$ref": "#/PromotionRuleConditionVerdict"
+PromotionRuleDryRun:
+  type: object
+  required: [ruleId, ruleVersion, examined, matched, truncated, items]
+  properties:
+    ruleId: {type: string, format: uuid}
+    ruleVersion: {type: string}
+    examined: {type: integer, format: int32, description: Artifacts of the source repository the evaluation looked at.}
+    matched: {type: integer, format: int32, description: Examined artifacts that the match selected.}
+    truncated: {type: boolean, description: True when the examination cap or the limit cut the answer short.}
+    items:
+      type: array
+      items:
+        "$ref": "#/PromotionRuleDryRunItem"

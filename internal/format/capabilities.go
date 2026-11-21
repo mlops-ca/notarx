@@ -41,6 +41,82 @@ type Governance interface {
 type Promotion interface {
 	EnqueuePromotion(context.Context, string, string, string, string, string, ...repository.AuditRecord) (repository.LifecycleJob, bool, error)
 }
+
+// PromotionPublisher extends Promotion with the format's own execution of a promotion job: it claims the format's
+// queued promotion jobs and publishes each artifact into its target. A format that can enqueue a promotion but not
+// publish it does not implement it.
+type PromotionPublisher interface {
+	Promotion
+	RunPromotionJobs(context.Context, int) error
+}
+
+// PromotionOptions carries the request details only some formats need: the acting principal and, for APT, the suite
+// the artifact is published into. A caller sets them with WithPromotionOptions before EnqueuePromotion.
+type PromotionOptions struct {
+	Actor          string
+	APTTargetSuite string
+}
+
+type promotionOptionsKey struct{}
+
+// WithPromotionOptions returns a context that carries options to EnqueuePromotion.
+func WithPromotionOptions(ctx context.Context, options PromotionOptions) context.Context {
+	return context.WithValue(ctx, promotionOptionsKey{}, options)
+}
+
+// PromotionOptionsFrom returns the options of ctx, or the zero value.
+func PromotionOptionsFrom(ctx context.Context) PromotionOptions {
+	options, _ := ctx.Value(promotionOptionsKey{}).(PromotionOptions)
+	return options
+}
+
+// BlobDescriptor names one content-addressed object of a unit of publication.
+type BlobDescriptor struct {
+	Digest, ObjectKey string
+	Size              int64
+}
+
+// ExportedUnit is one immutable publication unit: its manifest and the descriptors of the blobs it references.
+type ExportedUnit struct {
+	Format             repository.Format
+	Coordinate, Digest string
+	Manifest           []byte
+	Blobs              []BlobDescriptor
+}
+
+// Exporter returns the publication unit of an artifact so another repository or instance can import it (ADR 0021,
+// Format capabilities and scope).
+type Exporter interface {
+	ExportUnit(ctx context.Context, repositoryID, coordinate, digest string) (ExportedUnit, error)
+}
+
+// Importer publishes an exported unit into a repository, reading each blob through open. It must be idempotent for a
+// digest already present and report a different digest at the same coordinate as a conflict.
+type Importer interface {
+	ImportUnit(ctx context.Context, repositoryID string, unit ExportedUnit, open func(BlobDescriptor) (io.ReadCloser, error)) error
+}
+
+// TagLookup returns the tags that point at the artifact of a coordinate and digest.
+type TagLookup func(coordinate, digest string) []string
+
+// Tagged lists the mutable tags that point at an artifact (OCI tags, npm dist-tags). The tags of one name (an OCI
+// image, an npm package) are read once and answer every artifact of that name, so a caller that evaluates many
+// artifacts does not read the name again for each.
+type Tagged interface {
+	// TagName is the name whose tags are read together for the coordinate; false when no tag can point at it.
+	TagName(coordinate string) (string, bool)
+	// TagsOfName reads every tag of the name and returns the lookup over them; ErrNotFound when the name is absent.
+	TagsOfName(ctx context.Context, repositoryID, name string) (TagLookup, error)
+}
+
+// ReleaseMember is one artifact of a release.
+type ReleaseMember struct{ Coordinate, Digest string }
+
+// ReleaseSet returns the members of the release the coordinate identifies; the format package decides what a release
+// is, and nothing is inferred generically.
+type ReleaseSet interface {
+	ReleaseMembers(ctx context.Context, repositoryID, coordinate string) ([]ReleaseMember, error)
+}
 type Replication interface {
 	ReplicationCheckpoints(context.Context, string, string, string) ([]repository.ReplicationCheckpoint, error)
 }

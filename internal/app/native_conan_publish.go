@@ -17,12 +17,11 @@ import (
 )
 
 type nativeConanPublishHandler struct {
-	store              GatewayStore
-	publications       repository.ConanPublicationStore
-	objects            ObjectStore
-	auth               Authenticator
-	authorizer         RepositoryAuthorizer
-	publicationScanner *publicationScanScheduler
+	store        GatewayStore
+	publications repository.ConanPublicationStore
+	objects      ObjectStore
+	auth         Authenticator
+	authorizer   RepositoryAuthorizer
 }
 
 // nativeConanPublishRequest is the CreateConanPublishSession contract body.
@@ -37,11 +36,6 @@ type nativeConanPublishRequest struct {
 
 func newNativeConanPublishHandler(store GatewayStore, publications repository.ConanPublicationStore, objects ObjectStore, auth Authenticator) nativeConanPublishHandler {
 	return nativeConanPublishHandler{store: store, publications: publications, objects: objects, auth: auth, authorizer: RepositoryAuthorizer{Grants: store, Legacy: auth}}
-}
-
-func (h nativeConanPublishHandler) withPublicationScanner(scanner publicationScanScheduler) nativeConanPublishHandler {
-	h.publicationScanner = &scanner
-	return h
 }
 
 func (h nativeConanPublishHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -173,9 +167,6 @@ func (h nativeConanPublishHandler) commit(w http.ResponseWriter, r *http.Request
 	if _, _, err = h.publications.CommitConanPublicationSession(r.Context(), session.ID, session.Version, digest, actor); err != nil {
 		writeConanPublicationError(w, err)
 		return
-	}
-	if h.publicationScanner != nil {
-		_ = h.publicationScanner.ScheduleRepository(r.Context(), session.RepositoryID, repository.FormatConan, conanSessionCoordinate(session), digest, actor)
 	}
 	writeNativeMavenJSON(w, http.StatusOK, map[string]string{"state": "visible", "revision": session.RecipeRevision})
 }

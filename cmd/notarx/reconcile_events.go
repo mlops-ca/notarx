@@ -15,9 +15,9 @@ import (
 
 const reconcileEventsUsage = "usage: notarx reconcile-events (NOTARX_DATABASE_URL names the PostgreSQL database; NOTARX_EVENTS_RETENTION bounds the window; off falls back to 14d)"
 
-// runReconcileEvents is the repair tool of ADR 0021 (slice 1b): it emits artifact.published for every visible Raw, OCI
-// and Maven publication inside the event retention window that has none, once, and prints how many events it wrote.
-// It is the same reconciler the events worker runs, so it is safe next to a running node.
+// runReconcileEvents is the repair tool of ADR 0021 (slice 1c): it emits artifact.published for every visible publication
+// of the nine formats that emit it inside the event retention window and have none, once, and prints how many events it
+// wrote. No worker runs it; it is safe next to a running node because the store checks the dedupe key under a lock.
 func runReconcileEvents(ctx context.Context, args []string, getenv func(string) string, lookup func(string) (string, bool), stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("reconcile-events", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)

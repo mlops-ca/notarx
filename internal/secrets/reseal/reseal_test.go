@@ -47,6 +47,7 @@ func TestPurposesMatchCallers(t *testing.T) {
 		"nexus_migration_sources.credential_ciphertext": "nexus-source:X",
 		"identity_providers.secrets_sealed":             "oidc.client-secret",
 		"webhook_subscriptions.secret_ciphertext":       "webhook-subscription:X",
+		"remote_instances.token_sealed":                 "remote-instance:X",
 		"hosted_repositories.upstream_auth.secret":      "repository-upstream-auth",
 		"token_signing_keys.private_sealed":             "token-signing-key:X",
 	}

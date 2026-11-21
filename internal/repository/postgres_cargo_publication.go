@@ -150,6 +150,9 @@ func (s *PostgresStore) CommitCargoPublication(ctx context.Context, incoming Car
 	if err != nil {
 		return CargoPublication{}, false, err
 	}
+	if err = emitPublishedPostgres(ctx, tx, publication.RepositoryID, FormatCargo, cargoPublicationCoordinate(publication.Name, publication.Version), publication.Digest); err != nil {
+		return CargoPublication{}, false, err
+	}
 	// The quota is enforced by the counter, not by summing the repository's publications.
 	if err = capacity.Reserve(ctx, tx, publication.RepositoryID, publication.Size, 1); err != nil {
 		return CargoPublication{}, false, err

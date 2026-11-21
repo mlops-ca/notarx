@@ -95,6 +95,7 @@ func (s *MemoryStore) PublishNPMImport(ctx context.Context, c NPMImportClosure) 
 		if _, present := s.npmVersions[versionKey]; !present {
 			v.CreatedAt, v.CachedAt, v.State = now, now, "visible"
 			s.npmVersions[versionKey] = cloneNPMVersion(v)
+			s.emitPublishedLocked(ctx, c.RepositoryID, FormatNPM, c.PackageName+"@"+v.Version, v.Digest)
 		}
 	}
 	for tag, version := range c.DistTags {

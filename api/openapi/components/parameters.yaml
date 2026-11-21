@@ -18,6 +18,13 @@ RepositoryId:
   schema:
     type: string
     format: uuid
+PromotionBatchId:
+  name: batchId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
 AuthorizationTemplateId:
   name: templateId
   in: path
@@ -206,3 +213,17 @@ IfNoneMatch:
   description: Entity tag of a cached representation; a match answers 304.
   schema:
     type: string
+RemoteInstanceId:
+  name: remoteInstanceId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
+PromotionRuleId:
+  name: ruleId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid

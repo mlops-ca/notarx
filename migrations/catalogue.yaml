@@ -121,6 +121,45 @@ tables:
       confidence: "1"
     checks:
       artifact_license_confidence_check: ((confidence >= (0)::numeric) AND (confidence <= (1)::numeric))
+  artifact_promotions:
+    columns:
+      approvals: json
+      attempt: int32
+      chain_path: json
+      completed_at: timestamp?
+      coordinate: text
+      created_at: timestamp
+      digest: text
+      format: text
+      id: uuid
+      idempotency_key: text
+      job_id: uuid?
+      origin_instance_id: uuid?
+      origin_repository: text
+      requested_by: text
+      rule_id: uuid?
+      rule_version: int64?
+      state: text
+      target_repository_id: uuid
+    primaryKey: [id]
+    unique: [[idempotency_key, attempt]]
+    defaults:
+      approvals: '''[]'''
+      attempt: "1"
+      chain_path: '''[]'''
+      created_at: now()
+      origin_repository: ''''''
+    indexes:
+      - created_at desc,id desc
+      - target_repository_id,coordinate,digest
+    special:
+      artifact_promotions_job_idx: USING btree (job_id) WHERE (job_id IS NOT NULL)
+      artifact_promotions_pending_idx: USING btree (state) WHERE (state = ANY (ARRAY['pending_approval'::text, 'queued'::text, 'running'::text]))
+    checks:
+      artifact_promotions_approvals_check: (jsonb_typeof(approvals) = 'array'::text)
+      artifact_promotions_attempt_check: (attempt >= 1)
+      artifact_promotions_chain_path_check: (jsonb_typeof(chain_path) = 'array'::text)
+      artifact_promotions_state_check: (state = ANY (ARRAY['pending_approval'::text, 'queued'::text, 'running'::text, 'completed'::text, 'failed'::text, 'rejected'::text, 'expired'::text, 'cancelled'::text]))
   artifact_quarantines:
     columns:
       coordinate: text
@@ -922,6 +961,17 @@ tables:
       installation_repository_presets_repositories_created_check: (repositories_created >= 0)
       installation_repository_presets_singleton_check: singleton
       installation_repository_presets_state_check: (state = ANY (ARRAY['pending'::text, 'applied'::text, 'skipped_existing'::text]))
+  instance_identity:
+    columns:
+      created_at: timestamp
+      instance_id: uuid
+      singleton: bool
+    primaryKey: [singleton]
+    defaults:
+      created_at: now()
+      singleton: "true"
+    checks:
+      instance_identity_singleton_check: singleton
   lifecycle_jobs:
     columns:
       attempts: int32
@@ -3272,6 +3322,71 @@ tables:
       oci_subject_bindings_owner_check: (owner ~ '^[a-f0-9]{64}$'::text)
       oci_subject_bindings_source_version_check: (source_version > 0)
       oci_subject_bindings_subject_check: (subject ~ '^sha256:[a-f0-9]{64}$'::text)
+  promotion_batches:
+    columns:
+      created_at: timestamp
+      id: uuid
+      idempotency_key: text
+      items: json
+      request_hash: text
+      requested_by: text
+      source_repository_id: uuid
+      target_repository_id: uuid
+    primaryKey: [id]
+    unique: [[target_repository_id, idempotency_key]]
+    defaults:
+      created_at: now()
+    checks:
+      promotion_batches_items_check: ((jsonb_typeof(items) = 'array'::text) AND (jsonb_array_length(items) >= 1) AND (jsonb_array_length(items) <= 100))
+  promotion_rules:
+    columns:
+      approval: json?
+      conditions: json
+      created_at: timestamp
+      created_by: text
+      enabled: bool
+      id: uuid
+      match: json
+      name: text
+      remote_instance_id: uuid?
+      remote_repository: text?
+      run_as_service_account_id: uuid
+      schedule: json?
+      source_repository_id: uuid
+      target_kind: text
+      target_repository_id: uuid?
+      updated_at: timestamp
+      updated_by: text
+      version: int64
+    primaryKey: [id]
+    unique: [[name]]
+    foreignKeys:
+      - remote_instance_id -> remote_instances(id)
+      - run_as_service_account_id -> service_accounts(id)
+      - source_repository_id -> hosted_repositories(id) on delete cascade
+      - target_repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      conditions: '''{}'''
+      created_at: now()
+      enabled: "true"
+      updated_at: now()
+      version: "1"
+    indexes:
+      - remote_instance_id
+      - run_as_service_account_id
+      - source_repository_id,enabled
+      - target_repository_id
+    special:
+      promotion_rules_name_bytes_idx: USING btree (name COLLATE "C")
+    checks:
+      promotion_rules_actor_check: ((length(created_by) >= 1) AND (length(created_by) <= 255) AND (length(updated_by) >= 1) AND (length(updated_by) <= 255))
+      promotion_rules_approval_check: ((approval IS NULL) OR (jsonb_typeof(approval) = 'object'::text))
+      promotion_rules_conditions_check: (jsonb_typeof(conditions) = 'object'::text)
+      promotion_rules_match_check: (jsonb_typeof(match) = 'object'::text)
+      promotion_rules_name_check: ((length(name) >= 1) AND (length(name) <= 128))
+      promotion_rules_schedule_check: ((schedule IS NULL) OR (jsonb_typeof(schedule) = 'object'::text))
+      promotion_rules_target_check: (((target_kind = 'local'::text) AND (target_repository_id IS NOT NULL) AND (remote_instance_id IS NULL) AND (remote_repository IS NULL) AND (target_repository_id <> source_repository_id)) OR ((target_kind = 'remote'::text) AND (target_repository_id IS NULL) AND (remote_instance_id IS NOT NULL) AND (remote_repository IS NOT NULL) AND (length(remote_repository) >= 1) AND (length(remote_repository) <= 255)))
+      promotion_rules_version_check: (version >= 1)
   public_access_policy:
     columns:
       enabled: bool
@@ -3321,6 +3436,40 @@ tables:
       enabled: "true"
     checks:
       raw_groups_cache_quota_bytes_check: (cache_quota_bytes > 0)
+  remote_instances:
+    columns:
+      audience: text
+      auth_kind: text
+      base_url: text
+      created_at: timestamp
+      id: uuid
+      instance_id: uuid
+      last_checked_at: timestamp?
+      name: text
+      state: text
+      token_sealed: text?
+      trust_evidence: bool
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[name]]
+    defaults:
+      audience: ''''''
+      created_at: now()
+      state: '''active'''
+      trust_evidence: "false"
+      updated_at: now()
+      version: "1"
+    special:
+      remote_instances_name_bytes_idx: USING btree (name COLLATE "C")
+    checks:
+      remote_instances_audience_check: ((length(audience) <= 512) AND ((auth_kind <> 'workload_identity'::text) OR (audience <> ''::text)))
+      remote_instances_auth_kind_check: (auth_kind = ANY (ARRAY['workload_identity'::text, 'static_token'::text]))
+      remote_instances_base_url_check: ((length(base_url) >= 1) AND (length(base_url) <= 2048))
+      remote_instances_name_check: ((length(name) >= 1) AND (length(name) <= 128))
+      remote_instances_state_check: (state = ANY (ARRAY['active'::text, 'unreachable'::text, 'disabled'::text]))
+      remote_instances_token_check: (((auth_kind = 'static_token'::text) AND (token_sealed IS NOT NULL) AND (token_sealed <> ''::text)) OR ((auth_kind = 'workload_identity'::text) AND (token_sealed IS NULL)))
+      remote_instances_version_check: (version >= 1)
   replication_checkpoints:
     columns:
       attempts: int32
@@ -4263,9 +4412,9 @@ tables:
       workload_trust_policies_state_check: (state = ANY (ARRAY['active'::text, 'disabled'::text]))
       workload_trust_policies_ttl_check: (max_token_ttl_seconds > 0)
 triggers:
+  artifact_promotions_chain_path_append_only: 'artifact_promotions: BEFORE UPDATE OF chain_path ON artifact_promotions FOR EACH ROW EXECUTE FUNCTION artifact_promotions_chain_path_append_only()'
   audit_cleanup_jobs_notify_insert: 'audit_cleanup_jobs: AFTER INSERT ON audit_cleanup_jobs FOR EACH ROW WHEN ((new.state = ''pending''::text)) EXECUTE FUNCTION notarx_notify_queue(''notarx_audit_cleanup'')'
   audit_cleanup_jobs_notify_update: 'audit_cleanup_jobs: AFTER UPDATE OF state ON audit_cleanup_jobs FOR EACH ROW WHEN (((new.state = ''pending''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_queue(''notarx_audit_cleanup'')'
-  cargo_promotion_state_webhook_after_update: 'lifecycle_jobs: AFTER UPDATE ON lifecycle_jobs FOR EACH ROW EXECUTE FUNCTION cargo_promotion_state_webhook()'
   cargo_replication_state_webhook_after_update: 'replication_plans: AFTER UPDATE ON replication_plans FOR EACH ROW EXECUTE FUNCTION cargo_replication_state_webhook()'
   hosted_group_members_notify_cache_delete: 'hosted_group_members: AFTER DELETE ON hosted_group_members REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_group_id(''group'')'
   hosted_group_members_notify_cache_insert: 'hosted_group_members: AFTER INSERT ON hosted_group_members REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_group_id(''group'')'
@@ -4285,6 +4434,7 @@ triggers:
   identity_providers_notify_cache_update: 'identity_providers: AFTER UPDATE ON identity_providers REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''identity_provider'')'
   lifecycle_jobs_notify_insert: 'lifecycle_jobs: AFTER INSERT ON lifecycle_jobs FOR EACH ROW WHEN ((new.state = ANY (ARRAY[''pending''::text, ''retrying''::text]))) EXECUTE FUNCTION notarx_notify_job_kind()'
   lifecycle_jobs_notify_update: 'lifecycle_jobs: AFTER UPDATE OF state, next_attempt_at ON lifecycle_jobs FOR EACH ROW WHEN (((new.state = ANY (ARRAY[''pending''::text, ''retrying''::text])) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_job_kind()'
+  lifecycle_jobs_promotion_state: 'lifecycle_jobs: AFTER UPDATE OF state ON lifecycle_jobs FOR EACH ROW WHEN (((new.kind = ''promotion''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION promotion_job_state_change()'
   public_access_policy_notify_cache: 'public_access_policy: AFTER INSERT OR DELETE OR UPDATE ON public_access_policy FOR EACH ROW EXECUTE FUNCTION notarx_notify_cache(''policy'', '''')'
   replication_plans_notify_insert: 'replication_plans: AFTER INSERT ON replication_plans FOR EACH ROW WHEN ((new.state = ANY (ARRAY[''pending''::text, ''failed''::text]))) EXECUTE FUNCTION notarx_notify_queue(''notarx_replication_plans'')'
   replication_plans_notify_update: 'replication_plans: AFTER UPDATE OF state, next_attempt_at ON replication_plans FOR EACH ROW WHEN (((new.state = ''pending''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_queue(''notarx_replication_plans'')'

@@ -33,6 +33,7 @@ func TestNativeNPMHostedPublishInstallAndAnonymousBrowse(t *testing.T) {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
+	scans := publicationScanDispatcher(t, store, repository.FormatNPM)
 	if _, err = store.ReplacePublicAccessPolicy(context.Background(), repository.PublicAccessPolicy{Enabled: true}, "1"); err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +48,9 @@ func TestNativeNPMHostedPublishInstallAndAnonymousBrowse(t *testing.T) {
 	handler.ServeHTTP(published, publish)
 	if published.Code != http.StatusCreated {
 		t.Fatalf("publish=%d %s", published.Code, published.Body.String())
+	}
+	if _, err = scans.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	requirePublicationScan(t, store, repo.ID, repository.FormatNPM, "@scope/widget@1.2.3", testScanDigest(string(tarball)))
 

@@ -97,6 +97,7 @@ func TestCargoPublicationScanResolvesExactCrate(t *testing.T) {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
+	scans := publicationScanDispatcher(t, store, repository.FormatCargo)
 	deps := publicationScanDependencies(Dependencies{}, repository.FormatCargo)
 	handler := newTestGateway(t, GatewayOptions{Dependencies: deps, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatCargo: objects}})
 	body, archive := cargoC0PublishFixture(t, "demo", "1.0.0", "demo")
@@ -110,6 +111,9 @@ func TestCargoPublicationScanResolvesExactCrate(t *testing.T) {
 	}
 	publication, err := store.GetCargoPublication(ctx, repo.ID, "demo", "1.0.0")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = scans.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	requirePublicationScan(t, store, repo.ID, repository.FormatCargo, "demo@1.0.0", publication.Digest)

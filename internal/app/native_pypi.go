@@ -42,17 +42,16 @@ var (
 )
 
 type nativePyPIHandler struct {
-	store              repository.NativePyPIStore
-	repos              repository.HostedRepositoryStore
-	readPolicies       repository.RepositoryQuarantineReadPolicyStore
-	quarantine         repository.ArtifactQuarantineStore
-	objects            ObjectStore
-	auth               Authenticator
-	authorizer         RepositoryAuthorizer
-	audit              repository.Store
-	metrics            *Metrics
-	proxy              PyPIClient
-	publicationScanner *publicationScanScheduler
+	store        repository.NativePyPIStore
+	repos        repository.HostedRepositoryStore
+	readPolicies repository.RepositoryQuarantineReadPolicyStore
+	quarantine   repository.ArtifactQuarantineStore
+	objects      ObjectStore
+	auth         Authenticator
+	authorizer   RepositoryAuthorizer
+	audit        repository.Store
+	metrics      *Metrics
+	proxy        PyPIClient
 }
 
 type pypiRoute struct {
@@ -75,11 +74,6 @@ func newNativePyPIHandler(store GatewayStore, objects ObjectStore, auth Authenti
 			return AuthorizationDecision{Allowed: true, Source: "legacy_protocol", Reason: "authenticated"}
 		}},
 	}
-}
-
-func (h nativePyPIHandler) withPublicationScanner(scanner publicationScanScheduler) nativePyPIHandler {
-	h.publicationScanner = &scanner
-	return h
 }
 
 func (h nativePyPIHandler) withProxy(client PyPIClient) nativePyPIHandler {
@@ -301,7 +295,7 @@ func (h nativePyPIHandler) upload(w http.ResponseWriter, r *http.Request, repo r
 		h.writeError(w, http.StatusInternalServerError, "persist distribution failed")
 		return
 	}
-	published, err := h.store.PublishPyPIFile(objectCtx, repository.PyPIFile{
+	published, err := h.store.PublishPyPIFile(repository.WithWriteActor(objectCtx, publisher), repository.PyPIFile{
 		RepositoryID: repo.ID, Project: project, Version: version, Filename: header.Filename,
 		FileType: strings.TrimSpace(r.FormValue("filetype")), PythonVersion: strings.TrimSpace(r.FormValue("pyversion")),
 		RequiresPython: strings.TrimSpace(r.FormValue("requires_python")), Digest: digest, ObjectKey: objectKey,
@@ -321,9 +315,6 @@ func (h nativePyPIHandler) upload(w http.ResponseWriter, r *http.Request, repo r
 	}
 	prefix := "/pypi/" + url.PathEscape(repo.Name)
 	w.Header().Set("Location", prefix+"/packages/"+url.PathEscape(published.Filename))
-	if h.publicationScanner != nil {
-		_ = h.publicationScanner.Schedule(r.Context(), repo, project+"@"+version, published.Digest, publisher)
-	}
 	w.WriteHeader(http.StatusCreated)
 	h.recordAudit(r, repo, project+"@"+version, "distribution", publisher, repository.AuditResolved, http.StatusCreated, published.Size, "bypass")
 }

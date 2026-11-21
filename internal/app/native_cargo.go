@@ -25,19 +25,18 @@ import (
 const cargoPublishBodyLimit = (129 << 20) + 8
 
 type nativeCargoHandler struct {
-	store              cargoPublicationStore
-	proxy              repository.CargoProxyStore
-	upstream           UpstreamClient
-	repos              repository.HostedRepositoryStore
-	objects            ObjectStore
-	auth               Authenticator
-	authorizer         RepositoryAuthorizer
-	audit              repository.Store
-	anonymous          repository.PublicAccessPolicyStore
-	readPolicies       repository.RepositoryQuarantineReadPolicyStore
-	quarantine         repository.ArtifactQuarantineStore
-	tombstones         repository.ArtifactTombstoneStore
-	publicationScanner *publicationScanScheduler
+	store        cargoPublicationStore
+	proxy        repository.CargoProxyStore
+	upstream     UpstreamClient
+	repos        repository.HostedRepositoryStore
+	objects      ObjectStore
+	auth         Authenticator
+	authorizer   RepositoryAuthorizer
+	audit        repository.Store
+	anonymous    repository.PublicAccessPolicyStore
+	readPolicies repository.RepositoryQuarantineReadPolicyStore
+	quarantine   repository.ArtifactQuarantineStore
+	tombstones   repository.ArtifactTombstoneStore
 }
 
 type cargoPublicationStore interface {
@@ -56,11 +55,6 @@ func newNativeCargoHandler(store GatewayStore, objects ObjectStore, auth Authent
 	return nativeCargoHandler{store: store, proxy: store, repos: store, objects: objects, auth: auth,
 		authorizer: RepositoryAuthorizer{Grants: store, Legacy: auth}, audit: store, anonymous: store,
 		readPolicies: store, quarantine: store, tombstones: store}
-}
-
-func (h nativeCargoHandler) withPublicationScanner(scanner publicationScanScheduler) nativeCargoHandler {
-	h.publicationScanner = &scanner
-	return h
 }
 
 func validCargoVersionCoordinate(coordinate string) bool {
@@ -323,7 +317,7 @@ func (h nativeCargoHandler) publish(w http.ResponseWriter, r *http.Request, repo
 		h.writeError(w, http.StatusServiceUnavailable, "store Cargo crate failed")
 		return
 	}
-	committed, replay, err := h.store.CommitCargoPublication(objectCtx, publication)
+	committed, replay, err := h.store.CommitCargoPublication(repository.WithWriteActor(objectCtx, principal.Actor), publication)
 	if err != nil {
 		if created {
 			h.cleanupUnreferencedObject(objectCtx, publication.ObjectKey)
@@ -347,9 +341,6 @@ func (h nativeCargoHandler) publish(w http.ResponseWriter, r *http.Request, repo
 	}})
 	if !replay {
 		h.recordAudit(r, repo, committed.Name+"@"+committed.Version, "crate", principal.Actor, repository.AuditResolved, http.StatusOK, committed.Size)
-		if h.publicationScanner != nil {
-			_ = h.publicationScanner.Schedule(r.Context(), repo, committed.Name+"@"+committed.Version, committed.Digest, principal.Actor)
-		}
 	}
 }
 

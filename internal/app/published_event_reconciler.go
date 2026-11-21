@@ -3,28 +3,21 @@ package app
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"time"
 
-	"github.com/mlops-ca/notarx/internal/background"
-	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
 const (
 	// publishedReconcileBatch is how many publications of one format a pass emits before it asks again.
 	publishedReconcileBatch = 200
-	// PublishedReconcileConsumer names the reconciler's lease row.
-	PublishedReconcileConsumer = "published-reconciler"
-	// publishedReconcileLeaseTTL bounds how long a crashed reconciler keeps the other nodes out.
-	publishedReconcileLeaseTTL = 10 * time.Minute
 )
 
-// PublishedEventReconciler is the catch-up worker and repair tool of ADR 0021 (slice 1b): it emits
-// artifact.published for the visible publications that have none, idempotently by dedupe key, so a publication that
-// committed before its format emitted natively, or through a path that does not emit, still reaches the event
-// consumers. With Leases set only the node holding the lease reconciles; the store checks the dedupe key under an
-// advisory lock either way, so a second reconciler (the repair tool next to a node) writes no duplicate.
+// PublishedEventReconciler is the repair tool of ADR 0021 (slice 1c): it emits artifact.published for the visible
+// publications that have none, idempotently by dedupe key, so a publication whose event was lost (a database restored
+// from a backup, an event log trimmed too early) still reaches the event consumers. Every format emits the event in its
+// publish transaction, so nothing schedules it: `notarx reconcile-events` runs it once. The store checks the dedupe key
+// under an advisory lock, so the tool next to a running node writes no duplicate.
 type PublishedEventReconciler struct {
 	Store repository.PublishedEventReconciler
 	// Retention is the keep time of the event log (NOTARX_EVENTS_RETENTION): only publications younger than it are
@@ -33,10 +26,6 @@ type PublishedEventReconciler struct {
 	Retention time.Duration
 	// Batch is the publications per format a store call handles; it defaults to publishedReconcileBatch.
 	Batch int
-	// Leases elects the reconciling node between runs; nil runs on every call.
-	Leases events.Leaser
-	// Owner names this node in the lease.
-	Owner string
 	// Now is the clock of the retention floor, injected by tests.
 	Now func() time.Time
 }
@@ -74,42 +63,4 @@ func (r PublishedEventReconciler) RunOnce(ctx context.Context) (int, error) {
 			return total, err
 		}
 	}
-}
-
-// runLeased is RunOnce under the lease: a node that does not hold it, or that ran less than interval ago, does nothing.
-func (r PublishedEventReconciler) runLeased(ctx context.Context, interval time.Duration) (int, error) {
-	if r.Leases == nil {
-		return r.RunOnce(ctx)
-	}
-	task := events.LeaseTask(PublishedReconcileConsumer)
-	held, err := r.Leases.AcquireInternalTaskLease(ctx, task, r.Owner, publishedReconcileLeaseTTL, interval)
-	if err != nil || !held {
-		return 0, err
-	}
-	written, runErr := r.RunOnce(ctx)
-	// Release even when ctx ended, so the next node need not wait out the TTL; a completed run starts the interval.
-	release, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-	defer cancel()
-	releaseErr := r.Leases.ReleaseInternalTaskLease(release, task, r.Owner, ctx.Err() == nil)
-	return written, errors.Join(runErr, releaseErr)
-}
-
-// Start runs the reconciler every interval until ctx ends.
-func (r PublishedEventReconciler) Start(ctx context.Context, interval time.Duration) {
-	background.Go(ctx, func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for {
-			if written, err := r.runLeased(ctx, interval); err != nil && ctx.Err() == nil {
-				slog.Warn("published event reconciliation failed", "error", err)
-			} else if written > 0 {
-				slog.Info("published events reconciled", "events", written)
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-			}
-		}
-	})
 }

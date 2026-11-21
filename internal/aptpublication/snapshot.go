@@ -37,24 +37,14 @@ type publisherStore interface {
 // Publisher builds a complete immutable suite view and performs exactly one
 // database visibility transition after all bytes and signatures are durable.
 type Publisher struct {
-	store              publisherStore
-	objects            objectstore.Store
-	signer             Signer
-	metrics            SigningMetrics
-	publicationScanner PublicationScanScheduler
+	store   publisherStore
+	objects objectstore.Store
+	signer  Signer
+	metrics SigningMetrics
 }
 
 func NewPublisher(store publisherStore, objects objectstore.Store, signer Signer) *Publisher {
 	return &Publisher{store: store, objects: objects, signer: signer}
-}
-
-type PublicationScanScheduler interface {
-	ScheduleRepository(context.Context, string, repository.Format, string, string, string) error
-}
-
-func (p *Publisher) WithPublicationScanner(scanner PublicationScanScheduler) *Publisher {
-	p.publicationScanner = scanner
-	return p
 }
 
 type SigningMetrics interface {
@@ -234,6 +224,8 @@ func (p *Publisher) Publish(ctx context.Context, input PublishSnapshotInput) (pu
 	snapshot.SignerIdentity = signature.SignerIdentity
 	snapshot.KeyFingerprint = signature.KeyFingerprint
 	snapshot.SignatureAlgorithm = signature.Algorithm
+	// The snapshot commit emits artifact.published for each pool path it binds for the first time; the event names the actor.
+	objectCtx = repository.WithWriteActor(objectCtx, input.Actor)
 	audit := repository.AuditRecord{
 		GroupName: repo.Name, Repository: repo.Name, Actor: input.Actor, Outcome: repository.AuditResolved,
 		OccurredAt: time.Now().UTC(), Format: string(repository.FormatAPT), Resource: input.Suite,
@@ -266,11 +258,6 @@ func (p *Publisher) Publish(ctx context.Context, input PublishSnapshotInput) (pu
 	}
 	if err != nil {
 		return repository.APTRepositorySnapshot{}, err
-	}
-	if p.publicationScanner != nil {
-		for _, pkg := range packages {
-			_ = p.publicationScanner.ScheduleRepository(ctx, input.RepositoryID, repository.FormatAPT, pkg.poolPath, pkg.revision.Digest, input.Actor)
-		}
 	}
 	return published, nil
 }

@@ -51,6 +51,8 @@ var gatewayStorePorts = map[string]reflect.Type{
 	"RawStore":                            reflect.TypeFor[RawStore](),
 	"ReplicationStore":                    reflect.TypeFor[ReplicationStore](),
 	"RepositoryCapacityStore":             reflect.TypeFor[RepositoryCapacityStore](),
+	"PromotionRuleStore":                  reflect.TypeFor[PromotionRuleStore](),
+	"RemoteInstanceStore":                 reflect.TypeFor[RemoteInstanceStore](),
 	"RepositoryGrantStore":                reflect.TypeFor[RepositoryGrantStore](),
 	"RepositoryQuarantineReadPolicyStore": reflect.TypeFor[RepositoryQuarantineReadPolicyStore](),
 	"RepositoryQuotaAlertStore":           reflect.TypeFor[RepositoryQuotaAlertStore](),

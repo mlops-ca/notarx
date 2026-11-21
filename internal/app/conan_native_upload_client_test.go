@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/scanning"
@@ -99,6 +100,16 @@ func exerciseConanNativeClient(t *testing.T, backend conanClientBackend, reopen 
 	policy := repository.DefaultRepositorySecurityPolicy()
 	policy.AutoScanOnPublish = true
 	if _, err = store.ReplaceRepositorySecurityPolicy(ctx, repo.ID, policy, policy.Version); err != nil {
+		t.Fatal(err)
+	}
+	// The scan of a publication is scheduled by the artifact.published consumer, not by the publish request. The first
+	// pass creates the consumer's cursor, so it runs before the first publication. The dispatcher is rebuilt on the current store because the service restarts reopen the backend.
+	scanPass := func() error {
+		dispatcher := &events.Dispatcher{Source: store.(events.Source), Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store.(publicationScanStore), true, []repository.Format{repository.FormatConan}, nil).Consumer()}}
+		_, runErr := dispatcher.RunOnce(ctx)
+		return runErr
+	}
+	if err = scanPass(); err != nil {
 		t.Fatal(err)
 	}
 	build := func() http.Handler {
@@ -381,6 +392,9 @@ class Fixture(ConanFile):
 	}
 	if publications != 4 || replays != 2 {
 		t.Fatalf("publication audits=%d replays=%d, want initial recipe/package and two manifest-only replays", publications, replays)
+	}
+	if err = scanPass(); err != nil {
+		t.Fatal(err)
 	}
 	jobs, err := store.ListLifecycleJobs(ctx, repo.ID, 100)
 	if err != nil || len(jobs) != 2 {

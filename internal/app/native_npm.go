@@ -33,21 +33,20 @@ const (
 )
 
 type nativeNPMHandler struct {
-	store              repository.NativeNPMStore
-	metadata           repository.NPMMetadataStore
-	repos              repository.HostedRepositoryStore
-	readPolicies       repository.RepositoryQuarantineReadPolicyStore
-	quarantine         repository.ArtifactQuarantineStore
-	objects            ObjectStore
-	auth               Authenticator
-	authorizer         RepositoryAuthorizer
-	audit              repository.Store
-	metrics            *Metrics
-	proxy              NPMClient
-	protection         *npmProxyProtection
-	metadataTTL        time.Duration
-	negativeTTL        time.Duration
-	publicationScanner *publicationScanScheduler
+	store        repository.NativeNPMStore
+	metadata     repository.NPMMetadataStore
+	repos        repository.HostedRepositoryStore
+	readPolicies repository.RepositoryQuarantineReadPolicyStore
+	quarantine   repository.ArtifactQuarantineStore
+	objects      ObjectStore
+	auth         Authenticator
+	authorizer   RepositoryAuthorizer
+	audit        repository.Store
+	metrics      *Metrics
+	proxy        NPMClient
+	protection   *npmProxyProtection
+	metadataTTL  time.Duration
+	negativeTTL  time.Duration
 }
 
 type npmPublishDocument struct {
@@ -131,11 +130,6 @@ func (h nativeNPMHandler) withProxy(client NPMClient) nativeNPMHandler {
 
 func (h nativeNPMHandler) withMetrics(metrics *Metrics) nativeNPMHandler {
 	h.metrics = metrics
-	return h
-}
-
-func (h nativeNPMHandler) withPublicationScanner(scanner publicationScanScheduler) nativeNPMHandler {
-	h.publicationScanner = &scanner
 	return h
 }
 
@@ -417,7 +411,8 @@ func (h nativeNPMHandler) publish(w http.ResponseWriter, r *http.Request, repo r
 		h.writeError(w, http.StatusInternalServerError, "persist npm tarball failed")
 		return
 	}
-	published, err := h.store.PublishNPMVersion(r.Context(), repository.NPMVersion{
+	// The publish emits artifact.published in its transaction; the event names the publisher.
+	published, err := h.store.PublishNPMVersion(repository.WithWriteActor(r.Context(), publisher), repository.NPMVersion{
 		RepositoryID: repo.ID, PackageName: packageName, Version: version, Digest: digest,
 		Integrity: integrity, Shasum: shasum, TarballName: tarballName, ObjectKey: objectKey,
 		Size: int64(len(body)), Manifest: append([]byte(nil), manifest...), Publisher: publisher,
@@ -438,9 +433,6 @@ func (h nativeNPMHandler) publish(w http.ResponseWriter, r *http.Request, repo r
 	if err != nil {
 		h.writeError(w, http.StatusInternalServerError, "publish npm package failed")
 		return
-	}
-	if h.publicationScanner != nil {
-		_ = h.publicationScanner.Schedule(r.Context(), repo, packageName+"@"+version, published.Digest, publisher)
 	}
 	h.recordAudit(r, repo, packageName+"@"+version, publisher, repository.AuditResolved, http.StatusCreated, published.Size)
 	h.writeJSON(w, r, http.StatusCreated, map[string]any{"ok": true, "id": packageName, "rev": published.Digest})

@@ -67,8 +67,7 @@ const PublicationScanConsumer = "publication-scan"
 
 // Consumer returns the scheduler as an internal consumer of artifact.published events (ADR 0021): a
 // publication schedules its scan when the repository's autoScanOnPublish is on. The scan job key is
-// idempotent, so the at-least-once delivery of the dispatcher and the remaining post-commit call sites
-// of formats that do not emit natively yet cannot enqueue a scan twice.
+// idempotent, so the at-least-once delivery of the dispatcher cannot enqueue a scan twice.
 func (s publicationScanScheduler) Consumer() events.Consumer {
 	return events.Consumer{Name: PublicationScanConsumer, Types: []events.Type{events.ArtifactPublished}, Handler: s}
 }

@@ -1,0 +1,124 @@
+remote_instances:
+  get:
+    operationId: listRemoteInstances
+    description: >-
+      Lists the registered remote notarx instances by name, paged by keyset on the unique name; continue with the nextPageToken of the previous page. Platform administrators only. The token of a static-token instance is never returned.
+    parameters:
+    - name: limit
+      in: query
+      schema: {type: integer, minimum: 1, maximum: 500, default: 500}
+    - "$ref": "../components/parameters.yaml#/PageToken"
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/RemoteInstanceList"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+  post:
+    operationId: createRemoteInstance
+    description: >-
+      Registers a remote notarx instance. The base URL must pass the egress policy (private networks are refused unless NOTARX_REMOTE_ALLOW_PRIVATE_NETWORKS is true, TLS is verified, redirects are not followed), and GET /.well-known/notarx of the remote must answer a valid instance document. An instance id equal to this instance's own id is rejected. A static token is sealed with the settings encryption key and is write-only.
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/CreateRemoteInstance"
+    responses:
+      '201':
+        "$ref": "../components/responses.yaml#/RemoteInstance"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+      '422':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"
+remote_instances_remoteInstanceId:
+  parameters:
+  - "$ref": "../components/parameters.yaml#/RemoteInstanceId"
+  get:
+    operationId: getRemoteInstance
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/RemoteInstance"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+  put:
+    operationId: updateRemoteInstance
+    description: >-
+      Replaces the registration. The remote is checked again unless the instance is disabled. An omitted token keeps the sealed token only while baseUrl and audience are unchanged; changing either of a static_token instance requires a new token in the same request (422 token_required), so a credential sealed for one host is never sent to another. Switching to workload_identity removes it.
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IfMatch"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/UpdateRemoteInstance"
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/RemoteInstance"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+      '412':
+        "$ref": "../components/responses.yaml#/Problem"
+      '422':
+        "$ref": "../components/responses.yaml#/Problem"
+      '503':
+        "$ref": "../components/responses.yaml#/Problem"
+  delete:
+    operationId: deleteRemoteInstance
+    responses:
+      '204':
+        description: The remote instance was deleted
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
+remote_instances_remoteInstanceId_test:
+  parameters:
+  - "$ref": "../components/parameters.yaml#/RemoteInstanceId"
+  post:
+    operationId: testRemoteInstance
+    description: >-
+      Fetches GET /.well-known/notarx of the remote through the egress policy and records the outcome: the state becomes active or unreachable and lastCheckedAt is set. A failed check is a 200 answer with reachable false and a reason; a remote that now reports this instance's own id or another instance id than registered is unreachable.
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/RemoteInstanceTest"
+      '400':
+        "$ref": "../components/responses.yaml#/Problem"
+      '401':
+        "$ref": "../components/responses.yaml#/Problem"
+      '403':
+        "$ref": "../components/responses.yaml#/Problem"
+      '404':
+        "$ref": "../components/responses.yaml#/Problem"

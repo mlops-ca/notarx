@@ -1522,9 +1522,14 @@ export type Problem = {
     | "version_tombstoned"
     | "version_not_sealed"
     | "version_empty"
-    | "checksum_mismatch";
+    | "checksum_mismatch"
+    | "promotion_batch_rejected";
   message: string;
   requestId: string;
+  /**
+   * Present on promotion_batch_rejected. The refused items, each with the problem that refused it; nothing was queued.
+   */
+  items?: Array<PromotionBatchItemProblem>;
   /**
    * Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
    */
@@ -1968,6 +1973,15 @@ export type AuditCleanupJob = {
   startedAt?: string;
   completedAt?: string;
   lastError?: string;
+};
+
+export type PromotionBatchItemProblem = {
+  index: number;
+  coordinate: string;
+  digest: string;
+  status: number;
+  code: string;
+  message: string;
 };
 
 /**
@@ -3116,6 +3130,266 @@ export type UpdateWebhookSubscription = {
   enabled: boolean;
 };
 
+export type RemoteInstanceAuthKind = "workload_identity" | "static_token";
+
+export type RemoteInstanceState = "active" | "unreachable" | "disabled";
+
+export type RemoteInstance = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  /**
+   * The instance id the remote reported when it was registered or last changed.
+   */
+  instanceId: string;
+  authKind: RemoteInstanceAuthKind;
+  /**
+   * Audience of the workload assertion minted for this remote; empty for a static token.
+   */
+  audience: string;
+  /**
+   * True when a static token is stored. The token itself is never returned.
+   */
+  tokenConfigured: boolean;
+  trustEvidence: boolean;
+  state: RemoteInstanceState;
+  lastCheckedAt?: string;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RemoteInstancePage = {
+  items: Array<RemoteInstance>;
+  /**
+   * Present while more instances follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
+
+export type CreateRemoteInstance = {
+  name: string;
+  baseUrl: string;
+  authKind: RemoteInstanceAuthKind;
+  /**
+   * Required for workload_identity.
+   */
+  audience?: string;
+  trustEvidence?: boolean;
+};
+
+export type UpdateRemoteInstance = {
+  name: string;
+  baseUrl: string;
+  authKind: RemoteInstanceAuthKind;
+  audience?: string;
+  trustEvidence?: boolean;
+  enabled: boolean;
+};
+
+export type InstanceLimits = {
+  maxBlobBytes: number;
+  maxSessionBytes: number;
+  maxBlobsPerSession: number;
+  maxOpenSessionsPerPrincipal: number;
+};
+
+export type RemoteInstanceTestResult = {
+  reachable: boolean;
+  state: RemoteInstanceState;
+  checkedAt: string;
+  instanceId?: string;
+  apiVersion?: string;
+  formats: Array<string>;
+  limits?: InstanceLimits;
+  /**
+   * Why the check failed; never contains a credential.
+   */
+  error?: string;
+};
+
+export type PromotionRuleTargetKind = "local" | "remote";
+
+export type PromotionRuleTarget = {
+  kind: PromotionRuleTargetKind;
+  /**
+   * Required for a local target; forbidden for a remote one.
+   */
+  repositoryId?: string;
+  /**
+   * Required for a remote target; the id of a registered remote instance.
+   */
+  remoteInstanceId?: string;
+  /**
+   * Required for a remote target; the repository name on the remote instance.
+   */
+  remoteRepository?: string;
+};
+
+/**
+ * Exactly one of glob and regex. A glob matches the whole canonical coordinate; * does not cross a slash and ** does. A regex is Go RE2, anchored to the whole coordinate.
+ */
+export type PromotionRuleCoordinate = {
+  glob?: string;
+  regex?: string;
+};
+
+export type PromotionRuleVersionRange = {
+  /**
+   * A semantic version range such as ">=1.2.0 <2.0.0". A version that is not a semantic version never matches.
+   */
+  range: string;
+};
+
+export type PromotionRuleMatch = {
+  coordinate: PromotionRuleCoordinate;
+  version?: PromotionRuleVersionRange;
+  /**
+   * Globs over the mutable refs (OCI tags, npm dist-tags) that point at the artifact; only for formats with tags.
+   */
+  refs?: Array<string>;
+  /**
+   * Property key to a glob over its value; only for a versioned generic repository, where properties are frozen when a version is sealed.
+   */
+  properties?: {
+    [key: string]: string;
+  };
+  /**
+   * release promotes the whole release of a matching coordinate and is available only for formats with the ReleaseSet capability.
+   */
+  scope?: "coordinate" | "release";
+};
+
+export type PromotionRuleScanCondition = {
+  completed: boolean;
+  /**
+   * Highest severity a finding may have; requires completed.
+   */
+  maxSeverity?: "none" | "low" | "medium" | "high" | "critical";
+};
+
+/**
+ * All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.
+ */
+export type PromotionRuleConditions = {
+  /**
+   * The target repository's admission policy admits the artifact.
+   */
+  securityPolicy?: "pass";
+  scan?: PromotionRuleScanCondition;
+  /**
+   * Minimum time since publication as a duration such as 72h.
+   */
+  minAge?: string;
+  requireSignature?: boolean;
+  requireSbom?: boolean;
+  requireProvenance?: boolean;
+};
+
+/**
+ * Promotion copies; move and overwrite are not offered and the source is never changed.
+ */
+export type PromotionRuleMode = "copy";
+
+export type PromotionRule = {
+  id: string;
+  name: string;
+  sourceRepositoryId: string;
+  target: PromotionRuleTarget;
+  match: PromotionRuleMatch;
+  conditions: PromotionRuleConditions;
+  mode: PromotionRuleMode;
+  /**
+   * The service account the rule runs as; source read and target write are authorized for it at every evaluation.
+   */
+  runAsServiceAccountId: string;
+  enabled: boolean;
+  /**
+   * Increments on every edit.
+   */
+  version: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PromotionRulePage = {
+  items: Array<PromotionRule>;
+  /**
+   * Present while more rules follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
+
+export type CreatePromotionRule = {
+  name: string;
+  sourceRepositoryId: string;
+  target: PromotionRuleTarget;
+  match: PromotionRuleMatch;
+  conditions?: PromotionRuleConditions;
+  mode?: PromotionRuleMode;
+  runAsServiceAccountId: string;
+  enabled?: boolean;
+};
+
+export type UpdatePromotionRule = {
+  name: string;
+  target: PromotionRuleTarget;
+  match: PromotionRuleMatch;
+  conditions?: PromotionRuleConditions;
+  mode?: PromotionRuleMode;
+  runAsServiceAccountId: string;
+  enabled: boolean;
+};
+
+export type PromotionRuleConditionName =
+  | "notQuarantined"
+  | "securityPolicy"
+  | "scan"
+  | "minAge"
+  | "requireSignature"
+  | "requireSbom"
+  | "requireProvenance";
+
+export type PromotionRuleConditionVerdict = {
+  condition: PromotionRuleConditionName;
+  verdict: "pass" | "fail" | "not_evaluated";
+  /**
+   * A stable code or a short explanation; present for fail and not_evaluated.
+   */
+  reason?: string;
+};
+
+export type PromotionRuleDryRunItem = {
+  coordinate: string;
+  version?: string;
+  digest: string;
+  /**
+   * blocked when a condition fails, undetermined when none fails but one was not evaluated.
+   */
+  outcome: "eligible" | "blocked" | "undetermined";
+  conditions: Array<PromotionRuleConditionVerdict>;
+};
+
+export type PromotionRuleDryRun = {
+  ruleId: string;
+  ruleVersion: string;
+  /**
+   * Artifacts of the source repository the evaluation looked at.
+   */
+  examined: number;
+  /**
+   * Examined artifacts that the match selected.
+   */
+  matched: number;
+  /**
+   * True when the examination cap or the limit cut the answer short.
+   */
+  truncated: boolean;
+  items: Array<PromotionRuleDryRunItem>;
+};
+
 export type WebhookDeliveryState =
   "pending" | "delivering" | "retrying" | "succeeded" | "dead";
 
@@ -3922,6 +4196,123 @@ export type RetentionDryRunSummary = {
   oldestCandidateAt?: string;
 };
 
+export type ArtifactPromotionState =
+  | "pending_approval"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "rejected"
+  | "expired"
+  | "cancelled";
+
+/**
+ * One step of the path an artifact took to its repository. The list is appended to and never rewritten.
+ */
+export type PromotionChainHop = {
+  /**
+   * The remote instance the artifact came from; empty for this instance.
+   */
+  instance: string;
+  /**
+   * The repository the artifact was promoted from.
+   */
+  repository: string;
+  /**
+   * The promotion rule that promoted it; empty for a manual promotion.
+   */
+  ruleId: string;
+  at: string;
+};
+
+export type PromotionApproval = {
+  approver: string;
+  at: string;
+};
+
+export type ArtifactPromotion = {
+  id: string;
+  targetRepositoryId: string;
+  format: Format;
+  coordinate: string;
+  digest: string;
+  originInstanceId?: string;
+  originRepository: string;
+  ruleId?: string;
+  ruleVersion?: number;
+  chainPath: Array<PromotionChainHop>;
+  requestedBy: string;
+  state: ArtifactPromotionState;
+  /**
+   * The try of the idempotencyKey this row records.
+   */
+  attempt: number;
+  idempotencyKey: string;
+  jobId?: string;
+  approvals: Array<PromotionApproval>;
+  createdAt: string;
+  completedAt?: string;
+};
+
+export type ArtifactPromotionPage = {
+  items: Array<ArtifactPromotion>;
+  /**
+   * Present while older promotions follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
+
+export type PromotionBatchItemRequest = {
+  coordinate: string;
+  digest: string;
+  /**
+   * Required only for APT, as on a single promotion.
+   */
+  aptTargetSuite?: string;
+};
+
+export type PromotionBatchRequest = {
+  sourceRepositoryId: string;
+  targetRepositoryId: string;
+  items: Array<PromotionBatchItemRequest>;
+};
+
+export type PromotionBatchState =
+  "pending" | "running" | "completed" | "partially_failed" | "failed";
+
+/**
+ * The state of the item's provenance row, or pending while the item has no row yet.
+ */
+export type PromotionBatchItemState =
+  | "pending"
+  | "pending_approval"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "rejected"
+  | "expired"
+  | "cancelled";
+
+export type PromotionBatchItem = {
+  index: number;
+  coordinate: string;
+  digest: string;
+  state: PromotionBatchItemState;
+  promotionId?: string;
+  jobId?: string;
+};
+
+export type PromotionBatch = {
+  id: string;
+  sourceRepositoryId: string;
+  targetRepositoryId: string;
+  requestedBy: string;
+  state: PromotionBatchState;
+  items: Array<PromotionBatchItem>;
+  createdAt: string;
+};
+
 export type PromotionRequest = {
   targetRepositoryId: string;
   coordinate: string;
@@ -4721,6 +5112,34 @@ export type UpdateWebhookSubscriptionWritable = {
   enabled: boolean;
 };
 
+export type CreateRemoteInstanceWritable = {
+  name: string;
+  baseUrl: string;
+  authKind: RemoteInstanceAuthKind;
+  /**
+   * Required for workload_identity.
+   */
+  audience?: string;
+  /**
+   * Required for static_token; forbidden for workload_identity.
+   */
+  token?: string;
+  trustEvidence?: boolean;
+};
+
+export type UpdateRemoteInstanceWritable = {
+  name: string;
+  baseUrl: string;
+  authKind: RemoteInstanceAuthKind;
+  audience?: string;
+  /**
+   * Replaces the sealed token. Omit it to keep the stored one, which is allowed only while baseUrl and audience are unchanged; a changed destination needs a new token (422 token_required).
+   */
+  token?: string;
+  trustEvidence?: boolean;
+  enabled: boolean;
+};
+
 /**
  * Per-Proxy-Repository egress network proxy configuration. Only meaningful when the repository type is proxy. `password` is accepted on write (plaintext over TLS) and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
  */
@@ -4878,6 +5297,10 @@ export type HelmPreviewIdempotencyKey = string;
  */
 export type ArtifactSearchMatch = "prefix" | "contains";
 
+export type RemoteInstanceId = string;
+
+export type PromotionRuleId = string;
+
 export type UserGroupId = string;
 
 export type AuthorizationTemplateId = string;
@@ -4887,6 +5310,8 @@ export type AuthorizationRoleId = string;
 export type ScheduledTaskId = string;
 
 export type OptionalIfMatch = string;
+
+export type PromotionBatchId = string;
 
 export type LifecycleJobId = string;
 
@@ -11301,6 +11726,552 @@ export type UpdateWebhookSubscriptionResponses = {
 export type UpdateWebhookSubscriptionResponse =
   UpdateWebhookSubscriptionResponses[keyof UpdateWebhookSubscriptionResponses];
 
+export type ListRemoteInstancesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    limit?: number;
+    pageToken?: string;
+  };
+  url: "/remote-instances";
+};
+
+export type ListRemoteInstancesErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type ListRemoteInstancesError =
+  ListRemoteInstancesErrors[keyof ListRemoteInstancesErrors];
+
+export type ListRemoteInstancesResponses = {
+  /**
+   * Remote notarx instances
+   */
+  200: RemoteInstancePage;
+};
+
+export type ListRemoteInstancesResponse =
+  ListRemoteInstancesResponses[keyof ListRemoteInstancesResponses];
+
+export type CreateRemoteInstanceData = {
+  body: CreateRemoteInstanceWritable;
+  path?: never;
+  query?: never;
+  url: "/remote-instances";
+};
+
+export type CreateRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type CreateRemoteInstanceError =
+  CreateRemoteInstanceErrors[keyof CreateRemoteInstanceErrors];
+
+export type CreateRemoteInstanceResponses = {
+  /**
+   * Remote notarx instance with the token redacted
+   */
+  201: RemoteInstance;
+};
+
+export type CreateRemoteInstanceResponse =
+  CreateRemoteInstanceResponses[keyof CreateRemoteInstanceResponses];
+
+export type DeleteRemoteInstanceData = {
+  body?: never;
+  path: {
+    remoteInstanceId: string;
+  };
+  query?: never;
+  url: "/remote-instances/{remoteInstanceId}";
+};
+
+export type DeleteRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type DeleteRemoteInstanceError =
+  DeleteRemoteInstanceErrors[keyof DeleteRemoteInstanceErrors];
+
+export type DeleteRemoteInstanceResponses = {
+  /**
+   * The remote instance was deleted
+   */
+  204: void;
+};
+
+export type DeleteRemoteInstanceResponse =
+  DeleteRemoteInstanceResponses[keyof DeleteRemoteInstanceResponses];
+
+export type GetRemoteInstanceData = {
+  body?: never;
+  path: {
+    remoteInstanceId: string;
+  };
+  query?: never;
+  url: "/remote-instances/{remoteInstanceId}";
+};
+
+export type GetRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetRemoteInstanceError =
+  GetRemoteInstanceErrors[keyof GetRemoteInstanceErrors];
+
+export type GetRemoteInstanceResponses = {
+  /**
+   * Remote notarx instance with the token redacted
+   */
+  200: RemoteInstance;
+};
+
+export type GetRemoteInstanceResponse =
+  GetRemoteInstanceResponses[keyof GetRemoteInstanceResponses];
+
+export type UpdateRemoteInstanceData = {
+  body: UpdateRemoteInstanceWritable;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    remoteInstanceId: string;
+  };
+  query?: never;
+  url: "/remote-instances/{remoteInstanceId}";
+};
+
+export type UpdateRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type UpdateRemoteInstanceError =
+  UpdateRemoteInstanceErrors[keyof UpdateRemoteInstanceErrors];
+
+export type UpdateRemoteInstanceResponses = {
+  /**
+   * Remote notarx instance with the token redacted
+   */
+  200: RemoteInstance;
+};
+
+export type UpdateRemoteInstanceResponse =
+  UpdateRemoteInstanceResponses[keyof UpdateRemoteInstanceResponses];
+
+export type TestRemoteInstanceData = {
+  body?: never;
+  path: {
+    remoteInstanceId: string;
+  };
+  query?: never;
+  url: "/remote-instances/{remoteInstanceId}/test";
+};
+
+export type TestRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type TestRemoteInstanceError =
+  TestRemoteInstanceErrors[keyof TestRemoteInstanceErrors];
+
+export type TestRemoteInstanceResponses = {
+  /**
+   * Outcome of the well-known check
+   */
+  200: RemoteInstanceTestResult;
+};
+
+export type TestRemoteInstanceResponse =
+  TestRemoteInstanceResponses[keyof TestRemoteInstanceResponses];
+
+export type ListPromotionRulesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    limit?: number;
+    sourceRepositoryId?: string;
+    pageToken?: string;
+  };
+  url: "/promotion-rules";
+};
+
+export type ListPromotionRulesErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type ListPromotionRulesError =
+  ListPromotionRulesErrors[keyof ListPromotionRulesErrors];
+
+export type ListPromotionRulesResponses = {
+  /**
+   * Promotion rules
+   */
+  200: PromotionRulePage;
+};
+
+export type ListPromotionRulesResponse =
+  ListPromotionRulesResponses[keyof ListPromotionRulesResponses];
+
+export type CreatePromotionRuleData = {
+  body: CreatePromotionRule;
+  path?: never;
+  query?: never;
+  url: "/promotion-rules";
+};
+
+export type CreatePromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type CreatePromotionRuleError =
+  CreatePromotionRuleErrors[keyof CreatePromotionRuleErrors];
+
+export type CreatePromotionRuleResponses = {
+  /**
+   * Promotion rule
+   */
+  201: PromotionRule;
+};
+
+export type CreatePromotionRuleResponse =
+  CreatePromotionRuleResponses[keyof CreatePromotionRuleResponses];
+
+export type DeletePromotionRuleData = {
+  body?: never;
+  path: {
+    ruleId: string;
+  };
+  query?: never;
+  url: "/promotion-rules/{ruleId}";
+};
+
+export type DeletePromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type DeletePromotionRuleError =
+  DeletePromotionRuleErrors[keyof DeletePromotionRuleErrors];
+
+export type DeletePromotionRuleResponses = {
+  /**
+   * The promotion rule was deleted
+   */
+  204: void;
+};
+
+export type DeletePromotionRuleResponse =
+  DeletePromotionRuleResponses[keyof DeletePromotionRuleResponses];
+
+export type GetPromotionRuleData = {
+  body?: never;
+  path: {
+    ruleId: string;
+  };
+  query?: never;
+  url: "/promotion-rules/{ruleId}";
+};
+
+export type GetPromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetPromotionRuleError =
+  GetPromotionRuleErrors[keyof GetPromotionRuleErrors];
+
+export type GetPromotionRuleResponses = {
+  /**
+   * Promotion rule
+   */
+  200: PromotionRule;
+};
+
+export type GetPromotionRuleResponse =
+  GetPromotionRuleResponses[keyof GetPromotionRuleResponses];
+
+export type UpdatePromotionRuleData = {
+  body: UpdatePromotionRule;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    ruleId: string;
+  };
+  query?: never;
+  url: "/promotion-rules/{ruleId}";
+};
+
+export type UpdatePromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type UpdatePromotionRuleError =
+  UpdatePromotionRuleErrors[keyof UpdatePromotionRuleErrors];
+
+export type UpdatePromotionRuleResponses = {
+  /**
+   * Promotion rule
+   */
+  200: PromotionRule;
+};
+
+export type UpdatePromotionRuleResponse =
+  UpdatePromotionRuleResponses[keyof UpdatePromotionRuleResponses];
+
+export type DryRunPromotionRuleData = {
+  body?: never;
+  path: {
+    ruleId: string;
+  };
+  query?: {
+    /**
+     * Most matched artifacts returned.
+     */
+    limit?: number;
+  };
+  url: "/promotion-rules/{ruleId}/dry-run";
+};
+
+export type DryRunPromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type DryRunPromotionRuleError =
+  DryRunPromotionRuleErrors[keyof DryRunPromotionRuleErrors];
+
+export type DryRunPromotionRuleResponses = {
+  /**
+   * Matched artifacts with a verdict per condition; nothing was enqueued
+   */
+  200: PromotionRuleDryRun;
+};
+
+export type DryRunPromotionRuleResponse =
+  DryRunPromotionRuleResponses[keyof DryRunPromotionRuleResponses];
+
 export type ListWebhookDeliveriesData = {
   body?: never;
   path?: never;
@@ -14691,6 +15662,132 @@ export type ExecuteRepositoryRetentionResponses = {
 export type ExecuteRepositoryRetentionResponse =
   ExecuteRepositoryRetentionResponses[keyof ExecuteRepositoryRetentionResponses];
 
+export type ListArtifactPromotionsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    limit?: number;
+    pageToken?: string;
+    targetRepositoryId?: string;
+    format?: Format;
+    state?: ArtifactPromotionState;
+    coordinate?: string;
+    digest?: string;
+  };
+  url: "/artifact-promotions";
+};
+
+export type ListArtifactPromotionsErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+};
+
+export type ListArtifactPromotionsError =
+  ListArtifactPromotionsErrors[keyof ListArtifactPromotionsErrors];
+
+export type ListArtifactPromotionsResponses = {
+  /**
+   * A page of artifact promotions (provenance rows), newest first
+   */
+  200: ArtifactPromotionPage;
+};
+
+export type ListArtifactPromotionsResponse =
+  ListArtifactPromotionsResponses[keyof ListArtifactPromotionsResponses];
+
+export type CreatePromotionBatchData = {
+  body: PromotionBatchRequest;
+  headers: {
+    "Idempotency-Key": string;
+  };
+  path?: never;
+  query?: never;
+  url: "/promotion-batches";
+};
+
+export type CreatePromotionBatchErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type CreatePromotionBatchError =
+  CreatePromotionBatchErrors[keyof CreatePromotionBatchErrors];
+
+export type CreatePromotionBatchResponses = {
+  /**
+   * The batch was admitted and its items queued.
+   */
+  202: PromotionBatch;
+};
+
+export type CreatePromotionBatchResponse =
+  CreatePromotionBatchResponses[keyof CreatePromotionBatchResponses];
+
+export type GetPromotionBatchData = {
+  body?: never;
+  path: {
+    batchId: string;
+  };
+  query?: never;
+  url: "/promotion-batches/{batchId}";
+};
+
+export type GetPromotionBatchErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetPromotionBatchError =
+  GetPromotionBatchErrors[keyof GetPromotionBatchErrors];
+
+export type GetPromotionBatchResponses = {
+  /**
+   * The promotion batch.
+   */
+  200: PromotionBatch;
+};
+
+export type GetPromotionBatchResponse =
+  GetPromotionBatchResponses[keyof GetPromotionBatchResponses];
+
 export type CreateRepositoryPromotionData = {
   body: PromotionRequest;
   headers: {
@@ -14724,6 +15821,10 @@ export type CreateRepositoryPromotionErrors = {
    * Problem response
    */
   409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
 };
 
 export type CreateRepositoryPromotionError =
@@ -14731,7 +15832,7 @@ export type CreateRepositoryPromotionError =
 
 export type CreateRepositoryPromotionResponses = {
   /**
-   * Immutable artifact promotion job accepted
+   * Immutable artifact promotion job accepted. The Notarx-Promotion-Id header names the provenance row of the attempt (see listArtifactPromotions); a replay of the same Idempotency-Key returns the same job and the same row.
    */
   202: LifecycleJob;
 };

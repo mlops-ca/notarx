@@ -721,6 +721,9 @@ func publishAPTRepositorySnapshotTx(ctx context.Context, tx *sql.Tx, snapshot AP
 			if digest != asset.Digest || objectKey != asset.ObjectKey || size != asset.Size || contentType != asset.ContentType {
 				return APTRepositorySnapshot{}, ErrAPTPackageConflict
 			}
+		} else if err = emitPublishedPostgres(ctx, tx, asset.RepositoryID, FormatAPT, asset.Path, asset.Digest); err != nil {
+			// A pool path first bound to its digest by this snapshot is a new publication; a later snapshot that carries it again is not.
+			return APTRepositorySnapshot{}, err
 		}
 	}
 	for _, asset := range assets {

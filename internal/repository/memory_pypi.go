@@ -56,6 +56,7 @@ func (s *MemoryStore) PublishPyPIFile(ctx context.Context, file PyPIFile) (PyPIF
 		file.YankRevision = 1
 	}
 	s.pypiFiles[key] = file
+	s.emitPublishedLocked(ctx, file.RepositoryID, FormatPyPI, file.Project+"@"+file.Version, file.Digest)
 	return clonePyPIFile(file), nil
 }
 
@@ -113,6 +114,7 @@ func (s *MemoryStore) PublishPyPIVersion(ctx context.Context, files []PyPIFile) 
 			file.YankRevision = 1
 		}
 		s.pypiFiles[key] = file
+		s.emitPublishedLocked(ctx, file.RepositoryID, FormatPyPI, file.Project+"@"+file.Version, file.Digest)
 		result = append(result, file)
 	}
 	return result, nil

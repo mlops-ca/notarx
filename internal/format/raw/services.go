@@ -125,6 +125,25 @@ func (m *Module) EnqueuePromotion(ctx context.Context, sourceID, targetID, coord
 	}
 	return (rawprotocol.NativePromotion{Store: m.jobs}).Enqueue(ctx, targetID, key, rawprotocol.PromotionPayload{SourceRepositoryID: sourceID, Path: coordinate, Digest: digest}, audit...)
 }
+func (m *Module) RunPromotionJobs(ctx context.Context, limit int) error {
+	if m.jobs == nil {
+		return repository.ErrDisabled
+	}
+	return (rawprotocol.NativePromotion{Store: m.jobs, Intelligence: m.intelligence, Metrics: m.backgroundMetrics}).RunJobs(ctx, limit)
+}
+
+// ReleaseMembers implements formatmodule.ReleaseSet. An unversioned Raw coordinate is one path and its release is that
+// asset; a versioned name@version release is the work of the versioned-layout slice.
+func (m *Module) ReleaseMembers(ctx context.Context, repositoryID, coordinate string) ([]formatmodule.ReleaseMember, error) {
+	if m.store == nil {
+		return nil, repository.ErrDisabled
+	}
+	asset, err := m.store.GetRawAsset(ctx, repositoryID, coordinate)
+	if err != nil {
+		return nil, err
+	}
+	return []formatmodule.ReleaseMember{{Coordinate: asset.Path, Digest: asset.Digest}}, nil
+}
 func (m *Module) ReplicationCheckpoints(ctx context.Context, sourceID, coordinate, digest string) ([]repository.ReplicationCheckpoint, error) {
 	if m.store == nil {
 		return nil, repository.ErrDisabled
