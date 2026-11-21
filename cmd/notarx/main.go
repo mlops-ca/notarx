@@ -78,6 +78,12 @@ func main() {
 		stop()
 		os.Exit(code)
 	}
+	if len(os.Args) > 1 && os.Args[1] == "reconcile-events" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := runReconcileEvents(ctx, os.Args[2:], os.Getenv, os.LookupEnv, os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "preflight" {
 		os.Exit(preflight.RunCLI(context.Background(), os.Args[2:], os.Stdout, os.Stderr))
 	}

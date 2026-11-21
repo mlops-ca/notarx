@@ -13,8 +13,10 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/uploadspool"
@@ -27,6 +29,12 @@ func TestNativeOCIHostedUploadMountManifestRangeAndDelete(t *testing.T) {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
+	// The publish emits artifact.published in its own transaction and the scan scheduler consumes it from the event log;
+	// the handler no longer schedules the scan itself. The first pass creates the consumer's cursor.
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatOCI}, nil).Consumer()}}
+	if _, err = dispatcher.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	objects := objectstore.NewMemoryStore()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: publicationScanDependencies(Dependencies{}, repository.FormatOCI), Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatOCI: objects, repository.FormatRaw: objects}})
 	auth := func(r *http.Request) { authorize(r, "resolver-secret") }
@@ -88,6 +96,12 @@ func TestNativeOCIHostedUploadMountManifestRangeAndDelete(t *testing.T) {
 		t.Fatalf("publish=%d %s", published.Code, published.Body.String())
 	}
 	manifestDigest := published.Header().Get("Docker-Content-Digest")
+	if jobs, _ := store.ListLifecycleJobs(context.Background(), repo.ID, 10); len(jobs) != 0 {
+		t.Fatalf("the publish handler scheduled a scan itself: %v", jobs)
+	}
+	if handled, dispatchErr := dispatcher.RunOnce(context.Background()); dispatchErr != nil || handled != 1 {
+		t.Fatalf("dispatched %d events (%v)", handled, dispatchErr)
+	}
 	requirePublicationScan(t, store, repo.ID, repository.FormatOCI, "app", manifestDigest)
 	read := httptest.NewRequest(http.MethodHead, "/v2/team/app/manifests/latest", nil)
 	auth(read)

@@ -122,6 +122,17 @@ func (e Event) Prepare() Event {
 
 const emitStatement = `SELECT emit_domain_event($1::uuid,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7::jsonb,$8,$9)`
 
+// Published builds the artifact.published event of one visible publication of a digest (ADR 0021): one per
+// publication, so its Version is empty. The payload names the format and, when the publisher is known, the actor.
+func Published(repositoryID, format, coordinate, digest, actor string) Event {
+	payload := map[string]string{"format": format}
+	if actor != "" {
+		payload["actor"] = actor
+	}
+	data, _ := json.Marshal(payload) // a map of strings always marshals
+	return Event{Type: ArtifactPublished, RepositoryID: repositoryID, Format: format, Coordinate: coordinate, Digest: digest, Payload: data}
+}
+
 // Result is the outcome of Emit.
 type Result struct {
 	// Written reports whether a row was written: false when no subscription and no internal consumer wants the type.
@@ -141,6 +152,28 @@ func Emit(ctx context.Context, tx DB, event Event) (Result, error) {
 	var occurredAt sql.NullTime
 	err := tx.QueryRowContext(ctx, emitStatement, event.ID, string(event.Type), event.RepositoryID, event.Format, event.Coordinate, event.Digest,
 		[]byte(event.Payload), event.DedupeKey(), HasInternalConsumer(event.Type)).Scan(&occurredAt)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Written: occurredAt.Valid, OccurredAt: occurredAt.Time}, nil
+}
+
+const emitOnceStatement = `SELECT emit_domain_event_once($1::uuid,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7::jsonb,$8,$9,$10)`
+
+// EmitOnce is the emission of the catch-up reconciler and repair paths (ADR 0021, ADR 0023 section 2): it writes the
+// event only when no row with the same dedupe key exists at or after floor, under an advisory lock on the key, so
+// two reconcilers racing for one publication write one event and a row older than the retention floor does not
+// count (its partition is dropped or about to be). The in-transaction emission of a state change stays Emit: it is
+// exactly-once by construction and never relies on this check. Result.Written is false when the key is present and
+// when nothing consumes the type.
+func EmitOnce(ctx context.Context, tx DB, event Event, floor time.Time) (Result, error) {
+	if err := event.Validate(); err != nil {
+		return Result{}, err
+	}
+	event = event.Prepare()
+	var occurredAt sql.NullTime
+	err := tx.QueryRowContext(ctx, emitOnceStatement, event.ID, string(event.Type), event.RepositoryID, event.Format, event.Coordinate, event.Digest,
+		[]byte(event.Payload), event.DedupeKey(), HasInternalConsumer(event.Type), floor.UTC()).Scan(&occurredAt)
 	if err != nil {
 		return Result{}, err
 	}

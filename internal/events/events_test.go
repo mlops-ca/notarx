@@ -221,3 +221,57 @@ func TestEmitReportsNoRowAndErrors(t *testing.T) {
 		t.Error("database failure swallowed")
 	}
 }
+
+func TestPublishedBuildsTheOnePerPublicationEvent(t *testing.T) {
+	event := Published("repo", "oci", "app", "sha256:aa", "alice")
+	if event.Type != ArtifactPublished || event.Version != "" || event.DedupeKey() != "artifact.published|repo|app|sha256:aa|" {
+		t.Fatalf("event = %+v", event)
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(event.Payload, &payload); err != nil || payload["format"] != "oci" || payload["actor"] != "alice" {
+		t.Fatalf("payload = %s (%v)", event.Payload, err)
+	}
+	if err := event.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	var anonymous map[string]string
+	if err := json.Unmarshal(Published("repo", "raw", "a", "sha256:bb", "").Payload, &anonymous); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := anonymous["actor"]; ok {
+		t.Errorf("an unknown actor was written: %v", anonymous)
+	}
+}
+
+func TestEmitOnceCallsTheGuardedFunctionWithTheFloor(t *testing.T) {
+	at := time.Date(2026, 5, 6, 7, 8, 9, 0, time.UTC)
+	floor := time.Date(2026, 5, 1, 0, 0, 0, 0, time.FixedZone("x", 3600))
+	r := &recorder{answer: true, answerAt: at}
+	db := openRecorder(t, r)
+	result, err := EmitOnce(context.Background(), db, Published("repo", "raw", "a/b", "sha256:aa", ""), floor)
+	if err != nil || !result.Written || !result.OccurredAt.Equal(at) {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if len(r.queries) != 1 || !strings.Contains(r.queries[0], "emit_domain_event_once(") {
+		t.Fatalf("queries = %v", r.queries)
+	}
+	args := r.args[0]
+	if len(args) != 10 || args[7] != "artifact.published|repo|a/b|sha256:aa|" || args[8] != true {
+		t.Fatalf("args = %v", args)
+	}
+	if got, ok := args[9].(time.Time); !ok || !got.Equal(floor) || got.Location() != time.UTC {
+		t.Errorf("floor = %v", args[9])
+	}
+	// The database answers NULL when the key is present: nothing was written.
+	r.answer = false
+	if result, err = EmitOnce(context.Background(), db, Published("repo", "raw", "a/b", "sha256:aa", ""), floor); err != nil || result.Written {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if _, err = EmitOnce(context.Background(), db, Event{Type: "bogus"}, floor); err == nil {
+		t.Error("unknown type emitted")
+	}
+	r.fail = errors.New("boom")
+	if _, err = EmitOnce(context.Background(), db, Published("repo", "raw", "a", "sha256:aa", ""), floor); err == nil {
+		t.Error("database failure swallowed")
+	}
+}

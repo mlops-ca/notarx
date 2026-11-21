@@ -76,7 +76,8 @@ NOTARX_WORKER_KINDS=reclaim,replication
 `go`, and `apt`. APT currently runs only reclaim for management-preview uploads;
 this does not make Hosted APT public. Job kinds include `promotion`, `replication`,
 `retention`, `reclaim`, `intelligence`, `deletion`, `scan`, `recovery`, `cache`,
-`audit`, `webhook`, and `email`.
+`audit`, `webhook`, `email`, and `events` (the catch-up reconciler that emits missing
+`artifact.published` events, see the webhook delivery contract).
 
 `intelligence` copies delayed artifact intelligence after promotion. `scan`
 starts only when the node has `NOTARX_SCANNER_ENDPOINT`; its independent

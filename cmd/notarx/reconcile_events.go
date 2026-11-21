@@ -1,0 +1,64 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"strings"
+
+	"github.com/mlops-ca/notarx/internal/app"
+	"github.com/mlops-ca/notarx/internal/repository"
+	"github.com/mlops-ca/notarx/internal/retention"
+)
+
+const reconcileEventsUsage = "usage: notarx reconcile-events (NOTARX_DATABASE_URL names the PostgreSQL database; NOTARX_EVENTS_RETENTION bounds the window)"
+
+// runReconcileEvents is the repair tool of ADR 0021 (slice 1b): it emits artifact.published for every visible Raw, OCI
+// and Maven publication inside the event retention window that has none, once, and prints how many events it wrote.
+// It is the same reconciler the events worker runs, so it is safe next to a running node.
+func runReconcileEvents(ctx context.Context, args []string, getenv func(string) string, lookup func(string) (string, bool), stdout, stderr io.Writer) int {
+	flags := flag.NewFlagSet("reconcile-events", flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	if err := flags.Parse(args); err != nil || flags.NArg() != 0 {
+		if errors.Is(err, flag.ErrHelp) {
+			_, _ = fmt.Fprintln(stdout, reconcileEventsUsage)
+			return 0
+		}
+		_, _ = fmt.Fprintln(stderr, reconcileEventsUsage)
+		return 2
+	}
+	if driver := strings.TrimSpace(getenv("NOTARX_DATABASE_DRIVER")); driver != "" && driver != "postgres" {
+		_, _ = fmt.Fprintln(stderr, "reconcile-events needs NOTARX_DATABASE_DRIVER=postgres")
+		return 2
+	}
+	databaseURL := strings.TrimSpace(getenv("NOTARX_DATABASE_URL"))
+	if databaseURL == "" {
+		_, _ = fmt.Fprintln(stderr, "NOTARX_DATABASE_URL is not set")
+		return 1
+	}
+	retentionConfig, err := retention.LoadConfig(lookup)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 2
+	}
+	keep, err := retentionConfig.KeepOrForever("domain_events")
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, err)
+		return 2
+	}
+	store, err := repository.NewPostgresStore(databaseURL)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "open database:", err)
+		return 1
+	}
+	defer func() { _ = store.Close() }()
+	written, err := app.PublishedEventReconciler{Store: store, Retention: keep}.RunOnce(ctx)
+	_, _ = fmt.Fprintf(stdout, "published events written: %d\n", written)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "reconcile-events:", err)
+		return 1
+	}
+	return 0
+}

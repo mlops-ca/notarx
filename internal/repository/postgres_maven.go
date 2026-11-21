@@ -328,6 +328,9 @@ func (s *PostgresStore) PublishMavenProtocolAssets(ctx context.Context, id strin
 		if err != nil {
 			return MavenArtifact{}, err
 		}
+		if err = emitPublishedPostgres(ctx, tx, artifact.RepositoryID, FormatMaven, artifact.Coordinate, artifact.Digest); err != nil {
+			return MavenArtifact{}, err
+		}
 	}
 
 	// Pre-create and lock all intents in one deterministic key order.
@@ -533,6 +536,9 @@ func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, 
 		if err != nil {
 			return MavenArtifact{}, false, err
 		}
+		if err = emitPublishedPostgres(ctx, tx, a.RepositoryID, FormatMaven, a.Coordinate, a.Digest); err != nil {
+			return MavenArtifact{}, false, err
+		}
 		// Store the build's assets under Maven's timestamped filenames so
 		// repeated publishes of the same -SNAPSHOT coordinate never collide.
 		// The filename timestamp and build number come from the same row.
@@ -587,6 +593,9 @@ func (s *PostgresStore) commitMavenPublishSession(ctx context.Context, id, key, 
 			return MavenArtifact{}, false, ErrNameExists
 		}
 		if err != nil {
+			return MavenArtifact{}, false, err
+		}
+		if err = emitPublishedPostgres(ctx, tx, a.RepositoryID, FormatMaven, a.Coordinate, a.Digest); err != nil {
 			return MavenArtifact{}, false, err
 		}
 	}
@@ -924,6 +933,9 @@ func (s *PostgresStore) PromoteMavenArtifact(ctx context.Context, promotion Mave
 	if n, _ := result.RowsAffected(); n == 0 {
 		return MavenArtifact{}, ErrNameExists
 	}
+	if err = emitPublishedPostgres(ctx, tx, promotion.TargetRepositoryID, FormatMaven, source.Coordinate, source.Digest); err != nil {
+		return MavenArtifact{}, err
+	}
 	prefix := mavenArtifactPathPrefix(source.Coordinate)
 	if err = lockMavenArtifactIntentsTx(ctx, tx, promotion.SourceRepositoryID, prefix); err != nil {
 		return MavenArtifact{}, err
@@ -1040,6 +1052,9 @@ func (s *PostgresStore) PublishReplicatedMavenArtifact(ctx context.Context, repl
 		return MavenArtifact{}, ErrNameExists
 	}
 	if err != nil {
+		return MavenArtifact{}, err
+	}
+	if err = emitPublishedPostgres(ctx, tx, artifact.RepositoryID, FormatMaven, artifact.Coordinate, artifact.Digest); err != nil {
 		return MavenArtifact{}, err
 	}
 	if err = usage.reserve(ctx, tx); err != nil {

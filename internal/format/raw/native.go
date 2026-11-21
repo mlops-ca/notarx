@@ -74,7 +74,7 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		return true
 	}
 	if versioned(repo) {
-		r = r.WithContext(repository.WithRawWriteActor(r.Context(), principal.Actor))
+		r = r.WithContext(repository.WithWriteActor(r.Context(), principal.Actor))
 	}
 	if id := r.URL.Query().Get("uploadId"); id != "" {
 		// The store binds the upload id as a uuid, so a malformed one is a client

@@ -26,28 +26,22 @@ import (
 // claims paths whose first component is a V3 OCI hosted repository; all other
 // V2 paths retain the legacy group/proxy behaviour while it is being removed.
 type nativeOCIHandler struct {
-	store              repository.NativeOCIStore
-	repos              repository.HostedRepositoryStore
-	objects            ObjectStore
-	auth               Authenticator
-	authorizer         RepositoryAuthorizer
-	audit              repository.Store
-	metrics            *Metrics
-	proxy              *OCIHandler
-	publicationScanner *publicationScanScheduler
-	readPolicies       repository.RepositoryQuarantineReadPolicyStore
-	quarantine         repository.ArtifactQuarantineStore
-	discovery          ocidiscovery.Store
-	groups             repository.HostedGroupStore
+	store        repository.NativeOCIStore
+	repos        repository.HostedRepositoryStore
+	objects      ObjectStore
+	auth         Authenticator
+	authorizer   RepositoryAuthorizer
+	audit        repository.Store
+	metrics      *Metrics
+	proxy        *OCIHandler
+	readPolicies repository.RepositoryQuarantineReadPolicyStore
+	quarantine   repository.ArtifactQuarantineStore
+	discovery    ocidiscovery.Store
+	groups       repository.HostedGroupStore
 }
 
 func (h nativeOCIHandler) withMetrics(metrics *Metrics) nativeOCIHandler {
 	h.metrics = metrics
-	return h
-}
-
-func (h nativeOCIHandler) withPublicationScanner(scanner publicationScanScheduler) nativeOCIHandler {
-	h.publicationScanner = &scanner
 	return h
 }
 
@@ -765,7 +759,7 @@ func (h nativeOCIHandler) manifest(w http.ResponseWriter, r *http.Request, repo 
 			writeOCIError(w, http.StatusBadRequest, "MANIFEST_INVALID", "subject digest must be sha256")
 			return
 		}
-		manifest, err := h.store.PutOCIManifest(r.Context(), repository.OCIManifest{RepositoryID: repo.ID, Name: name, Digest: digest, ObjectKey: key, MediaType: mediaType, SubjectDigest: envelope.Subject.Digest, ArtifactType: envelope.ArtifactType, Size: int64(len(data))}, reference)
+		manifest, err := h.store.PutOCIManifest(repository.WithWriteActor(r.Context(), actor), repository.OCIManifest{RepositoryID: repo.ID, Name: name, Digest: digest, ObjectKey: key, MediaType: mediaType, SubjectDigest: envelope.Subject.Digest, ArtifactType: envelope.ArtifactType, Size: int64(len(data))}, reference)
 		if err != nil {
 			if repository.IsQuotaExceeded(err) {
 				writeOCIError(w, http.StatusInsufficientStorage, "DENIED", "repository capacity quota exceeded")
@@ -776,9 +770,6 @@ func (h nativeOCIHandler) manifest(w http.ResponseWriter, r *http.Request, repo 
 		}
 		w.Header().Set("Docker-Content-Digest", manifest.Digest)
 		w.Header().Set("Location", "/v2/"+repo.Name+"/"+name+"/manifests/"+reference)
-		if h.publicationScanner != nil {
-			_ = h.publicationScanner.Schedule(r.Context(), repo, name, manifest.Digest, actor)
-		}
 		w.WriteHeader(http.StatusCreated)
 	case http.MethodDelete:
 		if !validOCIDigest(reference) {

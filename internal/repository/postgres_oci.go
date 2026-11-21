@@ -310,6 +310,9 @@ func (s *PostgresStore) PutOCIManifest(ctx context.Context, v OCIManifest, refer
 		if err = refreshArtifactCatalog(ctx, tx, v.RepositoryID, FormatOCI, v.Name); err != nil {
 			return v, err
 		}
+		if err = emitPublishedPostgres(ctx, tx, v.RepositoryID, FormatOCI, v.Name, v.Digest); err != nil {
+			return v, err
+		}
 		if err = capacity.Reserve(ctx, tx, v.RepositoryID, v.Size, 1); err != nil {
 			return v, err
 		}
@@ -373,6 +376,9 @@ func (s *PostgresStore) PublishReplicatedOCIManifest(ctx context.Context, public
 	}
 	replicated.add(publication.Manifest.RepositoryID, publication.Manifest.Size, 1)
 	if err = refreshArtifactCatalog(ctx, tx, publication.Manifest.RepositoryID, FormatOCI, publication.Manifest.Name); err != nil {
+		return OCIManifest{}, err
+	}
+	if err = emitPublishedPostgres(ctx, tx, publication.Manifest.RepositoryID, FormatOCI, publication.Manifest.Name, publication.Manifest.Digest); err != nil {
 		return OCIManifest{}, err
 	}
 	if err = replicated.reserve(ctx, tx); err != nil {

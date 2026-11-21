@@ -147,6 +147,16 @@ func (c Config) Keep(e Entry) (time.Duration, bool) {
 	return e.Standard, true
 }
 
+// KeepOrForever is the keep time of a table, and zero when it is switched off (kept for ever), for a caller that only
+// needs the window of rows to look at.
+func (c Config) KeepOrForever(table string) (time.Duration, error) {
+	keep, on, err := c.KeepFor(table)
+	if err != nil || !on {
+		return 0, err
+	}
+	return keep, nil
+}
+
 // KeepFor is Keep by table name for the first entry of that table; the partition
 // manager uses it for the audit tables.
 func (c Config) KeepFor(table string) (time.Duration, bool, error) {

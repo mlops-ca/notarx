@@ -192,7 +192,7 @@ func (s *PostgresStore) beginVersionedWrite(ctx context.Context, tx *sql.Tx, ass
 // files cap. A write that finds the same digest at the path changes nothing and returns it with Replayed set.
 func (s *PostgresStore) replaceVersionedRawAsset(ctx context.Context, tx *sql.Tx, asset RawAsset, version RawVersion) (RawAsset, rawUsageDelta, error) {
 	var err error
-	if _, _, err = lockRawPath(ctx, tx, asset.RepositoryID, asset.Path); err != nil {
+	if _, err = lockRawPath(ctx, tx, asset.RepositoryID, asset.Path); err != nil {
 		return RawAsset{}, rawUsageDelta{}, err
 	}
 	current := RawAsset{RepositoryID: asset.RepositoryID, Path: asset.Path}
@@ -225,6 +225,9 @@ func (s *PostgresStore) replaceVersionedRawAsset(ctx context.Context, tx *sql.Tx
 	if err = refreshArtifactCatalog(ctx, tx, asset.RepositoryID, FormatRaw, asset.Path); err != nil {
 		return RawAsset{}, rawUsageDelta{}, err
 	}
+	if err = emitPublishedPostgres(ctx, tx, asset.RepositoryID, FormatRaw, asset.Path, asset.Digest); err != nil {
+		return RawAsset{}, rawUsageDelta{}, err
+	}
 	return RawAsset{}, rawUsageDelta{bytes: size, objects: 1}, nil
 }
 
@@ -242,7 +245,7 @@ func (s *PostgresStore) deleteVersionedRawAsset(ctx context.Context, tx *sql.Tx,
 	if !ok || version.State == RawVersionTombstoned {
 		return ErrNotFound
 	}
-	if _, _, err = lockRawPath(ctx, tx, repositoryID, path); err != nil {
+	if _, err = lockRawPath(ctx, tx, repositoryID, path); err != nil {
 		return err
 	}
 	var asset RawAsset

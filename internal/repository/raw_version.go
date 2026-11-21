@@ -149,17 +149,18 @@ func ValidRawVersionName(name string) bool { return rawversion.ValidName(name) }
 // ValidRawVersionString reports whether version is a valid version identifier; semver is not required.
 func ValidRawVersionString(version string) bool { return rawversion.ValidVersion(version) }
 
-type rawWriteActorKey struct{}
+type writeActorKey struct{}
 
-// WithRawWriteActor records the acting principal on ctx. A first write to a versioned repository creates the open
-// version row, and the row keeps the actor as created_by; the Raw write methods have no other way to name it
-// without writing an audit row for every path write.
-func WithRawWriteActor(ctx context.Context, actor string) context.Context {
-	return context.WithValue(ctx, rawWriteActorKey{}, actor)
+// WithWriteActor records the acting principal on ctx. A first write to a versioned Raw repository creates the open
+// version row, and the row keeps the actor as created_by, and the artifact.published event of every format carries
+// it as payload.actor. The write methods have no other way to name it without writing an audit row for every write.
+func WithWriteActor(ctx context.Context, actor string) context.Context {
+	return context.WithValue(ctx, writeActorKey{}, actor)
 }
 
-func rawWriteActor(ctx context.Context) string {
-	actor, _ := ctx.Value(rawWriteActorKey{}).(string)
+// publishActor is the principal WithWriteActor recorded on ctx, empty when none.
+func publishActor(ctx context.Context) string {
+	actor, _ := ctx.Value(writeActorKey{}).(string)
 	return actor
 }
 

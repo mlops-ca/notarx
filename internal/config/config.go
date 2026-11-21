@@ -61,7 +61,7 @@ var supportedScannerFormats = func() map[string]struct{} {
 var supportedWorkerKinds = map[string]struct{}{
 	"promotion": {}, "replication": {}, "retention": {}, "reclaim": {},
 	"intelligence": {}, "scan": {}, "deletion": {}, "cache": {}, "audit": {},
-	"webhook": {}, "email": {}, "migration": {},
+	"webhook": {}, "email": {}, "migration": {}, "events": {},
 }
 
 type Config struct {

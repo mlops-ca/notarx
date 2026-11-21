@@ -100,6 +100,9 @@ func (s *PostgresStore) PublishOCIImportClosure(ctx context.Context, c OCIImport
 		n, _ := result.RowsAffected()
 		if n > 0 {
 			imported.add(c.RepositoryID, m.Size, 1)
+			if err = emitPublishedPostgres(ctx, tx, c.RepositoryID, FormatOCI, c.Name, m.Digest); err != nil {
+				return err
+			}
 		}
 		changed = changed || n > 0
 	}

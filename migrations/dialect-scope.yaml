@@ -66,3 +66,6 @@ migrations:
   000020_domain_events.sql:
     dialect: postgres
     reason: creates the range-partitioned domain_events table and its partition manager registration, the emit_domain_event function and the Cargo trigger bodies, and drops webhook_events; the catalogue carries domain_events into the MySQL baseline as a plain table pruned by the retention janitor
+  000021_domain_events_emit_once.sql:
+    dialect: postgres
+    reason: adds the emit_domain_event_once function, the advisory-locked and retention-floor-aware insert of the catch-up reconciler, next to emit_domain_event; the MySQL baseline carries tables only

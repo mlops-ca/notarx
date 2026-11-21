@@ -86,7 +86,7 @@ func runRawVersionStoreContract(t *testing.T, newStore rawVersionContractFactory
 	}
 	put := func(t *testing.T, store rawVersionContractStore, repoID, path, content string) (repository.RawAsset, error) {
 		t.Helper()
-		return store.PutRawAssetIf(repository.WithRawWriteActor(ctx, "ci"), asset(repoID, path, content), create(path, content))
+		return store.PutRawAssetIf(repository.WithWriteActor(ctx, "ci"), asset(repoID, path, content), create(path, content))
 	}
 	mustPut := func(t *testing.T, store rawVersionContractStore, repoID, path, content string) repository.RawAsset {
 		t.Helper()
