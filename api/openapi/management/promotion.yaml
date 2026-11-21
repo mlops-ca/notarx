@@ -14,7 +14,11 @@ repositories_repositoryId_promotions:
             "$ref": "../components/schemas.yaml#/PromotionRequest"
     responses:
       '202':
-        description: Immutable artifact promotion job accepted
+        description: Immutable artifact promotion job accepted. The Notarx-Promotion-Id header names the provenance row of the attempt (see listArtifactPromotions); a replay of the same Idempotency-Key returns the same job and the same row.
+        headers:
+          Notarx-Promotion-Id:
+            description: Id of the artifact promotion (provenance) row written with the job.
+            schema: {type: string, format: uuid}
         content:
           application/json:
             schema:
@@ -24,3 +28,40 @@ repositories_repositoryId_promotions:
       '403': {"$ref": "../components/responses.yaml#/Problem"}
       '404': {"$ref": "../components/responses.yaml#/Problem"}
       '409': {"$ref": "../components/responses.yaml#/Problem"}
+      '422': {"$ref": "../components/responses.yaml#/Problem"}
+
+artifact_promotions:
+  get:
+    operationId: listArtifactPromotions
+    summary: List artifact promotions (provenance)
+    description: >-
+      Lists the provenance rows of promotions, one per attempt, newest first, paged by keyset on creation time then id: continue with the nextPageToken of the previous page. A platform administrator sees every target repository; any other caller sees only the promotions into repositories it may read, and a repository it cannot read contributes no rows and is indistinguishable from one that does not exist. Rows are filtered before the page is cut, so every page holds limit rows until the last one.
+    parameters:
+    - name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 500
+        default: 100
+    - "$ref": "../components/parameters.yaml#/PageToken"
+    - name: targetRepositoryId
+      in: query
+      schema: {type: string, format: uuid}
+    - name: format
+      in: query
+      schema: {"$ref": "../components/schemas.yaml#/Format"}
+    - name: state
+      in: query
+      schema: {"$ref": "../components/schemas.yaml#/ArtifactPromotionState"}
+    - name: coordinate
+      in: query
+      schema: {type: string, minLength: 1, maxLength: 1024}
+    - name: digest
+      in: query
+      schema: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+    responses:
+      '200':
+        "$ref": "../components/responses.yaml#/ArtifactPromotionList"
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}

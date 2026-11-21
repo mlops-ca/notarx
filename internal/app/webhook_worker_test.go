@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
 )
@@ -124,7 +125,12 @@ func TestWebhookDeliveryWorkerSendsCargoPromotionOutcome(t *testing.T) {
 		t.Fatal(err)
 	}
 	targetID := uuid.NewString()
-	job, _, err := store.EnqueueLifecycleJob(ctx, repository.LifecycleJob{
+	if _, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: targetID, Name: "cargo-promotion-target", Format: repository.FormatCargo}); err != nil {
+		t.Fatal(err)
+	}
+	provenance := repository.WithArtifactPromotion(ctx, repository.ArtifactPromotion{ID: ids.New(), Format: repository.FormatCargo, Coordinate: "demo@1.0.0", Digest: "sha256:" + strings.Repeat("a", 64),
+		RequestedBy: "alice", IdempotencyKey: "manual:" + targetID + ":cargo-promotion-outcome"})
+	job, _, err := store.EnqueueLifecycleJob(provenance, repository.LifecycleJob{
 		ID: uuid.NewString(), RepositoryID: targetID, Kind: repository.LifecycleJobPromotion,
 		IdempotencyKey: "cargo-promotion-outcome", MaxAttempts: 1,
 		Payload: []byte(`{"format":"cargo","sourceRepositoryId":"` + uuid.NewString() + `","name":"demo","version":"1.0.0","digest":"sha256:` + strings.Repeat("a", 64) + `"}`),

@@ -269,6 +269,7 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `DELETE /user-groups/{groupId}/members/{userId}`<br>`removeUserGroupMember` | `user-group member remove <id> <user>` | #557 | M2 implemented | A | W |
 | `GET /repository-capacities`<br>`listRepositoryCapacities` | `capacity list` | #138 | M2 | FA | Q |
 | `GET /lifecycle-jobs`<br>`listLifecycleJobs` | `lifecycle-job list --all-repositories` | #135 | M1 implemented | FA | Q |
+| `GET /artifact-promotions`<br>`listArtifactPromotions` | `promotion list` | #138 | M2 | FA | Q |
 | `GET /scheduled-tasks`<br>`listScheduledTasks` | `scheduled-task list` | #137 | M2 | ST | Q |
 | `POST /scheduled-tasks`<br>`createScheduledTask` | `scheduled-task create` | #137 | M2 | ST | W |
 | `GET /scheduled-tasks/{taskId}`<br>`getScheduledTask` | `scheduled-task show <id>` | #137 | M2 | ST | Q |

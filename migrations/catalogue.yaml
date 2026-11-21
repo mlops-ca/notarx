@@ -121,6 +121,45 @@ tables:
       confidence: "1"
     checks:
       artifact_license_confidence_check: ((confidence >= (0)::numeric) AND (confidence <= (1)::numeric))
+  artifact_promotions:
+    columns:
+      approvals: json
+      attempt: int32
+      chain_path: json
+      completed_at: timestamp?
+      coordinate: text
+      created_at: timestamp
+      digest: text
+      format: text
+      id: uuid
+      idempotency_key: text
+      job_id: uuid?
+      origin_instance_id: uuid?
+      origin_repository: text
+      requested_by: text
+      rule_id: uuid?
+      rule_version: int64?
+      state: text
+      target_repository_id: uuid
+    primaryKey: [id]
+    unique: [[idempotency_key, attempt]]
+    defaults:
+      approvals: '''[]'''
+      attempt: "1"
+      chain_path: '''[]'''
+      created_at: now()
+      origin_repository: ''''''
+    indexes:
+      - created_at desc,id desc
+      - target_repository_id,coordinate,digest
+    special:
+      artifact_promotions_job_idx: USING btree (job_id) WHERE (job_id IS NOT NULL)
+      artifact_promotions_pending_idx: USING btree (state) WHERE (state = ANY (ARRAY['pending_approval'::text, 'queued'::text, 'running'::text]))
+    checks:
+      artifact_promotions_approvals_check: (jsonb_typeof(approvals) = 'array'::text)
+      artifact_promotions_attempt_check: (attempt >= 1)
+      artifact_promotions_chain_path_check: (jsonb_typeof(chain_path) = 'array'::text)
+      artifact_promotions_state_check: (state = ANY (ARRAY['pending_approval'::text, 'queued'::text, 'running'::text, 'completed'::text, 'failed'::text, 'rejected'::text, 'expired'::text, 'cancelled'::text]))
   artifact_quarantines:
     columns:
       coordinate: text
@@ -4263,9 +4302,9 @@ tables:
       workload_trust_policies_state_check: (state = ANY (ARRAY['active'::text, 'disabled'::text]))
       workload_trust_policies_ttl_check: (max_token_ttl_seconds > 0)
 triggers:
+  artifact_promotions_chain_path_append_only: 'artifact_promotions: BEFORE UPDATE OF chain_path ON artifact_promotions FOR EACH ROW EXECUTE FUNCTION artifact_promotions_chain_path_append_only()'
   audit_cleanup_jobs_notify_insert: 'audit_cleanup_jobs: AFTER INSERT ON audit_cleanup_jobs FOR EACH ROW WHEN ((new.state = ''pending''::text)) EXECUTE FUNCTION notarx_notify_queue(''notarx_audit_cleanup'')'
   audit_cleanup_jobs_notify_update: 'audit_cleanup_jobs: AFTER UPDATE OF state ON audit_cleanup_jobs FOR EACH ROW WHEN (((new.state = ''pending''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_queue(''notarx_audit_cleanup'')'
-  cargo_promotion_state_webhook_after_update: 'lifecycle_jobs: AFTER UPDATE ON lifecycle_jobs FOR EACH ROW EXECUTE FUNCTION cargo_promotion_state_webhook()'
   cargo_replication_state_webhook_after_update: 'replication_plans: AFTER UPDATE ON replication_plans FOR EACH ROW EXECUTE FUNCTION cargo_replication_state_webhook()'
   hosted_group_members_notify_cache_delete: 'hosted_group_members: AFTER DELETE ON hosted_group_members REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_group_id(''group'')'
   hosted_group_members_notify_cache_insert: 'hosted_group_members: AFTER INSERT ON hosted_group_members REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_group_id(''group'')'
@@ -4285,6 +4324,7 @@ triggers:
   identity_providers_notify_cache_update: 'identity_providers: AFTER UPDATE ON identity_providers REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''identity_provider'')'
   lifecycle_jobs_notify_insert: 'lifecycle_jobs: AFTER INSERT ON lifecycle_jobs FOR EACH ROW WHEN ((new.state = ANY (ARRAY[''pending''::text, ''retrying''::text]))) EXECUTE FUNCTION notarx_notify_job_kind()'
   lifecycle_jobs_notify_update: 'lifecycle_jobs: AFTER UPDATE OF state, next_attempt_at ON lifecycle_jobs FOR EACH ROW WHEN (((new.state = ANY (ARRAY[''pending''::text, ''retrying''::text])) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_job_kind()'
+  lifecycle_jobs_promotion_state: 'lifecycle_jobs: AFTER UPDATE OF state ON lifecycle_jobs FOR EACH ROW WHEN (((new.kind = ''promotion''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION promotion_job_state_change()'
   public_access_policy_notify_cache: 'public_access_policy: AFTER INSERT OR DELETE OR UPDATE ON public_access_policy FOR EACH ROW EXECUTE FUNCTION notarx_notify_cache(''policy'', '''')'
   replication_plans_notify_insert: 'replication_plans: AFTER INSERT ON replication_plans FOR EACH ROW WHEN ((new.state = ANY (ARRAY[''pending''::text, ''failed''::text]))) EXECUTE FUNCTION notarx_notify_queue(''notarx_replication_plans'')'
   replication_plans_notify_update: 'replication_plans: AFTER UPDATE OF state, next_attempt_at ON replication_plans FOR EACH ROW WHEN (((new.state = ''pending''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_queue(''notarx_replication_plans'')'

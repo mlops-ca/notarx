@@ -151,6 +151,12 @@ indexes:
       - {name: due_at, type: "DATETIME(6)", expression: "COALESCE(`next_attempt_at`, `lease_expires_at`)", nullable: true}
     columns: [due_at, created_at]
     reason: "the due time is COALESCE(next_attempt_at, lease_expires_at): a generated column holds it; the state predicate is dropped because the claim query filters by state"
+  artifact_promotions_pending_idx:
+    action: generated
+    generated:
+      - {name: pending_state, type: "VARCHAR(32)", expression: "IF(`state` IN ('pending_approval', 'queued', 'running'), `state`, NULL)", nullable: true}
+    columns: [pending_state]
+    reason: "the pending-state sweep reads the unfinished rows only: a virtual column that is the state for a pending_approval, queued or running row and NULL otherwise, indexed, so the index stays as small as the PostgreSQL partial index (ADR 0023 section 5)"
   lifecycle_jobs_actionable_idx:
     action: flag
     flag: actionable
@@ -181,9 +187,12 @@ triggers:
   audit_cleanup_jobs_notify_update:
     disposition: dropped
     reason: "the Notifier polls the queue tables (ADR 0022); no trigger"
-  cargo_promotion_state_webhook_after_update:
+  artifact_promotions_chain_path_append_only:
     disposition: ported
-    reason: "the MySQL lifecycle and replication stores enqueue the webhook event in the same transaction as the state change (store group D); only the application writes these tables"
+    reason: "the MySQL provenance store refuses a chain_path that is not an append of the stored one; only the application writes this table"
+  lifecycle_jobs_promotion_state:
+    disposition: ported
+    reason: "the MySQL lifecycle store updates the provenance row and enqueues artifact.promoted or promotion.failed in the same transaction as the job state change (store group D); only the application writes these tables"
   cargo_replication_state_webhook_after_update:
     disposition: ported
     reason: "the MySQL lifecycle and replication stores enqueue the webhook event in the same transaction as the state change (store group D); only the application writes these tables"

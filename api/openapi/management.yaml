@@ -9,6 +9,8 @@ security:
 - bearerAuth: []
 openapi: 3.1.0
 paths:
+  "/artifact-promotions":
+    "$ref": "./management/promotion.yaml#/artifact_promotions"
   "/formats":
     "$ref": "./management/formats.yaml#/formats"
   "/artifact-search":

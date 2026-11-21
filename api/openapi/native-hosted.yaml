@@ -279,6 +279,8 @@ paths:
     "$ref": "./management/retention.yaml#/repositories_repositoryId_retention_dry_run"
   "/repositories/{repositoryId}/retention:execute":
     "$ref": "./management/retention-execute.yaml#/repositories_repositoryId_retention_execute"
+  "/artifact-promotions":
+    "$ref": "./management/promotion.yaml#/artifact_promotions"
   "/repositories/{repositoryId}/promotions":
     "$ref": "./management/promotion.yaml#/repositories_repositoryId_promotions"
   "/repositories/{repositoryId}/replications":

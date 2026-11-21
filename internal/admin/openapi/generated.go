@@ -260,6 +260,42 @@ func (e ArtifactIntelligenceSummaryVulnerabilityStatus) Valid() bool {
 	}
 }
 
+// Defines values for ArtifactPromotionState.
+const (
+	ArtifactPromotionStateCancelled       ArtifactPromotionState = "cancelled"
+	ArtifactPromotionStateCompleted       ArtifactPromotionState = "completed"
+	ArtifactPromotionStateExpired         ArtifactPromotionState = "expired"
+	ArtifactPromotionStateFailed          ArtifactPromotionState = "failed"
+	ArtifactPromotionStatePendingApproval ArtifactPromotionState = "pending_approval"
+	ArtifactPromotionStateQueued          ArtifactPromotionState = "queued"
+	ArtifactPromotionStateRejected        ArtifactPromotionState = "rejected"
+	ArtifactPromotionStateRunning         ArtifactPromotionState = "running"
+)
+
+// Valid indicates whether the value is a known member of the ArtifactPromotionState enum.
+func (e ArtifactPromotionState) Valid() bool {
+	switch e {
+	case ArtifactPromotionStateCancelled:
+		return true
+	case ArtifactPromotionStateCompleted:
+		return true
+	case ArtifactPromotionStateExpired:
+		return true
+	case ArtifactPromotionStateFailed:
+		return true
+	case ArtifactPromotionStatePendingApproval:
+		return true
+	case ArtifactPromotionStateQueued:
+		return true
+	case ArtifactPromotionStateRejected:
+		return true
+	case ArtifactPromotionStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ArtifactQuarantineState.
 const (
 	ArtifactQuarantineStateQuarantined ArtifactQuarantineState = "quarantined"
@@ -5879,6 +5915,41 @@ type ArtifactPage struct {
 	NextPageToken *string    `json:"nextPageToken,omitempty"`
 }
 
+// ArtifactPromotion defines model for ArtifactPromotion.
+type ArtifactPromotion struct {
+	Approvals []PromotionApproval `json:"approvals"`
+
+	// Attempt The try of the idempotencyKey this row records.
+	Attempt            int                    `json:"attempt"`
+	ChainPath          []PromotionChainHop    `json:"chainPath"`
+	CompletedAt        *time.Time             `json:"completedAt,omitempty"`
+	Coordinate         string                 `json:"coordinate"`
+	CreatedAt          time.Time              `json:"createdAt"`
+	Digest             string                 `json:"digest"`
+	Format             Format                 `json:"format"`
+	Id                 openapi_types.UUID     `json:"id"`
+	IdempotencyKey     string                 `json:"idempotencyKey"`
+	JobId              *openapi_types.UUID    `json:"jobId,omitempty"`
+	OriginInstanceId   *openapi_types.UUID    `json:"originInstanceId,omitempty"`
+	OriginRepository   string                 `json:"originRepository"`
+	RequestedBy        string                 `json:"requestedBy"`
+	RuleId             *openapi_types.UUID    `json:"ruleId,omitempty"`
+	RuleVersion        *int64                 `json:"ruleVersion,omitempty"`
+	State              ArtifactPromotionState `json:"state"`
+	TargetRepositoryId openapi_types.UUID     `json:"targetRepositoryId"`
+}
+
+// ArtifactPromotionPage defines model for ArtifactPromotionPage.
+type ArtifactPromotionPage struct {
+	Items []ArtifactPromotion `json:"items"`
+
+	// NextPageToken Present while older promotions follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// ArtifactPromotionState defines model for ArtifactPromotionState.
+type ArtifactPromotionState string
+
 // ArtifactProvenance defines model for ArtifactProvenance.
 type ArtifactProvenance struct {
 	BuildId          string     `json:"buildId"`
@@ -8923,6 +8994,26 @@ type Problem struct {
 // ProblemCode defines model for Problem.Code.
 type ProblemCode string
 
+// PromotionApproval defines model for PromotionApproval.
+type PromotionApproval struct {
+	Approver string    `json:"approver"`
+	At       time.Time `json:"at"`
+}
+
+// PromotionChainHop One step of the path an artifact took to its repository. The list is appended to and never rewritten.
+type PromotionChainHop struct {
+	At time.Time `json:"at"`
+
+	// Instance The remote instance the artifact came from; empty for this instance.
+	Instance string `json:"instance"`
+
+	// Repository The repository the artifact was promoted from.
+	Repository string `json:"repository"`
+
+	// RuleId The promotion rule that promoted it; empty for a manual promotion.
+	RuleId string `json:"ruleId"`
+}
+
 // PromotionRequest defines model for PromotionRequest.
 type PromotionRequest struct {
 	// AptTargetSuite Required only for APT Hosted operator preview. Appends the immutable pool package to this target suite using the target signer. The pool coordinate preserves its component.
@@ -10759,6 +10850,9 @@ type HelmPreviewIdempotencyKey = string
 // ArtifactList defines model for ArtifactList.
 type ArtifactList = ArtifactPage
 
+// ArtifactPromotionList defines model for ArtifactPromotionList.
+type ArtifactPromotionList = ArtifactPromotionPage
+
 // ArtifactSummaryList defines model for ArtifactSummaryList.
 type ArtifactSummaryList = ArtifactSummaryPage
 
@@ -10800,6 +10894,17 @@ type WebhookDeliveryList = WebhookDeliveryPage
 
 // WebhookSubscriptionList defines model for WebhookSubscriptionList.
 type WebhookSubscriptionList = WebhookSubscriptionPage
+
+// ListArtifactPromotionsParams defines parameters for ListArtifactPromotions.
+type ListArtifactPromotionsParams struct {
+	Limit              *int                    `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken          *PageToken              `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+	TargetRepositoryId *openapi_types.UUID     `form:"targetRepositoryId,omitempty" json:"targetRepositoryId,omitempty"`
+	Format             *Format                 `form:"format,omitempty" json:"format,omitempty"`
+	State              *ArtifactPromotionState `form:"state,omitempty" json:"state,omitempty"`
+	Coordinate         *string                 `form:"coordinate,omitempty" json:"coordinate,omitempty"`
+	Digest             *string                 `form:"digest,omitempty" json:"digest,omitempty"`
+}
 
 // SearchArtifactsParams defines parameters for SearchArtifacts.
 type SearchArtifactsParams struct {
@@ -12783,6 +12888,9 @@ type ServerInterface interface {
 
 	// (DELETE /api-keys/{apiKeyId})
 	RevokeApiKey(w http.ResponseWriter, r *http.Request, apiKeyId openapi_types.UUID)
+	// ListArtifactPromotions List artifact promotions (provenance)
+	// (GET /artifact-promotions)
+	ListArtifactPromotions(w http.ResponseWriter, r *http.Request, params ListArtifactPromotionsParams)
 	// SearchArtifacts Search visible artifacts across every readable repository
 	// (GET /artifact-search)
 	SearchArtifacts(w http.ResponseWriter, r *http.Request, params SearchArtifactsParams)
@@ -13760,6 +13868,117 @@ func (siw *ServerInterfaceWrapper) RevokeApiKey(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RevokeApiKey(w, r, apiKeyId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListArtifactPromotions operation middleware
+func (siw *ServerInterfaceWrapper) ListArtifactPromotions(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListArtifactPromotionsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "targetRepositoryId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "targetRepositoryId", r.URL.Query(), &params.TargetRepositoryId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "targetRepositoryId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "targetRepositoryId", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "format" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "format", r.URL.Query(), &params.Format, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "format"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "format", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "state" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "state", r.URL.Query(), &params.State, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "state"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "state", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "coordinate" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "coordinate", r.URL.Query(), &params.Coordinate, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "coordinate"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "coordinate", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "digest" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "digest", r.URL.Query(), &params.Digest, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "digest"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "digest", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListArtifactPromotions(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -26318,6 +26537,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/repositories/{repositoryId}/capacity", wrapper.ReplaceRepositoryCapacity)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/retention:dry-run", wrapper.DryRunRepositoryRetention)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/retention:execute", wrapper.ExecuteRepositoryRetention)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/artifact-promotions", wrapper.ListArtifactPromotions)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/promotions", wrapper.CreateRepositoryPromotion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/replications", wrapper.ListRepositoryReplications)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/replications", wrapper.CreateRepositoryReplication)
@@ -26419,6 +26639,8 @@ type ArtifactIntelligenceJSONResponse struct {
 }
 
 type ArtifactListJSONResponse ArtifactPage
+
+type ArtifactPromotionListJSONResponse ArtifactPromotionPage
 
 type ArtifactQuarantineResponseHeaders struct {
 	ETag string
@@ -26805,6 +27027,60 @@ func (response RevokeApiKey404ApplicationProblemPlusJSONResponse) VisitRevokeApi
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListArtifactPromotionsRequestObject struct {
+	Params ListArtifactPromotionsParams
+}
+
+type ListArtifactPromotionsResponseObject interface {
+	VisitListArtifactPromotionsResponse(w http.ResponseWriter) error
+}
+
+type ListArtifactPromotions200JSONResponse struct {
+	ArtifactPromotionListJSONResponse
+}
+
+func (response ListArtifactPromotions200JSONResponse) VisitListArtifactPromotionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListArtifactPromotions400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListArtifactPromotions400ApplicationProblemPlusJSONResponse) VisitListArtifactPromotionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListArtifactPromotions401ApplicationProblemPlusJSONResponse Problem
+
+func (response ListArtifactPromotions401ApplicationProblemPlusJSONResponse) VisitListArtifactPromotionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -44800,15 +45076,25 @@ type CreateRepositoryPromotionResponseObject interface {
 	VisitCreateRepositoryPromotionResponse(w http.ResponseWriter) error
 }
 
-type CreateRepositoryPromotion202JSONResponse LifecycleJob
+type CreateRepositoryPromotion202ResponseHeaders struct {
+	NotarxPromotionId *openapi_types.UUID
+}
+
+type CreateRepositoryPromotion202JSONResponse struct {
+	Body    LifecycleJob
+	Headers CreateRepositoryPromotion202ResponseHeaders
+}
 
 func (response CreateRepositoryPromotion202JSONResponse) VisitCreateRepositoryPromotionResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
+	if response.Headers.NotarxPromotionId != nil {
+		w.Header().Set("Notarx-Promotion-Id", fmt.Sprint(*response.Headers.NotarxPromotionId))
+	}
 	w.WriteHeader(202)
 	_, err := buf.WriteTo(w)
 	return err
@@ -44882,6 +45168,20 @@ func (response CreateRepositoryPromotion409ApplicationProblemPlusJSONResponse) V
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryPromotion422ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryPromotion422ApplicationProblemPlusJSONResponse) VisitCreateRepositoryPromotionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -51307,6 +51607,9 @@ type StrictServerInterface interface {
 
 	// (DELETE /api-keys/{apiKeyId})
 	RevokeApiKey(ctx context.Context, request RevokeApiKeyRequestObject) (RevokeApiKeyResponseObject, error)
+	// ListArtifactPromotions List artifact promotions (provenance)
+	// (GET /artifact-promotions)
+	ListArtifactPromotions(ctx context.Context, request ListArtifactPromotionsRequestObject) (ListArtifactPromotionsResponseObject, error)
 	// SearchArtifacts Search visible artifacts across every readable repository
 	// (GET /artifact-search)
 	SearchArtifacts(ctx context.Context, request SearchArtifactsRequestObject) (SearchArtifactsResponseObject, error)
@@ -52343,6 +52646,32 @@ func (sh *strictHandler) RevokeApiKey(w http.ResponseWriter, r *http.Request, ap
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RevokeApiKeyResponseObject); ok {
 		if err := validResponse.VisitRevokeApiKeyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListArtifactPromotions operation middleware
+func (sh *strictHandler) ListArtifactPromotions(w http.ResponseWriter, r *http.Request, params ListArtifactPromotionsParams) {
+	var request ListArtifactPromotionsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListArtifactPromotions(ctx, request.(ListArtifactPromotionsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListArtifactPromotions")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListArtifactPromotionsResponseObject); ok {
+		if err := validResponse.VisitListArtifactPromotionsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

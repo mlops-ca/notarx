@@ -31,9 +31,9 @@ Subscriptions may list any type of the catalogue before its emitter ships; such 
 subscription simply receives nothing yet.
 
 The Cargo-specific names (`cargo.promotion.*`, `cargo.replication.*`) no longer
-exist. Today the database emits `artifact.promoted`, `promotion.failed`,
-`replication.completed` and `replication.failed` for Cargo with `format`
-`cargo`, `artifact.quarantined` and `artifact.released` for every format, and
+exist. Today the database emits `artifact.promoted` and `promotion.failed` for the
+promotions of every format (with `format` naming it), `replication.completed` and
+`replication.failed` for Cargo, `artifact.quarantined` and `artifact.released` for every format, and
 `artifact.published` for Raw, OCI and Maven; the remaining types are emitted by
 the slices of ADR 0021 that own their state changes, and a subscription may
 already list them.
@@ -44,7 +44,8 @@ digest when it has them, a type-specific `version` that forms its dedupe key
 
 - `version` is the scan result id for `artifact.scan.completed` (so a re-scan
   is a new event), the transition version for quarantine and release, the
-  operation id for promotion and replication events (a replication plan adds its
+  promotion id (the `artifact_promotions` row of the attempt) for promotion events,
+  the operation id for replication events (a replication plan adds its
   attempt count, because an explicit replay is a new run), and empty for
   `artifact.published`.
 - `artifact.published` is written in the transaction that makes the publication
@@ -61,8 +62,13 @@ digest when it has them, a type-specific `version` that forms its dedupe key
   the digest) are summaries `{id, status, critical, high, medium, low, unknown,
   scannedAt}`; `newFindings` counts the distinct unsuppressed vulnerability ids
   of `current` that `previous` did not have.
-- Cargo operation events carry `operationId`, `kind` (`promotion` or
-  `replication`), `format` (`cargo`), `sourceRepositoryId`,
+- Promotion events (`artifact.promoted`, `promotion.failed`) are written in the
+  transaction that moves the promotion job to completed or failed, for every
+  format, and update the promotion's provenance row in the same transaction. They
+  carry `operationId` (the job), `promotionId`, `kind` (`promotion`), `format`,
+  `sourceRepositoryId`, `targetRepositoryId`, `coordinate`, `digest`, final `state`,
+  `attempts` and `attempt`.
+- Cargo replication events carry `operationId`, `kind` (`replication`), `format` (`cargo`), `sourceRepositoryId`,
   `targetRepositoryId`, `coordinate` (`crate@version`), `digest`, final `state`
   and `attempts`. They exclude raw worker error messages and credentials. They are
   emitted only when the operation reaches its final completed or failed state: an

@@ -164,16 +164,6 @@ func TestQuarantineAndCargoEventsCarryTheArtifactIdentity(t *testing.T) {
 	if event.Type != WebhookEventArtifactReleased || event.RepositoryID != "r" || event.Format != "raw" || event.Version != "4" || event.Coordinate != "a" {
 		t.Fatalf("quarantine event = %+v", event)
 	}
-	job, ok := cargoPromotionWebhookEvent(LifecycleJob{ID: "job", Kind: LifecycleJobPromotion, State: LifecycleJobFailed, RepositoryID: "t", CompletedAt: time.Now(),
-		Payload: []byte(`{"format":"cargo","name":"demo","version":"1.0.0","digest":"sha256:bb"}`)})
-	if !ok || job.Type != WebhookEventPromotionFailed || job.Format != "cargo" || job.Coordinate != "demo@1.0.0" || job.Version != "job" {
-		t.Fatalf("promotion event = %+v", job)
-	}
-	done, _ := cargoPromotionWebhookEvent(LifecycleJob{ID: "job", Kind: LifecycleJobPromotion, State: LifecycleJobCompleted, RepositoryID: "t", CompletedAt: time.Now(),
-		Payload: []byte(`{"format":"cargo"}`)})
-	if done.Type != WebhookEventArtifactPromoted {
-		t.Fatalf("completed promotion event = %+v", done)
-	}
 	plan, ok := cargoReplicationWebhookEvent(ReplicationPlan{ID: "p", Format: FormatCargo, State: "completed", TargetRepositoryID: "t", Coordinate: "demo@1.0.0", Digest: "sha256:bb", Attempts: 2})
 	if !ok || plan.Type != WebhookEventReplicationCompleted || plan.Version != "p:2" || plan.RepositoryID != "t" {
 		t.Fatalf("replication event = %+v", plan)
