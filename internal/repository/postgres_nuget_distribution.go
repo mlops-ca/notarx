@@ -95,6 +95,12 @@ func nuGetReplicationActorTx(ctx context.Context, tx *sql.Tx, j dist.Job, a *dis
 			return err
 		}
 		a.Active = state == string(UserActive)
+	case WorkloadActorKind:
+		w, err := WorkloadAuthorityTx(ctx, tx, j.Actor, j.CredentialID)
+		if err != nil {
+			return err
+		}
+		a.Active, a.ValidUntil = w.Active, w.ValidUntil
 	case "api_key", "service_account_credential":
 		credential := strings.TrimPrefix(j.Actor, "api-key:")
 		account := ""

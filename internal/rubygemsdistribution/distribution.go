@@ -161,11 +161,11 @@ func NewJob(plan Plan, subject Subject, key string) (Job, error) {
 		return Job{}, ErrInvalid
 	}
 	switch kind {
-	case "static_admin", "static_resolver", "local_session", "api_key", "service_account_credential", "oidc":
+	case "static_admin", "static_resolver", "local_session", "api_key", "service_account_credential", "oidc", "workload_federation":
 	default:
 		return Job{}, ErrInvalid
 	}
-	if kind == "service_account_credential" {
+	if kind == "service_account_credential" || kind == "workload_federation" {
 		if _, err := uuid.Parse(credential); err != nil {
 			return Job{}, ErrInvalid
 		}
@@ -251,7 +251,7 @@ func ValidSubject(s Subject) bool {
 	case "api_key":
 		_, e := uuid.Parse(strings.TrimPrefix(s.Actor, "api-key:"))
 		return strings.HasPrefix(s.Actor, "api-key:") && e == nil && s.CredentialID == "" && s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0
-	case "service_account_credential":
+	case "service_account_credential", "workload_federation":
 		_, e := uuid.Parse(strings.TrimPrefix(s.Actor, "service-account:"))
 		_, ce := uuid.Parse(s.CredentialID)
 		return strings.HasPrefix(s.Actor, "service-account:") && e == nil && ce == nil && s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0

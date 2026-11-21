@@ -78,12 +78,12 @@ func TestRubyGemsReplicationCanonicalIdentityBoundsAndSubjects(t *testing.T) {
 	if dist.ValidNewJob(bad) {
 		t.Fatal("noncanonical job accepted")
 	}
-	for _, s := range []dist.Subject{{Actor: "operator", Kind: "unknown"}, {Actor: "service-account:" + uuid.NewString(), Kind: "service_account_credential"}, {Actor: "user:a", Kind: "local_session"}, {Actor: "operator", Kind: "static_admin", SessionVersion: 1}} {
+	for _, s := range []dist.Subject{{Actor: "operator", Kind: "unknown"}, {Actor: "service-account:" + uuid.NewString(), Kind: "service_account_credential"}, {Actor: "service-account:" + uuid.NewString(), Kind: "workload_federation"}, {Actor: "user:a", Kind: "local_session"}, {Actor: "operator", Kind: "static_admin", SessionVersion: 1}} {
 		if _, err = dist.NewJob(p, s, "key"); !errors.Is(err, dist.ErrInvalid) {
 			t.Fatal("invalid subject accepted")
 		}
 	}
-	for _, s := range []dist.Subject{{Actor: "api-key:" + uuid.NewString(), Kind: "api_key"}, {Actor: "service-account:" + uuid.NewString(), Kind: "service_account_credential", CredentialID: uuid.NewString()}, {Actor: "user:a", Kind: "local_session", UserID: uuid.NewString(), SessionID: uuid.NewString(), SessionVersion: 2, ValidUntil: time.Now().UTC().Add(time.Hour)}} {
+	for _, s := range []dist.Subject{{Actor: "api-key:" + uuid.NewString(), Kind: "api_key"}, {Actor: "service-account:" + uuid.NewString(), Kind: "service_account_credential", CredentialID: uuid.NewString()}, {Actor: "service-account:" + uuid.NewString(), Kind: "workload_federation", CredentialID: uuid.NewString()}, {Actor: "user:a", Kind: "local_session", UserID: uuid.NewString(), SessionID: uuid.NewString(), SessionVersion: 2, ValidUntil: time.Now().UTC().Add(time.Hour)}} {
 		if !dist.ValidSubject(s) || !dist.SameSubject(s, s) {
 			t.Fatalf("valid subject %+v", s)
 		}

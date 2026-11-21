@@ -80,7 +80,7 @@ func waitHelmReplicationLock(t *testing.T, s *PostgresStore, pid int) {
 	t.Fatal("concurrent authority mutation did not block on the real publication transaction lock")
 }
 func TestPostgresHelmReplicationAuthorityMutationSerializesWithPublication(t *testing.T) {
-	for _, mode := range []string{"key-revoke", "user-demote", "service-disable", "credential-revoke", "grant-revoke"} {
+	for _, mode := range []string{"key-revoke", "user-demote", "service-disable", "credential-revoke", "grant-revoke", "workload-policy-disable", "workload-issuer-disable", "workload-service-disable"} {
 		t.Run(mode, func(t *testing.T) {
 			s := newPostgresNuGetStore(t)
 			f := helmReplicationContractSetup(t, s)
@@ -145,6 +145,9 @@ func TestPostgresHelmReplicationAuthorityMutationSerializesWithPublication(t *te
 			case "grant-revoke":
 				actor = "operator"
 				kind = "static_admin"
+			case "workload-policy-disable", "workload-issuer-disable", "workload-service-disable":
+				actor, credential, mutate = workloadReplicationActor(t, s, mutator, mode)
+				kind = "workload_federation"
 			}
 			if _, err := s.ReplaceRepositoryGrants(ctx, f.target.ID, []RepositoryGrant{{Principal: actor, Scopes: []string{"repositories:write"}}}, "1"); err != nil {
 				t.Fatal(err)

@@ -1,5 +1,7 @@
 package authorization
 
+import "strings"
+
 // DurablePrincipal rebuilds authority from a transaction-locked current
 // subject snapshot. It never restores the submitter's admin/OIDC claims or
 // persists a bearer. Callers must supply a fresh snapshot at every execution.
@@ -29,6 +31,12 @@ func (a Authenticator) DurablePrincipal(actor string, kind AuthenticationKind, r
 		}
 		p.Admin = p.Role == RoleAdmin
 	case AuthenticationServiceAccountCredential:
+	case AuthenticationWorkloadFederation:
+		// The actor is the service account and holds no role; the store revalidated the policy, issuer and
+		// account in the same snapshot. A deployment without workload federation refuses the kind.
+		if a.Workload == nil || !strings.HasPrefix(actor, "service-account:") {
+			return Principal{}, false
+		}
 	default:
 		return Principal{}, false
 	}

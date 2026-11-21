@@ -259,6 +259,13 @@ Entry points:
   `principalToken` revalidates policy and service-account state against a
   5-second cache, so disabling a policy takes effect within seconds, not at token
   expiry.
+- **Durable jobs.** The Helm, NuGet and RubyGems replication jobs record their
+  submitter as `(actor, kind, credential id)`. A workload principal is stored as the
+  service account (`service-account:<uuid>`), kind `workload_federation` and the
+  trust policy id as credential id. Every execution step re-reads the policy, its
+  issuer and the service account under row locks and refuses the job unless all three
+  are active and the policy has not expired; `DurablePrincipal` rebuilds the
+  principal with no role, so only the service account's grants apply.
 
 ### Token exchange endpoint
 

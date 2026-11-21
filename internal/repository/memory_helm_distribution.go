@@ -42,6 +42,9 @@ func (s *MemoryStore) helmReplicationAuthorityLocked(j dist.Job) (dist.Authority
 		if k.ExpiresAt != nil {
 			a.ValidUntil = *k.ExpiresAt
 		}
+	case WorkloadActorKind:
+		w := s.WorkloadAuthorityLocked(j.Actor, j.CredentialID)
+		a.Active, a.ValidUntil = w.Active, w.ValidUntil
 	case "service_account_credential":
 		account, ok := s.serviceAccounts[strings.TrimPrefix(j.Actor, "service-account:")]
 		k, found := s.apiKeys[j.CredentialID]

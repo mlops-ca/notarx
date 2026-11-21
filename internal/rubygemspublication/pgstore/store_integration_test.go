@@ -124,6 +124,7 @@ func TestRubyGemsPostgresReplicationStoreContract(t *testing.T) {
 		*r = v
 	}
 	f.ReplicationStoreContract(t, store, source, target)
+	f.WorkloadReplicationContract(t, store, repos, source, target)
 }
 
 func TestRubyGemsPostgresReplicationRejectsPublicationExpiryAfterAudit(t *testing.T) {
