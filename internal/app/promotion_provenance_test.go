@@ -306,3 +306,48 @@ func TestNPMAndMavenModulesDeclareTheirOptionalCapabilities(t *testing.T) {
 		t.Fatalf("unknown release err=%v", err)
 	}
 }
+
+// prunedJobStore is a gateway store whose lifecycle jobs have been pruned while the provenance rows remain.
+type prunedJobStore struct{ GatewayStore }
+
+func (prunedJobStore) GetLifecycleJob(context.Context, string, string) (repository.LifecycleJob, error) {
+	return repository.LifecycleJob{}, repository.ErrNotFound
+}
+
+func TestManualPromotionReplayAfterTheJobIsPrunedReturnsTheStoredOutcome(t *testing.T) {
+	f := newProvenanceFixture(t)
+	first := f.promote(t, "pruned-key")
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("promotion=%d %s", first.Code, first.Body.String())
+	}
+	service := PromotionService{store: prunedJobStore{f.store}, securityPolicies: f.store, intelligence: f.store, audit: f.store, promotions: f.store,
+		registry: promotionFormatRegistry(promotionModuleDeps{Store: f.store}),
+		quarantine: func(context.Context, Principal, repository.HostedRepository, repository.HostedRepository, string, string) *PromotionError {
+			t.Fatal("a replay must not be admitted again")
+			return nil
+		}}
+	request := PromotionRequest{Principal: Principal{Actor: "promoter"}, Source: f.source, TargetID: f.target.ID, Coordinate: f.asset.Path, Digest: f.asset.Digest, IdempotencyKey: "pruned-key"}
+	result, perr := service.Request(context.Background(), request)
+	if perr != nil || result.Promotion.ID != first.Header().Get("Notarx-Promotion-Id") || result.Job.ID != result.Promotion.JobID || result.Job.ID == "" ||
+		result.Job.State != repository.LifecycleJobPending || result.Job.Kind != repository.LifecycleJobPromotion {
+		t.Fatalf("replay=%+v err=%v", result, perr)
+	}
+	request.Coordinate = "releases/other.txt"
+	if _, perr = service.Request(context.Background(), request); perr == nil || perr.Status != http.StatusConflict || perr.Code != "idempotency_conflict" {
+		t.Fatalf("a key reused for another artifact must conflict: %v", perr)
+	}
+	if page := f.list(t, "", f.token); len(page.Items) != 1 {
+		t.Fatalf("replay wrote %d rows", len(page.Items))
+	}
+}
+
+func TestManualPromotionKeyReusedForAnotherArtifactIsAConflict(t *testing.T) {
+	f := newProvenanceFixture(t)
+	if first := f.promote(t, "reused"); first.Code != http.StatusAccepted {
+		t.Fatalf("promotion=%d %s", first.Code, first.Body.String())
+	}
+	f.asset.Path = "releases/other.txt"
+	if second := f.promote(t, "reused"); second.Code != http.StatusConflict || !strings.Contains(second.Body.String(), "idempotency_conflict") {
+		t.Fatalf("reuse=%d %s", second.Code, second.Body.String())
+	}
+}

@@ -248,7 +248,9 @@ func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJo
 		return nil, err
 	}
 	s.claimObserver.record(kind, scan.scanned)
-	scan.claimed = s.refuseClaimedPromotions(ctx, scan.claimed)
+	if scan.claimed, err = refuseClaimedPromotions(ctx, postgresClaimedPromotions{s}, scan.claimed); err != nil {
+		return nil, err
+	}
 	for _, job := range scan.claimed {
 		jobCtx, ids := requestcontext.WithRequest(ctx, job.ID)
 		slog.LogAttrs(jobCtx, slog.LevelInfo, "lifecycle job claimed",

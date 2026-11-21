@@ -166,6 +166,9 @@ func (s PromotionService) Request(ctx context.Context, in PromotionRequest) (Pro
 }
 
 func (s PromotionService) request(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (PromotionResult, *PromotionError) {
+	if result, replayed, perr := s.replay(ctx, in, resolved); replayed || perr != nil {
+		return result, perr
+	}
 	admission, perr := s.admit(ctx, in, resolved)
 	if perr != nil {
 		return PromotionResult{}, perr
@@ -191,6 +194,53 @@ func (s PromotionService) request(ctx context.Context, in PromotionRequest, reso
 		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
 	}
 	return PromotionResult{Job: job, Promotion: row}, nil
+}
+
+// replay answers a request whose Idempotency-Key already has a provenance row: the same request returns the first
+// outcome without admitting or enqueueing anything (so a policy tightened since, or a lifecycle job pruned since, does
+// not turn a replay into a conflict), and a key reused for another artifact or source is a conflict. The provenance row
+// outlives its job, so a pruned job is rebuilt from the row.
+func (s PromotionService) replay(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (PromotionResult, bool, *PromotionError) {
+	if resolved.repo.ID == "" {
+		return PromotionResult{}, false, nil
+	}
+	key := promotionIdempotencyKey(resolved.repo.ID, in.IdempotencyKey)
+	rows, err := s.promotions.GetArtifactPromotionsByKeys(ctx, []string{key})
+	if err != nil {
+		return PromotionResult{}, false, promotionError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
+	}
+	row, ok := rows[key]
+	if !ok {
+		return PromotionResult{}, false, nil
+	}
+	if row.Format != in.Source.Format || row.Coordinate != in.Coordinate || row.Digest != in.Digest || row.OriginRepository != in.Source.Name {
+		return PromotionResult{}, false, promotionError(http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing promotion job")
+	}
+	job, err := s.store.GetLifecycleJob(ctx, row.TargetRepositoryID, row.JobID)
+	if errors.Is(err, repository.ErrNotFound) {
+		job = repository.LifecycleJob{ID: row.JobID, RepositoryID: row.TargetRepositoryID, Kind: repository.LifecycleJobPromotion,
+			IdempotencyKey: in.IdempotencyKey, State: lifecycleStateForPromotion(row.State), CreatedAt: row.CreatedAt, CompletedAt: row.CompletedAt}
+		err = nil
+	}
+	if err != nil {
+		return PromotionResult{}, false, promotionError(http.StatusInternalServerError, "internal_error", "get promotion job failed")
+	}
+	return PromotionResult{Job: job, Promotion: row}, true, nil
+}
+
+// lifecycleStateForPromotion is the job state a provenance state stands for when the job itself was pruned.
+func lifecycleStateForPromotion(state repository.ArtifactPromotionState) repository.LifecycleJobState {
+	switch state {
+	case repository.ArtifactPromotionRunning:
+		return repository.LifecycleJobRunning
+	case repository.ArtifactPromotionCompleted:
+		return repository.LifecycleJobCompleted
+	case repository.ArtifactPromotionFailed, repository.ArtifactPromotionRejected, repository.ArtifactPromotionExpired:
+		return repository.LifecycleJobFailed
+	case repository.ArtifactPromotionCancelled:
+		return repository.LifecycleJobCancelled
+	}
+	return repository.LifecycleJobPending
 }
 
 // promotionIdempotencyKey scopes a caller's Idempotency-Key to the target: provenance keys are unique across the
