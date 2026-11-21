@@ -51,14 +51,15 @@ func CandidateOf(format repository.Format, coordinate string) promotionrules.Can
 	return candidate
 }
 
-// CandidatesOf is every candidate a published artifact can be matched as. A Raw path of the form name/version/file may be a
-// file of a versioned repository, whose coordinate is name@version (ADR 0028); the fan-out does not know the layout of the
-// repository, so it offers both readings and the evaluator, which does, decides.
+// CandidatesOf is every candidate a published artifact can be matched as. A Raw coordinate of the form name@version may be
+// a sealed version of a versioned repository (ADR 0028), which publishes once, at seal; the fan-out does not know the
+// layout of the repository, so it offers the flat reading (the path) and the versioned one, and the evaluator, which does,
+// decides.
 func CandidatesOf(format repository.Format, coordinate string) []promotionrules.Candidate {
 	candidates := []promotionrules.Candidate{CandidateOf(format, coordinate)}
 	if format == repository.FormatRaw {
-		if parsed, err := repository.ParseRawVersionPath(coordinate); err == nil {
-			candidates = append(candidates, promotionrules.Candidate{Coordinate: parsed.Name + "@" + parsed.Version, Version: parsed.Version})
+		if name, version, ok := repository.ParseRawVersionCoordinate(coordinate); ok {
+			candidates = append(candidates, promotionrules.Candidate{Coordinate: name + "@" + version, Version: version})
 		}
 	}
 	return candidates

@@ -63,6 +63,18 @@ func (s *MemoryStore) syncPromotionLocked(job LifecycleJob) {
 	if state == promotion.State {
 		return
 	}
+	if state == ArtifactPromotionQueued && (promotion.State == ArtifactPromotionFailed || promotion.State == ArtifactPromotionCancelled) {
+		// A retried job: the failed attempt keeps its outcome and the retry is the next attempt under the key.
+		retry := cloneArtifactPromotion(promotion)
+		retry.ID, retry.State, retry.CompletedAt, retry.CreatedAt = ids.New(), ArtifactPromotionQueued, time.Time{}, time.Now().UTC()
+		for _, other := range s.artifactPromotions {
+			if other.IdempotencyKey == promotion.IdempotencyKey {
+				retry.Attempt = max(retry.Attempt, other.Attempt+1)
+			}
+		}
+		s.artifactPromotions[retry.ID] = retry
+		return
+	}
 	promotion.State, promotion.CompletedAt = state, time.Time{}
 	if state == ArtifactPromotionCompleted || state == ArtifactPromotionFailed || state == ArtifactPromotionCancelled {
 		promotion.CompletedAt = time.Now().UTC()

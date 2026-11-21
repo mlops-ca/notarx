@@ -349,10 +349,10 @@ API) set by the system without a version bump, conditionally on the rule version
 newer than the target's tombstone; bytes that differ from a completed promotion are `conflict` (an OCI image name holds many digests, so only the
 exact manifest decides there); a direct publication into the target that no promotion made is refused by the format's job, not by the
 evaluator. The target's admission policy is evaluated as a condition of every rule. A condition that can still change (a scan, findings above the
-limit, evidence, the target's policy, a quarantine, an open Raw version) makes the evaluation wait and look again, after a quarter of the artifact's
+limit, evidence, the target's policy, a quarantine) makes the evaluation wait and look again, after a quarter of the artifact's
 age between one minute and one hour, until a week after the age condition was met (after publication without one); for `scope: release` the
-conditions hold for every member, checked in order with the first failing member deciding. A versioned Raw file event is evaluated as its version,
-which counts as published when it is sealed; `scope: release` on versioned Raw expands to the files of the version through `ReleaseSet`, and a release of more than
+conditions hold for every member, checked in order with the first failing member deciding. A versioned Raw repository emits `artifact.published` once per version, in the seal transaction, with the coordinate `name@version` and
+the manifest digest (a file written into an open version emits nothing); the version counts as published when it is sealed; `scope: release` on versioned Raw expands to the files of the version through `ReleaseSet`, and a release of more than
 1000 members fails with `release_too_large`.
 
 ### Provenance and approval

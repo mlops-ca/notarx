@@ -87,3 +87,6 @@ migrations:
   000027_domain_events_emitter_horizon.sql:
     dialect: postgres
     reason: replaces the emit_domain_event function so the first emission of a transaction stamps its session with an application_name that bounds the dispatcher read horizon; the MySQL baseline carries tables only
+  000028_promotion_retry_attempts.sql:
+    dialect: postgres
+    reason: replaces the promotion_job_state_change function so a retried failed or cancelled promotion job records a new attempt row; the MySQL baseline carries tables only
