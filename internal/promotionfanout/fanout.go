@@ -145,6 +145,9 @@ type Index struct {
 func New(source RuleSource, registry *readcache.Registry, validate CoordinateValidator) *Index {
 	return &Index{source: source, validate: validate, cache: readcache.New[string, []compiledRule](registry, readcache.Options[[]compiledRule]{
 		Name: "promotion_rules", Scope: repository.CacheScopePromotionRule,
+		// The rule set is configuration that notifications invalidate, not credential state, so the cache serves a request that
+		// asked management reads to bypass the caches: every HTTP publication carries that mark.
+		IgnoreBypass: true,
 		// A miss loads on the transaction of the publication that found it, so any error is that transaction's: another
 		// publication that joined the load must not fail with it.
 		LeaderError: func(error) bool { return true },

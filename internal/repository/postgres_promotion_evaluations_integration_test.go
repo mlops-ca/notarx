@@ -363,3 +363,40 @@ func TestPostgresRulesAreListedThroughTheTransaction(t *testing.T) {
 		t.Fatalf("rules = %+v, %v", rules, err)
 	}
 }
+
+// Recording a hold for a parked rule re-checks the rule in the same statement: a rule that is active again makes the row due at once.
+func TestPostgresHoldForARuleIsDueAtOnceWhenTheRuleIsActive(t *testing.T) {
+	f := newEvaluationFixture(t)
+	ctx := context.Background()
+	events.SetRuleFanout(staticFanout{rules: []string{f.rule.ID}})
+	if _, err := f.publish(t, true); err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Minute, 1)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claimed = %+v, %v", claimed, err)
+	}
+	next := time.Now().Add(7 * 24 * time.Hour)
+	if err = f.store.FinishPromotionEvaluation(ctx, claimed[0].ID, claimed[0].LeaseToken, PromotionEvaluationOutcome{State: PromotionEvaluationWaiting, Reason: "rule_authorization_lost", NextAttemptAt: next, HoldForRule: true}); err != nil {
+		t.Fatal(err)
+	}
+	items := f.evaluations(t)
+	if len(items) != 1 || items[0].State != PromotionEvaluationWaiting || items[0].NextAttemptAt.After(time.Now().Add(time.Minute)) {
+		t.Fatalf("a hold for an active rule must be due now: %+v", items)
+	}
+	// While the rule is parked the hold stands.
+	event := events.Event{Type: events.PromotionFailed, RepositoryID: f.target.ID, Format: "raw", Coordinate: "a", Digest: "sha256:" + uuid.NewString(), Version: "hold"}
+	if parked, parkErr := f.store.ParkPromotionRule(ctx, f.rule.ID, f.rule.Version, PromotionRuleAuthorizationLost, "x", event); parkErr != nil || !parked {
+		t.Fatalf("parked = %v, %v", parked, parkErr)
+	}
+	again, err := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Minute, 1)
+	if err != nil || len(again) != 1 {
+		t.Fatalf("claimed again = %+v, %v", again, err)
+	}
+	if err = f.store.FinishPromotionEvaluation(ctx, again[0].ID, again[0].LeaseToken, PromotionEvaluationOutcome{State: PromotionEvaluationWaiting, Reason: "rule_authorization_lost", NextAttemptAt: next, HoldForRule: true}); err != nil {
+		t.Fatal(err)
+	}
+	if held := f.evaluations(t); len(held) != 1 || held[0].NextAttemptAt.Before(next.Add(-time.Minute)) {
+		t.Fatalf("the hold for a parked rule must stand: %+v", held)
+	}
+}

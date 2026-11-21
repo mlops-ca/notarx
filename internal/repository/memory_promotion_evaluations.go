@@ -100,6 +100,9 @@ func (s *MemoryStore) FinishPromotionEvaluation(_ context.Context, id, leaseToke
 		if !outcome.NextAttemptAt.IsZero() {
 			evaluation.NextAttemptAt = outcome.NextAttemptAt.UTC()
 		}
+		if rule, ok := s.promotionRules[evaluation.RuleID]; ok && outcome.HoldForRule && rule.State == PromotionRuleActive {
+			evaluation.NextAttemptAt = now
+		}
 	}
 	switch {
 	case outcome.State == PromotionEvaluationWaiting:

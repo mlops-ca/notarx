@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"sort"
 	"time"
 
@@ -55,7 +54,7 @@ ON CONFLICT (consumer) DO NOTHING RETURNING occurred_at,seq`, consumer).Scan(&cu
 	for i, t := range types {
 		names[i] = string(t)
 	}
-	rows, err := s.db.QueryContext(ctx, readDomainEventsQuery, names, cursor.OccurredAt, cursor.Seq, fmt.Sprintf("%d milliseconds", settle.Milliseconds()), limit)
+	rows, err := s.db.QueryContext(ctx, readDomainEventsQuery, names, cursor.OccurredAt, cursor.Seq, intervalOf(settle), limit)
 	if err != nil {
 		return nil, err
 	}

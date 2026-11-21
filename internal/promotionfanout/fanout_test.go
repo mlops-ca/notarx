@@ -135,8 +135,8 @@ func TestIndexCachesTheRuleSetAndTheScopeFlushIsTheVersionBump(t *testing.T) {
 	if err != nil || len(got) != 0 || source.calls != 2 {
 		t.Fatalf("after the flush: matched %v, %v, calls %d", got, err, source.calls)
 	}
-	// A bypassed read (the management API) goes to the store.
-	if _, err = index.MatchingRules(readcache.Bypass(context.Background()), nil, event); err != nil || source.calls != 3 {
+	// A publication over HTTP carries the bypass mark of management reads; the rule set is served from the cache all the same.
+	if _, err = index.MatchingRules(readcache.Bypass(context.Background()), nil, event); err != nil || source.calls != 2 {
 		t.Fatalf("bypass: %v, calls %d", err, source.calls)
 	}
 }

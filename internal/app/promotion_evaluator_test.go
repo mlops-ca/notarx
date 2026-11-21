@@ -1079,3 +1079,23 @@ func TestWaitForAParkedRuleHoldsForTheWeekUnlessTheRuleIsActiveAgain(t *testing.
 		t.Fatalf("a restore took the lease of a row a worker holds: %+v, %v", held, claimErr)
 	}
 }
+
+// The edit that restores a rule skips the row a worker holds, so recording a hold for a parked rule checks the rule again: if
+// the edit committed while the evaluation ran, the row is due at once, not a week from now.
+func TestHoldForAParkedRuleIsDueAtOnceWhenTheRuleIsActiveAgain(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	f.publishRaw(f.source, "releases/widget.txt", "widget")
+	claimed, err := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Hour, 1)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claimed = %+v, %v", claimed, err)
+	}
+	// The rule is active (nothing parked it), as it is after an edit that restored it while this evaluation ran.
+	hold := repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationWaiting, Reason: reasonRuleParkedPrefix + repository.PromotionRuleAuthorizationLost, NextAttemptAt: f.now.Add(7 * 24 * time.Hour), HoldForRule: true}
+	if err = f.store.FinishPromotionEvaluation(ctx, claimed[0].ID, claimed[0].LeaseToken, hold); err != nil {
+		t.Fatal(err)
+	}
+	if again, claimErr := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Hour, 1); claimErr != nil || len(again) != 1 || again[0].ID != claimed[0].ID {
+		t.Fatalf("a hold for a rule that is active again must be due at once: %+v, %v", again, claimErr)
+	}
+}

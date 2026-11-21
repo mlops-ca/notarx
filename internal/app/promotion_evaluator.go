@@ -202,12 +202,12 @@ func (e *PromotionEvaluator) finish(ctx context.Context, evaluation repository.P
 	}
 }
 
-func skipped(reason string) (repository.PromotionEvaluationOutcome, error) {
-	return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationSkipped, Reason: reason}, nil
+func skipped(reason string) repository.PromotionEvaluationOutcome {
+	return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationSkipped, Reason: reason}
 }
 
-func failed(reason string) (repository.PromotionEvaluationOutcome, error) {
-	return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationFailed, Reason: reason}, nil
+func failed(reason string) repository.PromotionEvaluationOutcome {
+	return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationFailed, Reason: reason}
 }
 
 // evaluate decides one evaluation. A non-nil error is transient (a store read failed); every decision about the rule or
@@ -215,19 +215,19 @@ func failed(reason string) (repository.PromotionEvaluationOutcome, error) {
 func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository.PromotionEvaluation) (repository.PromotionEvaluationOutcome, error) {
 	rule, err := e.store.GetPromotionRule(ctx, evaluation.RuleID)
 	if errors.Is(err, repository.ErrNotFound) {
-		return skipped(reasonRuleDeleted)
+		return skipped(reasonRuleDeleted), nil
 	}
 	if err != nil {
 		return repository.PromotionEvaluationOutcome{}, err
 	}
 	if !rule.Enabled {
-		return skipped(reasonRuleDisabled)
+		return skipped(reasonRuleDisabled), nil
 	}
 	if rule.State != repository.PromotionRuleActive {
 		return e.waitForRule(ctx, rule, evaluation, reasonRuleParkedPrefix+rule.State)
 	}
 	if rule.TargetKind != repository.PromotionTargetLocal {
-		return skipped(reasonRemoteUnsupported)
+		return skipped(reasonRemoteUnsupported), nil
 	}
 	source, found, err := e.repository(ctx, rule.SourceRepositoryID)
 	if err != nil || !found {
@@ -244,7 +244,7 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 	}
 	run, err := e.prepare(ctx, rule, source, target)
 	if errors.Is(err, errInvalidRule) {
-		return failed(reasonRuleInvalid)
+		return failed(reasonRuleInvalid), nil
 	}
 	if err != nil {
 		return repository.PromotionEvaluationOutcome{}, err
@@ -266,15 +266,15 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 	members, err := e.members(ctx, run, evaluation)
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
-		return skipped(reasonSourceUnavailable)
+		return skipped(reasonSourceUnavailable), nil
 	case errors.Is(err, errUnsupportedPromotionFormat):
-		return failed(reasonUnsupportedFormat)
+		return failed(reasonUnsupportedFormat), nil
 	case err != nil:
 		return repository.PromotionEvaluationOutcome{}, err
 	case len(members) == 0:
-		return skipped(reasonEmptyRelease)
+		return skipped(reasonEmptyRelease), nil
 	case len(members) > e.releaseMax:
-		return failed(reasonReleaseTooLarge)
+		return failed(reasonReleaseTooLarge), nil
 	}
 	if id, requested, shortErr := e.releaseRequested(ctx, run, members, trigger); shortErr != nil {
 		return repository.PromotionEvaluationOutcome{}, shortErr
@@ -289,7 +289,7 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 			return repository.PromotionEvaluationOutcome{}, verdictErr
 		}
 		if !found {
-			return skipped(reasonSourceUnavailable)
+			return skipped(reasonSourceUnavailable), nil
 		}
 		if blocked, outcome := e.conditionOutcome(run, published, verdicts); blocked {
 			return outcome, nil
@@ -302,7 +302,7 @@ func skippedOrError(err error, reason string) (repository.PromotionEvaluationOut
 	if err != nil {
 		return repository.PromotionEvaluationOutcome{}, err
 	}
-	return skipped(reason)
+	return skipped(reason), nil
 }
 
 // repository loads an active hosted repository; found is false for one that does not exist or is not active.
@@ -373,9 +373,9 @@ func (e *PromotionEvaluator) park(ctx context.Context, rule repository.Promotion
 }
 
 // waitForRule is the outcome of an evaluation of a parked rule: it holds until the end of the week the artifact has, without
-// polling, because the edit that restores the rule makes the waiting evaluations due at once. An evaluation that read the
-// rule parked a moment before such an edit would hold for the week, so the rule is read once more first; if it is active
-// again the evaluation is looked at again now, without using up an attempt.
+// polling, because the edit that restores the rule makes the waiting evaluations due at once. The edit's wake-up skips a row
+// a worker holds, so the rule is read once more before the hold and the store re-checks it atomically when it records the
+// hold (HoldForRule): an evaluation that read the rule parked a moment before an edit restored it is due at once.
 func (e *PromotionEvaluator) waitForRule(ctx context.Context, rule repository.PromotionRule, evaluation repository.PromotionEvaluation, reason string) (repository.PromotionEvaluationOutcome, error) {
 	fresh, err := e.store.GetPromotionRule(ctx, rule.ID)
 	if err != nil && !errors.Is(err, repository.ErrNotFound) {
@@ -384,7 +384,9 @@ func (e *PromotionEvaluator) waitForRule(ctx context.Context, rule repository.Pr
 	if err == nil && (fresh.State == repository.PromotionRuleActive || fresh.Version != rule.Version) {
 		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationPending, Reason: reasonRuleChanged, NextAttemptAt: e.now().Add(waitFloor), NotAnAttempt: true}, nil
 	}
-	return e.laterBy(evaluation.EventOccurredAt, reason, max(evaluation.EventOccurredAt.Add(conditionGiveUp).Sub(e.now()), conditionPollFloor)+time.Second), nil
+	outcome := e.laterBy(evaluation.EventOccurredAt, reason, max(evaluation.EventOccurredAt.Add(conditionGiveUp).Sub(e.now()), conditionPollFloor)+time.Second)
+	outcome.HoldForRule = true
+	return outcome, nil
 }
 
 // ruleRun is a rule loaded for evaluation.
@@ -481,12 +483,12 @@ func (e *PromotionEvaluator) reload(ctx context.Context, run ruleRun, evaluation
 	versions, ok := any(e.store).(repository.NativeRawVersionStore)
 	parsed, parseErr := repository.ParseRawVersionPath(evaluation.Coordinate)
 	if !ok || parseErr != nil {
-		outcome, _ := skipped(reasonNoMatch)
+		outcome := skipped(reasonNoMatch)
 		return evaluation, nil, outcome, nil
 	}
 	version, err := versions.GetRawVersion(ctx, run.source.ID, parsed.Name, parsed.Version)
 	if errors.Is(err, repository.ErrNotFound) {
-		outcome, _ := skipped(reasonSourceUnavailable)
+		outcome := skipped(reasonSourceUnavailable)
 		return evaluation, nil, outcome, nil
 	}
 	if err != nil {
@@ -516,7 +518,7 @@ func (e *PromotionEvaluator) matches(ctx context.Context, run ruleRun, evaluatio
 		candidate.Refs = tags
 	}
 	if !run.match.Matches(candidate, run.validCoordinate) {
-		outcome, _ := skipped(reasonNoMatch)
+		outcome := skipped(reasonNoMatch)
 		return false, outcome, nil
 	}
 	return true, repository.PromotionEvaluationOutcome{}, nil
@@ -617,7 +619,7 @@ func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members [
 		}
 		if conflict != "" {
 			slog.Warn("promotion refused: the target holds different bytes at the coordinate", "component", "promotion_evaluator", "ruleId", run.rule.ID, "target", run.target.Name, "coordinate", member.coordinate, "held", conflict, "offered", member.digest)
-			return failed(reasonConflict + ":" + member.coordinate + " holds " + conflict)
+			return failed(reasonConflict + ":" + member.coordinate + " holds " + conflict), nil
 		}
 		if holds {
 			continue
@@ -628,7 +630,7 @@ func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members [
 			IdempotencyKey: key, Rule: &PromotionRuleOrigin{RuleID: run.rule.ID, RuleVersion: version, Key: key}})
 	}
 	if len(requests) == 0 {
-		return skipped(reasonAlreadyAtTarget)
+		return skipped(reasonAlreadyAtTarget), nil
 	}
 	if id, replayed, replayErr := e.replay(ctx, keys); replayErr != nil {
 		return repository.PromotionEvaluationOutcome{}, replayErr
@@ -688,11 +690,11 @@ func (e *PromotionEvaluator) promotionRefusal(perr *PromotionError) (repository.
 	case perr.Status >= http.StatusInternalServerError:
 		return repository.PromotionEvaluationOutcome{}, perr
 	case perr.Status == http.StatusNotFound:
-		return skipped(reasonSourceUnavailable)
+		return skipped(reasonSourceUnavailable), nil
 	case perr.Status == http.StatusForbidden:
-		return skipped(perr.Code)
+		return skipped(perr.Code), nil
 	}
-	return failed(perr.Code)
+	return failed(perr.Code), nil
 }
 
 // targetState reports what the target holds at a coordinate, from the newest completed promotion into it that is newer than

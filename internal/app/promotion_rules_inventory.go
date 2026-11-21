@@ -4,9 +4,8 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"strings"
 
-	"github.com/mlops-ca/notarx/internal/promotionrules"
+	"github.com/mlops-ca/notarx/internal/promotionfanout"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -86,7 +85,7 @@ func (d *dryRun) inventoryCandidates(ctx context.Context, yield func(dryRunCandi
 				if version.State == "deleted" || version.Digest == "" {
 					continue
 				}
-				if err = offer(dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: name + "@" + version.Version, Version: version.Version}, Digest: version.Digest, CreatedAt: version.CreatedAt}); err != nil || stopped {
+				if err = offer(dryRunCandidate{Candidate: promotionfanout.CandidateOf(d.source.Format, name+"@"+version.Version), Digest: version.Digest, CreatedAt: version.CreatedAt}); err != nil || stopped {
 					return err
 				}
 			}
@@ -117,7 +116,7 @@ func (d *dryRun) inventoryCandidates(ctx context.Context, yield func(dryRunCandi
 					continue
 				}
 				seen[file.Version] = true
-				if err = offer(dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: project + "@" + file.Version, Version: file.Version}, Digest: file.Digest, CreatedAt: file.CreatedAt}); err != nil || stopped {
+				if err = offer(dryRunCandidate{Candidate: promotionfanout.CandidateOf(d.source.Format, project+"@"+file.Version), Digest: file.Digest, CreatedAt: file.CreatedAt}); err != nil || stopped {
 					return err
 				}
 			}
@@ -142,7 +141,7 @@ func (d *dryRun) inventoryCandidates(ctx context.Context, yield func(dryRunCandi
 				if assetErr != nil {
 					return assetErr
 				}
-				if err = offer(dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: module + "@" + version.Version, Version: version.Version, ModuleVersion: true}, Digest: zip.Digest, CreatedAt: version.CreatedAt}); err != nil || stopped {
+				if err = offer(dryRunCandidate{Candidate: promotionfanout.CandidateOf(d.source.Format, module+"@"+version.Version), Digest: zip.Digest, CreatedAt: version.CreatedAt}); err != nil || stopped {
 					return err
 				}
 			}
@@ -165,7 +164,7 @@ func (d *dryRun) inventoryCandidates(ctx context.Context, yield func(dryRunCandi
 				return err
 			}
 			for _, publication := range publications {
-				if err = offer(dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: name + "@" + publication.Version, Version: publication.Version}, Digest: publication.Digest, CreatedAt: publication.PublishedAt}); err != nil || stopped {
+				if err = offer(dryRunCandidate{Candidate: promotionfanout.CandidateOf(d.source.Format, name+"@"+publication.Version), Digest: publication.Digest, CreatedAt: publication.PublishedAt}); err != nil || stopped {
 					return err
 				}
 			}
@@ -187,13 +186,8 @@ func (d *dryRun) inventoryCandidates(ctx context.Context, yield func(dryRunCandi
 			if err != nil {
 				return err
 			}
-			// A reference reads name/version/user/channel; its version is the second segment.
-			version := ""
-			if parts := strings.Split(reference, "/"); len(parts) == 4 {
-				version = parts[1]
-			}
 			for _, revision := range revisions {
-				if err = offer(dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: reference + "#" + revision.Revision, Version: version}, Digest: revision.Digest, CreatedAt: revision.CreatedAt}); err != nil || stopped {
+				if err = offer(dryRunCandidate{Candidate: promotionfanout.CandidateOf(d.source.Format, reference+"#"+revision.Revision), Digest: revision.Digest, CreatedAt: revision.CreatedAt}); err != nil || stopped {
 					return err
 				}
 			}
@@ -210,7 +204,7 @@ func (d *dryRun) inventoryCandidates(ctx context.Context, yield func(dryRunCandi
 					return err
 				}
 				for _, manifest := range manifests {
-					if err = offer(dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: name}, Digest: manifest.Digest, CreatedAt: manifest.CreatedAt}); err != nil || stopped {
+					if err = offer(dryRunCandidate{Candidate: promotionfanout.CandidateOf(d.source.Format, name), Digest: manifest.Digest, CreatedAt: manifest.CreatedAt}); err != nil || stopped {
 						return err
 					}
 					after = manifest.Digest

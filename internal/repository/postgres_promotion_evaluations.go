@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/events"
@@ -72,8 +71,6 @@ const claimPromotionEvaluationsQuery = `WITH clock AS MATERIALIZED (SELECT clock
 )
 SELECT ` + promotionEvaluationColumns + ` FROM claimed e ORDER BY e.next_attempt_at,e.id`
 
-func intervalOf(d time.Duration) string { return fmt.Sprintf("%d milliseconds", d.Milliseconds()) }
-
 // ClaimPromotionEvaluations implements PromotionEvaluationStore.
 func (s *PostgresStore) ClaimPromotionEvaluations(ctx context.Context, owner string, lease time.Duration, limit int) ([]PromotionEvaluation, error) {
 	rows, err := s.db.QueryContext(ctx, claimPromotionEvaluationsQuery, owner, intervalOf(lease), limit, PromotionEvaluationMaxAttempts)
@@ -102,11 +99,14 @@ func (s *PostgresStore) FinishPromotionEvaluation(ctx context.Context, id, lease
 	}
 	result, err := s.db.ExecContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now)
 UPDATE promotion_evaluations e SET state=$3,last_reason=$4,
-    next_attempt_at=CASE WHEN $3 IN ('pending','waiting') THEN COALESCE($5::timestamptz,clock.now) ELSE e.next_attempt_at END,
+    next_attempt_at=CASE
+        WHEN $8::boolean AND EXISTS (SELECT 1 FROM promotion_rules r WHERE r.id=e.rule_id AND r.state='active') THEN clock.now
+        WHEN $3 IN ('pending','waiting') THEN COALESCE($5::timestamptz,clock.now)
+        ELSE e.next_attempt_at END,
     attempts=CASE WHEN $3='waiting' THEN 0 WHEN $7::boolean THEN GREATEST(e.attempts-1,0) ELSE e.attempts END,promotion_id=COALESCE($6::uuid,e.promotion_id),
     lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now
 FROM clock WHERE e.id=$1::uuid AND e.lease_token=$2::uuid AND e.lease_expires_at>clock.now`,
-		id, leaseToken, string(outcome.State), truncateRunes(outcome.Reason, promotionReasonMax), next, nullableText(outcome.PromotionID), outcome.NotAnAttempt)
+		id, leaseToken, string(outcome.State), truncateRunes(outcome.Reason, promotionReasonMax), next, nullableText(outcome.PromotionID), outcome.NotAnAttempt, outcome.HoldForRule)
 	if err != nil {
 		return err
 	}

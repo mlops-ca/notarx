@@ -85,6 +85,10 @@ type PromotionEvaluationOutcome struct {
 	NextAttemptAt time.Time
 	// PromotionID is the provenance row of a queued outcome.
 	PromotionID string
+	// HoldForRule marks a waiting outcome that holds for a parked rule. The hold is a long wait that the edit restoring the
+	// rule ends early; if the rule is active again when the outcome is recorded (the edit committed while the evaluation ran,
+	// and its wake-up skipped this leased row), the evaluation is due at once instead.
+	HoldForRule bool
 	// NotAnAttempt returns the attempt the claim counted: the evaluator decided nothing (the rule changed under it) and
 	// asks to be looked at again, which must not use up the row's attempts.
 	NotAnAttempt bool
