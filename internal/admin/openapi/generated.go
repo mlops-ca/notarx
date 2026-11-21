@@ -41944,6 +41944,20 @@ func (response DeleteRemoteInstance404ApplicationProblemPlusJSONResponse) VisitD
 	return err
 }
 
+type DeleteRemoteInstance409ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteRemoteInstance409ApplicationProblemPlusJSONResponse) VisitDeleteRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetRemoteInstanceRequestObject struct {
 	RemoteInstanceId RemoteInstanceId `json:"remoteInstanceId"`
 }

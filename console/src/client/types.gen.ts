@@ -11837,6 +11837,10 @@ export type DeleteRemoteInstanceErrors = {
    * Problem response
    */
   404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
 };
 
 export type DeleteRemoteInstanceError =

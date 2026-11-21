@@ -339,6 +339,10 @@ func (h remoteInstanceHandler) DeleteRemoteInstance(w http.ResponseWriter, r *ht
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "remote instance not found")
 		return
 	}
+	if errors.Is(err, repository.ErrRemoteInstanceInUse) {
+		writeHostedProblem(w, http.StatusConflict, "in_use", "remote instance is still the target of a promotion rule")
+		return
+	}
 	if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "delete remote instance failed")
 		return

@@ -102,6 +102,8 @@ remote_instances_remoteInstanceId:
         "$ref": "../components/responses.yaml#/Problem"
       '404':
         "$ref": "../components/responses.yaml#/Problem"
+      '409':
+        "$ref": "../components/responses.yaml#/Problem"
 remote_instances_remoteInstanceId_test:
   parameters:
   - "$ref": "../components/parameters.yaml#/RemoteInstanceId"

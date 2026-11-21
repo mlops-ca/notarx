@@ -126,6 +126,9 @@ WHERE id=$1::uuid AND version=$11::text::bigint RETURNING `+remoteInstanceColumn
 func (s *PostgresStore) DeleteRemoteInstance(ctx context.Context, id string, audit ...AuditRecord) error {
 	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
 		result, execErr := q.ExecContext(ctx, `DELETE FROM remote_instances WHERE id=$1::uuid`, id)
+		if isForeignKeyViolation(execErr) {
+			return struct{}{}, ErrRemoteInstanceInUse
+		}
 		if execErr != nil {
 			return struct{}{}, execErr
 		}

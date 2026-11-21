@@ -14,6 +14,23 @@ func TestMemoryRemoteInstanceStore(t *testing.T) {
 	exerciseRemoteInstanceStore(t, NewMemoryStore())
 }
 
+func TestMemoryRemoteInstanceDeleteRefusedWhileARuleTargetsIt(t *testing.T) {
+	store := NewMemoryStore()
+	ctx := context.Background()
+	instance, err := store.CreateRemoteInstance(ctx, RemoteInstance{Name: "peer", BaseURL: "https://peer.example.com", InstanceID: ids.New(), AuthKind: "workload_identity", Audience: "peer", State: RemoteInstanceStateActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.promotionRules = map[string]PromotionRule{"rule": {ID: "rule", RemoteInstanceID: instance.ID}}
+	if err = store.DeleteRemoteInstance(ctx, instance.ID); !errors.Is(err, ErrRemoteInstanceInUse) {
+		t.Fatalf("delete while a rule targets it err = %v", err)
+	}
+	delete(store.promotionRules, "rule")
+	if err = store.DeleteRemoteInstance(ctx, instance.ID); err != nil {
+		t.Fatalf("delete after the rule is gone: %v", err)
+	}
+}
+
 // exerciseRemoteInstanceStore is the store contract shared by the memory and PostgreSQL stores.
 func exerciseRemoteInstanceStore(t *testing.T, store RemoteInstanceStore) {
 	t.Helper()

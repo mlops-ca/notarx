@@ -23,6 +23,7 @@ const (
 var (
 	// ErrRemoteInstanceNameExists reports a second remote instance under an existing name.
 	ErrRemoteInstanceNameExists = errors.New("remote instance name already exists")
+	ErrRemoteInstanceInUse      = errors.New("remote instance is still the target of a promotion rule")
 )
 
 // RemoteInstance is a registered peer notarx instance that promotions can push to. TokenSealed holds the static
