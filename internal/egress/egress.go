@@ -357,7 +357,8 @@ var specialPurposePrefixes = []netip.Prefix{
 	netip.MustParsePrefix("198.51.100.0/24"), // TEST-NET-2
 	netip.MustParsePrefix("203.0.113.0/24"),  // TEST-NET-3
 	netip.MustParsePrefix("240.0.0.0/4"),     // reserved, includes the broadcast address
-	netip.MustParsePrefix("64:ff9b::/96"),    // NAT64
+	netip.MustParsePrefix("::/96"),           // deprecated IPv4-compatible addresses (::10.0.0.5 reaches 10.0.0.5)
+	netip.MustParsePrefix("64:ff9b:1::/48"),  // local-use NAT64
 	netip.MustParsePrefix("100::/64"),        // discard-only
 	netip.MustParsePrefix("2001::/32"),       // Teredo
 	netip.MustParsePrefix("2001:db8::/32"),   // documentation
@@ -383,8 +384,16 @@ func NonPublicAddress(ip net.IP) bool {
 			return true
 		}
 	}
+	// The well-known NAT64 prefix carries an IPv4 address in its last 32 bits: the destination is as public as that
+	// address.
+	if nat64WellKnown.Contains(address) {
+		embedded := address.As16()
+		return NonPublicAddress(net.IP(embedded[12:]))
+	}
 	return false
 }
+
+var nat64WellKnown = netip.MustParsePrefix("64:ff9b::/96")
 
 // dialPinned connects to the first of the already-checked addresses that accepts the connection, so a second
 // name resolution can never rebind the connection.

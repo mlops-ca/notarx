@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
 	"github.com/mlops-ca/notarx/internal/promotionrules"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -55,8 +56,10 @@ func (f fakeRawVersions) ListRawVersions(_ context.Context, query repository.Raw
 
 type fakeTags map[string][]string
 
-func (f fakeTags) Tags(_ context.Context, _, coordinate, _ string) ([]string, error) {
-	return f[coordinate], nil
+func (f fakeTags) TagName(coordinate string) (string, bool) { return coordinate, true }
+
+func (f fakeTags) TagsOfName(context.Context, string, string) (formatmodule.TagLookup, error) {
+	return func(coordinate, _ string) []string { return f[coordinate] }, nil
 }
 
 func versionedDryRun(t *testing.T, match promotionrules.Match, versions []repository.RawVersion) (*dryRun, *repository.MemoryStore) {

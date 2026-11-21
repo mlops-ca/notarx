@@ -132,29 +132,29 @@ func (s *MemoryStore) PageArtifactPromotions(_ context.Context, query ArtifactPr
 	return page, nil
 }
 
-// refuseClaimedPromotionsLocked is refuseClaimedPromotions for the in-memory store; the caller holds s.mu. A refused job
-// fails as FailLifecycleJob does.
-func (s *MemoryStore) refuseClaimedPromotionsLocked(ctx context.Context, claimed []LifecycleJob) ([]LifecycleJob, error) {
-	kept := claimed[:0:0]
-	for _, job := range claimed {
-		promotion, ok := s.latestArtifactPromotionLocked(job.ID)
-		if job.Kind != LifecycleJobPromotion || !ok {
-			kept = append(kept, job)
-			continue
-		}
-		reason, err := promotionRefusal(ctx, memoryPolicyReader{s}, promotion, job)
-		if err != nil {
-			reason = "target admission policy could not be evaluated"
-		}
-		if reason == "" {
-			kept = append(kept, job)
-			continue
-		}
-		if failErr := s.failLifecycleJobLocked(job.ID, job.LeaseToken, reason); failErr != nil {
-			return nil, failErr
-		}
+// memoryClaimedPromotions adapts the in-memory store to the claim-time re-evaluation; the caller holds s.mu, so every
+// read and write goes through the locked forms.
+type memoryClaimedPromotions struct{ memoryPolicyReader }
+
+func (c memoryClaimedPromotions) promotionOfJob(_ context.Context, jobID string) (ArtifactPromotion, error) {
+	promotion, ok := c.s.latestArtifactPromotionLocked(jobID)
+	if !ok {
+		return ArtifactPromotion{}, ErrNotFound
 	}
-	return kept, nil
+	return promotion, nil
+}
+
+func (c memoryClaimedPromotions) failClaimed(_ context.Context, job LifecycleJob, reason string) error {
+	return c.s.failLifecycleJobLocked(job.ID, job.LeaseToken, reason)
+}
+
+func (c memoryClaimedPromotions) releaseClaimed(_ context.Context, job LifecycleJob) error {
+	return c.s.releaseLifecycleJobLeaseLocked(job.ID, job.LeaseToken)
+}
+
+// refuseClaimedPromotionsLocked is refuseClaimedPromotions for the in-memory store; the caller holds s.mu.
+func (s *MemoryStore) refuseClaimedPromotionsLocked(ctx context.Context, claimed []LifecycleJob) ([]LifecycleJob, error) {
+	return refuseClaimedPromotions(ctx, memoryClaimedPromotions{memoryPolicyReader{s}}, claimed)
 }
 
 // memoryPolicyReader reads policy and intelligence while the store lock is already held.

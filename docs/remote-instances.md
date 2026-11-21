@@ -20,7 +20,9 @@ an authentication kind:
 A static token is sealed with the settings encryption key (`NOTARX_SETTINGS_ENCRYPTION_KEY`, see
 [workload identity](workload-identity.md) for the key ring) and stored as TEXT. It is write-only: responses report
 `tokenConfigured` and never return it, and it is never logged, audited or put into an event. Omit `token` on update to
-keep the stored one. The key-ring reseal command re-seals the column when the settings encryption key rotates.
+keep the stored one, but only while `baseUrl` and `audience` are unchanged: changing either of a `static_token`
+instance needs a new `token` in the same request (`422 token_required`), so a credential sealed for one host is never
+sent to another. The key-ring reseal command re-seals the column when the settings encryption key rotates.
 
 `trustEvidence` (default `false`) says whether scan, SBOM and signature evidence shipped by this instance counts toward
 the remote's policy. The remote's own policy always has the final word.

@@ -185,6 +185,12 @@ func TestRemoteInstanceAPIAdministratorsOnlyWriteOnlyTokenAndCredentialHygiene(t
 	if now, _ := store.GetRemoteInstance(ctx, id); now.TokenSealed == stored.TokenSealed || now.TokenSealed == "" {
 		t.Fatal("a new token must be sealed again")
 	}
+	if moved := api.do(http.MethodPut, path+"/"+id, "admin-secret", `{"name":"peer-renamed","baseUrl":"https://other.example.test","authKind":"static_token","enabled":true}`, "3"); moved.Code != http.StatusUnprocessableEntity || !strings.Contains(moved.Body.String(), "token_required") {
+		t.Fatalf("a static token must not follow a changed baseUrl = %d %s", moved.Code, moved.Body.String())
+	}
+	if now, _ := store.GetRemoteInstance(ctx, id); now.BaseURL != "https://peer.example.test" {
+		t.Fatalf("a refused update changed the instance: %s", now.BaseURL)
+	}
 	if noAudience := api.do(http.MethodPut, path+"/"+id, "admin-secret", `{"name":"peer-renamed","baseUrl":"https://peer.example.test","authKind":"workload_identity","enabled":true}`, "3"); noAudience.Code != http.StatusBadRequest {
 		t.Fatalf("workload without audience = %d", noAudience.Code)
 	}

@@ -418,6 +418,22 @@ func (s *MemoryStore) failLifecycleJobLocked(id, leaseToken, message string) err
 	return ErrNotFound
 }
 
+// releaseLifecycleJobLeaseLocked hands a claimed job that never ran back to the queue, actionable at once, and returns
+// the attempt its claim counted; the caller holds s.mu.
+func (s *MemoryStore) releaseLifecycleJobLeaseLocked(id, leaseToken string) error {
+	for key, job := range s.lifecycleJobs {
+		if job.ID != id || job.State != LifecycleJobRunning || job.LeaseToken != leaseToken {
+			continue
+		}
+		job.State, job.StartedAt, job.NextAttemptAt = LifecycleJobPending, time.Time{}, time.Now().UTC()
+		job.LeaseExpiresAt, job.LeaseToken, job.Attempts = time.Time{}, "", max(job.Attempts-1, 0)
+		s.lifecycleJobs[key] = job
+		s.syncPromotionLocked(job)
+		return nil
+	}
+	return ErrNotFound
+}
+
 func (s *MemoryStore) finishLifecycleJob(id, leaseToken string, state LifecycleJobState, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

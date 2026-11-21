@@ -290,12 +290,12 @@ func TestNPMAndMavenModulesDeclareTheirOptionalCapabilities(t *testing.T) {
 	if !ok {
 		t.Fatal("npm does not declare Tagged")
 	}
-	tags, err := tagged.Tags(ctx, repositoryID, "left-pad@1.0.0", digest)
+	tags, err := taggedTags(ctx, tagged, repositoryID, "left-pad@1.0.0", digest)
 	sort.Strings(tags)
 	if err != nil || strings.Join(tags, ",") != "latest,stable" {
 		t.Fatalf("tags=%v err=%v", tags, err)
 	}
-	if _, err = tagged.Tags(ctx, repositoryID, "not a coordinate", digest); !errors.Is(err, repository.ErrNotFound) {
+	if _, err = taggedTags(ctx, tagged, repositoryID, "not a coordinate", digest); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("invalid coordinate err=%v", err)
 	}
 	releases, ok := formatmodule.Capability[formatmodule.ReleaseSet](registry, repository.FormatMaven)
@@ -304,5 +304,56 @@ func TestNPMAndMavenModulesDeclareTheirOptionalCapabilities(t *testing.T) {
 	}
 	if _, err = releases.ReleaseMembers(ctx, repositoryID, "com.example:lib:1.0.0"); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("unknown release err=%v", err)
+	}
+}
+
+// prunedJobStore is a gateway store whose lifecycle jobs have been pruned while the provenance rows remain: a job is
+// never found again, so an enqueue under a used key writes a fresh job that meets the provenance row's unique key.
+type prunedJobStore struct{ GatewayStore }
+
+func (p prunedJobStore) EnqueueLifecycleJob(ctx context.Context, job repository.LifecycleJob, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
+	job.IdempotencyKey += "#after-prune"
+	return p.GatewayStore.EnqueueLifecycleJob(ctx, job, audit...)
+}
+
+func (prunedJobStore) GetLifecycleJob(context.Context, string, string) (repository.LifecycleJob, error) {
+	return repository.LifecycleJob{}, repository.ErrNotFound
+}
+
+func TestManualPromotionReplayAfterTheJobIsPrunedReturnsTheStoredOutcome(t *testing.T) {
+	f := newProvenanceFixture(t)
+	first := f.promote(t, "pruned-key")
+	if first.Code != http.StatusAccepted {
+		t.Fatalf("promotion=%d %s", first.Code, first.Body.String())
+	}
+	pruned := prunedJobStore{f.store}
+	service := PromotionService{store: pruned, securityPolicies: f.store, intelligence: f.store, audit: f.store, promotions: f.store,
+		registry: promotionFormatRegistry(promotionModuleDeps{Store: pruned}),
+		quarantine: func(context.Context, Principal, repository.HostedRepository, repository.HostedRepository, string, string) *PromotionError {
+			return nil
+		}}
+	request := PromotionRequest{Principal: Principal{Actor: "promoter"}, Source: f.source, TargetID: f.target.ID, Coordinate: f.asset.Path, Digest: f.asset.Digest, IdempotencyKey: "pruned-key"}
+	result, perr := service.Request(context.Background(), request)
+	if perr != nil || result.Promotion.ID != first.Header().Get("Notarx-Promotion-Id") || result.Job.ID != result.Promotion.JobID || result.Job.ID == "" ||
+		result.Job.State != repository.LifecycleJobPending || result.Job.Kind != repository.LifecycleJobPromotion {
+		t.Fatalf("replay=%+v err=%v", result, perr)
+	}
+	request.Coordinate = "releases/other.txt"
+	if _, perr = service.Request(context.Background(), request); perr == nil || perr.Status != http.StatusConflict || perr.Code != "idempotency_conflict" {
+		t.Fatalf("a key reused for another artifact must conflict: %v", perr)
+	}
+	if page := f.list(t, "", f.token); len(page.Items) != 1 {
+		t.Fatalf("replay wrote %d rows", len(page.Items))
+	}
+}
+
+func TestManualPromotionKeyReusedForAnotherArtifactIsAConflict(t *testing.T) {
+	f := newProvenanceFixture(t)
+	if first := f.promote(t, "reused"); first.Code != http.StatusAccepted {
+		t.Fatalf("promotion=%d %s", first.Code, first.Body.String())
+	}
+	f.asset.Path = "releases/other.txt"
+	if second := f.promote(t, "reused"); second.Code != http.StatusConflict || !strings.Contains(second.Body.String(), "idempotency_conflict") {
+		t.Fatalf("reuse=%d %s", second.Code, second.Body.String())
 	}
 }

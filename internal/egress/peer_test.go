@@ -179,3 +179,26 @@ func TestNonPublicAddressSpecialPurposeRanges(t *testing.T) {
 		}
 	}
 }
+
+func TestNonPublicAddressIPv4CompatibleAndNAT64(t *testing.T) {
+	for address, nonPublic := range map[string]bool{
+		"::10.0.0.5":               true,
+		"::127.0.0.1":              true,
+		"::8.8.8.8":                true, // IPv4-compatible space is deprecated whatever it embeds
+		"::1":                      true,
+		"64:ff9b:1::1":             true,
+		"64:ff9b:1:ffff::8.8.8.8":  true,
+		"64:ff9b::10.0.0.5":        true,
+		"64:ff9b::127.0.0.1":       true,
+		"64:ff9b::169.254.169.254": true,
+		"64:ff9b::192.168.1.1":     true,
+		"64:ff9b::100.64.0.1":      true,
+		"64:ff9b::8.8.8.8":         false,
+		"64:ff9b::93.184.216.34":   false,
+		"2606:4700:4700::1111":     false,
+	} {
+		if got := NonPublicAddress(net.ParseIP(address)); got != nonPublic {
+			t.Errorf("NonPublicAddress(%s)=%t want %t", address, got, nonPublic)
+		}
+	}
+}

@@ -5133,7 +5133,7 @@ export type UpdateRemoteInstanceWritable = {
   authKind: RemoteInstanceAuthKind;
   audience?: string;
   /**
-   * Replaces the sealed token; omit it to keep the stored one.
+   * Replaces the sealed token. Omit it to keep the stored one, which is allowed only while baseUrl and audience are unchanged; a changed destination needs a new token (422 token_required).
    */
   token?: string;
   trustEvidence?: boolean;

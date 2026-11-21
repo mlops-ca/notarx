@@ -158,33 +158,17 @@ func (s *PostgresStore) PageArtifactPromotions(ctx context.Context, query Artifa
 	return page, nil
 }
 
-// refuseClaimedPromotions re-evaluates the target's admission policy for each claimed promotion job just before it
-// runs (ADR 0021, Evaluator). A refused job fails with the policy reasons, takes its retry like any failure, and is not
-// handed to its worker.
-func (s *PostgresStore) refuseClaimedPromotions(ctx context.Context, claimed []LifecycleJob) []LifecycleJob {
-	kept := claimed[:0:0]
-	for _, job := range claimed {
-		if job.Kind != LifecycleJobPromotion {
-			kept = append(kept, job)
-			continue
-		}
-		promotion, err := s.GetArtifactPromotionByJob(ctx, job.ID)
-		if errors.Is(err, ErrNotFound) {
-			kept = append(kept, job)
-			continue
-		}
-		reason := ""
-		if err == nil {
-			reason, err = promotionRefusal(ctx, s, promotion, job)
-		}
-		if err != nil {
-			reason = "target admission policy could not be evaluated"
-		}
-		if reason == "" {
-			kept = append(kept, job)
-			continue
-		}
-		_ = s.FailLifecycleJob(ctx, job.ID, job.LeaseToken, reason)
-	}
-	return kept
+// postgresClaimedPromotions adapts the store to the claim-time re-evaluation.
+type postgresClaimedPromotions struct{ *PostgresStore }
+
+func (p postgresClaimedPromotions) promotionOfJob(ctx context.Context, jobID string) (ArtifactPromotion, error) {
+	return p.GetArtifactPromotionByJob(ctx, jobID)
+}
+
+func (p postgresClaimedPromotions) failClaimed(ctx context.Context, job LifecycleJob, reason string) error {
+	return p.FailLifecycleJob(ctx, job.ID, job.LeaseToken, reason)
+}
+
+func (p postgresClaimedPromotions) releaseClaimed(ctx context.Context, job LifecycleJob) error {
+	return p.ReleaseLifecycleJobLease(ctx, job.ID, job.LeaseToken)
 }

@@ -96,9 +96,17 @@ type Importer interface {
 	ImportUnit(ctx context.Context, repositoryID string, unit ExportedUnit, open func(BlobDescriptor) (io.ReadCloser, error)) error
 }
 
-// Tagged lists the mutable tags that point at an artifact (OCI tags, npm dist-tags).
+// TagLookup returns the tags that point at the artifact of a coordinate and digest.
+type TagLookup func(coordinate, digest string) []string
+
+// Tagged lists the mutable tags that point at an artifact (OCI tags, npm dist-tags). The tags of one name (an OCI
+// image, an npm package) are read once and answer every artifact of that name, so a caller that evaluates many
+// artifacts does not read the name again for each.
 type Tagged interface {
-	Tags(ctx context.Context, repositoryID, coordinate, digest string) ([]string, error)
+	// TagName is the name whose tags are read together for the coordinate; false when no tag can point at it.
+	TagName(coordinate string) (string, bool)
+	// TagsOfName reads every tag of the name and returns the lookup over them; ErrNotFound when the name is absent.
+	TagsOfName(ctx context.Context, repositoryID, name string) (TagLookup, error)
 }
 
 // ReleaseMember is one artifact of a release.

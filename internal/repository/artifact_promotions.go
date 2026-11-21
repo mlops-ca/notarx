@@ -188,3 +188,70 @@ func promotionRefusal(ctx context.Context, store promotionPolicyStore, promotion
 	}
 	return PromotionPolicyRefusalPrefix + strings.Join(evaluation.Reasons, ","), nil
 }
+
+// claimedPromotionPort is what the claim-time re-evaluation needs of a store: the provenance row of a job, the policy
+// and intelligence reads, and the two ways a claimed job leaves the claim without running.
+type claimedPromotionPort interface {
+	promotionPolicyStore
+	promotionOfJob(ctx context.Context, jobID string) (ArtifactPromotion, error)
+	// failClaimed fails the claimed job with the reason, taking its retry like any failure.
+	failClaimed(ctx context.Context, job LifecycleJob, reason string) error
+	// releaseClaimed hands the claimed job back to the queue unrun, returning the attempt its claim counted.
+	releaseClaimed(ctx context.Context, job LifecycleJob) error
+}
+
+// refuseClaimedPromotions re-evaluates the target's admission policy for each claimed promotion job just before it runs
+// (ADR 0021, Evaluator). A refused job fails with the policy reasons, takes its retry like any failure, and is not
+// handed to its worker. A job whose policy could not be read (a store error, not a verdict) is released to the queue
+// without spending an attempt; only a target repository that no longer exists fails it. A failure to apply either
+// outcome is returned, and every claimed job not yet resolved is released so none waits out its lease.
+func refuseClaimedPromotions(ctx context.Context, port claimedPromotionPort, claimed []LifecycleJob) ([]LifecycleJob, error) {
+	kept := claimed[:0:0]
+	for index, job := range claimed {
+		if job.Kind != LifecycleJobPromotion {
+			kept = append(kept, job)
+			continue
+		}
+		promotion, err := port.promotionOfJob(ctx, job.ID)
+		if errors.Is(err, ErrNotFound) {
+			kept = append(kept, job)
+			continue
+		}
+		reason := ""
+		if err == nil {
+			reason, err = promotionRefusal(ctx, port, promotion, job)
+		}
+		switch {
+		case errors.Is(err, ErrNotFound):
+			err, reason = nil, "target admission policy could not be evaluated: the target repository no longer exists"
+		case err != nil:
+			// Transient: the verdict is unknown, so the job goes back unrun and its attempt is not spent.
+			if releaseErr := port.releaseClaimed(ctx, job); releaseErr != nil {
+				return nil, releaseUnresolved(ctx, port, errors.Join(err, releaseErr), kept, claimed[index+1:])
+			}
+			continue
+		}
+		if reason == "" {
+			kept = append(kept, job)
+			continue
+		}
+		if failErr := port.failClaimed(ctx, job, reason); failErr != nil {
+			return nil, releaseUnresolved(ctx, port, failErr, kept, claimed[index+1:])
+		}
+	}
+	return kept, nil
+}
+
+// releaseUnresolved releases the claimed jobs that were neither failed nor released, best effort, and returns cause
+// joined with any release failure.
+func releaseUnresolved(ctx context.Context, port claimedPromotionPort, cause error, groups ...[]LifecycleJob) error {
+	errs := []error{cause}
+	for _, group := range groups {
+		for _, job := range group {
+			if err := port.releaseClaimed(ctx, job); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
+}

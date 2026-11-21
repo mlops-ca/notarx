@@ -205,3 +205,114 @@ func TestMemoryPromotionPageFiltersAndKeysets(t *testing.T) {
 		t.Fatalf("state filter returned %+v", page.Items)
 	}
 }
+
+// fakeClaimedPromotions is a claimedPromotionPort that records how each claimed job leaves the claim.
+type fakeClaimedPromotions struct {
+	policyErr, intelligenceErr, failErr, releaseErr error
+	allowed                                         bool
+	failed, released                                []string
+}
+
+func (f *fakeClaimedPromotions) GetRepositorySecurityPolicy(context.Context, string) (RepositorySecurityPolicy, error) {
+	policy := DefaultRepositorySecurityPolicy()
+	if !f.allowed {
+		policy.Enabled, policy.RequireSBOM = true, true
+	}
+	return policy, f.policyErr
+}
+
+func (f *fakeClaimedPromotions) GetArtifactIntelligence(context.Context, string, Format, string, string) (ArtifactIntelligence, error) {
+	return ArtifactIntelligence{}, f.intelligenceErr
+}
+
+func (f *fakeClaimedPromotions) promotionOfJob(_ context.Context, jobID string) (ArtifactPromotion, error) {
+	return ArtifactPromotion{JobID: jobID, Format: FormatRaw}, nil
+}
+
+func (f *fakeClaimedPromotions) failClaimed(_ context.Context, job LifecycleJob, _ string) error {
+	f.failed = append(f.failed, job.ID)
+	return f.failErr
+}
+
+func (f *fakeClaimedPromotions) releaseClaimed(_ context.Context, job LifecycleJob) error {
+	f.released = append(f.released, job.ID)
+	return f.releaseErr
+}
+
+func claimedPromotionJobs(ids ...string) []LifecycleJob {
+	jobs := make([]LifecycleJob, len(ids))
+	for i, id := range ids {
+		jobs[i] = LifecycleJob{ID: id, Kind: LifecycleJobPromotion, Payload: []byte(`{"sourceRepositoryId":"s"}`)}
+	}
+	return jobs
+}
+
+func TestClaimedPromotionsTransientEvaluationErrorReleasesWithoutSpendingAnAttempt(t *testing.T) {
+	for name, fake := range map[string]*fakeClaimedPromotions{
+		"policy read":       {policyErr: errors.New("connection reset")},
+		"intelligence read": {allowed: true, intelligenceErr: errors.New("connection reset")},
+	} {
+		kept, err := refuseClaimedPromotions(context.Background(), fake, claimedPromotionJobs("a", "b"))
+		if err != nil || len(kept) != 0 || len(fake.failed) != 0 || len(fake.released) != 2 {
+			t.Fatalf("%s: kept=%v failed=%v released=%v err=%v", name, kept, fake.failed, fake.released, err)
+		}
+	}
+}
+
+func TestClaimedPromotionsVanishedTargetAndRefusalFailTheJob(t *testing.T) {
+	for name, fake := range map[string]*fakeClaimedPromotions{
+		"target gone": {policyErr: ErrNotFound},
+		"refused":     {},
+	} {
+		kept, err := refuseClaimedPromotions(context.Background(), fake, claimedPromotionJobs("a"))
+		if err != nil || len(kept) != 0 || len(fake.failed) != 1 || len(fake.released) != 0 {
+			t.Fatalf("%s: kept=%v failed=%v released=%v err=%v", name, kept, fake.failed, fake.released, err)
+		}
+	}
+	allowed := &fakeClaimedPromotions{allowed: true}
+	if kept, err := refuseClaimedPromotions(context.Background(), allowed, claimedPromotionJobs("a")); err != nil || len(kept) != 1 {
+		t.Fatalf("allowed kept=%v err=%v", kept, err)
+	}
+}
+
+func TestClaimedPromotionsFailureToApplyAnOutcomeIsReturnedAndReleasesTheRest(t *testing.T) {
+	failErr := errors.New("write failed")
+	fake := &fakeClaimedPromotions{failErr: failErr}
+	kept, err := refuseClaimedPromotions(context.Background(), fake, claimedPromotionJobs("a", "b", "c"))
+	if !errors.Is(err, failErr) || kept != nil || len(fake.failed) != 1 || len(fake.released) != 2 {
+		t.Fatalf("kept=%v failed=%v released=%v err=%v", kept, fake.failed, fake.released, err)
+	}
+	releaseErr := errors.New("release failed")
+	fake = &fakeClaimedPromotions{policyErr: errors.New("blip"), releaseErr: releaseErr}
+	if _, err = refuseClaimedPromotions(context.Background(), fake, claimedPromotionJobs("a")); !errors.Is(err, releaseErr) {
+		t.Fatalf("a release failure must surface: %v", err)
+	}
+}
+
+func TestMemoryReleaseLifecycleJobLeaseReturnsTheAttemptAndTheQueuedRow(t *testing.T) {
+	ctx := context.Background()
+	store, target, source := memoryPromotionFixture(t)
+	digest := "sha256:" + strings.Repeat("a", 64)
+	job, _, err := store.EnqueueLifecycleJob(promotionProvenance(ctx, FormatRaw, "a.bin", digest, "k"), promotionJob(target, source, "k"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	claimed, err := store.ClaimLifecycleJobsByKindAndFormat(ctx, LifecycleJobPromotion, FormatRaw, 1)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claimed=%+v err=%v", claimed, err)
+	}
+	store.mu.Lock()
+	err = store.releaseLifecycleJobLeaseLocked(job.ID, claimed[0].LeaseToken)
+	store.mu.Unlock()
+	stored, getErr := store.GetLifecycleJob(ctx, target.ID, job.ID)
+	row, rowErr := store.GetArtifactPromotionByJob(ctx, job.ID)
+	if err != nil || getErr != nil || rowErr != nil || stored.State != LifecycleJobPending || stored.Attempts != 0 || stored.LeaseToken != "" || row.State != ArtifactPromotionQueued {
+		t.Fatalf("job=%+v row=%+v err=%v %v %v", stored, row, err, getErr, rowErr)
+	}
+	store.mu.Lock()
+	err = store.releaseLifecycleJobLeaseLocked(job.ID, "stale")
+	store.mu.Unlock()
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("stale lease err=%v", err)
+	}
+}

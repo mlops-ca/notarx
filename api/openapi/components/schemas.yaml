@@ -5234,7 +5234,7 @@ UpdateRemoteInstance:
     baseUrl: {type: string, format: uri, maxLength: 2048}
     authKind: {"$ref": "#/RemoteInstanceAuthKind"}
     audience: {type: string, maxLength: 512}
-    token: {type: string, minLength: 8, maxLength: 4096, writeOnly: true, description: Replaces the sealed token; omit it to keep the stored one.}
+    token: {type: string, minLength: 8, maxLength: 4096, writeOnly: true, description: "Replaces the sealed token. Omit it to keep the stored one, which is allowed only while baseUrl and audience are unchanged; a changed destination needs a new token (422 token_required)."}
     trustEvidence: {type: boolean, default: false}
     enabled: {type: boolean}
 RemoteInstancePage:
