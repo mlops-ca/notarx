@@ -249,6 +249,11 @@ func CompileRegex(pattern string) (*regexp.Regexp, error) {
 	if err := checkPattern(pattern); err != nil {
 		return nil, err
 	}
+	// The bare pattern must compile on its own: wrapping an unbalanced pattern such as "a)|(b" would otherwise close
+	// the anchoring group early and escape the anchors.
+	if _, err := regexp.Compile(pattern); err != nil {
+		return nil, err
+	}
 	return regexp.Compile("^(?:" + pattern + ")$")
 }
 
@@ -283,6 +288,17 @@ func (c *Compiled) MatchesVersion(version string) bool {
 		return false
 	}
 	return c.version.Check(parsed)
+}
+
+// MatchesModuleVersion is MatchesVersion for a Go module version, whose syntax carries a leading "v" ("v1.2.3"); the
+// "v" is dropped before the semantic version parse. A string that is not a "v" followed by a semantic version never
+// satisfies a range.
+func (c *Compiled) MatchesModuleVersion(version string) bool {
+	trimmed, found := strings.CutPrefix(version, "v")
+	if !found {
+		return c.version == nil
+	}
+	return c.MatchesVersion(trimmed)
 }
 
 // HasRefs reports whether the match restricts refs.
@@ -325,8 +341,10 @@ func (c *Compiled) MatchesProperties(properties map[string]string) bool {
 type Candidate struct {
 	Coordinate string
 	Version    string
-	Refs       []string
-	Properties map[string]string
+	// ModuleVersion marks a Go module version, which is written with a leading "v".
+	ModuleVersion bool
+	Refs          []string
+	Properties    map[string]string
 }
 
 // Matches reports whether the candidate satisfies every member of the match. validCoordinate is the format's
@@ -336,6 +354,10 @@ func (c *Compiled) Matches(candidate Candidate, validCoordinate func(string) boo
 	if validCoordinate != nil && !validCoordinate(candidate.Coordinate) {
 		return false
 	}
-	return c.MatchesCoordinate(candidate.Coordinate) && c.MatchesVersion(candidate.Version) &&
+	versionMatches := c.MatchesVersion(candidate.Version)
+	if candidate.ModuleVersion {
+		versionMatches = c.MatchesModuleVersion(candidate.Version)
+	}
+	return c.MatchesCoordinate(candidate.Coordinate) && versionMatches &&
 		c.MatchesRefs(candidate.Refs) && c.MatchesProperties(candidate.Properties)
 }

@@ -45,11 +45,12 @@ func newPromotionRuleHandler(scope managementScope, store GatewayStore, legacy g
 	grantIndex, _ := any(store).(repository.RepositoryGrantIndex)
 	search, _ := any(store).(repository.ArtifactSearchStore)
 	rawVersions, _ := any(store).(repository.NativeRawVersionStore)
+	inventory, _ := any(store).(dryRunInventory)
 	return promotionRuleHandler{
 		managementScope: scope, rules: store, remotes: store, accounts: store, grantIndex: grantIndex, maxRules: maxRules,
 		registry: promotionFormatRegistry(promotionModuleDeps{Store: store}),
 		dryRunPorts: promotionDryRunPorts{
-			securityPolicies: store, intelligence: store, search: search, rawVersions: rawVersions, quarantine: store,
+			securityPolicies: store, intelligence: store, search: search, rawVersions: rawVersions, inventory: inventory, quarantine: store,
 			distributionDigests: legacy.artifactDistributionDigests,
 		},
 	}

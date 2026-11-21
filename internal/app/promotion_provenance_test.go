@@ -236,7 +236,7 @@ func TestRegistryRegistersAllNineFormatsAndDeclaresTheirCapabilities(t *testing.
 		repository.FormatRaw:   "promotion,promotion-publisher,release-set",
 		repository.FormatMaven: "promotion,promotion-publisher,release-set",
 		repository.FormatNPM:   "promotion,promotion-publisher,tagged",
-		repository.FormatOCI:   "promotion,promotion-publisher",
+		repository.FormatOCI:   "promotion,promotion-publisher,tagged",
 	} {
 		if got := strings.Join(registry.Capabilities(format), ","); got != want {
 			t.Errorf("%s declares %q, want %q", format, got, want)

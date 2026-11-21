@@ -31,6 +31,8 @@ type promotionDryRunPorts struct {
 	intelligence     repository.ArtifactIntelligenceStore
 	search           repository.ArtifactSearchStore
 	rawVersions      repository.NativeRawVersionStore
+	// inventory lists the promotable units of the formats that keep one package row per name (see inventoryCandidates).
+	inventory dryRunInventory
 	// quarantine is the store handed to repository.ArtifactDistributionAllowedForDigests.
 	quarantine any
 	// distributionDigests lists the digests whose quarantine decides the distribution of an artifact.
@@ -202,10 +204,16 @@ func (d *dryRun) execute(ctx context.Context, limit int) (adminopenapi.Promotion
 
 // candidates walks the visible artifacts of the source repository and calls yield for each until it answers false. A
 // versioned generic repository lists its sealed versions (coordinate name@version, digest the manifest digest, the
-// properties frozen at seal); every other format reads the artifact search projection.
+// properties frozen at seal); OCI, npm, PyPI, Go, Cargo and Conan list one candidate per promotable (coordinate,
+// digest) unit exactly as a promotion addresses it (inventoryCandidates); Maven, APT and flat Raw read the artifact
+// search projection, which has one row per such unit.
 func (d *dryRun) candidates(ctx context.Context, yield func(dryRunCandidate) (bool, error)) error {
 	if d.source.Format == repository.FormatRaw && d.source.RawLayout == repository.RawLayoutVersioned {
 		return d.versionedCandidates(ctx, yield)
+	}
+	switch d.source.Format {
+	case repository.FormatOCI, repository.FormatNPM, repository.FormatPyPI, repository.FormatGo, repository.FormatCargo, repository.FormatConan:
+		return d.inventoryCandidates(ctx, yield)
 	}
 	if d.ports.search == nil {
 		return errDryRunUnavailable

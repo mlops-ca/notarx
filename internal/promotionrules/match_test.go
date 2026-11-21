@@ -309,3 +309,48 @@ func TestParseMatchRefusesUnknownMembersAndRoundTrips(t *testing.T) {
 		t.Fatalf("round trip = %#v, %v", parsed, err)
 	}
 }
+
+func TestCompileRegexCannotEscapeItsAnchors(t *testing.T) {
+	for _, pattern := range []string{"a)|(b", "a)|b|(c", ")(", "a(?:", "(?i", "[a"} {
+		if _, err := CompileRegex(pattern); err == nil {
+			t.Errorf("pattern %q accepted", pattern)
+		}
+	}
+	compiled, err := CompileRegex("a|b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for value, want := range map[string]bool{"a": true, "b": true, "axxxx": false, "xxxb": false} {
+		if got := compiled.MatchString(value); got != want {
+			t.Errorf("a|b on %q = %v, want %v", value, got, want)
+		}
+	}
+}
+
+func TestModuleVersionMatchesGoSyntax(t *testing.T) {
+	ranged, err := (Match{Coordinate: Coordinate{Glob: "**"}, Version: &VersionRange{Range: ">=1.2.0 <2.0.0"}}).Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for version, want := range map[string]bool{
+		"v1.2.3": true, "v1.9.9": true, "v2.0.0": false, "v1.1.0": false, "v1.2.3-rc.1": false,
+		"1.2.3": false, "vv1.2.3": false, "v": false, "v1.2": false, "latest": false, "": false,
+		"v1.5.0+incompatible": true,
+	} {
+		if got := ranged.MatchesModuleVersion(version); got != want {
+			t.Errorf("module version %q = %v, want %v", version, got, want)
+		}
+	}
+	candidate := Candidate{Coordinate: "example.com/m@v1.2.3", Version: "v1.2.3", ModuleVersion: true}
+	if !ranged.Matches(candidate, nil) {
+		t.Error("a Go candidate in range was refused")
+	}
+	candidate.ModuleVersion = false
+	if ranged.Matches(candidate, nil) {
+		t.Error("a non-Go v-prefixed version matched a range")
+	}
+	none, _ := (Match{Coordinate: Coordinate{Glob: "**"}}).Compile()
+	if !none.MatchesModuleVersion("v1.2.3") || !none.MatchesModuleVersion("") {
+		t.Error("a match without a range accepts every version")
+	}
+}
