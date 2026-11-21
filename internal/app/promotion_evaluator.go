@@ -643,14 +643,17 @@ func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members [
 		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationQueued, PromotionID: id}, nil
 	}
 	resolved := e.service.resolveTarget(ctx, run.source, run.target.ID)
-	for _, request := range requests {
-		if _, perr := e.service.admit(ctx, request, resolved); perr != nil {
+	admissions := make([]promotionAdmission, len(requests))
+	for index, request := range requests {
+		admission, perr := e.service.admit(ctx, request, resolved)
+		if perr != nil {
 			return e.promotionRefusal(perr)
 		}
+		admissions[index] = admission
 	}
 	promotionID := ""
-	for _, request := range requests {
-		request.admitted = true
+	for index, request := range requests {
+		request.admission = &admissions[index]
 		result, perr := e.service.request(ctx, request, resolved)
 		if perr != nil {
 			return e.promotionRefusal(perr)

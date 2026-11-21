@@ -82,12 +82,12 @@ VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6::uuid,$7,$8::uuid,$9::bigint,$10::jsonb,$1
 	return err
 }
 
-// GetImportedArtifactPromotion implements ArtifactPromotionStore.
-func (s *PostgresStore) GetImportedArtifactPromotion(ctx context.Context, targetRepositoryID string, format Format, coordinate, digest string) (ArtifactPromotion, error) {
+// GetCompletedArtifactPromotion implements ArtifactPromotionStore.
+func (s *PostgresStore) GetCompletedArtifactPromotion(ctx context.Context, targetRepositoryID string, format Format, coordinate, digest string) (ArtifactPromotion, error) {
 	var promotion ArtifactPromotion
 	err := scanArtifactPromotion(s.db.QueryRowContext(ctx, `SELECT `+artifactPromotionColumns+` FROM artifact_promotions
-WHERE target_repository_id=$1::uuid AND coordinate=$2 AND digest=$3 AND format=$4 AND state='completed' AND idempotency_key LIKE $5
-ORDER BY created_at DESC,artifact_promotions.id DESC LIMIT 1`, targetRepositoryID, coordinate, digest, string(format), ImportPromotionKeyPrefix+"%"), &promotion)
+WHERE target_repository_id=$1::uuid AND coordinate=$2 AND digest=$3 AND format=$4 AND state='completed'
+ORDER BY created_at DESC,artifact_promotions.id DESC LIMIT 1`, targetRepositoryID, coordinate, digest, string(format)), &promotion)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ArtifactPromotion{}, ErrNotFound
 	}

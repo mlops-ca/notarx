@@ -2,8 +2,13 @@ package objectstore
 
 import (
 	"context"
+	"errors"
 	"io"
 )
+
+// ErrCopyUnavailable is returned by a Copier whose service does not do (or refused) the server-side copy of this object;
+// CopyVerified then streams the object instead.
+var ErrCopyUnavailable = errors.New("server-side copy is unavailable")
 
 // Copier is implemented by a store that copies an object to another key of the same store without the bytes passing
 // through the caller (S3 CopyObject, an in-process copy). CopyVerified prefers it over streaming.
@@ -32,7 +37,9 @@ func CopyVerified(ctx context.Context, store Store, src, dst, digest string, siz
 		return ErrSizeMismatch
 	}
 	if copier, ok := store.(Copier); ok {
-		return copier.CopyObject(ctx, src, dst)
+		if err = copier.CopyObject(ctx, src, dst); !errors.Is(err, ErrCopyUnavailable) {
+			return err
+		}
 	}
 	reader, _, err := store.Open(ctx, src)
 	if err != nil {

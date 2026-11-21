@@ -315,3 +315,12 @@ func TestPromotionBatchIsAuthorisedOnBothRepositories(t *testing.T) {
 		t.Fatalf("anonymous get=%d", response.Code)
 	}
 }
+
+func TestGatewayStoreWithoutThePromotionPortsFailsAtConstruction(t *testing.T) {
+	if _, err := requirePromotionStores(struct{ GatewayStore }{repository.NewMemoryStore()}); err == nil {
+		t.Fatal("a store without the promotion ports must be refused when the gateway is built")
+	}
+	if _, err := requirePromotionStores(repository.NewMemoryStore()); err != nil {
+		t.Fatal(err)
+	}
+}

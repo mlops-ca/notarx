@@ -460,7 +460,9 @@ func TestRemoteInstanceUpdateRefusesAChangedInstanceIDUnderAKeptToken(t *testing
 	if created.Code != http.StatusCreated {
 		t.Fatalf("create = %d %s", created.Code, created.Body.String())
 	}
-	var instance struct{ ID string `json:"id"` }
+	var instance struct {
+		ID string `json:"id"`
+	}
 	if err := json.Unmarshal(created.Body.Bytes(), &instance); err != nil {
 		t.Fatal(err)
 	}

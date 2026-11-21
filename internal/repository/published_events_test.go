@@ -231,3 +231,21 @@ func TestDrainPublishedCandidatesPagesPastFailingCandidates(t *testing.T) {
 		t.Fatalf("second pass written=%d failures=%v", written, failures)
 	}
 }
+
+// A format whose publications keep failing ends the pass at the cap instead of widening its pages without bound.
+func TestDrainPublishedCandidatesStopsAtTheFailureCap(t *testing.T) {
+	var fetches int
+	fetch := func(pageSize int) ([]publishedCandidate, error) {
+		fetches++
+		out := make([]publishedCandidate, pageSize)
+		for i := range out {
+			out[i] = publishedCandidate{RepositoryID: "r", Format: "raw", Coordinate: "bad" + string(rune('a'+i%26)) + string(rune('a'+i/26%26)) + string(rune('a'+i/676)), Digest: "d"}
+		}
+		return out, nil
+	}
+	emit := func(publishedCandidate) (bool, error) { return false, errors.New("boom") }
+	written, failures := drainPublishedCandidates(context.Background(), 5, fetch, emit)
+	if written != 0 || len(failures) <= maxFailedPublicationsPerPass || fetches > maxFailedPublicationsPerPass {
+		t.Fatalf("written=%d failures=%d fetches=%d", written, len(failures), fetches)
+	}
+}

@@ -152,6 +152,10 @@ func (s *PostgresStore) ReconcilePublishedEvents(ctx context.Context, floor time
 	return written, errors.Join(failures...)
 }
 
+// maxFailedPublicationsPerPass bounds the pages of one format: a pass that met this many failing publications stops and
+// reports it, so the window of a page cannot grow without limit.
+const maxFailedPublicationsPerPass = 256
+
 // drainPublishedCandidates emits the missing events of one format, at most limit of them. A candidate that fails keeps
 // matching the query and stays at its head, so each page asks for as many extra candidates as failed in this pass and
 // skips those: a publication that keeps failing never hides the newer ones behind it (keyset paging would need the order
@@ -163,6 +167,9 @@ func drainPublishedCandidates(ctx context.Context, limit int, fetch func(pageSiz
 	failed := map[publishedCandidate]bool{}
 	var failures []error
 	for written < limit && ctx.Err() == nil {
+		if len(failed) >= maxFailedPublicationsPerPass {
+			return written, append(failures, fmt.Errorf("%d publications failed in this pass; the rest of the format is left for the next one", len(failed)))
+		}
 		pageSize := limit - written + len(failed)
 		candidates, err := fetch(pageSize)
 		if err != nil {

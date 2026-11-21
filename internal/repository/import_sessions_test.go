@@ -374,7 +374,7 @@ func exerciseImportSessionStore(t *testing.T, store interface {
 	if err = store.CompleteImportSession(ctx, live.ID, f.now, importDraft(live)); err != nil {
 		t.Fatal(err)
 	}
-	if row, getErr := store.GetImportedArtifactPromotion(ctx, live.TargetRepositoryID, live.Format, live.Coordinate, live.Digest); getErr != nil || row.State != ArtifactPromotionCompleted || row.IdempotencyKey != ImportPromotionKey(live.ID) || row.JobID != "" || row.CompletedAt.IsZero() || row.RequestedBy != live.Principal || len(row.ChainPath) != len(live.ChainPath) {
+	if row, getErr := store.GetCompletedArtifactPromotion(ctx, live.TargetRepositoryID, live.Format, live.Coordinate, live.Digest); getErr != nil || row.State != ArtifactPromotionCompleted || row.IdempotencyKey != ImportPromotionKey(live.ID) || row.JobID != "" || row.CompletedAt.IsZero() || row.RequestedBy != live.Principal || len(row.ChainPath) != len(live.ChainPath) {
 		t.Fatalf("import provenance = %+v %v", row, getErr)
 	}
 	if got, _ := store.GetImportSession(ctx, live.ID); got.State != ImportSessionCommitted {
@@ -386,7 +386,7 @@ func exerciseImportSessionStore(t *testing.T, store interface {
 	if page, pageErr := store.PageArtifactPromotions(ctx, ArtifactPromotionQuery{TargetRepositoryID: live.TargetRepositoryID}); pageErr != nil || len(page.Items) != 1 {
 		t.Fatalf("completing twice wrote %d provenance rows: %v", len(page.Items), pageErr)
 	}
-	if _, getErr := store.GetImportedArtifactPromotion(ctx, live.TargetRepositoryID, live.Format, live.Coordinate, "sha256:"+strings.Repeat("0", 64)); !errors.Is(getErr, ErrNotFound) {
+	if _, getErr := store.GetCompletedArtifactPromotion(ctx, live.TargetRepositoryID, live.Format, live.Coordinate, "sha256:"+strings.Repeat("0", 64)); !errors.Is(getErr, ErrNotFound) {
 		t.Fatalf("another digest = %v", getErr)
 	}
 	if err = store.AbortImportSession(ctx, live.ID, f.now); !errors.Is(err, ErrImportSessionClosed) {

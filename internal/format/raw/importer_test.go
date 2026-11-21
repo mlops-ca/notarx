@@ -133,7 +133,9 @@ func TestImportUnitOnlyFillsAFlatHostedRepository(t *testing.T) {
 func TestImportUnitCopiesAStagedBlobWithoutReadingIt(t *testing.T) {
 	ctx := context.Background()
 	store, objects, module, repo := importFixture(t)
-	refuse := func(formatmodule.BlobDescriptor) (io.ReadCloser, error) { return nil, errors.New("the staged blob must not be streamed") }
+	refuse := func(formatmodule.BlobDescriptor) (io.ReadCloser, error) {
+		return nil, errors.New("the staged blob must not be streamed")
+	}
 	staged := func(content, stagedContent string) formatmodule.ExportedUnit {
 		unit := unitOf("staged/"+content+".txt", content)
 		unit.Blobs[0].ObjectKey = "native/imports/s/" + content

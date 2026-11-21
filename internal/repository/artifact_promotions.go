@@ -98,16 +98,14 @@ type ArtifactPromotionStore interface {
 	PageArtifactPromotions(ctx context.Context, query ArtifactPromotionQuery) (ArtifactPromotionPage, error)
 	// GetArtifactPromotionsByKeys returns the newest attempt of each given idempotency key that has a row, by key.
 	GetArtifactPromotionsByKeys(ctx context.Context, keys []string) (map[string]ArtifactPromotion, error)
-	// GetImportedArtifactPromotion returns the newest completed provenance row that an import commit wrote for the
-	// artifact in the repository (ADR 0021, Chains), or ErrNotFound when it was not imported there.
-	GetImportedArtifactPromotion(ctx context.Context, targetRepositoryID string, format Format, coordinate, digest string) (ArtifactPromotion, error)
+	// GetCompletedArtifactPromotion returns the newest completed provenance row into the repository for the artifact
+	// (a promotion or an import commit), whose chain path a promotion out of the repository continues (ADR 0021, Chains),
+	// or ErrNotFound when nothing was promoted or imported there.
+	GetCompletedArtifactPromotion(ctx context.Context, targetRepositoryID string, format Format, coordinate, digest string) (ArtifactPromotion, error)
 }
 
-// ImportPromotionKeyPrefix starts the idempotency key of the provenance row an import commit writes.
-const ImportPromotionKeyPrefix = "import:"
-
 // ImportPromotionKey is the idempotency key of the provenance row of a committed import session.
-func ImportPromotionKey(sessionID string) string { return ImportPromotionKeyPrefix + sessionID }
+func ImportPromotionKey(sessionID string) string { return "import:" + sessionID }
 
 type artifactPromotionContextKey struct{}
 

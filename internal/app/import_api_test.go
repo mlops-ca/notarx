@@ -528,7 +528,7 @@ func TestImportRecordsProvenanceAndALocalPromotionContinuesItsChainPath(t *testi
 		return fmt.Sprintf(`{"instance":%q,"repository":%q,"ruleId":"","at":"2026-01-01T00:00:00Z"}`, instance, repo)
 	}
 	f.imported("docs/notes.txt", content, "k1", `,"chainPath":[`+hop(peer, "dev")+`]`)
-	row, err := f.store.GetImportedArtifactPromotion(ctx, f.target.ID, repository.FormatRaw, "docs/notes.txt", "sha256:"+sha(content))
+	row, err := f.store.GetCompletedArtifactPromotion(ctx, f.target.ID, repository.FormatRaw, "docs/notes.txt", "sha256:"+sha(content))
 	if err != nil || row.State != repository.ArtifactPromotionCompleted || row.OriginInstanceID != peer || row.OriginRepository != "dev" || row.JobID != "" ||
 		len(row.ChainPath) != 2 || row.ChainPath[0].Repository != "dev" || row.ChainPath[1].Instance != f.local || row.ChainPath[1].Repository != f.target.Name {
 		t.Fatalf("import provenance = %+v %v", row, err)
@@ -561,5 +561,56 @@ func TestImportRecordsProvenanceAndALocalPromotionContinuesItsChainPath(t *testi
 	}
 	if page, pageErr := f.store.PageArtifactPromotions(ctx, repository.ArtifactPromotionQuery{TargetRepositoryID: next.ID}); pageErr != nil || len(page.Items) != 1 {
 		t.Fatalf("refused promotions wrote rows: %+v %v", page, pageErr)
+	}
+}
+
+// A promotion out of a repository continues the path of the completed promotion that brought the artifact there, so the
+// cap and the cycle check cover a chain of local promotions as well.
+func TestLocalPromotionsContinueTheChainPathAndRefuseCyclesAndTooLongRoutes(t *testing.T) {
+	f := newImportFixture(t)
+	ctx := context.Background()
+	const content = "chained"
+	f.imported("docs/chained.txt", content, "k1", "")
+	digest := "sha256:" + sha(content)
+	create := func(name string) repository.HostedRepository {
+		repo, err := f.store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: name, Format: repository.FormatRaw})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return repo
+	}
+	next, third := create("next"), create("third")
+	serviceWith := func(maxHops int) PromotionService {
+		return newPromotionService(generatedRepositoryAPIAdapter{store: f.store, sessions: nativeMavenHandler{store: f.store}, securityPolicies: f.store, intelligence: f.store,
+			audit: f.store, quarantine: f.store, cargo: f.store, promotions: f.store, promotionMaxHops: maxHops})
+	}
+	request := func(service PromotionService, source, target repository.HostedRepository, key string) (PromotionResult, *PromotionError) {
+		return service.Request(ctx, PromotionRequest{Principal: Principal{Actor: "promoter", Admin: true}, Source: source, TargetID: target.ID, Coordinate: "docs/chained.txt", Digest: digest, IdempotencyKey: key})
+	}
+	service := serviceWith(3)
+	first, perr := request(service, f.target, next, "first")
+	if perr != nil || len(first.Promotion.ChainPath) != 1 || first.Promotion.ChainPath[0].Repository != f.target.Name {
+		t.Fatalf("first promotion = %+v %+v", first.Promotion, perr)
+	}
+	claimed, err := f.store.ClaimLifecycleJobsByKind(ctx, repository.LifecycleJobPromotion, 10)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claim = %v %v", claimed, err)
+	}
+	if err = f.store.CompleteLifecycleJob(ctx, claimed[0].ID, claimed[0].LeaseToken); err != nil {
+		t.Fatal(err)
+	}
+	// The promotion worker is not running: put the artifact where it would have published it.
+	if _, err = f.store.PutRawAsset(ctx, repository.RawAsset{RepositoryID: next.ID, Path: "docs/chained.txt", Digest: digest, ObjectKey: "native/raw/" + sha(content), Size: int64(len(content)), ContentType: "text/plain"}); err != nil {
+		t.Fatal(err)
+	}
+	second, perr := request(service, next, third, "second")
+	if perr != nil || len(second.Promotion.ChainPath) != 2 || second.Promotion.ChainPath[0].Repository != f.target.Name || second.Promotion.ChainPath[1].Repository != next.Name {
+		t.Fatalf("second promotion = %+v %+v", second.Promotion, perr)
+	}
+	if _, perr = request(service, next, f.target, "back"); perr == nil || perr.Code != "chain_loop" {
+		t.Fatalf("a promotion back to the origin = %+v", perr)
+	}
+	if _, perr = request(serviceWith(1), next, third, "long"); perr == nil || perr.Code != "chain_too_long" {
+		t.Fatalf("a route over the cap = %+v", perr)
 	}
 }

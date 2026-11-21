@@ -263,9 +263,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
-	promotions, ok := options.Store.(promotionStores)
-	if !ok {
-		return nil, errors.New("gateway store must implement the artifact promotion and promotion batch stores")
+	promotions, err := requirePromotionStores(options.Store)
+	if err != nil {
+		return nil, err
 	}
 	options.Storage = maps.Clone(options.Storage)
 	dependencies, store := options.Dependencies, options.Store

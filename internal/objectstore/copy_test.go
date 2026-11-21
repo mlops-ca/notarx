@@ -129,3 +129,42 @@ func TestS3CopyOfALargeObjectUsesPartCopies(t *testing.T) {
 		t.Fatalf("a failed copy left uploads=%d object=%v", len(fake.uploads), fake.object("final/broken"))
 	}
 }
+
+// A service that does not implement CopyObject, or refuses it, leaves the copy to the streaming path.
+func TestS3CopyVerifiedStreamsWhenTheServiceRefusesTheCopy(t *testing.T) {
+	ctx := context.Background()
+	fake := newFakeS3(t)
+	store := fake.store(fake.config())
+	data := []byte("refused copy")
+	digest := digestOf(data)
+	if err := store.PutVerifiedReader(ctx, "staging/a", bytes.NewReader(data), int64(len(data)), digest); err != nil {
+		t.Fatal(err)
+	}
+	fake.rejectCopy = true
+	if err := CopyVerified(ctx, store, "staging/a", "final/a", digest, int64(len(data))); err != nil {
+		t.Fatalf("a refused CopyObject must fall back to streaming: %v", err)
+	}
+	if info, err := store.Stat(ctx, "final/a"); err != nil || info.Digest != digest {
+		t.Fatalf("copy = %+v %v", info, err)
+	}
+}
+
+// '+' in a key is escaped in the copy source, which the service would otherwise read as a space.
+func TestS3CopySourceEscapesPlus(t *testing.T) {
+	if got := copySource("bucket", "a+b/c d"); got != "bucket%2Fa%2Bb%2Fc%20d" {
+		t.Fatalf("copySource = %q", got)
+	}
+	ctx := context.Background()
+	fake := newFakeS3(t)
+	store := fake.store(fake.config())
+	data := []byte("plus")
+	if err := store.PutVerifiedReader(ctx, "staging/a+b", bytes.NewReader(data), int64(len(data)), digestOf(data)); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyVerified(ctx, store, "staging/a+b", "final/a+b", digestOf(data), int64(len(data))); err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.copySources) != 1 || !strings.Contains(fake.copySources[0], "%2B") {
+		t.Fatalf("copy sources = %v", fake.copySources)
+	}
+}

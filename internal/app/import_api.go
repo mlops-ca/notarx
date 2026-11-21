@@ -503,9 +503,11 @@ func (h importHandler) importProvenance(ctx context.Context, principal Principal
 	}
 	provenance := repository.ArtifactPromotion{
 		ID: ids.New(), TargetRepositoryID: target.ID, Format: session.Format, Coordinate: session.Coordinate, Digest: session.Digest,
-		OriginRepository: target.Name, ChainPath: session.ChainPath, RequestedBy: principal.Actor,
+		ChainPath: session.ChainPath, RequestedBy: principal.Actor,
 	}
-	if len(session.ChainPath) > 0 {
+	if len(session.ChainPath) > 1 {
+		// The sender reported its route: its first hop is the origin. Without one the sender's repository is unknown (the
+		// path holds only this instance's own hop) and the origin stays empty rather than naming the receiving repository.
 		first := session.ChainPath[0]
 		provenance.OriginRepository = first.Repository
 		if origin, parseErr := uuid.Parse(first.Instance); parseErr == nil && !strings.EqualFold(first.Instance, local) {

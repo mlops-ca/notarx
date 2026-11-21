@@ -197,13 +197,15 @@ func (r backgroundRuntime) startWorkers(ctx context.Context, cfg config.Config, 
 		app.ArtifactScanWorker{Store: r.store, Scanner: r.scanner, Resolver: r.scanResolver, WorkerFormats: r.scannerFormats, Metrics: r.metrics}.Start(ctx, time.Minute)
 	}
 	if cfg.WorkerKindEnabled("scan") && r.scanner != nil {
-		if catchUp, err := cfg.Retention.KeepOrDefault("domain_events"); err != nil {
-			slog.Error("publication scan consumer not started", "error", err)
-		} else {
-			scheduler := app.NewPublicationScanScheduler(r.store, true, r.scannerFormats, catchUp, r.metrics)
-			dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default(), ObserveLag: r.metrics.SetEventHorizonLag}
-			background.Go(ctx, func() { dispatcher.Run(ctx) })
+		catchUp, err := cfg.Retention.KeepOrDefault("domain_events")
+		if err != nil {
+			// The registry always lists domain_events; an error is a defect of the build, and a node that silently never
+			// schedules the scans of published artifacts is worse than one that does not start.
+			panic("publication scan consumer: " + err.Error())
 		}
+		scheduler := app.NewPublicationScanScheduler(r.store, true, r.scannerFormats, catchUp, r.metrics)
+		dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default(), ObserveLag: r.metrics.SetEventHorizonLag}
+		background.Go(ctx, func() { dispatcher.Run(ctx) })
 	}
 	if r.promotionEvaluator != nil && cfg.WorkerKindEnabled("evaluator") {
 		r.promotionEvaluator.Start(ctx)

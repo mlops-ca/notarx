@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/url"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -205,7 +204,7 @@ func (s *S3Store) copyDigest(ctx context.Context, key, digest string, info *s3.H
 	}
 	metadata[digestMetadataKey] = digest
 	_, err := s.client.CopyObject(ctx, &s3.CopyObjectInput{
-		Bucket: aws.String(s.bucket), Key: aws.String(key), CopySource: aws.String(url.PathEscape(s.bucket + "/" + key)),
+		Bucket: aws.String(s.bucket), Key: aws.String(key), CopySource: aws.String(copySource(s.bucket, key)),
 		MetadataDirective: types.MetadataDirectiveReplace, Metadata: metadata,
 		CacheControl: info.CacheControl, ContentDisposition: info.ContentDisposition, ContentEncoding: info.ContentEncoding,
 		ContentLanguage: info.ContentLanguage, ContentType: info.ContentType,

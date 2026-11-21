@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -29,19 +30,36 @@ func (s *S3Store) CopyObject(ctx context.Context, src, dst string) error {
 		}
 		return err
 	}
-	source := aws.String(url.PathEscape(s.bucket + "/" + src))
+	source := aws.String(copySource(s.bucket, src))
 	size := aws.ToInt64(head.ContentLength)
 	if size <= singleCopyLimit {
 		_, err = s.client.CopyObject(ctx, &s3.CopyObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(dst), CopySource: source, MetadataDirective: types.MetadataDirectiveCopy})
-		if s3NotFound(err) {
-			return ErrNotFound
-		}
-		return err
+		return copyError(err)
 	}
 	if size > int64(MaxMultipartParts-1)*copyPartSize {
 		return fmt.Errorf("%w: %d bytes exceeds %d at a copy part size of %d", ErrObjectTooLarge, size, int64(MaxMultipartParts-1)*copyPartSize, copyPartSize)
 	}
-	return s.copyParts(ctx, source, dst, size, head)
+	return copyError(s.copyParts(ctx, source, dst, size, head))
+}
+
+// copySource is the x-amz-copy-source value of bucket/key. url.PathEscape leaves '+' as it is, which the service reads as a
+// space, so it is escaped as well.
+func copySource(bucket, key string) string {
+	return strings.ReplaceAll(url.PathEscape(bucket+"/"+key), "+", "%2B")
+}
+
+// copyError maps the answer of a copy: a missing source is ErrNotFound, and a service that does not implement the copy or
+// refuses this one (a source over its single-copy limit, say) is ErrCopyUnavailable, so the caller streams the object.
+func copyError(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case s3NotFound(err):
+		return ErrNotFound
+	case copyUnsupported(err) || copyRefused(err):
+		return errors.Join(ErrCopyUnavailable, err)
+	}
+	return err
 }
 
 // copyParts copies size bytes of source into dst as a multipart upload, carrying the headers and metadata of head.
