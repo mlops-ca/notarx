@@ -488,8 +488,11 @@ OCI importer as built (slice 7c): the coordinate is the image name, the unit dig
 the tags to apply to the root and the digests of its referrer manifests. Every manifest and blob of the unit is supplied as a blob of the session; the importer reads
 the structure from the verified manifests (config, layers, index children, subject) and refuses a unit whose blobs are not exactly the closure of the
 root and the listed referrers (`import_invalid_unit`), a descriptor size or manifest bytes the blobs contradict (`import_mismatch`) and a referrer whose
-subject is not a manifest of the image. Blobs are written child-first: a blob the repository holds is kept, one that exists elsewhere on the instance is mounted
-(the sender supplied its verified bytes), any other is stored from the verified bytes; the root is published last. `ReleaseSet.ReleaseMembers` takes the digest of the artifact the evaluation is about
+subject is not a manifest of the image. A blob the repository holds is kept and any other is stored from the sender's bytes, verified against its digest; a blob that other repositories hold is
+never mounted from them, so the sender must prove it holds the bytes. Manifests are published by digest, children before their parents and the referrers after the image, and the
+tags are applied last, each under the tag lock that native pushes of the tag also take, so a failure part way never leaves a tagged image without its referrers and the
+tag check and write are not interleaved with another writer. A promotion of an index publishes its child manifests first, so the index is never visible without them whatever
+order the members of a release are promoted in. `ReleaseSet.ReleaseMembers` takes the digest of the artifact the evaluation is about
 (`ReleaseMembers(ctx, repositoryID, coordinate, digest)`): for OCI the manifest and, for an index, the child manifests the repository holds; a promotion mounts only the
 config and layers of a manifest, never its child manifests, which are members of their own.
 

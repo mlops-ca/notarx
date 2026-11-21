@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/google/uuid"
 	"testing"
 	"time"
 
@@ -67,5 +68,35 @@ func TestManifestBlobDigestsAreTheConfigAndLayersNotTheChildManifestsOfAnIndex(t
 	}
 	if got := manifestBlobDigests([]byte("not json")); got != nil {
 		t.Fatalf("got %v", got)
+	}
+}
+
+func TestPromotingAnIndexPublishesItsChildManifestsFirst(t *testing.T) {
+	ctx := context.Background()
+	store, objects, importer, source := importFixture(t, repository.FormatOCI)
+	target, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "prod", Format: repository.FormatOCI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	image := newImportImage()
+	if err = importer.ImportUnit(ctx, source.ID, image.unit(`{"referrers":["`+image.signature+`"]}`), image.open); err != nil {
+		t.Fatal(err)
+	}
+	worker := NativePromotion{Store: store, Objects: objects}
+	if _, _, err = worker.Enqueue(ctx, target.ID, "promote-index", PromotionPayload{SourceRepositoryID: source.ID, Name: "team/app", Digest: image.index}); err != nil {
+		t.Fatal(err)
+	}
+	if err = worker.RunJobs(ctx, 1); err != nil {
+		t.Fatal(err)
+	}
+	for _, digest := range []string{image.index, image.child} {
+		if _, err = store.GetOCIManifest(ctx, target.ID, "team/app", digest); err != nil {
+			t.Fatalf("%s is missing at the target: %v", digest, err)
+		}
+	}
+	for _, digest := range []string{image.config, image.layer} {
+		if _, err = store.GetOCIBlob(ctx, target.ID, digest); err != nil {
+			t.Fatalf("blob %s is missing at the target: %v", digest, err)
+		}
 	}
 }

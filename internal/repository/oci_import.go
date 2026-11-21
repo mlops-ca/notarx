@@ -58,7 +58,7 @@ func validateOCIImport(c OCIImportClosure) error {
 		}
 	}
 	for _, b := range c.Blobs {
-		if b.ObjectKey != "native/oci/blobs/sha256/"+strings.TrimPrefix(b.Digest, "sha256:") {
+		if b.ObjectKey != OCIBlobObjectKey(b.Digest) {
 			return ErrDisabled
 		}
 		mediaType := descriptorTypes[b.Digest]

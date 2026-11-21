@@ -6,28 +6,10 @@ import (
 	"github.com/mlops-ca/notarx/internal/ocigraph"
 )
 
-// descriptor is one content descriptor of a manifest, read leniently: only what promotion, import and release sets need.
-type descriptor struct {
-	MediaType string   `json:"mediaType"`
-	Digest    string   `json:"digest"`
-	Size      *int64   `json:"size"`
-	URLs      []string `json:"urls"`
-}
-
-// manifestDocument is the part of an image manifest or index that names other objects. It admits artifact manifests with
-// custom config and layer types, which ocigraph.Decode does not.
-type manifestDocument struct {
-	SchemaVersion int          `json:"schemaVersion"`
-	MediaType     string       `json:"mediaType"`
-	Config        *descriptor  `json:"config"`
-	Layers        []descriptor `json:"layers"`
-	Manifests     []descriptor `json:"manifests"`
-	Subject       *descriptor  `json:"subject"`
-	ArtifactType  string       `json:"artifactType"`
-}
-
-func decodeManifestDocument(body []byte) (manifestDocument, error) {
-	var document manifestDocument
+// decodeManifestDocument reads the descriptors of a manifest or index leniently: it admits artifact manifests with custom
+// config and layer types and a subject, which ocigraph.Decode refuses.
+func decodeManifestDocument(body []byte) (ocigraph.Document, error) {
+	var document ocigraph.Document
 	err := json.Unmarshal(body, &document)
 	return document, err
 }
@@ -37,11 +19,31 @@ func isManifestMediaType(mediaType string) bool {
 	return ocigraph.IsManifest(mediaType) || ocigraph.IsIndex(mediaType)
 }
 
-// blobDescriptors are the config and layers: the objects a manifest references that are blobs.
-func (d manifestDocument) blobDescriptors() []descriptor {
-	out := make([]descriptor, 0, 1+len(d.Layers))
+// blobDescriptors are the config and layers of a manifest that are blobs of the repository: a foreign layer that is fetched
+// from URLs is not.
+func blobDescriptors(d ocigraph.Document) []ocigraph.Descriptor {
+	all := make([]ocigraph.Descriptor, 0, 1+len(d.Layers))
 	if d.Config != nil {
-		out = append(out, *d.Config)
+		all = append(all, *d.Config)
 	}
-	return append(out, d.Layers...)
+	all = append(all, d.Layers...)
+	held := all[:0]
+	for _, item := range all {
+		if len(item.URLs) == 0 {
+			held = append(held, item)
+		}
+	}
+	return held
+}
+
+// subjectDigest is the digest of the subject descriptor of a manifest; false when the manifest has none.
+func subjectDigest(d ocigraph.Document) (string, bool) {
+	if len(d.Subject) == 0 || string(d.Subject) == "null" {
+		return "", false
+	}
+	var subject ocigraph.Descriptor
+	if json.Unmarshal(d.Subject, &subject) != nil {
+		return "", true
+	}
+	return subject.Digest, true
 }

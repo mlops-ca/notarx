@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
-	"strings"
 	"time"
 
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
@@ -45,13 +44,18 @@ type NativeImporter struct {
 
 // plannedManifest is a manifest of the unit with its verified bytes.
 type plannedManifest struct {
-	digest, mediaType, subject, artifactType string
-	body                                     []byte
-	root                                     bool
+	name, digest, mediaType, subject, artifactType string
+	body                                           []byte
+}
+
+// record is the registry row of the manifest stored at key.
+func (p *plannedManifest) record(repositoryID, key string) repository.OCIManifest {
+	return repository.OCIManifest{RepositoryID: repositoryID, Name: p.name, Digest: p.digest, ObjectKey: key, MediaType: p.mediaType, SubjectDigest: p.subject, ArtifactType: p.artifactType, Size: int64(len(p.body))}
 }
 
 // importPlan is the closure of the unit as the verified manifests describe it.
 type importPlan struct {
+	name          string
 	byDigest      map[string]formatmodule.BlobDescriptor
 	manifests     map[string]*plannedManifest
 	order         []*plannedManifest // children before the manifests that reference them
@@ -87,21 +91,11 @@ func (i NativeImporter) ImportUnit(ctx context.Context, repositoryID string, uni
 	if err != nil {
 		return err
 	}
-	// One import of an image at a time, so the tag check below and the tag writes are not interleaved with another import.
-	release, err := i.Store.LockOCIObject(ctx, "import:"+repositoryID+":"+unit.Coordinate)
-	if err != nil {
-		return err
-	}
-	defer release()
-	// A tag is applied only when it is absent or already points at this digest; a move is an explicit operator action.
+	// A tag is applied only when it is absent or already points at this digest; a move is an explicit operator action. The
+	// check here refuses a conflict before any byte is written; applyTag checks again under the lock of the tag.
 	for _, tag := range manifest.Tags {
-		existing, getErr := i.Store.GetOCIManifest(ctx, repositoryID, unit.Coordinate, tag)
-		switch {
-		case errors.Is(getErr, repository.ErrNotFound):
-		case getErr != nil:
-			return getErr
-		case existing.Digest != unit.Digest:
-			return formatmodule.ErrImportConflict
+		if err = i.checkTag(ctx, repositoryID, unit.Coordinate, tag, unit.Digest); err != nil {
+			return err
 		}
 	}
 	for _, blob := range unit.Blobs {
@@ -111,16 +105,48 @@ func (i NativeImporter) ImportUnit(ctx context.Context, repositoryID string, uni
 			}
 		}
 	}
+	// Every manifest is published by digest first, children before their parents and the referrers after the image, and the
+	// tags are applied last: a failure part way never leaves a tagged image without its referrers.
 	for _, planned := range plan.order {
-		references := []string{planned.digest}
-		if planned.root && len(manifest.Tags) > 0 {
-			references = manifest.Tags
+		if err = i.publishManifest(ctx, repositoryID, unit.Coordinate, planned); err != nil {
+			return err
 		}
-		if err = i.publishManifest(ctx, repositoryID, unit.Coordinate, planned, references); err != nil {
+	}
+	for _, tag := range manifest.Tags {
+		if err = i.applyTag(ctx, repositoryID, plan.manifests[unit.Digest], tag); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// checkTag refuses a tag that points at another digest.
+func (i NativeImporter) checkTag(ctx context.Context, repositoryID, name, tag, digest string) error {
+	existing, err := i.Store.GetOCIManifest(ctx, repositoryID, name, tag)
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
+		return nil
+	case err != nil:
+		return err
+	case existing.Digest != digest:
+		return formatmodule.ErrImportConflict
+	}
+	return nil
+}
+
+// applyTag points the tag at the root manifest. It holds the lock that every writer of the tag takes, so the check and the
+// write are not interleaved with a push of the same tag.
+func (i NativeImporter) applyTag(ctx context.Context, repositoryID string, root *plannedManifest, tag string) error {
+	release, err := i.Store.LockOCIObject(ctx, repository.OCITagLockKey(repositoryID, root.name, tag))
+	if err != nil {
+		return err
+	}
+	defer release()
+	if err = i.checkTag(ctx, repositoryID, root.name, tag, root.digest); err != nil {
+		return err
+	}
+	_, err = i.Store.PutOCIManifest(ctx, root.record(repositoryID, ManifestObjectKey(repositoryID, root.name, root.digest)), tag)
+	return err
 }
 
 func validateImportManifest(manifest importManifest, root string) error {
@@ -148,14 +174,14 @@ func validateImportManifest(manifest importManifest, root string) error {
 // invalid unless its blobs are exactly the closure those manifests describe, and a descriptor whose size differs from the
 // blob it names is a mismatch.
 func planImport(unit formatmodule.ExportedUnit, manifest importManifest, open func(formatmodule.BlobDescriptor) (io.ReadCloser, error)) (*importPlan, error) {
-	plan := &importPlan{byDigest: make(map[string]formatmodule.BlobDescriptor, len(unit.Blobs)), manifests: map[string]*plannedManifest{}, blobs: map[string]bool{}, open: open}
+	plan := &importPlan{name: unit.Coordinate, byDigest: make(map[string]formatmodule.BlobDescriptor, len(unit.Blobs)), manifests: map[string]*plannedManifest{}, blobs: map[string]bool{}, open: open}
 	for _, blob := range unit.Blobs {
 		if _, duplicate := plan.byDigest[blob.Digest]; duplicate || !ocigraph.ValidDigest(blob.Digest) || blob.Size < 0 {
 			return nil, formatmodule.ErrImportInvalidUnit
 		}
 		plan.byDigest[blob.Digest] = blob
 	}
-	if err := plan.addManifest(unit.Digest, "", 0, true); err != nil {
+	if err := plan.addManifest(unit.Digest, "", 0); err != nil {
 		return nil, err
 	}
 	image := make(map[string]bool, len(plan.manifests))
@@ -163,10 +189,10 @@ func planImport(unit formatmodule.ExportedUnit, manifest importManifest, open fu
 		image[digest] = true
 	}
 	for _, referrer := range manifest.Referrers {
-		if _, inImage := plan.manifests[referrer]; inImage {
+		if image[referrer] {
 			return nil, formatmodule.ErrImportInvalidUnit
 		}
-		if err := plan.addManifest(referrer, "", 0, false); err != nil {
+		if err := plan.addManifest(referrer, "", 0); err != nil {
 			return nil, err
 		}
 	}
@@ -184,7 +210,7 @@ func planImport(unit formatmodule.ExportedUnit, manifest importManifest, open fu
 
 // addManifest verifies and reads one manifest, then its children and blobs. mediaType is what the referencing descriptor
 // claims, empty for a root.
-func (p *importPlan) addManifest(digest, mediaType string, depth int, root bool) error {
+func (p *importPlan) addManifest(digest, mediaType string, depth int) error {
 	if planned, seen := p.manifests[digest]; seen {
 		if mediaType != "" && planned.mediaType != mediaType {
 			return formatmodule.ErrImportInvalidUnit
@@ -219,12 +245,12 @@ func (p *importPlan) addManifest(digest, mediaType string, depth int, root bool)
 	if !isManifestMediaType(resolved) || mediaType != "" && mediaType != resolved {
 		return formatmodule.ErrImportInvalidUnit
 	}
-	planned := &plannedManifest{digest: digest, mediaType: resolved, artifactType: document.ArtifactType, body: body, root: root}
-	if document.Subject != nil {
-		if !ocigraph.ValidDigest(document.Subject.Digest) {
+	planned := &plannedManifest{name: p.name, digest: digest, mediaType: resolved, artifactType: document.ArtifactType, body: body}
+	if subject, has := subjectDigest(document); has {
+		if !ocigraph.ValidDigest(subject) {
 			return formatmodule.ErrImportInvalidUnit
 		}
-		planned.subject = document.Subject.Digest
+		planned.subject = subject
 	}
 	p.manifests[digest] = planned
 	for _, child := range document.Manifests {
@@ -232,7 +258,7 @@ func (p *importPlan) addManifest(digest, mediaType string, depth int, root bool)
 			return err
 		}
 	}
-	for _, item := range document.blobDescriptors() {
+	for _, item := range blobDescriptors(document) {
 		if err = p.addDescriptor(item, depth+1); err != nil {
 			return err
 		}
@@ -243,7 +269,7 @@ func (p *importPlan) addManifest(digest, mediaType string, depth int, root bool)
 
 // addDescriptor follows one descriptor of a manifest: a manifest is read, a blob is recorded, and a foreign layer that is
 // fetched from URLs is not part of the unit.
-func (p *importPlan) addDescriptor(item descriptor, depth int) error {
+func (p *importPlan) addDescriptor(item ocigraph.Descriptor, depth int) error {
 	if !ocigraph.ValidDigest(item.Digest) || item.Size == nil || *item.Size < 0 {
 		return formatmodule.ErrImportInvalidUnit
 	}
@@ -258,7 +284,7 @@ func (p *importPlan) addDescriptor(item descriptor, depth int) error {
 		return formatmodule.ErrImportMismatch
 	}
 	if isManifestMediaType(item.MediaType) {
-		return p.addManifest(item.Digest, item.MediaType, depth, false)
+		return p.addManifest(item.Digest, item.MediaType, depth)
 	}
 	if _, isManifest := p.manifests[item.Digest]; isManifest {
 		return formatmodule.ErrImportInvalidUnit
@@ -285,9 +311,9 @@ func (p *importPlan) read(blob formatmodule.BlobDescriptor) ([]byte, error) {
 	return body, nil
 }
 
-// publishBlob makes one blob visible in the repository: a blob the repository holds is left alone, one that exists
-// elsewhere on this instance is mounted (the sender supplied its verified bytes, so it proves nothing it could not already
-// read), and any other is written from the verified bytes into its content-addressed object.
+// publishBlob makes one blob visible in the repository: a blob the repository holds is left alone, any other is written
+// from the bytes the sender supplied, verified against the digest, into its content-addressed object. A blob that other
+// repositories hold is never mounted from them: the sender must prove it holds the bytes.
 func (i NativeImporter) publishBlob(ctx context.Context, repositoryID, name string, blob formatmodule.BlobDescriptor, open func(formatmodule.BlobDescriptor) (io.ReadCloser, error)) error {
 	existing, err := i.Store.GetOCIBlob(ctx, repositoryID, blob.Digest)
 	if err == nil {
@@ -296,14 +322,7 @@ func (i NativeImporter) publishBlob(ctx context.Context, repositoryID, name stri
 	if !errors.Is(err, repository.ErrNotFound) {
 		return err
 	}
-	mounted, err := i.Store.MountOCIBlob(ctx, repositoryID, blob.Digest)
-	if err == nil {
-		return sameSize(mounted.Size, blob.Size)
-	}
-	if !errors.Is(err, repository.ErrNotFound) {
-		return err
-	}
-	key := "native/oci/blobs/sha256/" + strings.TrimPrefix(blob.Digest, "sha256:")
+	key := repository.OCIBlobObjectKey(blob.Digest)
 	release, err := i.Store.LockOCIObject(ctx, key)
 	if err != nil {
 		return err
@@ -334,8 +353,8 @@ func sameSize(held, claimed int64) error {
 	return nil
 }
 
-// publishManifest writes a verified manifest into its target-owned object and registers it under each reference.
-func (i NativeImporter) publishManifest(ctx context.Context, repositoryID, name string, planned *plannedManifest, references []string) error {
+// publishManifest writes a verified manifest into its target-owned object and registers it by digest.
+func (i NativeImporter) publishManifest(ctx context.Context, repositoryID, name string, planned *plannedManifest) error {
 	key := ManifestObjectKey(repositoryID, name, planned.digest)
 	release, err := i.Store.LockOCIObject(ctx, key)
 	if err != nil {
@@ -349,10 +368,6 @@ func (i NativeImporter) publishManifest(ctx context.Context, repositoryID, name 
 	if err = i.Objects.PutVerifiedReader(ctx, key, bytes.NewReader(planned.body), size, planned.digest); err != nil {
 		return errors.Join(formatmodule.ErrPublicationUpload, err)
 	}
-	for _, reference := range references {
-		if _, err = i.Store.PutOCIManifest(ctx, repository.OCIManifest{RepositoryID: repositoryID, Name: name, Digest: planned.digest, ObjectKey: key, MediaType: planned.mediaType, SubjectDigest: planned.subject, ArtifactType: planned.artifactType, Size: size}, reference); err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err = i.Store.PutOCIManifest(ctx, planned.record(repositoryID, key), planned.digest)
+	return err
 }

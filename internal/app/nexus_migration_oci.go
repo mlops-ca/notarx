@@ -64,7 +64,7 @@ func (p *NexusOCIMigrationPublication) NativeAssets(entry nexusmigration.Entry) 
 		if !ok || source.Kind == "blobs" && source.Reference != digest || source.Kind == "manifests" && (source.Name != name || ocigraph.ValidDigest(source.Reference) && source.Reference != digest) {
 			return nil, nexusmigration.Failed("invalid_publication")
 		}
-		key := "native/oci/blobs/sha256/" + asset.SHA256
+		key := repository.OCIBlobObjectKey("sha256:" + asset.SHA256)
 		if asset.TargetPath == name+"/manifests/"+digest {
 			if source.Kind != "manifests" || !ocigraph.IsManifest(asset.MediaType) && !ocigraph.IsIndex(asset.MediaType) {
 				return nil, nexusmigration.Failed("invalid_publication")

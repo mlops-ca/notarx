@@ -259,3 +259,57 @@ func TestReleaseSetIsTheIndexAndItsChildren(t *testing.T) {
 		t.Fatalf("not a digest = %v", err)
 	}
 }
+
+func TestImportUnitNeverMountsABlobOtherRepositoriesHold(t *testing.T) {
+	ctx := context.Background()
+	store, _, importer, repo := importFixture(t, repository.FormatOCI)
+	other, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "other", Format: repository.FormatOCI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	img := newImportImage()
+	manifest := `{"referrers":["` + img.signature + `"]}`
+	if err = importer.ImportUnit(ctx, other.ID, img.unit(manifest), img.open); err != nil {
+		t.Fatal(err)
+	}
+	// A sender that does not hold the layer cannot publish it by naming its digest: its bytes are read and hashed.
+	forged := func(blob formatmodule.BlobDescriptor) (io.ReadCloser, error) {
+		if blob.Digest == img.layer {
+			return io.NopCloser(bytes.NewReader([]byte("not the layer"))), nil
+		}
+		return img.open(blob)
+	}
+	if err = importer.ImportUnit(ctx, repo.ID, img.unit(manifest), forged); !errors.Is(err, formatmodule.ErrImportMismatch) {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err = store.GetOCIBlob(ctx, repo.ID, img.layer); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("the blob of another repository was mounted: %v", err)
+	}
+}
+
+func TestImportUnitReadsForeignLayersAndNestedReferrersFromTheManifests(t *testing.T) {
+	ctx := context.Background()
+	_, _, importer, repo := importFixture(t, repository.FormatOCI)
+	files := map[string][]byte{}
+	add := func(content string) string {
+		digest := digestOf([]byte(content))
+		files[digest] = []byte(content)
+		return digest
+	}
+	config := add("{}")
+	foreign := digestOf([]byte("foreign layer"))
+	image := add(fmt.Sprintf(`{"schemaVersion":2,"config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"%s","size":2},"layers":[{"mediaType":"application/vnd.oci.image.layer.nondistributable.v1.tar+gzip","digest":"%s","size":13,"urls":["https://example.invalid/layer"]}]}`, config, foreign))
+	// Two referrers, the first an index that lists the second as a child.
+	leaf := add(fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","artifactType":"application/vnd.example.sbom","config":{"mediaType":"application/vnd.oci.empty.v1+json","digest":"%s","size":2},"layers":[],"subject":{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"%s","size":1}}`, config, image))
+	wrapper := add(fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","artifactType":"application/vnd.example.bundle","manifests":[{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"%s","size":%d}],"subject":{"mediaType":"application/vnd.oci.image.manifest.v1+json","digest":"%s","size":1}}`, leaf, len(files[leaf]), image))
+	unit := formatmodule.ExportedUnit{Format: repository.FormatOCI, Coordinate: "team/app", Digest: image, Manifest: []byte(`{"referrers":["` + wrapper + `","` + leaf + `"]}`)}
+	for digest, content := range files {
+		unit.Blobs = append(unit.Blobs, formatmodule.BlobDescriptor{Digest: digest, Size: int64(len(content))})
+	}
+	open := func(blob formatmodule.BlobDescriptor) (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(files[blob.Digest])), nil
+	}
+	if err := importer.ImportUnit(ctx, repo.ID, unit, open); err != nil {
+		t.Fatal(err)
+	}
+}

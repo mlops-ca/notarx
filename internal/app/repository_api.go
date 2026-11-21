@@ -334,7 +334,11 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		Audit: store, Anonymous: store, ReadPolicies: store, Quarantine: store, Client: rawClient, Cache: rawCache, Metrics: rawModuleMetrics{metrics},
 		GroupRuntime: rawModuleGroupRuntime{resolver: v2GroupResolver{groups: store, repos: store, audit: store, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}}, policy: store},
 		LegacyStore:  store, LegacyRuntime: rawRuntime{handler: rawLegacy}, RecordFailure: recordRawFailure})
-	modules := []formatmodule.Module{rawModule, ociImportModule{ociprotocol.NativeImporter{Store: store, Objects: options.Storage[repository.FormatOCI]}}}
+	modules := []formatmodule.Module{rawModule}
+	if ociObjects := options.Storage[repository.FormatOCI]; ociObjects != nil {
+		// Without an OCI object store the instance has nowhere to put an image, so it does not advertise OCI imports.
+		modules = append(modules, ociImportModule{ociprotocol.NativeImporter{Store: store, Objects: ociObjects}})
+	}
 	var helmPreview http.Handler
 	if options.HelmPreviewEnabled {
 		client := helmformat.Upstream(UpstreamClient{})
