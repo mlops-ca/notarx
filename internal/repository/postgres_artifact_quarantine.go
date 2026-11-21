@@ -69,7 +69,7 @@ RETURNING `+artifactQuarantineColumns, value.RepositoryID, value.Format, value.C
 		if err != nil {
 			return ArtifactQuarantine{}, err
 		}
-		if err = enqueueWebhookEventPostgres(ctx, tx, artifactQuarantineWebhookEvent(created)); err != nil {
+		if _, err = enqueueWebhookEventPostgres(ctx, tx, artifactQuarantineWebhookEvent(created)); err != nil {
 			return ArtifactQuarantine{}, err
 		}
 		if err = insertAudits(ctx, tx, audit); err != nil {
@@ -90,7 +90,7 @@ RETURNING `+artifactQuarantineColumns, value.RepositoryID, value.Format, value.C
 		if err != nil {
 			return ArtifactQuarantine{}, err
 		}
-		if err = enqueueWebhookEventPostgres(ctx, tx, artifactQuarantineWebhookEvent(updated)); err != nil {
+		if _, err = enqueueWebhookEventPostgres(ctx, tx, artifactQuarantineWebhookEvent(updated)); err != nil {
 			return ArtifactQuarantine{}, err
 		}
 		if err = insertAudits(ctx, tx, audit); err != nil {

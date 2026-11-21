@@ -4,6 +4,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -56,8 +57,8 @@ func TestPostgresEmitIsTransactionalAndConsumerGated(t *testing.T) {
 		t.Fatal(err)
 	}
 	quiet := event(events.ArtifactPromoted, "p1")
-	if written, emitErr := events.Emit(ctx, tx, quiet); emitErr != nil || written {
-		t.Fatalf("written=%v err=%v", written, emitErr)
+	if result, emitErr := events.Emit(ctx, tx, quiet); emitErr != nil || result.Written {
+		t.Fatalf("result=%+v err=%v", result, emitErr)
 	}
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -81,8 +82,8 @@ func TestPostgresEmitIsTransactionalAndConsumerGated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if written, emitErr := events.Emit(ctx, tx, rolledBack); emitErr != nil || !written {
-		t.Fatalf("written=%v err=%v", written, emitErr)
+	if result, emitErr := events.Emit(ctx, tx, rolledBack); emitErr != nil || !result.Written || result.OccurredAt.IsZero() {
+		t.Fatalf("result=%+v err=%v", result, emitErr)
 	}
 	if err = tx.Rollback(); err != nil {
 		t.Fatal(err)
@@ -100,8 +101,8 @@ func TestPostgresEmitIsTransactionalAndConsumerGated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if written, emitErr := events.Emit(ctx, tx, committed); emitErr != nil || !written {
-		t.Fatalf("written=%v err=%v", written, emitErr)
+	if result, emitErr := events.Emit(ctx, tx, committed); emitErr != nil || !result.Written || result.OccurredAt.IsZero() {
+		t.Fatalf("result=%+v err=%v", result, emitErr)
 	}
 	if err = tx.Commit(); err != nil {
 		t.Fatal(err)
@@ -367,5 +368,30 @@ func TestPostgresSwapScanResultEmitsScanCompleted(t *testing.T) {
 	if err = store.db.QueryRowContext(ctx, `SELECT format, COALESCE(payload->'previous'->>'id','') FROM domain_events WHERE dedupe_key=$1`,
 		string(events.ArtifactScanCompleted)+"|"+repo.ID+"||"+digest+"|"+second.ID).Scan(&format, &previous); err != nil || format != "raw" || previous != first.ID {
 		t.Fatalf("second event format=%q previous=%q err=%v", format, previous, err)
+	}
+}
+
+// A dead delivery whose event is gone cannot be replayed, and says why.
+func TestPostgresReplayOfADeliveryWithoutAnEventSaysWhy(t *testing.T) {
+	store := domainEventsStore(t)
+	ctx := context.Background()
+	subscription, err := store.CreateWebhookSubscription(ctx, WebhookSubscription{ID: uuid.NewString(), Name: "gone-" + uuid.NewString(), EndpointURL: "https://events.example.test/g",
+		SecretCiphertext: "sealed", EventTypes: []WebhookEventType{WebhookEventArtifactReleased}, Enabled: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM webhook_subscriptions WHERE id=$1`, subscription.ID)
+	})
+	deliveryID := uuid.NewString()
+	if _, err = store.db.ExecContext(ctx, `INSERT INTO webhook_deliveries (id,event_id,event_occurred_at,subscription_id,state,attempts)
+VALUES ($1::uuid,gen_random_uuid(),now(),$2::uuid,'dead',8)`, deliveryID, subscription.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.ReplayWebhookDelivery(ctx, deliveryID, time.Now()); !errors.Is(err, ErrWebhookEventNotRetained) {
+		t.Fatalf("replay = %v, want ErrWebhookEventNotRetained", err)
+	}
+	if _, err = store.ReplayWebhookDelivery(ctx, uuid.NewString(), time.Now()); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("replay of an unknown delivery = %v", err)
 	}
 }

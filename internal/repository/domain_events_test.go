@@ -179,3 +179,18 @@ func TestQuarantineAndCargoEventsCarryTheArtifactIdentity(t *testing.T) {
 		t.Fatalf("replication event = %+v", plan)
 	}
 }
+
+func TestMemorySwapScanResultTwiceWithTheSameResultEmitsOnce(t *testing.T) {
+	store := NewMemoryStore()
+	ctx := context.Background()
+	memoryWebhookSubscription(t, store, true, WebhookEventArtifactScanCompleted)
+	result := ScanResult{ID: ids.New(), RepositoryID: ids.New(), ArtifactDigest: "sha256:" + strings.Repeat("b", 64), Scanner: "trivy", Status: ScanStatusClean, ScannedAt: time.Now().UTC()}
+	for range 2 {
+		if _, err := store.SwapScanResult(ctx, result); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(store.webhookEvents) != 1 {
+		t.Fatalf("a repeated swap of the stored result emitted %d events", len(store.webhookEvents))
+	}
+}

@@ -305,6 +305,10 @@ func (h generatedRepositoryAPIAdapter) ReplayWebhookDelivery(w http.ResponseWrit
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "webhook delivery not found")
 		return
 	}
+	if errors.Is(err, repository.ErrWebhookEventNotRetained) {
+		writeHostedProblem(w, http.StatusConflict, "event_not_retained", "the event of this webhook delivery is no longer retained")
+		return
+	}
 	if errors.Is(err, repository.ErrInvalidWebhookDeliveryState) {
 		writeHostedProblem(w, http.StatusConflict, "invalid_state", "only dead webhook deliveries can be replayed")
 		return

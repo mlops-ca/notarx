@@ -70,7 +70,9 @@ An event is written only when something consumes it: an enabled subscription for
 its type, or an internal consumer (the publication scan scheduler reads
 `artifact.published`). Otherwise the state change commits without an event row.
 Internal consumers read the log with a durable cursor, in order and at least once, one node
-at a time; an event whose handler fails five times in a row is logged and skipped.
+at a time; a failed event is retried with an exponential backoff, and one that fails ten times
+in a row is logged and skipped. The `occurredAt` of an event is the database time of its
+emission.
 
 ### Retention
 
@@ -79,7 +81,8 @@ is entirely older than `NOTARX_EVENTS_RETENTION` (default 14 days, 3 on the
 free-tier profile). A delivery is inspectable and replayable while its event is
 kept, so `webhook_deliveries` rows are pruned on the same schedule, and a pending or
 retrying delivery whose event is gone is parked as `dead` with the error
-`event is no longer retained`. The table
+`event is no longer retained`; it is no longer listed, and replaying it answers
+`409 event_not_retained`. The table
 that records promotions (`artifact_promotions`) is the long-lived provenance
 record, not the event log.
 

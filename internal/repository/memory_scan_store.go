@@ -159,6 +159,9 @@ func (s *MemoryStore) SwapScanResult(_ context.Context, result ScanResult) (Scan
 	if existed {
 		replaced = &previous
 	}
+	if existed && previous.ID == result.ID {
+		return swap, nil // nothing changed: a repeated swap of the stored result emits no second event
+	}
 	s.enqueueWebhookEventLocked(scanCompletedEvent(result, replaced, s.hostedRepositories[result.RepositoryID].Format, s.newScanFindingsLocked(result, replaced)))
 	return swap, nil
 }

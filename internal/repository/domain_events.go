@@ -21,22 +21,23 @@ var (
 	_ DomainEventStore = (*MemoryStore)(nil)
 )
 
-// enqueueWebhookEventPostgres emits the event in tx with events.Emit.
-func enqueueWebhookEventPostgres(ctx context.Context, tx sqlRunner, event WebhookEvent) error {
-	_, err := events.Emit(ctx, tx, event.domainEvent())
-	return err
+// enqueueWebhookEventPostgres emits the event in tx with events.Emit and reports what was written.
+func enqueueWebhookEventPostgres(ctx context.Context, tx sqlRunner, event WebhookEvent) (events.Result, error) {
+	return events.Emit(ctx, tx, event.domainEvent())
 }
 
 const readDomainEventsQuery = `SELECT seq,id::text,type,COALESCE(repository_id::text,''),COALESCE(format,''),COALESCE(coordinate,''),COALESCE(digest,''),payload,occurred_at
 FROM domain_events WHERE type = ANY($1::text[]) AND occurred_at >= $2 AND (occurred_at,seq) > ($2,$3)
-  AND occurred_at < LEAST(clock_timestamp() - $4::interval, COALESCE((SELECT min(xact_start) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()), 'infinity'::timestamptz))
+  AND occurred_at < LEAST(clock_timestamp() - $4::interval, COALESCE((SELECT min(xact_start) FROM pg_stat_activity WHERE datname = current_database() AND usename = current_user AND backend_type = 'client backend' AND pid <> pg_backend_pid()), 'infinity'::timestamptz))
 ORDER BY occurred_at,seq LIMIT $5`
 
 // ReadEvents implements events.Source. A consumer without a cursor row starts at the present: its cursor is
 // created at the database clock and nothing older is replayed. occurred_at is the database clock (events.Emit
 // passes no time of its own), so an event not yet committed has an occurred_at at or after the start of its
 // transaction: reading only below the oldest open transaction's start, and below the settle horizon, means an
-// event that commits late is never behind the cursor.
+// event that commits late is never behind the cursor. Only transactions of the connecting role count: they are the
+// only ones that emit, and another role's session (or a vacuum worker) must not hold the log back. A long open
+// transaction of this role delays the read until it ends, which is what keeps the cursor honest.
 func (s *PostgresStore) ReadEvents(ctx context.Context, consumer string, types []events.Type, settle time.Duration, limit int) ([]events.Stored, error) {
 	var cursor events.Cursor
 	err := s.db.QueryRowContext(ctx, `SELECT occurred_at,seq FROM domain_event_cursors WHERE consumer=$1`, consumer).Scan(&cursor.OccurredAt, &cursor.Seq)

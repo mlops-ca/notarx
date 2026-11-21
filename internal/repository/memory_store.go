@@ -1,12 +1,12 @@
 package repository
 
 import (
-	"github.com/mlops-ca/notarx/internal/events"
-	"github.com/mlops-ca/notarx/internal/identity"
 	"sync"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/events"
 	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/identity"
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 
 	"github.com/mlops-ca/notarx/internal/ocidiscovery"

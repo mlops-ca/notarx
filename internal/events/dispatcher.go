@@ -71,16 +71,21 @@ func Permanent(err error) error {
 	return permanentError{err}
 }
 
-// DefaultMaxAttempts is how many times in a row a handler may fail on one event before the dispatcher
-// gives the event up, logs it and moves on, so one poisoned event cannot block the consumer for good.
-const DefaultMaxAttempts = 5
+// DefaultMaxAttempts is how many times in a row a handler may fail on one event before the dispatcher gives the
+// event up, logs it and moves on, so one poisoned event cannot block the consumer for good. The attempts back off
+// exponentially from the dispatch interval to MaxBackoff, which spans a store outage of about a quarter of an hour.
+const (
+	DefaultMaxAttempts = 10
+	MaxBackoff         = 5 * time.Minute
+)
 
 // dispatchLeaseTTL bounds how long a crashed dispatcher keeps the other nodes out.
 const dispatchLeaseTTL = time.Minute
 
 // Dispatcher hands each consumer the events it asked for, in order, advancing its cursor once per batch. One
-// node at a time serves a consumer (a lease row of scheduled_tasks). A transient handler error stops that
-// consumer for the pass and the event is retried, up to MaxAttempts times in a row.
+// node at a time serves a consumer: the node that holds its lease row of scheduled_tasks renews it on every pass and
+// hands it back in Close, so the other nodes only issue a cheap non-matching update. A transient handler error
+// stops that consumer, and the event is retried after an exponential backoff, up to MaxAttempts times in a row.
 type Dispatcher struct {
 	Source    Source
 	Consumers []Consumer
@@ -96,8 +101,31 @@ type Dispatcher struct {
 	Interval    time.Duration
 	MaxAttempts int
 	Logger      *slog.Logger
+	// Now is the clock of the backoff, injected by tests.
+	Now func() time.Time
 
-	failures map[string]int
+	failures map[string]*failure
+	held     map[string]tasklease.Task
+}
+
+// failure is the retry state of one event that a handler failed on.
+type failure struct {
+	count int
+	next  time.Time
+}
+
+func (d *Dispatcher) now() time.Time {
+	if d.Now != nil {
+		return d.Now()
+	}
+	return time.Now()
+}
+
+func (d *Dispatcher) interval() time.Duration {
+	if d.Interval > 0 {
+		return d.Interval
+	}
+	return 2 * time.Second
 }
 
 func (d *Dispatcher) batch() int {
@@ -157,13 +185,13 @@ func (d *Dispatcher) serve(ctx context.Context, consumer Consumer) (int, error) 
 			return 0, fmt.Errorf("events: lease of %s: %w", consumer.Name, err)
 		}
 		if !held {
+			delete(d.held, consumer.Name)
 			return 0, nil
 		}
-		defer func() {
-			release, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-			defer cancel()
-			_ = d.Leases.ReleaseInternalTaskLease(release, task, d.owner(), false)
-		}()
+		if d.held == nil {
+			d.held = map[string]tasklease.Task{}
+		}
+		d.held[consumer.Name] = task
 	}
 	stored, err := d.Source.ReadEvents(ctx, consumer.Name, consumer.Types, d.settle(), d.batch())
 	if err != nil {
@@ -171,23 +199,27 @@ func (d *Dispatcher) serve(ctx context.Context, consumer Consumer) (int, error) 
 	}
 	var last *Cursor
 	handled := 0
-	var failure error
+	var failed error
 	for i := range stored {
 		item := stored[i]
+		key := consumer.Name + "/" + item.Event.ID
+		if retry := d.failures[key]; retry != nil && d.now().Before(retry.next) {
+			break // backing off after a failed attempt; the events behind it wait
+		}
 		if err = consumer.Handler.HandleEvent(ctx, item.Event); err != nil && !d.giveUp(consumer, item, err) {
-			failure = fmt.Errorf("events: %s handling %s: %w", consumer.Name, item.Event.Type, err)
+			failed = fmt.Errorf("events: %s handling %s: %w", consumer.Name, item.Event.Type, err)
 			break
 		}
-		delete(d.failures, consumer.Name+"/"+item.Event.ID)
+		delete(d.failures, key)
 		last = &stored[i].Position
 		handled++
 	}
 	if last != nil {
 		if err = d.Source.AdvanceCursor(ctx, consumer.Name, *last); err != nil {
-			return 0, errors.Join(failure, fmt.Errorf("events: advance cursor of %s: %w", consumer.Name, err))
+			return 0, errors.Join(failed, fmt.Errorf("events: advance cursor of %s: %w", consumer.Name, err))
 		}
 	}
-	return handled, failure
+	return handled, failed
 }
 
 // giveUp reports whether the event is skipped after a handler error: always for a permanent error, and for a
@@ -196,11 +228,18 @@ func (d *Dispatcher) giveUp(consumer Consumer, item Stored, err error) bool {
 	var permanent permanentError
 	if !errors.As(err, &permanent) {
 		if d.failures == nil {
-			d.failures = map[string]int{}
+			d.failures = map[string]*failure{}
 		}
 		key := consumer.Name + "/" + item.Event.ID
-		d.failures[key]++
-		if d.failures[key] < d.maxAttempts() {
+		retry := d.failures[key]
+		if retry == nil {
+			retry = &failure{}
+			d.failures[key] = retry
+		}
+		retry.count++
+		if retry.count < d.maxAttempts() {
+			delay := d.interval() << min(retry.count-1, 20)
+			retry.next = d.now().Add(min(delay, MaxBackoff))
 			return false
 		}
 	}
@@ -210,14 +249,26 @@ func (d *Dispatcher) giveUp(consumer Consumer, item Stored, err error) bool {
 	return true
 }
 
-// Run passes until ctx ends, logging failures.
-func (d *Dispatcher) Run(ctx context.Context) {
-	interval := d.Interval
-	if interval <= 0 {
-		interval = 2 * time.Second
+// Close hands back the leases this node holds, so another node takes over at once.
+func (d *Dispatcher) Close(ctx context.Context) {
+	if d.Leases == nil {
+		return
 	}
-	ticker := time.NewTicker(interval)
+	for name, task := range d.held {
+		_ = d.Leases.ReleaseInternalTaskLease(ctx, task, d.owner(), false)
+		delete(d.held, name)
+	}
+}
+
+// Run passes until ctx ends, logging failures, and releases its leases on the way out.
+func (d *Dispatcher) Run(ctx context.Context) {
+	ticker := time.NewTicker(d.interval())
 	defer ticker.Stop()
+	defer func() {
+		release, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		d.Close(release)
+	}()
 	for {
 		if _, err := d.RunOnce(ctx); err != nil && ctx.Err() == nil && d.Logger != nil {
 			d.Logger.Error("event dispatch failed", "error", err)

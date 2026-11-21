@@ -77,7 +77,8 @@ type Event struct {
 	Version string
 	// Payload is a JSON object; Emit writes {} when empty.
 	Payload json.RawMessage
-	// OccurredAt is the time of the state change; zero takes the database clock.
+	// OccurredAt is the time of the state change as the in-memory store records it. Emit ignores it: the
+	// database stamps its own clock.
 	OccurredAt time.Time
 }
 
@@ -105,8 +106,7 @@ type DB interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// Prepare returns the event with its id and payload filled in. A zero OccurredAt stays zero: the database stamps
-// it with its own clock, the one the dispatcher's cursor and settle delay run on.
+// Prepare returns the event with its id and payload filled in.
 func (e Event) Prepare() Event {
 	if e.ID == "" {
 		e.ID = ids.New()
@@ -120,21 +120,29 @@ func (e Event) Prepare() Event {
 	return e
 }
 
-const emitStatement = `SELECT emit_domain_event($1::uuid,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7::jsonb,$8,$9::timestamptz,$10)`
+const emitStatement = `SELECT emit_domain_event($1::uuid,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7::jsonb,$8,$9)`
 
-// Emit writes the event in the caller's transaction and reports whether a row was written. A failure must
-// fail the transaction of the state change: a silently missed event would break the chain guarantee.
-func Emit(ctx context.Context, tx DB, event Event) (bool, error) {
+// Result is the outcome of Emit.
+type Result struct {
+	// Written reports whether a row was written: false when no subscription and no internal consumer wants the type.
+	Written bool
+	// OccurredAt is the database time stamped on the row; zero when nothing was written.
+	OccurredAt time.Time
+}
+
+// Emit writes the event in the caller's transaction. A failure must fail the transaction of the state change: a
+// silently missed event would break the chain guarantee. The row's occurred_at is the database clock at emission
+// whatever Event.OccurredAt says, so the position of the event in the log is never behind a consumer's cursor.
+func Emit(ctx context.Context, tx DB, event Event) (Result, error) {
 	if err := event.Validate(); err != nil {
-		return false, err
+		return Result{}, err
 	}
 	event = event.Prepare()
-	var occurredAt any
-	if !event.OccurredAt.IsZero() {
-		occurredAt = event.OccurredAt
-	}
-	var written bool
+	var occurredAt sql.NullTime
 	err := tx.QueryRowContext(ctx, emitStatement, event.ID, string(event.Type), event.RepositoryID, event.Format, event.Coordinate, event.Digest,
-		[]byte(event.Payload), event.DedupeKey(), occurredAt, HasInternalConsumer(event.Type)).Scan(&written)
-	return written, err
+		[]byte(event.Payload), event.DedupeKey(), HasInternalConsumer(event.Type)).Scan(&occurredAt)
+	if err != nil {
+		return Result{}, err
+	}
+	return Result{Written: occurredAt.Valid, OccurredAt: occurredAt.Time}, nil
 }

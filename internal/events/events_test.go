@@ -93,11 +93,12 @@ func TestValidateAndPrepare(t *testing.T) {
 
 // recorder is a database/sql driver that records the statement and arguments of the emit call and answers with a boolean.
 type recorder struct {
-	mu      sync.Mutex
-	queries []string
-	args    [][]driver.Value
-	answer  bool
-	fail    error
+	mu       sync.Mutex
+	queries  []string
+	args     [][]driver.Value
+	answer   bool
+	answerAt time.Time
+	fail     error
 }
 
 type recorderDriver struct{ r *recorder }
@@ -130,11 +131,12 @@ func (s recorderStmt) Query(args []driver.Value) (driver.Rows, error) {
 	if s.r.fail != nil {
 		return nil, s.r.fail
 	}
-	return &recorderRows{answer: s.r.answer}, nil
+	return &recorderRows{answer: s.r.answer, at: s.r.answerAt}, nil
 }
 
 type recorderRows struct {
 	answer bool
+	at     time.Time
 	done   bool
 }
 
@@ -145,7 +147,11 @@ func (r *recorderRows) Next(dest []driver.Value) error {
 		return io.EOF
 	}
 	r.done = true
-	dest[0] = r.answer
+	if r.answer {
+		dest[0] = r.at
+	} else {
+		dest[0] = nil
+	}
 	return nil
 }
 
@@ -168,19 +174,22 @@ func openRecorder(t *testing.T, r *recorder) *sql.DB {
 }
 
 func TestEmitCallsTheDatabaseFunction(t *testing.T) {
-	r := &recorder{answer: true}
-	db := openRecorder(t, r)
 	at := time.Date(2026, 5, 6, 7, 8, 9, 0, time.UTC)
-	written, err := Emit(context.Background(), db, Event{ID: "0192d9a0-0000-7000-8000-000000000001", Type: ArtifactScanCompleted, RepositoryID: "repo",
-		Format: "raw", Coordinate: "a/b", Digest: "sha256:aa", Version: "scan-1", Payload: json.RawMessage(`{"k":"v"}`), OccurredAt: at})
-	if err != nil || !written {
-		t.Fatalf("written=%v err=%v", written, err)
+	r := &recorder{answer: true, answerAt: at}
+	db := openRecorder(t, r)
+	result, err := Emit(context.Background(), db, Event{ID: "0192d9a0-0000-7000-8000-000000000001", Type: ArtifactScanCompleted, RepositoryID: "repo",
+		Format: "raw", Coordinate: "a/b", Digest: "sha256:aa", Version: "scan-1", Payload: json.RawMessage(`{"k":"v"}`), OccurredAt: time.Unix(1, 0)})
+	if err != nil || !result.Written || !result.OccurredAt.Equal(at) {
+		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	if len(r.queries) != 1 || !strings.Contains(r.queries[0], "emit_domain_event(") {
 		t.Fatalf("queries = %v", r.queries)
 	}
 	args := r.args[0]
-	if args[1] != "artifact.scan.completed" || args[2] != "repo" || args[7] != "artifact.scan.completed|repo|a/b|sha256:aa|scan-1" || args[9] != false {
+	if len(args) != 9 {
+		t.Fatalf("the database function takes no caller-supplied time, got %d args", len(args))
+	}
+	if args[1] != "artifact.scan.completed" || args[2] != "repo" || args[7] != "artifact.scan.completed|repo|a/b|sha256:aa|scan-1" || args[8] != false {
 		t.Errorf("args = %v", args)
 	}
 	if string(args[6].([]byte)) != `{"k":"v"}` {
@@ -190,7 +199,7 @@ func TestEmitCallsTheDatabaseFunction(t *testing.T) {
 	if _, err = Emit(context.Background(), db, Event{Type: ArtifactPublished}); err != nil {
 		t.Fatal(err)
 	}
-	if r.args[1][9] != true || string(r.args[1][6].([]byte)) != "{}" || r.args[1][8] != nil {
+	if r.args[1][8] != true || string(r.args[1][6].([]byte)) != "{}" {
 		t.Errorf("published args = %v", r.args[1])
 	}
 }
@@ -198,8 +207,8 @@ func TestEmitCallsTheDatabaseFunction(t *testing.T) {
 func TestEmitReportsNoRowAndErrors(t *testing.T) {
 	r := &recorder{}
 	db := openRecorder(t, r)
-	if written, err := Emit(context.Background(), db, Event{Type: ArtifactReleased}); err != nil || written {
-		t.Fatalf("written=%v err=%v", written, err)
+	if result, err := Emit(context.Background(), db, Event{Type: ArtifactReleased}); err != nil || result.Written || !result.OccurredAt.IsZero() {
+		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	if _, err := Emit(context.Background(), db, Event{Type: "bogus"}); err == nil {
 		t.Error("unknown type emitted")

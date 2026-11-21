@@ -134,11 +134,18 @@ func (s *PostgresStore) EnqueueWebhookEvent(ctx context.Context, event WebhookEv
 		return WebhookEvent{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = enqueueWebhookEventPostgres(ctx, tx, event); err != nil {
+	result, err := enqueueWebhookEventPostgres(ctx, tx, event)
+	if err != nil {
 		return WebhookEvent{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return WebhookEvent{}, err
+	}
+	if len(event.Data) == 0 {
+		event.Data = []byte("{}")
+	}
+	if result.Written {
+		event.OccurredAt = result.OccurredAt
 	}
 	return event, nil
 }
@@ -307,17 +314,22 @@ func (s *PostgresStore) ReplayWebhookDelivery(ctx context.Context, id string, _ 
 func replayWebhookDelivery(ctx context.Context, q sqlRunner, id string) (WebhookDelivery, error) {
 	value, err := scanWebhookDelivery(q.QueryRowContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), replayed AS (
 UPDATE webhook_deliveries SET state='pending',attempts=0,next_attempt_at=clock.now,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,last_status=NULL,last_error='',delivered_at=NULL,updated_at=clock.now
-FROM clock WHERE id=$1::uuid AND state='dead' RETURNING webhook_deliveries.*)
+FROM clock WHERE id=$1::uuid AND state='dead'
+  AND EXISTS (SELECT 1 FROM domain_events e WHERE e.id=webhook_deliveries.event_id AND e.occurred_at=webhook_deliveries.event_occurred_at) RETURNING webhook_deliveries.*)
 SELECT d.id::text,d.event_id::text,e.type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at
 FROM replayed d JOIN domain_events e ON e.id=d.event_id AND e.occurred_at=d.event_occurred_at`, id))
 	if !errors.Is(err, sql.ErrNoRows) {
 		return value, err
 	}
-	var exists bool
-	if queryErr := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE id=$1::uuid)`, id).Scan(&exists); queryErr != nil {
+	var exists, dead, retained bool
+	if queryErr := q.QueryRowContext(ctx, `SELECT true, d.state='dead', EXISTS (SELECT 1 FROM domain_events e WHERE e.id=d.event_id AND e.occurred_at=d.event_occurred_at)
+FROM webhook_deliveries d WHERE d.id=$1::uuid`, id).Scan(&exists, &dead, &retained); queryErr != nil && !errors.Is(queryErr, sql.ErrNoRows) {
 		return WebhookDelivery{}, queryErr
 	}
-	if exists {
+	switch {
+	case exists && dead && !retained:
+		return WebhookDelivery{}, ErrWebhookEventNotRetained
+	case exists:
 		return WebhookDelivery{}, ErrInvalidWebhookDeliveryState
 	}
 	return WebhookDelivery{}, ErrNotFound

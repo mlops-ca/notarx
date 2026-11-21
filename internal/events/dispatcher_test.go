@@ -106,11 +106,13 @@ func TestDispatcherRetriesTransientAndSkipsPermanentErrors(t *testing.T) {
 		}
 		return nil
 	})
-	d := &Dispatcher{Source: source, Consumers: []Consumer{{Name: "c1", Handler: handler}}}
+	clock := time.Unix(1_000, 0)
+	d := &Dispatcher{Source: source, Now: func() time.Time { return clock }, Consumers: []Consumer{{Name: "c1", Handler: handler}}}
 	if n, err := d.RunOnce(context.Background()); err == nil || n != 0 || source.cursors["c1"].Seq != 0 {
 		t.Fatalf("transient: n=%d err=%v cursor=%v", n, err, source.cursors["c1"])
 	}
 	fail = false
+	clock = clock.Add(time.Minute)
 	if n, err := d.RunOnce(context.Background()); err != nil || n != 2 || source.cursors["c1"].Seq != 2 {
 		t.Fatalf("recovered: n=%d err=%v cursor=%v", n, err, source.cursors["c1"])
 	}
@@ -122,26 +124,45 @@ func TestDispatcherRetriesTransientAndSkipsPermanentErrors(t *testing.T) {
 	}
 }
 
-func TestDispatcherGivesUpAPoisonedEventAfterMaxAttempts(t *testing.T) {
+func TestDispatcherBacksOffAndGivesUpAPoisonedEventAfterMaxAttempts(t *testing.T) {
 	source := &fakeSource{events: []Stored{stored(1, "poison"), stored(2, "next")}}
+	clock := time.Unix(1_000, 0)
 	var seen []string
-	d := &Dispatcher{Source: source, MaxAttempts: 3, Consumers: []Consumer{{Name: "c1", Handler: HandlerFunc(func(_ context.Context, e Event) error {
+	d := &Dispatcher{Source: source, MaxAttempts: 3, Interval: time.Second, Now: func() time.Time { return clock }, Consumers: []Consumer{{Name: "c1", Handler: HandlerFunc(func(_ context.Context, e Event) error {
 		seen = append(seen, e.ID)
 		if e.ID == "poison" {
 			return errors.New("always failing")
 		}
 		return nil
 	})}}}
-	for pass := 1; pass <= 2; pass++ {
-		if n, err := d.RunOnce(context.Background()); err == nil || n != 0 || source.cursors["c1"].Seq != 0 {
-			t.Fatalf("pass %d: n=%d err=%v cursor=%v", pass, n, err, source.cursors["c1"])
-		}
+	if n, err := d.RunOnce(context.Background()); err == nil || n != 0 {
+		t.Fatalf("attempt 1: n=%d err=%v", n, err)
 	}
+	// Inside the backoff window (1s after the first failure) nothing is retried and nothing is reported.
+	if n, err := d.RunOnce(context.Background()); err != nil || n != 0 || len(seen) != 1 {
+		t.Fatalf("backoff: n=%d err=%v seen=%v", n, err, seen)
+	}
+	clock = clock.Add(time.Second)
+	if n, err := d.RunOnce(context.Background()); err == nil || n != 0 || len(seen) != 2 {
+		t.Fatalf("attempt 2: n=%d err=%v seen=%v", n, err, seen)
+	}
+	// The second failure doubles the delay.
+	clock = clock.Add(time.Second)
+	if n, _ := d.RunOnce(context.Background()); n != 0 || len(seen) != 2 {
+		t.Fatalf("a doubled backoff was not honoured: seen=%v", seen)
+	}
+	clock = clock.Add(time.Second)
 	if n, err := d.RunOnce(context.Background()); err != nil || n != 2 || source.cursors["c1"].Seq != 2 {
-		t.Fatalf("pass 3 must skip the poisoned event: n=%d err=%v cursor=%v", n, err, source.cursors["c1"])
+		t.Fatalf("attempt 3 must skip the poisoned event: n=%d err=%v cursor=%v", n, err, source.cursors["c1"])
 	}
 	if len(d.failures) != 0 {
-		t.Fatalf("failure counters leaked: %v", d.failures)
+		t.Fatalf("failure state leaked: %v", d.failures)
+	}
+	capped := &Dispatcher{Interval: time.Hour, Now: func() time.Time { return clock }}
+	capped.failures = map[string]*failure{}
+	capped.giveUp(Consumer{Name: "c"}, stored(1, "x"), errors.New("x"))
+	if got := capped.failures["c/x"].next.Sub(clock); got != MaxBackoff {
+		t.Fatalf("backoff = %v, want the %v cap", got, MaxBackoff)
 	}
 }
 
@@ -160,8 +181,16 @@ func TestDispatcherServesOnlyUnderTheLease(t *testing.T) {
 	if n, err := d.RunOnce(context.Background()); err != nil || n != 1 || seen != 1 {
 		t.Fatalf("the lease holder did not serve: n=%d err=%v", n, err)
 	}
-	if len(leases.acquired) != 2 || leases.acquired[0] != "event-dispatcher|internal:event-dispatcher:scan|node-1" || len(leases.released) != 1 {
-		t.Fatalf("acquired=%v released=%v", leases.acquired, leases.released)
+	if n, err := d.RunOnce(context.Background()); err != nil || n != 0 {
+		t.Fatalf("second pass: n=%d err=%v", n, err)
+	}
+	if len(leases.acquired) != 3 || leases.acquired[0] != "event-dispatcher|internal:event-dispatcher:scan|node-1" || len(leases.released) != 0 {
+		t.Fatalf("the lease must be renewed on every pass and kept between passes: acquired=%v released=%v", leases.acquired, leases.released)
+	}
+	d.Close(context.Background())
+	d.Close(context.Background())
+	if len(leases.released) != 1 || leases.released[0] != leaseTask("scan").ID {
+		t.Fatalf("Close released %v", leases.released)
 	}
 	if leaseTask("scan").ID != leaseTask("scan").ID || leaseTask("scan").ID == leaseTask("other").ID {
 		t.Error("the lease id must be stable per consumer")
@@ -170,6 +199,7 @@ func TestDispatcherServesOnlyUnderTheLease(t *testing.T) {
 	if _, err := d.RunOnce(context.Background()); err == nil {
 		t.Error("lease failure swallowed")
 	}
+	(&Dispatcher{}).Close(context.Background())
 	if (&Dispatcher{}).owner() == "" {
 		t.Error("no default owner")
 	}

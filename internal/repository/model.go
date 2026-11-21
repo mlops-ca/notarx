@@ -2,12 +2,13 @@ package repository
 
 import (
 	"errors"
-	"github.com/mlops-ca/notarx/internal/events"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/events"
 )
 
 type Format string

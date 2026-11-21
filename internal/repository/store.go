@@ -49,10 +49,12 @@ var (
 	ErrServiceAccountDisabled        = errors.New("service account is disabled")
 	ErrWebhookSubscriptionNameExists = errors.New("webhook subscription name already exists")
 	ErrInvalidWebhookDeliveryState   = errors.New("webhook delivery state is invalid")
-	ErrAPTPackageConflict            = errors.New("APT package identity already has different immutable bytes")
-	ErrConsoleThemeExists            = errors.New("console theme already exists")
-	ErrNPMDistTagTargetUnavailable   = errors.New("npm dist-tag target version is not visible")
-	ErrConsoleThemeNotFound          = errors.New("console theme not found")
+	// ErrWebhookEventNotRetained reports a delivery whose domain event left the retained log; it cannot be replayed.
+	ErrWebhookEventNotRetained     = errors.New("webhook event is no longer retained")
+	ErrAPTPackageConflict          = errors.New("APT package identity already has different immutable bytes")
+	ErrConsoleThemeExists          = errors.New("console theme already exists")
+	ErrNPMDistTagTargetUnavailable = errors.New("npm dist-tag target version is not visible")
+	ErrConsoleThemeNotFound        = errors.New("console theme not found")
 )
 
 type HostedRepositoryStore interface {
