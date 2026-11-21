@@ -18,6 +18,12 @@ type WorkloadAuthority struct {
 	ValidUntil time.Time
 }
 
+// ActiveUntil is the one place the Helm, NuGet and RubyGems stores fold a workload actor into their authority: it
+// returns Active and the earlier of until (the expiry the caller already holds, zero for none) and the policy expiry.
+func (w WorkloadAuthority) ActiveUntil(until time.Time) (bool, time.Time) {
+	return w.Active, RubyGemsEarlierAuthorityExpiry(until, w.ValidUntil)
+}
+
 func workloadAuthority(policy WorkloadTrustPolicy, issuerState WorkloadState, accountActive bool, now time.Time) WorkloadAuthority {
 	a := WorkloadAuthority{}
 	if policy.ExpiresAt != nil {
@@ -54,8 +60,8 @@ WHERE p.id=$1::uuid AND p.service_account_id=$2::uuid FOR SHARE OF p,i,a`, polic
 	return workloadAuthority(policy, WorkloadState(issuerState), ServiceAccountState(accountState) == ServiceAccountActive, time.Now()), nil
 }
 
-// WorkloadAuthorityLocked is WorkloadAuthorityTx for the memory store; the caller holds s.mu.
-func (s *MemoryStore) WorkloadAuthorityLocked(actor, policyID string) WorkloadAuthority {
+// workloadAuthorityLocked is WorkloadAuthorityTx for the memory store; the caller holds s.mu.
+func (s *MemoryStore) workloadAuthorityLocked(actor, policyID string) WorkloadAuthority {
 	accountID, ok := durableactor.ServiceAccountID(actor)
 	if !ok {
 		return WorkloadAuthority{}
@@ -69,7 +75,7 @@ func (s *MemoryStore) WorkloadAuthorityLocked(actor, policyID string) WorkloadAu
 	if !found {
 		return WorkloadAuthority{}
 	}
-	account, found := s.serviceAccounts[policy.ServiceAccountID]
+	account, found := s.serviceAccounts[workloadKey(accountID)]
 	if !found {
 		return WorkloadAuthority{}
 	}

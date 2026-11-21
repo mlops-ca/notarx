@@ -97,10 +97,7 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 		if werr != nil {
 			return a, werr
 		}
-		a.Active = w.Active
-		if !w.ValidUntil.IsZero() {
-			a.ValidUntil = repository.RubyGemsEarlierAuthorityExpiry(a.ValidUntil, w.ValidUntil)
-		}
+		a.Active, a.ValidUntil = w.ActiveUntil(a.ValidUntil)
 	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
 		credential := strings.TrimPrefix(in.Actor, durableactor.APIKeyActorPrefix)
 		account := ""

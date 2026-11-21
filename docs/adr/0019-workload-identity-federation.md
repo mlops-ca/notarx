@@ -265,7 +265,10 @@ Entry points:
   trust policy id as credential id. Every execution step re-reads the policy, its
   issuer and the service account under row locks and refuses the job unless all three
   are active and the policy has not expired; `DurablePrincipal` rebuilds the
-  principal with no role, so only the service account's grants apply.
+  principal with no role, so only the service account's grants apply. The same
+  authority applies to RubyGems governance: a workload principal is not limited to
+  replication jobs, it holds exactly its service account's grants, revalidated at
+  every commit.
 
 ### Token exchange endpoint
 

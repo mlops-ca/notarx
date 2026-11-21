@@ -36,6 +36,8 @@ func (governanceGrants) DeleteRepositoryGrant(context.Context, string, string, s
 	return repository.RepositoryGrantSet{}, domain.ErrAccessDenied
 }
 
+// A workload_federation principal keeps the authority of its service account: no role, only the account's grants, and
+// the policy, issuer and account are re-read at every commit (ADR 0019). It is not limited to replication jobs.
 // Identity capture only narrows an already-verified credential. Session expiry
 // and signed version are copied from that credential, never re-derived from a
 // potentially newer database row. No token material crosses the persistence port.

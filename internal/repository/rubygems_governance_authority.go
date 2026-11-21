@@ -90,11 +90,8 @@ func (s *MemoryStore) rubyGemsGovernanceAuthorityLocked(ctx context.Context, id 
 			break
 		}
 	case durableactor.ClassWorkload:
-		w := s.WorkloadAuthorityLocked(in.Actor, in.CredentialID)
-		a.Active = w.Active
-		if !w.ValidUntil.IsZero() {
-			a.ValidUntil = RubyGemsEarlierAuthorityExpiry(a.ValidUntil, w.ValidUntil)
-		}
+		w := s.workloadAuthorityLocked(in.Actor, in.CredentialID)
+		a.Active, a.ValidUntil = w.ActiveUntil(a.ValidUntil)
 	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
 		keyID := strings.TrimPrefix(in.Actor, durableactor.APIKeyActorPrefix)
 		accountID := ""

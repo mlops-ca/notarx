@@ -166,9 +166,6 @@ func NewJob(plan Plan, subject Subject, key string) (Job, error) {
 	if err != nil || !ValidSubject(subject) || actor == "" || len(actor) > 512 || strings.ContainsAny(actor, "\x00\r\n") || key == "" || len(key) > 200 || strings.ContainsAny(key, "\x00\r\n") {
 		return Job{}, ErrInvalid
 	}
-	if !durableactor.ValidCredential(kind, credential) {
-		return Job{}, ErrInvalid
-	}
 	j := Job{ID: uuid.NewSHA1(uuid.NameSpaceURL, []byte("rubygems-replication\x00"+actor+"\x00"+kind+"\x00"+key)).String(), PlanDigest: d, SourceRepositoryID: p.SourceRepositoryID, TargetRepositoryID: p.TargetRepositoryID, Actor: actor, ActorKind: kind, CredentialID: credential, UserID: subject.UserID, SessionID: subject.SessionID, SessionVersion: subject.SessionVersion, ValidUntil: subject.ValidUntil}
 	for i, v := range p.Items {
 		j.Items = append(j.Items, Item{Index: i, Identity: v, State: "pending"})
