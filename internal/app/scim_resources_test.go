@@ -882,7 +882,9 @@ func TestSCIMGroupListLeavesOutTheMembersOfAGroupThatExceedsItsShare(t *testing.
 	bigID := h.createGroup("Big", "g-big", big...)
 	// Fill the page with groups so that each one's share of the budget is one member: the group of three exceeds it.
 	for index := 0; index < scimMaxListedMembers-2; index++ {
-		h.store.CreateSCIMGroup(t.Context(), repository.SCIMGroupCreate{ProviderID: h.provider.ID, DisplayName: "Filler " + strconv.Itoa(index)})
+		if _, err := h.store.CreateSCIMGroup(t.Context(), repository.SCIMGroupCreate{ProviderID: h.provider.ID, DisplayName: "Filler " + strconv.Itoa(index)}); err != nil {
+			t.Fatal(err)
+		}
 	}
 	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: scimMaxListedMembers}, h.store, nil)
 	request := httptest.NewRequest(http.MethodGet, "/scim/v2/Groups?count="+strconv.Itoa(scimMaxListedMembers), nil)

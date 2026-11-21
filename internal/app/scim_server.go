@@ -163,7 +163,9 @@ func scimTokenShape(token string) bool {
 		return false
 	}
 	for _, character := range rest {
-		if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '-' || character == '_') {
+		switch {
+		case character >= 'a' && character <= 'z', character >= 'A' && character <= 'Z', character >= '0' && character <= '9', character == '-', character == '_':
+		default:
 			return false
 		}
 	}
