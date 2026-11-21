@@ -63,9 +63,10 @@ const (
 
 // ValidAssertionText reports whether value is usable as an assertion audience or subject: printable characters only
 // (no control, format or non-ASCII space characters, which are invisible or confusable and are matched byte for byte
-// by Entra and peers), no surrounding space and at most MaxAssertionAudienceLength characters.
+// by Entra and peers), no surrounding space, at most MaxAssertionAudienceLength characters and not a dot segment: a
+// subject travels as a URL path segment when it is released, and "." or ".." would be normalised away by every client.
 func ValidAssertionText(value string) bool {
-	if value == "" || value != strings.TrimSpace(value) || utf8.RuneCountInString(value) > MaxAssertionAudienceLength || !utf8.ValidString(value) {
+	if value == "" || value == "." || value == ".." || value != strings.TrimSpace(value) || utf8.RuneCountInString(value) > MaxAssertionAudienceLength || !utf8.ValidString(value) {
 		return false
 	}
 	for _, r := range value {
@@ -112,8 +113,9 @@ type ServiceAccountStore interface {
 	GetAssertionAudience(ctx context.Context, accountID, audience string) (AssertionAudience, error)
 	// PutAssertionAudience adds an entry or replaces the lifetime of an existing one and reports whether it was added.
 	PutAssertionAudience(ctx context.Context, entry AssertionAudience, audit ...AuditRecord) (AssertionAudience, bool, error)
-	// ListAssertionSubjects returns every reserved assertion subject ordered by subject, owned or orphaned.
-	ListAssertionSubjects(ctx context.Context) ([]AssertionSubject, error)
+	// ListAssertionSubjects returns up to limit reserved assertion subjects, owned or orphaned, ordered by subject and
+	// following afterSubject (empty for the first page).
+	ListAssertionSubjects(ctx context.Context, limit int, afterSubject string) ([]AssertionSubject, error)
 	// ReleaseAssertionSubject deletes the reservation of an orphaned subject and records audit in the same transaction;
 	// ErrNotFound for an unknown subject and ErrAssertionSubjectHeld when a live account still owns it.
 	ReleaseAssertionSubject(ctx context.Context, subject string, audit ...AuditRecord) error

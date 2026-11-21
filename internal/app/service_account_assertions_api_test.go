@@ -8,9 +8,11 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -56,12 +58,17 @@ type auditFaultStore struct {
 	orphans map[string]time.Time
 }
 
-func (s *auditFaultStore) ListAssertionSubjects(ctx context.Context) ([]repository.AssertionSubject, error) {
-	subjects, err := s.MemoryStore.ListAssertionSubjects(ctx)
+func (s *auditFaultStore) ListAssertionSubjects(ctx context.Context, limit int, after string) ([]repository.AssertionSubject, error) {
+	subjects, err := s.MemoryStore.ListAssertionSubjects(ctx, math.MaxInt, "")
+	if err != nil {
+		return nil, err
+	}
 	for subject, createdAt := range s.orphans {
 		subjects = append(subjects, repository.AssertionSubject{Subject: subject, CreatedAt: createdAt})
 	}
-	return subjects, err
+	sort.Slice(subjects, func(i, j int) bool { return subjects[i].Subject < subjects[j].Subject })
+	subjects = subjects[sort.Search(len(subjects), func(i int) bool { return subjects[i].Subject > after }):]
+	return subjects[:min(limit, len(subjects))], nil
 }
 
 func (s *auditFaultStore) ReleaseAssertionSubject(ctx context.Context, subject string, audit ...repository.AuditRecord) error {
@@ -641,6 +648,29 @@ func TestAssertionSubjectListAndRelease(t *testing.T) {
 		default:
 			t.Fatalf("unexpected subject %+v", item)
 		}
+	}
+	first := f.call(http.MethodGet, "/api/v2/assertion-subjects?pageSize=1", "root", "")
+	var firstPage struct {
+		Items []struct {
+			Subject string `json:"subject"`
+		} `json:"items"`
+		NextPageToken string `json:"nextPageToken"`
+	}
+	if err := json.Unmarshal(first.Body.Bytes(), &firstPage); err != nil || len(firstPage.Items) != 1 || firstPage.NextPageToken == "" {
+		t.Fatalf("first page: %d %s", first.Code, first.Body.String())
+	}
+	second := f.call(http.MethodGet, "/api/v2/assertion-subjects?pageSize=1&pageToken="+url.QueryEscape(firstPage.NextPageToken), "root", "")
+	var secondPage struct {
+		Items []struct {
+			Subject string `json:"subject"`
+		} `json:"items"`
+		NextPageToken string `json:"nextPageToken"`
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &secondPage); err != nil || len(secondPage.Items) != 1 || secondPage.Items[0].Subject == firstPage.Items[0].Subject || secondPage.NextPageToken != "" {
+		t.Fatalf("second page: %d %s", second.Code, second.Body.String())
+	}
+	if response := f.call(http.MethodGet, "/api/v2/assertion-subjects?pageToken=bogus", "root", ""); response.Code != http.StatusBadRequest {
+		t.Fatalf("a bad page token: %d", response.Code)
 	}
 	held := "/api/v2/assertion-subjects/" + url.PathEscape("notarx:service-account:keeper")
 	if response := f.call(http.MethodDelete, held, "root", ""); response.Code != http.StatusConflict || problemCode(t, response) != problemAssertionSubjectHeld {

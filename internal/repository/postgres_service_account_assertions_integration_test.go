@@ -137,16 +137,22 @@ func TestPostgresAssertionSubjectListAndRelease(t *testing.T) {
 		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM service_accounts WHERE id=$1::uuid`, account.ID)
 	})
 	find := func() (AssertionSubject, bool) {
-		subjects, err := store.ListAssertionSubjects(ctx)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, item := range subjects {
-			if item.Subject == subject {
-				return item, true
+		after := ""
+		for {
+			subjects, err := store.ListAssertionSubjects(ctx, 50, after)
+			if err != nil {
+				t.Fatal(err)
 			}
+			for _, item := range subjects {
+				if item.Subject == subject {
+					return item, true
+				}
+			}
+			if len(subjects) < 50 {
+				return AssertionSubject{}, false
+			}
+			after = subjects[len(subjects)-1].Subject
 		}
-		return AssertionSubject{}, false
 	}
 	if item, ok := find(); !ok || item.Orphaned() || item.ServiceAccountID != account.ID || item.CreatedAt.IsZero() {
 		t.Fatalf("held reservation = %+v, %v", item, ok)

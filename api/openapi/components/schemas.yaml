@@ -1053,6 +1053,8 @@ AssertionSubjectList:
     items:
       type: array
       items: {"$ref": "#/AssertionSubject"}
+    nextPageToken:
+      type: string
 PutServiceAccountAssertionAudience:
   type: object
   required: [audience]

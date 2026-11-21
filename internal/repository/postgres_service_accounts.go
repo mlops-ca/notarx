@@ -221,8 +221,9 @@ func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, acco
 	return key, err
 }
 
-func (s *PostgresStore) ListAssertionSubjects(ctx context.Context) ([]AssertionSubject, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT subject, COALESCE(service_account_id::text, ''), created_at FROM service_account_assertion_subjects ORDER BY subject`)
+func (s *PostgresStore) ListAssertionSubjects(ctx context.Context, limit int, afterSubject string) ([]AssertionSubject, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT subject, COALESCE(service_account_id::text, ''), created_at FROM service_account_assertion_subjects
+		WHERE subject > $1 ORDER BY subject LIMIT $2`, afterSubject, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -240,21 +241,24 @@ func (s *PostgresStore) ListAssertionSubjects(ctx context.Context) ([]AssertionS
 
 func (s *PostgresStore) ReleaseAssertionSubject(ctx context.Context, subject string, audit ...AuditRecord) error {
 	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
-		// The owner is read under a row lock so a concurrent delete of the account cannot change it between the check
-		// and the removal.
-		var owner sql.NullString
-		err := q.QueryRowContext(ctx, `SELECT service_account_id::text FROM service_account_assertion_subjects WHERE subject=$1 FOR UPDATE`, subject).Scan(&owner)
-		if errors.Is(err, sql.ErrNoRows) {
-			return struct{}{}, ErrNotFound
-		}
+		// The owner check is part of the statement, so it holds with or without a surrounding transaction.
+		done, err := q.ExecContext(ctx, `DELETE FROM service_account_assertion_subjects WHERE subject=$1 AND service_account_id IS NULL`, subject)
 		if err != nil {
 			return struct{}{}, err
 		}
-		if owner.Valid {
+		if n, err := done.RowsAffected(); err != nil {
+			return struct{}{}, err
+		} else if n > 0 {
+			return struct{}{}, nil
+		}
+		var exists bool
+		if err := q.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM service_account_assertion_subjects WHERE subject=$1)`, subject).Scan(&exists); err != nil {
+			return struct{}{}, err
+		}
+		if exists {
 			return struct{}{}, ErrAssertionSubjectHeld
 		}
-		_, err = q.ExecContext(ctx, `DELETE FROM service_account_assertion_subjects WHERE subject=$1`, subject)
-		return struct{}{}, err
+		return struct{}{}, ErrNotFound
 	})
 	return err
 }

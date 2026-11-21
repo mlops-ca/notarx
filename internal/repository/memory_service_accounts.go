@@ -169,7 +169,7 @@ type memoryAssertionSubject struct {
 	createdAt time.Time
 }
 
-func (s *MemoryStore) ListAssertionSubjects(_ context.Context) ([]AssertionSubject, error) {
+func (s *MemoryStore) ListAssertionSubjects(_ context.Context, limit int, afterSubject string) ([]AssertionSubject, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	subjects := make([]AssertionSubject, 0, len(s.assertions.subjects))
@@ -177,6 +177,10 @@ func (s *MemoryStore) ListAssertionSubjects(_ context.Context) ([]AssertionSubje
 		subjects = append(subjects, AssertionSubject{Subject: subject, ServiceAccountID: reservation.accountID, CreatedAt: reservation.createdAt})
 	}
 	sort.Slice(subjects, func(i, j int) bool { return subjects[i].Subject < subjects[j].Subject })
+	subjects = subjects[sort.Search(len(subjects), func(i int) bool { return subjects[i].Subject > afterSubject }):]
+	if len(subjects) > limit {
+		subjects = subjects[:limit]
+	}
 	return subjects, nil
 }
 

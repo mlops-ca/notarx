@@ -153,6 +153,17 @@ func TestMemoryAssertionAudienceNeedsASubject(t *testing.T) {
 	}
 }
 
+func TestValidAssertionTextRefusesDotSegments(t *testing.T) {
+	for _, value := range []string{".", ".."} {
+		if ValidAssertionText(value) {
+			t.Errorf("%q is a dot segment and cannot travel in a URL path", value)
+		}
+	}
+	if !ValidAssertionText("a.b") || !ValidAssertionText("...") {
+		t.Error("dots inside a value are fine")
+	}
+}
+
 func TestMemoryAssertionSubjectListAndRelease(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
@@ -172,9 +183,12 @@ func TestMemoryAssertionSubjectListAndRelease(t *testing.T) {
 	store.assertions.subjects[gone.AssertionSubject] = reservation
 	store.mu.Unlock()
 
-	subjects, err := store.ListAssertionSubjects(ctx)
+	subjects, err := store.ListAssertionSubjects(ctx, 10, "")
 	if err != nil || len(subjects) != 2 || subjects[0].Subject != gone.AssertionSubject || !subjects[0].Orphaned() || subjects[1].ServiceAccountID != live.ID || subjects[1].Orphaned() || subjects[1].CreatedAt.IsZero() {
 		t.Fatalf("list = %+v, %v", subjects, err)
+	}
+	if page, err := store.ListAssertionSubjects(ctx, 1, gone.AssertionSubject); err != nil || len(page) != 1 || page[0].Subject != live.AssertionSubject {
+		t.Fatalf("second page = %+v, %v", page, err)
 	}
 	if err := store.ReleaseAssertionSubject(ctx, live.AssertionSubject); !errors.Is(err, ErrAssertionSubjectHeld) {
 		t.Fatalf("release of a held subject err=%v", err)
@@ -188,7 +202,7 @@ func TestMemoryAssertionSubjectListAndRelease(t *testing.T) {
 		t.Fatal("a release whose audit fails must fail")
 	}
 	store.SetAuditFault(nil)
-	if subjects, _ := store.ListAssertionSubjects(ctx); len(subjects) != 2 {
+	if subjects, _ := store.ListAssertionSubjects(ctx, 10, ""); len(subjects) != 2 {
 		t.Fatalf("a failed audit rolled the release back, got %+v", subjects)
 	}
 	if err := store.ReleaseAssertionSubject(ctx, gone.AssertionSubject, audit); err != nil {

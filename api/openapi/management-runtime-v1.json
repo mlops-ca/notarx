@@ -7424,10 +7424,21 @@
         "tags": [
           "service-accounts"
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
         "description": "Lists the reserved assertion subjects (ADR 0020). A subject stays reserved after its service account is deleted; such an orphaned reservation is flagged and can be released. Administrator only.",
         "responses": {
           "200": {
             "$ref": "#/components/responses/AssertionSubjectList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
           },
           "401": {
             "$ref": "#/components/responses/Problem"
@@ -24596,6 +24607,9 @@
             "items": {
               "$ref": "#/components/schemas/AssertionSubject"
             }
+          },
+          "nextPageToken": {
+            "type": "string"
           }
         }
       },

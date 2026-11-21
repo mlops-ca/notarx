@@ -86,7 +86,8 @@ hand, so the subject must be predictable and must never change silently.
   assertion-subject release SUBJECT --yes` removes an orphaned reservation and is audited
   (`service_account.assertion_subject.release`); a subject held by a live account answers 409
   `assertion_subject_held`. Release a subject only when the Entra federated credential built on it is gone,
-  because the next account that takes it inherits that trust.
+  because the next account that takes it inherits that trust. The subject is a URL path segment of the
+  release request, so `/` travels as `%2F` (the CLI does this); a proxy in front of notarx must not decode it.
 
 ## Entra setup
 

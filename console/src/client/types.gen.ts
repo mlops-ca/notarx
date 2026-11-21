@@ -3494,6 +3494,7 @@ export type AssertionSubject = {
 
 export type AssertionSubjectList = {
   items: Array<AssertionSubject>;
+  nextPageToken?: string;
 };
 
 export type UserSession = {
@@ -12029,11 +12030,18 @@ export type PutServiceAccountAssertionAudienceResponse =
 export type ListAssertionSubjectsData = {
   body?: never;
   path?: never;
-  query?: never;
+  query?: {
+    pageSize?: number;
+    pageToken?: string;
+  };
   url: "/assertion-subjects";
 };
 
 export type ListAssertionSubjectsErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
   /**
    * Problem response
    */

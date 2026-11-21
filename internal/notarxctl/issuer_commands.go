@@ -411,31 +411,23 @@ func renderAssertionSubjects(w io.Writer, items []adminopenapi.AssertionSubject)
 }
 
 func assertionSubjectListCommand() command {
+	list := &cursorList[adminopenapi.AssertionSubject]{
+		path:    assertionSubjectsPath,
+		command: "notarxctl service-account assertion-subject list",
+		noun:    "assertion subjects",
+		render:  renderAssertionSubjects,
+	}
 	return command{
 		name:     "service-account assertion-subject list",
 		synopsis: "list the reserved assertion subjects, with the orphaned ones that can be released",
-		usage:    "notarxctl service-account assertion-subject list [--json]",
+		usage:    "notarxctl service-account assertion-subject list [--page-size N] [--cursor TOKEN | --all [--max-pages N]] [--json]",
+		setFlags: list.setFlags,
 		meta: commandMeta{
 			Resource: "service-account", Scenarios: []string{"admin"}, Stage: "m2",
 			Endpoints: []string{"GET " + assertionSubjectsPath}, MinimumRole: "platform admin",
-			OutputSchema: "AssertionSubjectList", DryRun: "unsupported", Retry: true,
+			OutputSchema: "AssertionSubjectList", Pagination: true, DryRun: "unsupported", Retry: true,
 		},
-		run: func(ctx context.Context, env *commandContext) error {
-			client, err := env.client()
-			if err != nil {
-				return err
-			}
-			var list serverPage[adminopenapi.AssertionSubject]
-			response, err := client.sendJSON(ctx, http.MethodGet, assertionSubjectsPath, requestOptions{idempotent: true}, &list)
-			if err == nil && list.Items == nil {
-				err = incompleteResponse(response, client, "assertion subject list")
-			}
-			if err != nil {
-				return err
-			}
-			meta := &envelopeMeta{Pagination: &paginationMeta{Mode: "none"}}
-			return env.render(newListPayload(list.Items), meta, func(w io.Writer) error { return renderAssertionSubjects(w, list.Items) })
-		},
+		run: list.run,
 	}
 }
 

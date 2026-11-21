@@ -6070,7 +6070,8 @@ type AssertionSubject struct {
 
 // AssertionSubjectList defines model for AssertionSubjectList.
 type AssertionSubjectList struct {
-	Items []AssertionSubject `json:"items"`
+	Items         []AssertionSubject `json:"items"`
+	NextPageToken *string            `json:"nextPageToken,omitempty"`
 }
 
 // AuditCleanupJob defines model for AuditCleanupJob.
@@ -10797,6 +10798,12 @@ type SearchArtifactsParams struct {
 // SearchArtifactsParamsMatch defines parameters for SearchArtifacts.
 type SearchArtifactsParamsMatch string
 
+// ListAssertionSubjectsParams defines parameters for ListAssertionSubjects.
+type ListAssertionSubjectsParams struct {
+	PageSize  *PageSize  `form:"pageSize,omitempty" json:"pageSize,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
 // ReplaceAuditRetentionPolicyParams defines parameters for ReplaceAuditRetentionPolicy.
 type ReplaceAuditRetentionPolicyParams struct {
 	IfMatch IfMatch `json:"If-Match"`
@@ -12763,7 +12770,7 @@ type ServerInterface interface {
 	SearchArtifacts(w http.ResponseWriter, r *http.Request, params SearchArtifactsParams)
 
 	// (GET /assertion-subjects)
-	ListAssertionSubjects(w http.ResponseWriter, r *http.Request)
+	ListAssertionSubjects(w http.ResponseWriter, r *http.Request, params ListAssertionSubjectsParams)
 
 	// (DELETE /assertion-subjects/{subject})
 	ReleaseAssertionSubject(w http.ResponseWriter, r *http.Request, subject string)
@@ -13832,8 +13839,40 @@ func (siw *ServerInterfaceWrapper) SearchArtifacts(w http.ResponseWriter, r *htt
 // ListAssertionSubjects operation middleware
 func (siw *ServerInterfaceWrapper) ListAssertionSubjects(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListAssertionSubjectsParams
+
+	// ------------- Optional query parameter "pageSize" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageSize", r.URL.Query(), &params.PageSize, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageSize"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageSize", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListAssertionSubjects(w, r)
+		siw.Handler.ListAssertionSubjects(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -26833,6 +26872,7 @@ func (response SearchArtifacts501ApplicationProblemPlusJSONResponse) VisitSearch
 }
 
 type ListAssertionSubjectsRequestObject struct {
+	Params ListAssertionSubjectsParams
 }
 
 type ListAssertionSubjectsResponseObject interface {
@@ -26855,9 +26895,23 @@ func (response ListAssertionSubjects200JSONResponse) VisitListAssertionSubjectsR
 	return err
 }
 
-type ListAssertionSubjects401ApplicationProblemPlusJSONResponse struct {
+type ListAssertionSubjects400ApplicationProblemPlusJSONResponse struct {
 	ProblemApplicationProblemPlusJSONResponse
 }
+
+func (response ListAssertionSubjects400ApplicationProblemPlusJSONResponse) VisitListAssertionSubjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAssertionSubjects401ApplicationProblemPlusJSONResponse Problem
 
 func (response ListAssertionSubjects401ApplicationProblemPlusJSONResponse) VisitListAssertionSubjectsResponse(w http.ResponseWriter) error {
 
@@ -52305,8 +52359,10 @@ func (sh *strictHandler) SearchArtifacts(w http.ResponseWriter, r *http.Request,
 }
 
 // ListAssertionSubjects operation middleware
-func (sh *strictHandler) ListAssertionSubjects(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListAssertionSubjects(w http.ResponseWriter, r *http.Request, params ListAssertionSubjectsParams) {
 	var request ListAssertionSubjectsRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListAssertionSubjects(ctx, request.(ListAssertionSubjectsRequestObject))
