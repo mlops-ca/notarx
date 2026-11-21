@@ -115,6 +115,8 @@ type Config struct {
 	// Workload is the JWT verification policy of workload identity federation
 	// (NOTARX_WORKLOAD_*, ADR 0019).
 	Workload WorkloadConfig
+	// Remote is the remote instance policy of promotion targets (NOTARX_REMOTE_*, ADR 0021).
+	Remote RemoteConfig
 	// SAML is the SAML service provider policy (NOTARX_SAML_*, ADR 0018 section 3).
 	SAML SAMLConfig
 	// SCIM is the SCIM 2.0 server policy (NOTARX_SCIM_*, ADR 0018 section 4).
@@ -603,6 +605,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.Workload = workload
+	}
+	if remote, err := remoteConfigFromEnv(cfg.Remote); err != nil {
+		return Config{}, err
+	} else {
+		cfg.Remote = remote
 	}
 	if saml, err := samlConfigFromEnv(cfg.SAML); err != nil {
 		return Config{}, err

@@ -683,6 +683,14 @@ CREATE TABLE `installation_repository_presets` (
   CONSTRAINT `installation_repository_presets_state_check` CHECK ((`state` IN ('pending', 'applied', 'skipped_existing')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `instance_identity` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `instance_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `singleton` TINYINT(1) NOT NULL DEFAULT 1,
+  PRIMARY KEY (`singleton`),
+  CONSTRAINT `instance_identity_singleton_check` CHECK ((`singleton` <> 0))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `lifecycle_jobs` (
   `attempts` INT NOT NULL DEFAULT 0,
   `completed_at` DATETIME(6) NULL,
@@ -2495,6 +2503,32 @@ CREATE TABLE `raw_groups` (
   `name` VARCHAR(255) NOT NULL,
   PRIMARY KEY (`name`),
   CONSTRAINT `raw_groups_cache_quota_bytes_check` CHECK ((`cache_quota_bytes` > 0))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `remote_instances` (
+  `audience` TEXT NOT NULL DEFAULT (''),
+  `auth_kind` TEXT NOT NULL,
+  `base_url` TEXT NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `instance_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `last_checked_at` DATETIME(6) NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `state` TEXT NOT NULL DEFAULT ('active'),
+  `token_sealed` TEXT NULL,
+  `trust_evidence` TINYINT(1) NOT NULL DEFAULT 0,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `version` BIGINT NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_remote_instances_name` (`name`),
+  KEY `ix_remote_instances_name_bytes_idx` (`name`),
+  CONSTRAINT `remote_instances_audience_check` CHECK (((CHAR_LENGTH(`audience`) <= 512) AND ((`auth_kind` <> 'workload_identity') OR (`audience` <> '')))),
+  CONSTRAINT `remote_instances_auth_kind_check` CHECK ((`auth_kind` IN ('workload_identity', 'static_token'))),
+  CONSTRAINT `remote_instances_base_url_check` CHECK (((CHAR_LENGTH(`base_url`) >= 1) AND (CHAR_LENGTH(`base_url`) <= 2048))),
+  CONSTRAINT `remote_instances_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
+  CONSTRAINT `remote_instances_state_check` CHECK ((`state` IN ('active', 'unreachable', 'disabled'))),
+  CONSTRAINT `remote_instances_token_check` CHECK (((((`auth_kind` = 'static_token') AND (`token_sealed` IS NOT NULL)) AND (`token_sealed` <> '')) OR ((`auth_kind` = 'workload_identity') AND (`token_sealed` IS NULL)))),
+  CONSTRAINT `remote_instances_version_check` CHECK ((`version` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
 CREATE TABLE `replication_checkpoints` (

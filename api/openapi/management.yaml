@@ -41,6 +41,12 @@ paths:
     "$ref": "./management/webhooks.yaml#/webhook_subscriptions"
   "/webhook-subscriptions/{subscriptionId}":
     "$ref": "./management/webhooks.yaml#/webhook_subscriptions_subscriptionId"
+  "/remote-instances":
+    "$ref": "./management/remote-instances.yaml#/remote_instances"
+  "/remote-instances/{remoteInstanceId}":
+    "$ref": "./management/remote-instances.yaml#/remote_instances_remoteInstanceId"
+  "/remote-instances/{remoteInstanceId}/test":
+    "$ref": "./management/remote-instances.yaml#/remote_instances_remoteInstanceId_test"
   "/webhook-deliveries":
     "$ref": "./management/webhooks.yaml#/webhook_deliveries"
   "/webhook-deliveries/{deliveryId}":

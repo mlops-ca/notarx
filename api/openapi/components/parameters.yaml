@@ -206,3 +206,10 @@ IfNoneMatch:
   description: Entity tag of a cached representation; a match answers 304.
   schema:
     type: string
+RemoteInstanceId:
+  name: remoteInstanceId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid

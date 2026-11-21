@@ -125,6 +125,7 @@ agree with executable tests and the
 - [Keycloak on Kubernetes](oidc-keycloak-k8s.md) — real browser callback acceptance.
 - [Repository Grant authorization](repository-grant-authorization-plan.md) — scoped runtime decisions and rollout.
 - [Service Account operations](service-account-operations.md) — stable machine principals and zero-downtime rotation.
+- [Remote instances](remote-instances.md) — register peer notarx instances as promotion targets, the instance document and the network policy.
 - [Workload identity federation](workload-identity.md) — sign in with GitHub Actions, GitLab CI and Kubernetes tokens instead of stored secrets.
 - [notarx as an OIDC issuer and Microsoft Entra setup](oidc-issuer.md) — assertion minting, audience allow-lists, the Entra procedure, key rotation, root of trust and backups.
 - [notarxctl CLI](cli.md) — client contract for CI, platform management, and agents: configuration precedence, exit codes, JSON envelope, and the current introspection commands.

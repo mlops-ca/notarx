@@ -69,3 +69,6 @@ migrations:
   000021_domain_events_emit_once.sql:
     dialect: postgres
     reason: adds the emit_domain_event_once function, the advisory-locked and retention-floor-aware insert of the catch-up reconciler, next to emit_domain_event; the MySQL baseline carries tables only
+  000023_remote_instances.sql:
+    dialect: postgres
+    reason: creates remote_instances and instance_identity with a byte-order name index; the catalogue carries both tables into the MySQL baseline

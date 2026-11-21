@@ -158,6 +158,8 @@ type MemoryStore struct {
 	eventSeqs              map[string]int64
 	eventCursors           map[string]events.Cursor
 	webhookDeliveries      map[string]WebhookDelivery
+	remoteInstances        map[string]RemoteInstance
+	localInstanceID        string
 }
 
 type mavenObjectIntent struct {

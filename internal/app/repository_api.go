@@ -24,6 +24,7 @@ import (
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
+	"github.com/mlops-ca/notarx/internal/remoteinstance"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -244,6 +245,7 @@ type GatewayStore interface {
 	repository.RuntimeNodeStore
 	repository.ScheduledTaskStore
 	repository.WebhookStore
+	repository.RemoteInstanceStore
 	repository.EmailStore
 	repository.RepositoryQuotaAlertStore
 	repository.BackgroundOperationQueueStore
@@ -267,6 +269,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("GET /readyz", dependencies.ready)
 	registerIssuerRoutes(mux, options.Issuer)
+	registerInstanceRoutes(mux, newInstanceDocumentHandler(store))
 	if metrics == nil {
 		metrics = &Metrics{}
 	}
@@ -468,8 +471,13 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		humanProviders = dependencies.IdentityRuntime
 	}
 	workloadAPI := newWorkloadIdentityHandler(workloadIdentityOptions{Scope: scope, Store: workloadStore, Providers: humanProviders, AllowPrivateNetwork: options.WorkloadAllowPrivateNetwork})
+	remoteDiscoverer := options.RemoteDiscoverer
+	if remoteDiscoverer == nil {
+		remoteDiscoverer = remoteinstance.NewDiscoverer(remoteinstance.Options{AllowPrivateNetworks: options.RemoteAllowPrivateNetworks})
+	}
+	remoteAPI := newRemoteInstanceHandler(scope, store, remoteDiscoverer)
 	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, overview: newOverviewCache(options.ReadCache, options.OverviewCacheTTL), authzCacheTTL: options.AuthzCacheTTL, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
-	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, workloadIdentityHandler: workloadAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
+	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, workloadIdentityHandler: workloadAPI, remoteInstanceHandler: remoteAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
 		BaseURL:    "/api/v2",
 		BaseRouter: openAPIServeMux{mux: mux, authorize: hostedRepositories.authenticateManagementRequest},
 		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {

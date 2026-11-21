@@ -18,6 +18,7 @@ type managementServer struct {
 	accessManagementHandler
 	identityManagementHandler
 	workloadIdentityHandler
+	remoteInstanceHandler
 	pypiYankManagementHandler
 	rawVersionManagementHandler
 	generatedRepositoryAPIAdapter

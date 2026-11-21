@@ -3116,6 +3116,84 @@ export type UpdateWebhookSubscription = {
   enabled: boolean;
 };
 
+export type RemoteInstanceAuthKind = "workload_identity" | "static_token";
+
+export type RemoteInstanceState = "active" | "unreachable" | "disabled";
+
+export type RemoteInstance = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  /**
+   * The instance id the remote reported when it was registered or last changed.
+   */
+  instanceId: string;
+  authKind: RemoteInstanceAuthKind;
+  /**
+   * Audience of the workload assertion minted for this remote; empty for a static token.
+   */
+  audience: string;
+  /**
+   * True when a static token is stored. The token itself is never returned.
+   */
+  tokenConfigured: boolean;
+  trustEvidence: boolean;
+  state: RemoteInstanceState;
+  lastCheckedAt?: string;
+  version: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RemoteInstancePage = {
+  items: Array<RemoteInstance>;
+  /**
+   * Present while more instances follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
+
+export type CreateRemoteInstance = {
+  name: string;
+  baseUrl: string;
+  authKind: RemoteInstanceAuthKind;
+  /**
+   * Required for workload_identity.
+   */
+  audience?: string;
+  trustEvidence?: boolean;
+};
+
+export type UpdateRemoteInstance = {
+  name: string;
+  baseUrl: string;
+  authKind: RemoteInstanceAuthKind;
+  audience?: string;
+  trustEvidence?: boolean;
+  enabled: boolean;
+};
+
+export type InstanceLimits = {
+  maxBlobBytes: number;
+  maxSessionBytes: number;
+  maxBlobsPerSession: number;
+  maxOpenSessionsPerPrincipal: number;
+};
+
+export type RemoteInstanceTestResult = {
+  reachable: boolean;
+  state: RemoteInstanceState;
+  checkedAt: string;
+  instanceId?: string;
+  apiVersion?: string;
+  formats: Array<string>;
+  limits?: InstanceLimits;
+  /**
+   * Why the check failed; never contains a credential.
+   */
+  error?: string;
+};
+
 export type WebhookDeliveryState =
   "pending" | "delivering" | "retrying" | "succeeded" | "dead";
 
@@ -4721,6 +4799,34 @@ export type UpdateWebhookSubscriptionWritable = {
   enabled: boolean;
 };
 
+export type CreateRemoteInstanceWritable = {
+  name: string;
+  baseUrl: string;
+  authKind: RemoteInstanceAuthKind;
+  /**
+   * Required for workload_identity.
+   */
+  audience?: string;
+  /**
+   * Required for static_token; forbidden for workload_identity.
+   */
+  token?: string;
+  trustEvidence?: boolean;
+};
+
+export type UpdateRemoteInstanceWritable = {
+  name: string;
+  baseUrl: string;
+  authKind: RemoteInstanceAuthKind;
+  audience?: string;
+  /**
+   * Replaces the sealed token; omit it to keep the stored one.
+   */
+  token?: string;
+  trustEvidence?: boolean;
+  enabled: boolean;
+};
+
 /**
  * Per-Proxy-Repository egress network proxy configuration. Only meaningful when the repository type is proxy. `password` is accepted on write (plaintext over TLS) and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.
  */
@@ -4877,6 +4983,8 @@ export type HelmPreviewIdempotencyKey = string;
  * Explicit coordinate matching. contains is a case-insensitive literal substring; prefix is a case-sensitive literal prefix. Omitting match preserves the legacy behavior of each format (Cargo name substring; other formats prefix). Complete SHA-256 queries in global search remain exact digest matches. Contains requests have a five-second server budget; narrow the query if it expires.
  */
 export type ArtifactSearchMatch = "prefix" | "contains";
+
+export type RemoteInstanceId = string;
 
 export type UserGroupId = string;
 
@@ -11300,6 +11408,274 @@ export type UpdateWebhookSubscriptionResponses = {
 
 export type UpdateWebhookSubscriptionResponse =
   UpdateWebhookSubscriptionResponses[keyof UpdateWebhookSubscriptionResponses];
+
+export type ListRemoteInstancesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    limit?: number;
+    pageToken?: string;
+  };
+  url: "/remote-instances";
+};
+
+export type ListRemoteInstancesErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type ListRemoteInstancesError =
+  ListRemoteInstancesErrors[keyof ListRemoteInstancesErrors];
+
+export type ListRemoteInstancesResponses = {
+  /**
+   * Remote notarx instances
+   */
+  200: RemoteInstancePage;
+};
+
+export type ListRemoteInstancesResponse =
+  ListRemoteInstancesResponses[keyof ListRemoteInstancesResponses];
+
+export type CreateRemoteInstanceData = {
+  body: CreateRemoteInstanceWritable;
+  path?: never;
+  query?: never;
+  url: "/remote-instances";
+};
+
+export type CreateRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type CreateRemoteInstanceError =
+  CreateRemoteInstanceErrors[keyof CreateRemoteInstanceErrors];
+
+export type CreateRemoteInstanceResponses = {
+  /**
+   * Remote notarx instance with the token redacted
+   */
+  201: RemoteInstance;
+};
+
+export type CreateRemoteInstanceResponse =
+  CreateRemoteInstanceResponses[keyof CreateRemoteInstanceResponses];
+
+export type DeleteRemoteInstanceData = {
+  body?: never;
+  path: {
+    remoteInstanceId: string;
+  };
+  query?: never;
+  url: "/remote-instances/{remoteInstanceId}";
+};
+
+export type DeleteRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type DeleteRemoteInstanceError =
+  DeleteRemoteInstanceErrors[keyof DeleteRemoteInstanceErrors];
+
+export type DeleteRemoteInstanceResponses = {
+  /**
+   * The remote instance was deleted
+   */
+  204: void;
+};
+
+export type DeleteRemoteInstanceResponse =
+  DeleteRemoteInstanceResponses[keyof DeleteRemoteInstanceResponses];
+
+export type GetRemoteInstanceData = {
+  body?: never;
+  path: {
+    remoteInstanceId: string;
+  };
+  query?: never;
+  url: "/remote-instances/{remoteInstanceId}";
+};
+
+export type GetRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetRemoteInstanceError =
+  GetRemoteInstanceErrors[keyof GetRemoteInstanceErrors];
+
+export type GetRemoteInstanceResponses = {
+  /**
+   * Remote notarx instance with the token redacted
+   */
+  200: RemoteInstance;
+};
+
+export type GetRemoteInstanceResponse =
+  GetRemoteInstanceResponses[keyof GetRemoteInstanceResponses];
+
+export type UpdateRemoteInstanceData = {
+  body: UpdateRemoteInstanceWritable;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    remoteInstanceId: string;
+  };
+  query?: never;
+  url: "/remote-instances/{remoteInstanceId}";
+};
+
+export type UpdateRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type UpdateRemoteInstanceError =
+  UpdateRemoteInstanceErrors[keyof UpdateRemoteInstanceErrors];
+
+export type UpdateRemoteInstanceResponses = {
+  /**
+   * Remote notarx instance with the token redacted
+   */
+  200: RemoteInstance;
+};
+
+export type UpdateRemoteInstanceResponse =
+  UpdateRemoteInstanceResponses[keyof UpdateRemoteInstanceResponses];
+
+export type TestRemoteInstanceData = {
+  body?: never;
+  path: {
+    remoteInstanceId: string;
+  };
+  query?: never;
+  url: "/remote-instances/{remoteInstanceId}/test";
+};
+
+export type TestRemoteInstanceErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type TestRemoteInstanceError =
+  TestRemoteInstanceErrors[keyof TestRemoteInstanceErrors];
+
+export type TestRemoteInstanceResponses = {
+  /**
+   * Outcome of the well-known check
+   */
+  200: RemoteInstanceTestResult;
+};
+
+export type TestRemoteInstanceResponse =
+  TestRemoteInstanceResponses[keyof TestRemoteInstanceResponses];
 
 export type ListWebhookDeliveriesData = {
   body?: never;

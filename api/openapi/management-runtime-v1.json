@@ -6721,6 +6721,201 @@
         }
       }
     },
+    "/remote-instances": {
+      "get": {
+        "operationId": "listRemoteInstances",
+        "description": "Lists the registered remote notarx instances by name, paged by keyset on the unique name; continue with the nextPageToken of the previous page. Platform administrators only. The token of a static-token instance is never returned.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 500
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RemoteInstanceList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createRemoteInstance",
+        "description": "Registers a remote notarx instance. The base URL must pass the egress policy (private networks are refused unless NOTARX_REMOTE_ALLOW_PRIVATE_NETWORKS is true, TLS is verified, redirects are not followed), and GET /.well-known/notarx of the remote must answer a valid instance document. An instance id equal to this instance's own id is rejected. A static token is sealed with the settings encryption key and is write-only.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRemoteInstance"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/RemoteInstance"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/remote-instances/{remoteInstanceId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RemoteInstanceId"
+        }
+      ],
+      "get": {
+        "operationId": "getRemoteInstance",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RemoteInstance"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateRemoteInstance",
+        "description": "Replaces the registration. The remote is checked again unless the instance is disabled. An omitted token keeps the sealed token; switching to workload_identity removes it.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateRemoteInstance"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RemoteInstance"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteRemoteInstance",
+        "responses": {
+          "204": {
+            "description": "The remote instance was deleted"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/remote-instances/{remoteInstanceId}/test": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RemoteInstanceId"
+        }
+      ],
+      "post": {
+        "operationId": "testRemoteInstance",
+        "description": "Fetches GET /.well-known/notarx of the remote through the egress policy and records the outcome: the state becomes active or unreachable and lastCheckedAt is set. A failed check is a 200 answer with reachable false and a reason; a remote that now reports this instance's own id or another instance id than registered is unreachable.",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/RemoteInstanceTest"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/webhook-deliveries": {
       "get": {
         "operationId": "listWebhookDeliveries",
@@ -23517,6 +23712,266 @@
           }
         }
       },
+      "RemoteInstanceAuthKind": {
+        "type": "string",
+        "enum": [
+          "workload_identity",
+          "static_token"
+        ]
+      },
+      "RemoteInstanceState": {
+        "type": "string",
+        "enum": [
+          "active",
+          "unreachable",
+          "disabled"
+        ]
+      },
+      "RemoteInstance": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "baseUrl",
+          "instanceId",
+          "authKind",
+          "audience",
+          "tokenConfigured",
+          "trustEvidence",
+          "state",
+          "version",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "instanceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The instance id the remote reported when it was registered or last changed."
+          },
+          "authKind": {
+            "$ref": "#/components/schemas/RemoteInstanceAuthKind"
+          },
+          "audience": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Audience of the workload assertion minted for this remote; empty for a static token."
+          },
+          "tokenConfigured": {
+            "type": "boolean",
+            "description": "True when a static token is stored. The token itself is never returned."
+          },
+          "trustEvidence": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RemoteInstanceState"
+          },
+          "lastCheckedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "version": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RemoteInstancePage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RemoteInstance"
+            }
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while more instances follow; pass it as pageToken for the next page."
+          }
+        }
+      },
+      "CreateRemoteInstance": {
+        "type": "object",
+        "required": [
+          "name",
+          "baseUrl",
+          "authKind"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "authKind": {
+            "$ref": "#/components/schemas/RemoteInstanceAuthKind"
+          },
+          "audience": {
+            "type": "string",
+            "maxLength": 512,
+            "description": "Required for workload_identity."
+          },
+          "token": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 4096,
+            "writeOnly": true,
+            "description": "Required for static_token; forbidden for workload_identity."
+          },
+          "trustEvidence": {
+            "type": "boolean",
+            "default": false
+          }
+        }
+      },
+      "UpdateRemoteInstance": {
+        "type": "object",
+        "required": [
+          "name",
+          "baseUrl",
+          "authKind",
+          "enabled"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "baseUrl": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048
+          },
+          "authKind": {
+            "$ref": "#/components/schemas/RemoteInstanceAuthKind"
+          },
+          "audience": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "token": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 4096,
+            "writeOnly": true,
+            "description": "Replaces the sealed token; omit it to keep the stored one."
+          },
+          "trustEvidence": {
+            "type": "boolean",
+            "default": false
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "InstanceLimits": {
+        "type": "object",
+        "required": [
+          "maxBlobBytes",
+          "maxSessionBytes",
+          "maxBlobsPerSession",
+          "maxOpenSessionsPerPrincipal"
+        ],
+        "properties": {
+          "maxBlobBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "maxSessionBytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "maxBlobsPerSession": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          },
+          "maxOpenSessionsPerPrincipal": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 1
+          }
+        }
+      },
+      "RemoteInstanceTestResult": {
+        "type": "object",
+        "required": [
+          "reachable",
+          "state",
+          "checkedAt",
+          "formats"
+        ],
+        "properties": {
+          "reachable": {
+            "type": "boolean"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RemoteInstanceState"
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "instanceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "apiVersion": {
+            "type": "string",
+            "maxLength": 16
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 32
+            }
+          },
+          "limits": {
+            "$ref": "#/components/schemas/InstanceLimits"
+          },
+          "error": {
+            "type": "string",
+            "maxLength": 1024,
+            "description": "Why the check failed; never contains a credential."
+          }
+        }
+      },
       "WebhookDeliveryState": {
         "type": "string",
         "enum": [
@@ -27859,6 +28314,15 @@
           ]
         }
       },
+      "RemoteInstanceId": {
+        "name": "remoteInstanceId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
       "UserGroupId": {
         "name": "groupId",
         "in": "path",
@@ -28726,6 +29190,44 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/WebhookSubscription"
+            }
+          }
+        }
+      },
+      "RemoteInstanceList": {
+        "description": "Remote notarx instances",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RemoteInstancePage"
+            }
+          }
+        }
+      },
+      "RemoteInstance": {
+        "description": "Remote notarx instance with the token redacted",
+        "headers": {
+          "ETag": {
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RemoteInstance"
+            }
+          }
+        }
+      },
+      "RemoteInstanceTest": {
+        "description": "Outcome of the well-known check",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RemoteInstanceTestResult"
             }
           }
         }
