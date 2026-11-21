@@ -213,6 +213,82 @@ func TestPostgresDomainEventCursor(t *testing.T) {
 	}
 }
 
+// A consumer that starts with a look-back reads the events of that window; a consumer that already has a cursor keeps it.
+func TestPostgresStartCursorReadsBackOverTheWindow(t *testing.T) {
+	store := domainEventsStore(t)
+	ctx := context.Background()
+	consumer, existing := "catchup-"+ids.New(), "catchup-existing-"+ids.New()
+	repoID := uuid.NewString()
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM domain_event_cursors WHERE consumer=$1 OR consumer=$2`, consumer, existing)
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM domain_events WHERE repository_id=$1`, repoID)
+	})
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = events.Emit(ctx, tx, events.Event{Type: events.ArtifactPublished, RepositoryID: repoID, Format: "raw", Coordinate: "before-start"}); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	types := []events.Type{events.ArtifactPublished}
+	if err = store.StartCursor(ctx, consumer, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	// Other tests share the log, so look for this event among what the window returns.
+	if !eventsContain(readEventsUntil(t, store, consumer, types, repoID), repoID, "before-start") {
+		t.Fatal("the event published before the consumer started was not read")
+	}
+	// A consumer with a cursor keeps it.
+	if _, err = store.ReadEvents(ctx, existing, types, 0, 10); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.StartCursor(ctx, existing, time.Hour); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.ReadEvents(ctx, existing, types, 0, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if eventsContain(got, repoID, "before-start") {
+		t.Fatal("StartCursor moved an existing cursor back")
+	}
+}
+
+func eventsContain(stored []events.Stored, repositoryID, coordinate string) bool {
+	for _, item := range stored {
+		if item.Event.RepositoryID == repositoryID && item.Event.Coordinate == coordinate {
+			return true
+		}
+	}
+	return false
+}
+
+// readEventsUntil reads in batches from the consumer's cursor until an event of the repository arrives or the log is
+// drained, advancing the cursor as a dispatcher would; an open emitting transaction of another test can delay it.
+func readEventsUntil(t *testing.T, store *PostgresStore, consumer string, types []events.Type, repositoryID string) []events.Stored {
+	t.Helper()
+	var all []events.Stored
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		batch, err := store.ReadEvents(context.Background(), consumer, types, 0, 1000)
+		if err != nil {
+			t.Fatal(err)
+		}
+		all = append(all, batch...)
+		if len(batch) > 0 {
+			if err = store.AdvanceCursor(context.Background(), consumer, batch[len(batch)-1].Position); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if eventsContain(all, repositoryID, "before-start") {
+			break
+		}
+	}
+	return all
+}
+
 // An event committed while an older transaction that has emitted is still open is not read past: the transaction could
 // be about to commit an event with an earlier occurred_at, which the cursor would then skip for good. A long
 // transaction that never emitted does not hold the log back, and the lag reports the emitting one.

@@ -31,6 +31,9 @@ type Source interface {
 	// still in flight could be about to commit before them, so no event is skipped by a late commit. A
 	// consumer without a cursor starts at the present.
 	ReadEvents(ctx context.Context, consumer string, types []Type, settle time.Duration, limit int) ([]Stored, error)
+	// StartCursor creates the cursor of a consumer that has none at the database clock minus lookback, so the
+	// consumer reads what was published in that window; a consumer that already has a cursor keeps it.
+	StartCursor(ctx context.Context, consumer string, lookback time.Duration) error
 	// AdvanceCursor moves the cursor forward; it never moves it back.
 	AdvanceCursor(ctx context.Context, consumer string, cursor Cursor) error
 }
@@ -70,6 +73,10 @@ type Consumer struct {
 	Name    string
 	Types   []Type
 	Handler Handler
+	// CatchUp makes a consumer that has no cursor yet start that far in the past instead of at the present, so
+	// publications made while its node did not run it (scanning disabled, an upgrade gap) are still delivered. Delivery
+	// is at least once, so a handler that is idempotent takes the replay without harm. Zero starts at the present.
+	CatchUp time.Duration
 }
 
 type permanentError struct{ error }
@@ -122,6 +129,7 @@ type Dispatcher struct {
 
 	failures map[string]*failure
 	held     map[string]tasklease.Task
+	started  map[string]bool
 	lastWarn time.Time
 }
 
@@ -232,6 +240,15 @@ func (d *Dispatcher) serve(ctx context.Context, consumer Consumer) (int, error) 
 			d.held = map[string]tasklease.Task{}
 		}
 		d.held[consumer.Name] = task
+	}
+	if consumer.CatchUp > 0 && !d.started[consumer.Name] {
+		if err := d.Source.StartCursor(ctx, consumer.Name, consumer.CatchUp); err != nil {
+			return 0, fmt.Errorf("events: start cursor of %s: %w", consumer.Name, err)
+		}
+		if d.started == nil {
+			d.started = map[string]bool{}
+		}
+		d.started[consumer.Name] = true
 	}
 	stored, err := d.Source.ReadEvents(ctx, consumer.Name, consumer.Types, d.settle(), d.batch())
 	if err != nil {

@@ -97,6 +97,25 @@ func (s *PostgresStore) EventHorizonLag(ctx context.Context) (time.Duration, err
 // EventHorizonLag implements events.LagSource; the in-memory store has no open transactions.
 func (s *MemoryStore) EventHorizonLag(context.Context) (time.Duration, error) { return 0, nil }
 
+// StartCursor implements events.Source.
+func (s *PostgresStore) StartCursor(ctx context.Context, consumer string, lookback time.Duration) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO domain_event_cursors (consumer,occurred_at,seq) VALUES ($1,clock_timestamp() - $2::interval,0) ON CONFLICT (consumer) DO NOTHING`, consumer, intervalOf(lookback))
+	return err
+}
+
+// StartCursor implements events.Source for the in-memory store.
+func (s *MemoryStore) StartCursor(_ context.Context, consumer string, lookback time.Duration) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.eventCursors == nil {
+		s.eventCursors = map[string]events.Cursor{}
+	}
+	if _, ok := s.eventCursors[consumer]; !ok {
+		s.eventCursors[consumer] = events.Cursor{OccurredAt: time.Now().UTC().Add(-lookback)}
+	}
+	return nil
+}
+
 // AdvanceCursor implements events.Source; the cursor only moves forward.
 func (s *PostgresStore) AdvanceCursor(ctx context.Context, consumer string, cursor events.Cursor) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO domain_event_cursors (consumer,occurred_at,seq) VALUES ($1,$2,$3)

@@ -97,6 +97,44 @@ func requirePublicationScan(t *testing.T, store *repository.MemoryStore, reposit
 	t.Fatalf("missing publication scan format=%q coordinate=%q digest=%q in %#v", format, coordinate, digest, jobs)
 }
 
+// A node that enables scanning later still scans what was published while it did not: the consumer's first pass reads
+// back over the retention window of the event log, and only repositories with autoScanOnPublish are scheduled.
+func TestPublicationScanConsumerCatchesUpOnPublicationsMadeBeforeItStarted(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	auto, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: "auto", Name: "auto", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	manual, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: "manual", Name: "manual", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	enablePublicationScan(t, store, auto.ID)
+	for _, repo := range []repository.HostedRepository{auto, manual} {
+		if _, err = store.PutRawAsset(ctx, repository.RawAsset{RepositoryID: repo.ID, Path: "a.txt", Digest: "sha256:c1", ObjectKey: "k", Size: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if consumer := NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, nil).Consumer(); consumer.CatchUp < 24*time.Hour {
+		t.Fatalf("catch-up window = %v, want the retention window of the event log", consumer.CatchUp)
+	}
+	// The scan consumer starts only now, after both publications.
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatRaw}, nil).Consumer()}}
+	if _, err = dispatcher.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	requirePublicationScan(t, store, auto.ID, repository.FormatRaw, "a.txt", "sha256:c1")
+	jobs, err := store.ListLifecycleJobs(ctx, manual.ID, 100)
+	if err != nil || len(jobs) != 0 {
+		t.Fatalf("a repository without auto scan was scheduled: %v %v", jobs, err)
+	}
+	// A second pass finds nothing new, and a restarted dispatcher keeps its cursor.
+	if n, err := dispatcher.RunOnce(ctx); err != nil || n != 0 {
+		t.Fatalf("second pass handled %d, %v", n, err)
+	}
+}
+
 func TestPublicationScanSchedulerEnqueuesEachPublishedDigestOnce(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()

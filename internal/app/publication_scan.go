@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/events"
+	"github.com/mlops-ca/notarx/internal/partitions"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -68,8 +69,22 @@ const PublicationScanConsumer = "publication-scan"
 // Consumer returns the scheduler as an internal consumer of artifact.published events (ADR 0021): a
 // publication schedules its scan when the repository's autoScanOnPublish is on. The scan job key is
 // idempotent, so the at-least-once delivery of the dispatcher cannot enqueue a scan twice.
+//
+// A node that starts the consumer for the first time reads back over the retention window of the event log
+// (partitions.DefaultRegistry) instead of starting at the present, so the publications of an auto-scan repository made
+// while scanning was disabled or during an upgrade gap are scheduled too.
 func (s publicationScanScheduler) Consumer() events.Consumer {
-	return events.Consumer{Name: PublicationScanConsumer, Types: []events.Type{events.ArtifactPublished}, Handler: s}
+	return events.Consumer{Name: PublicationScanConsumer, Types: []events.Type{events.ArtifactPublished}, Handler: s, CatchUp: eventLogRetention()}
+}
+
+// eventLogRetention is how long domain_events rows are kept: nothing older can be replayed.
+func eventLogRetention() time.Duration {
+	for _, spec := range partitions.DefaultRegistry() {
+		if spec.Table == "domain_events" {
+			return spec.Retention
+		}
+	}
+	return 0
 }
 
 // HandleEvent schedules the scan of a published artifact. An event of a repository that no longer exists is

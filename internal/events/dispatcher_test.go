@@ -40,6 +40,9 @@ type fakeSource struct {
 	advErr   error
 	settle   time.Duration
 	consumer string
+	starts   []string
+	lookback time.Duration
+	startErr error
 }
 
 func (f *fakeSource) ReadEvents(_ context.Context, consumer string, types []Type, settle time.Duration, limit int) ([]Stored, error) {
@@ -55,6 +58,12 @@ func (f *fakeSource) ReadEvents(_ context.Context, consumer string, types []Type
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeSource) StartCursor(_ context.Context, consumer string, lookback time.Duration) error {
+	f.starts = append(f.starts, consumer)
+	f.lookback = lookback
+	return f.startErr
 }
 
 func (f *fakeSource) AdvanceCursor(_ context.Context, consumer string, cursor Cursor) error {
@@ -262,6 +271,30 @@ func TestDispatcherObservesAndWarnsAboutHorizonLag(t *testing.T) {
 	source.err = errors.New("stats down")
 	if _, err := d.RunOnce(context.Background()); err != nil || !strings.Contains(logs.String(), "lag unavailable") {
 		t.Fatalf("a lag failure must be logged without failing the pass: %v %s", err, logs.String())
+	}
+}
+
+func TestDispatcherStartsACatchUpConsumerOnceBeforeReading(t *testing.T) {
+	source := &fakeSource{events: []Stored{stored(1, "a")}}
+	consumer := Consumer{Name: "late", CatchUp: 72 * time.Hour, Handler: HandlerFunc(func(context.Context, Event) error { return nil })}
+	plain := Consumer{Name: "plain", Handler: consumer.Handler}
+	d := &Dispatcher{Source: source, Consumers: []Consumer{consumer, plain}}
+	for range 2 {
+		if _, err := d.RunOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(source.starts) != 1 || source.starts[0] != "late" || source.lookback != 72*time.Hour {
+		t.Fatalf("starts = %v lookback = %v; want one start of the catch-up consumer", source.starts, source.lookback)
+	}
+	source.startErr = errors.New("down")
+	d = &Dispatcher{Source: source, Consumers: []Consumer{consumer}}
+	if _, err := d.RunOnce(context.Background()); err == nil {
+		t.Fatal("a failed cursor start was swallowed")
+	}
+	source.startErr = nil
+	if _, err := d.RunOnce(context.Background()); err != nil || len(source.starts) != 3 {
+		t.Fatalf("the start must be retried after a failure: %v %v", err, source.starts)
 	}
 }
 

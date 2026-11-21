@@ -189,7 +189,7 @@ long transaction that never emits (an import, a job, an idle session) does not h
 consumers by the time it stays open after its first emission. The gauge `notarx_event_horizon_lag_seconds` and a
 dispatcher warning (above one minute) report that delay. `occurred_at` is always the database clock at emission, never a caller-supplied time. One node serves a
 consumer at a time through a lease row of `scheduled_tasks` (kind `event-dispatcher`) that it renews on every
-pass; a consumer without a cursor starts at the present; delivery is at least once, a failed event is
+pass; a consumer without a cursor starts at the present, except one that declares a catch-up window: the scan consumer starts at the retention window of the log (14 d), so publications made while scanning was off or during an upgrade gap are still scheduled (the scan job key is idempotent); delivery is at least once, a failed event is
 retried with an exponential backoff (to five minutes), and one that fails ten times in a row is logged and
 skipped so a poisoned event cannot block the consumer.
 `webhook_deliveries` carries `event_occurred_at` so its join to `domain_events` is pruned to one

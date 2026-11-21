@@ -74,7 +74,7 @@ var publishedCandidateQueries = append([]string{
 WHERE a.updated_at >= $1 AND NOT EXISTS (SELECT 1 FROM hosted_repositories h WHERE h.id = a.repository_id AND h.raw_layout = 'versioned') AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.dedupe_key = 'artifact.published|' || a.repository_id::text || '|' || a.path || '|' || a.digest || '|' AND e.occurred_at >= $1)
 ORDER BY a.updated_at,a.repository_id,a.path LIMIT $2`,
 	`SELECT v.repository_id::text,'raw',v.name || '@' || v.version,v.manifest_digest FROM native_raw_versions v
-WHERE v.state = 'sealed' AND v.sealed_at >= $1 AND `+notAnnounced("v.repository_id", "v.name || '@' || v.version", "v.manifest_digest")+`
+WHERE v.state = 'sealed' AND v.sealed_at >= $1 AND ` + notAnnounced("v.repository_id", "v.name || '@' || v.version", "v.manifest_digest") + `
 ORDER BY v.sealed_at,v.repository_id,v.name,v.version LIMIT $2`,
 	`SELECT m.repository_id::text,'oci',m.name,m.digest FROM native_oci_manifests m
 WHERE m.created_at >= $1 AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.dedupe_key = 'artifact.published|' || m.repository_id::text || '|' || m.name || '|' || m.digest || '|' AND e.occurred_at >= $1)
