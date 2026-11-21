@@ -247,8 +247,44 @@ func (s *PostgresStore) BeginImportCommit(ctx context.Context, sessionID string,
 }
 
 // CompleteImportSession implements ImportSessionStore.
-func (s *PostgresStore) CompleteImportSession(ctx context.Context, sessionID string, now time.Time) error {
-	return s.transitionImportSession(ctx, sessionID, now, ImportSessionCommitted, ImportSessionCommitting)
+func (s *PostgresStore) CompleteImportSession(ctx context.Context, sessionID string, now time.Time, provenance ArtifactPromotion) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, `UPDATE import_sessions SET state=$2,updated_at=$3 WHERE id=$1::uuid AND state=$4`, sessionID, string(ImportSessionCommitted), now, string(ImportSessionCommitting))
+	if err != nil {
+		return err
+	}
+	if n, rowsErr := result.RowsAffected(); rowsErr != nil {
+		return rowsErr
+	} else if n != 1 {
+		var exists bool
+		if err = tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM import_sessions WHERE id=$1::uuid)`, sessionID).Scan(&exists); err != nil {
+			return err
+		}
+		if !exists {
+			return ErrNotFound
+		}
+		return ErrImportSessionClosed
+	}
+	if err = insertArtifactPromotion(ctx, tx, completedImportProvenance(provenance, sessionID, now)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// completedImportProvenance completes the provenance draft of an import: completed, one attempt, no job, keyed by the session.
+func completedImportProvenance(provenance ArtifactPromotion, sessionID string, now time.Time) ArtifactPromotion {
+	provenance.IdempotencyKey, provenance.State, provenance.Attempt, provenance.JobID, provenance.CompletedAt = ImportPromotionKey(sessionID), ArtifactPromotionCompleted, 1, "", now
+	if provenance.ChainPath == nil {
+		provenance.ChainPath = []PromotionChainHop{}
+	}
+	if provenance.Approvals == nil {
+		provenance.Approvals = []PromotionApproval{}
+	}
+	return provenance
 }
 
 // AbortImportSession implements ImportSessionStore. Aborting an aborted session changes nothing.

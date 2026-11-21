@@ -18,7 +18,11 @@ type generatedRepositoryAPIAdapter struct {
 	*sourceapi.Adapter
 	*migrationapi.BatchAdapter
 	managementScope
-	store                  repository.HostedRepositoryStore
+	store repository.HostedRepositoryStore
+	// promotions are the provenance and batch ports of store, asserted once by NewGatewayHandler.
+	promotions promotionStores
+	// promotionMaxHops is NOTARX_PROMOTION_MAX_HOPS, defaulted by NewGatewayHandler.
+	promotionMaxHops       int
 	sessions               nativeMavenHandler
 	npmRestore             repository.NPMRestoreStore
 	aptPublication         *aptpublication.Manager

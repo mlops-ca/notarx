@@ -54,7 +54,7 @@ func (h generatedRepositoryAPIAdapter) ListArtifactPromotions(w http.ResponseWri
 			query.RepositoryIDs = ids
 		}
 	}
-	page, err := h.sessions.store.(promotionStores).PageArtifactPromotions(r.Context(), query)
+	page, err := h.promotions.PageArtifactPromotions(r.Context(), query)
 	if errors.Is(err, repository.ErrInvalidPageToken) {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "pageToken is not valid for this listing")
 		return
@@ -107,7 +107,7 @@ func artifactPromotionResponse(promotion repository.ArtifactPromotion) adminopen
 		Id: uuid.MustParse(promotion.ID), TargetRepositoryId: uuid.MustParse(promotion.TargetRepositoryID), Format: adminopenapi.Format(promotion.Format),
 		Coordinate: promotion.Coordinate, Digest: promotion.Digest, OriginRepository: promotion.OriginRepository,
 		ChainPath: make([]adminopenapi.PromotionChainHop, 0, len(promotion.ChainPath)), RequestedBy: promotion.RequestedBy,
-		State: adminopenapi.ArtifactPromotionState(promotion.State), Attempt: promotion.Attempt, IdempotencyKey: promotion.IdempotencyKey,
+		State: adminopenapi.ArtifactPromotionState(promotion.State), Attempt: promotion.Attempt,
 		Approvals: make([]adminopenapi.PromotionApproval, 0, len(promotion.Approvals)), CreatedAt: promotion.CreatedAt,
 	}
 	for _, hop := range promotion.ChainPath {

@@ -127,8 +127,10 @@ type ImportSessionStore interface {
 	// otherwise) and keeps it at least ImportCommitGrace from now (see there). A session that is already committing stays
 	// so; any other state is ErrImportSessionClosed.
 	BeginImportCommit(ctx context.Context, sessionID string, now time.Time) error
-	// CompleteImportSession moves a committing session to committed (ErrImportSessionClosed otherwise).
-	CompleteImportSession(ctx context.Context, sessionID string, now time.Time) error
+	// CompleteImportSession moves a committing session to committed (ErrImportSessionClosed otherwise) and, in the same
+	// transaction, records provenance as the completed provenance row of the imported artifact, so a committed session
+	// always has its row and a later promotion of the artifact continues its chain path (ADR 0021, Chains).
+	CompleteImportSession(ctx context.Context, sessionID string, now time.Time, provenance ArtifactPromotion) error
 	// FailImportCommit moves a committing session whose commit the format refused to aborted, so a commit that can never
 	// succeed does not hold its staging capacity and its idempotency key until the expiry: the sender's retry then opens a
 	// new session. An aborted session stays so, any other state is ErrImportSessionClosed. The staging objects are removed

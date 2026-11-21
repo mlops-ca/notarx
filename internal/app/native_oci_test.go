@@ -31,7 +31,7 @@ func TestNativeOCIHostedUploadMountManifestRangeAndDelete(t *testing.T) {
 	enablePublicationScan(t, store, repo.ID)
 	// The publish emits artifact.published in its own transaction and the scan scheduler consumes it from the event log;
 	// the handler no longer schedules the scan itself. The first pass creates the consumer's cursor.
-	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatOCI}, nil).Consumer()}}
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatOCI}, testEventRetention, nil).Consumer()}}
 	if _, err = dispatcher.RunOnce(context.Background()); err != nil {
 		t.Fatal(err)
 	}

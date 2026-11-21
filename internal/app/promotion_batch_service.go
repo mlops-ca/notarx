@@ -24,7 +24,7 @@ type PromotionBatchService struct {
 }
 
 func newPromotionBatchService(h generatedRepositoryAPIAdapter) PromotionBatchService {
-	return PromotionBatchService{PromotionService: newPromotionService(h), batches: h.sessions.store.(promotionStores)}
+	return PromotionBatchService{PromotionService: newPromotionService(h), batches: h.promotions}
 }
 
 // PromotionBatchRequest is one validated request to promote a batch.
@@ -108,8 +108,9 @@ func (s PromotionBatchService) Create(ctx context.Context, in PromotionBatchRequ
 	if found && existing.RequestHash != hash {
 		return PromotionBatchView{}, batchError(http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing promotion batch")
 	}
+	target := s.resolveTarget(ctx, in.Source, in.TargetID)
 	if !found {
-		if problems := s.admitAll(ctx, in); len(problems) > 0 {
+		if problems := s.admitAll(ctx, in, target); len(problems) > 0 {
 			refusal := batchError(http.StatusUnprocessableEntity, "promotion_batch_rejected", fmt.Sprintf("%d of %d items were refused; nothing was queued", len(problems), len(in.Items)))
 			refusal.Items = problems
 			return PromotionBatchView{}, refusal
@@ -126,7 +127,7 @@ func (s PromotionBatchService) Create(ctx context.Context, in PromotionBatchRequ
 			return PromotionBatchView{}, batchError(http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing promotion batch")
 		}
 	}
-	if perr := s.queue(ctx, in, batch); perr != nil {
+	if perr := s.queue(ctx, in, batch, target, !found); perr != nil {
 		return PromotionBatchView{}, perr
 	}
 	view, err := s.view(ctx, batch)
@@ -150,14 +151,14 @@ func (s PromotionBatchService) lookup(ctx context.Context, in PromotionBatchRequ
 	return s.batches.FindPromotionBatch(ctx, in.TargetID, in.IdempotencyKey)
 }
 
-// admitAll runs the admission checks of every item and returns the refusals; none means the whole batch is admitted.
-func (s PromotionBatchService) admitAll(ctx context.Context, in PromotionBatchRequest) []PromotionBatchItemProblem {
+// admitAll runs the admission checks of every item against the resolved target and returns the refusals; none means the
+// whole batch is admitted.
+func (s PromotionBatchService) admitAll(ctx context.Context, in PromotionBatchRequest, target *promotionTarget) []PromotionBatchItemProblem {
 	var problems []PromotionBatchItemProblem
-	target := s.resolveTarget(ctx, in.Source, in.TargetID)
 	seen := map[[2]string]int{}
 	for index, item := range in.Items {
 		problem := func(status int, code, message string) {
-			problems = append(problems, PromotionBatchItemProblem{Index: index, Coordinate: item.Coordinate, Digest: item.Digest, Status: status, Code: code, Message: message})
+			problems = append(problems, itemProblem(index, item, status, code, message))
 		}
 		key := [2]string{item.Coordinate, item.Digest}
 		if first, duplicate := seen[key]; duplicate {
@@ -176,6 +177,10 @@ func (s PromotionBatchService) admitAll(ctx context.Context, in PromotionBatchRe
 	return problems
 }
 
+func itemProblem(index int, item repository.PromotionBatchItem, status int, code, message string) PromotionBatchItemProblem {
+	return PromotionBatchItemProblem{Index: index, Coordinate: item.Coordinate, Digest: item.Digest, Status: status, Code: code, Message: message}
+}
+
 func optionalSuite(item repository.PromotionBatchItem) *string {
 	if item.AptTargetSuite == "" {
 		return nil
@@ -187,21 +192,43 @@ func (s PromotionBatchService) itemRequest(in PromotionBatchRequest, item reposi
 	return PromotionRequest{Principal: in.Principal, Source: in.Source, TargetID: in.TargetID, Coordinate: item.Coordinate, Digest: item.Digest, AptTargetSuite: optionalSuite(item), IdempotencyKey: key}
 }
 
-// queue enqueues every item that has no provenance row yet, in order. An item that already has a row is not
-// admitted again, so a replay never flips on a policy tightened since the first request.
-func (s PromotionBatchService) queue(ctx context.Context, in PromotionBatchRequest, batch repository.PromotionBatch) *PromotionBatchError {
+// queue enqueues every item that has no provenance row yet, in order. An item that already has a row is not admitted
+// again, so a replay never flips on a policy tightened since the first request. admitted says the caller admitted the
+// whole batch against target a moment ago (a fresh batch); a replay is not, so its unqueued items are admitted first and
+// one refusal fails the whole replay before any of them is queued. The items are then queued as admitted, never a
+// second time.
+func (s PromotionBatchService) queue(ctx context.Context, in PromotionBatchRequest, batch repository.PromotionBatch, target *promotionTarget, admitted bool) *PromotionBatchError {
 	rows, err := s.promotions.GetArtifactPromotionsByKeys(ctx, s.provenanceKeys(batch))
 	if err != nil {
 		return batchError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
 	}
-	target := s.resolveTarget(ctx, in.Source, in.TargetID)
-	for index, item := range batch.Items {
-		if _, queued := rows[promotionIdempotencyKey(batch.TargetRepositoryID, PromotionBatchItemKey(batch.ID, index))]; queued {
-			continue
+	var pending []int
+	for index := range batch.Items {
+		if _, queued := rows[promotionIdempotencyKey(batch.TargetRepositoryID, PromotionBatchItemKey(batch.ID, index))]; !queued {
+			pending = append(pending, index)
 		}
-		if _, perr := s.request(ctx, s.itemRequest(in, item, PromotionBatchItemKey(batch.ID, index)), target); perr != nil {
+	}
+	if !admitted {
+		var problems []PromotionBatchItemProblem
+		for _, index := range pending {
+			item := batch.Items[index]
+			if _, perr := s.admit(ctx, s.itemRequest(in, item, ""), target); perr != nil {
+				problems = append(problems, itemProblem(index, item, perr.Status, perr.Code, perr.Message))
+			}
+		}
+		if len(problems) > 0 {
+			refusal := batchError(http.StatusUnprocessableEntity, "promotion_batch_rejected", fmt.Sprintf("%d of %d items were refused; nothing was queued", len(problems), len(pending)))
+			refusal.Items = problems
+			return refusal
+		}
+	}
+	for _, index := range pending {
+		item := batch.Items[index]
+		request := s.itemRequest(in, item, PromotionBatchItemKey(batch.ID, index))
+		request.admitted = true
+		if _, perr := s.request(ctx, request, target); perr != nil {
 			refusal := &PromotionBatchError{PromotionError: *perr}
-			refusal.Items = []PromotionBatchItemProblem{{Index: index, Coordinate: item.Coordinate, Digest: item.Digest, Status: perr.Status, Code: perr.Code, Message: perr.Message}}
+			refusal.Items = []PromotionBatchItemProblem{itemProblem(index, item, perr.Status, perr.Code, perr.Message)}
 			return refusal
 		}
 	}

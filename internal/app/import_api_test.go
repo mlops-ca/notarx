@@ -403,8 +403,8 @@ func TestImportUploadDeletesTheObjectItStagedWhenTheSessionClosed(t *testing.T) 
 // A commit that lost the race against another commit of the same session still answers 200: the artifact is published.
 type racingCompleteStore struct{ repository.ImportSessionStore }
 
-func (s racingCompleteStore) CompleteImportSession(ctx context.Context, id string, now time.Time) error {
-	if err := s.ImportSessionStore.CompleteImportSession(ctx, id, now); err != nil {
+func (s racingCompleteStore) CompleteImportSession(ctx context.Context, id string, now time.Time, provenance repository.ArtifactPromotion) error {
+	if err := s.ImportSessionStore.CompleteImportSession(ctx, id, now, provenance); err != nil {
 		return err
 	}
 	return repository.ErrImportSessionClosed
@@ -501,5 +501,65 @@ func TestImportPublishesAsTheOpeningPrincipal(t *testing.T) {
 	}
 	if len(published) != 1 || published[0].Coordinate != "actor.txt" || !strings.Contains(string(published[0].Payload), `"actor":"alice"`) {
 		t.Fatalf("published events = %+v", published)
+	}
+}
+
+// imported pushes one Raw file with the given chainPath member of the session body into the fixture target and commits it.
+func (f importFixture) imported(path, content, key, chainPath string) {
+	f.t.Helper()
+	opened, session := f.open(claim(path, content, key, chainPath))
+	if opened.Code != http.StatusCreated {
+		f.t.Fatalf("open = %d %s", opened.Code, opened.Body.String())
+	}
+	id, _ := session["id"].(string)
+	if up := f.upload(id, sha(content), content); up.Code != http.StatusNoContent {
+		f.t.Fatalf("upload = %d %s", up.Code, up.Body.String())
+	}
+	if done := f.commit(id); done.Code != http.StatusOK {
+		f.t.Fatalf("commit = %d %s", done.Code, done.Body.String())
+	}
+}
+
+func TestImportRecordsProvenanceAndALocalPromotionContinuesItsChainPath(t *testing.T) {
+	f := newImportFixture(t)
+	ctx := context.Background()
+	const peer, content = "0197c0de-0000-7000-8000-000000000001", "release notes\n"
+	hop := func(instance, repo string) string {
+		return fmt.Sprintf(`{"instance":%q,"repository":%q,"ruleId":"","at":"2026-01-01T00:00:00Z"}`, instance, repo)
+	}
+	f.imported("docs/notes.txt", content, "k1", `,"chainPath":[`+hop(peer, "dev")+`]`)
+	row, err := f.store.GetImportedArtifactPromotion(ctx, f.target.ID, repository.FormatRaw, "docs/notes.txt", "sha256:"+sha(content))
+	if err != nil || row.State != repository.ArtifactPromotionCompleted || row.OriginInstanceID != peer || row.OriginRepository != "dev" || row.JobID != "" ||
+		len(row.ChainPath) != 2 || row.ChainPath[0].Repository != "dev" || row.ChainPath[1].Instance != f.local || row.ChainPath[1].Repository != f.target.Name {
+		t.Fatalf("import provenance = %+v %v", row, err)
+	}
+	if page, pageErr := f.store.PageArtifactPromotions(ctx, repository.ArtifactPromotionQuery{TargetRepositoryID: f.target.ID}); pageErr != nil || len(page.Items) != 1 {
+		t.Fatalf("provenance listing = %+v %v", page, pageErr)
+	}
+	next, err := f.store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "next", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := newPromotionService(generatedRepositoryAPIAdapter{store: f.store, sessions: nativeMavenHandler{store: f.store}, securityPolicies: f.store, intelligence: f.store,
+		audit: f.store, quarantine: f.store, cargo: f.store, promotions: f.store, promotionMaxHops: 3})
+	request := func(coordinate, digest, key string) (PromotionResult, *PromotionError) {
+		return service.Request(ctx, PromotionRequest{Principal: Principal{Actor: "promoter", Admin: true}, Source: f.target, TargetID: next.ID, Coordinate: coordinate, Digest: digest, IdempotencyKey: key})
+	}
+	result, perr := request("docs/notes.txt", "sha256:"+sha(content), "first")
+	if perr != nil || len(result.Promotion.ChainPath) != 2 || result.Promotion.ChainPath[0].Repository != "dev" || result.Promotion.ChainPath[1].Repository != f.target.Name {
+		t.Fatalf("a promotion of an imported artifact = %+v %+v", result.Promotion, perr)
+	}
+	// A path at the cap is refused: three reported hops plus this instance's own is one over.
+	f.imported("docs/long.txt", "long", "k2", `,"chainPath":[`+hop(peer, "a")+","+hop(peer, "b")+","+hop(peer, "c")+`]`)
+	if _, perr = request("docs/long.txt", "sha256:"+sha("long"), "long"); perr == nil || perr.Code != "chain_too_long" {
+		t.Fatalf("a chain over the cap = %+v", perr)
+	}
+	// A route that already passed the target repository of this instance is refused.
+	f.imported("docs/loop.txt", "loop", "k3", `,"chainPath":[`+hop(f.local, "next")+`]`)
+	if _, perr = request("docs/loop.txt", "sha256:"+sha("loop"), "loop"); perr == nil || perr.Code != "chain_loop" {
+		t.Fatalf("a chain through the target = %+v", perr)
+	}
+	if page, pageErr := f.store.PageArtifactPromotions(ctx, repository.ArtifactPromotionQuery{TargetRepositoryID: next.ID}); pageErr != nil || len(page.Items) != 1 {
+		t.Fatalf("refused promotions wrote rows: %+v %v", page, pageErr)
 	}
 }

@@ -1995,7 +1995,7 @@ export const getRemoteInstance = <ThrowOnError extends boolean = false>(options:
 });
 
 /**
- * Replaces the registration. The remote is checked again unless the instance is disabled. An omitted token keeps the sealed token only while baseUrl and audience are unchanged; changing either of a static_token instance requires a new token in the same request (422 token_required), so a credential sealed for one host is never sent to another. Switching to workload_identity removes it.
+ * Replaces the registration. The remote is checked again unless the instance is disabled. An omitted token keeps the sealed token only while baseUrl and audience are unchanged; changing either of a static_token instance requires a new token in the same request (422 token_required), so a credential sealed for one host is never sent to another. An enabling update that discovers another instance id than the registered one is refused with 422 instance_changed unless the same request supplies a new token. Switching to workload_identity removes it.
  */
 export const updateRemoteInstance = <ThrowOnError extends boolean = false>(options: Options<UpdateRemoteInstanceData, ThrowOnError>): RequestResult<UpdateRemoteInstanceResponses, UpdateRemoteInstanceErrors, ThrowOnError> => (options.client ?? client).put<UpdateRemoteInstanceResponses, UpdateRemoteInstanceErrors, ThrowOnError>({
     security: [{

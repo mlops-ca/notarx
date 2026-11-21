@@ -359,7 +359,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		if cfg.HasRole(config.NodeRoleWorker) {
 			authority := authorization.Authenticator{AdminToken: cfg.AdminToken, AdminActor: cfg.AdminActor, ResolverToken: cfg.ResolverToken, ResolverActor: cfg.ResolverActor, RepositoryReaders: cfg.RepositoryReaders, LegacyReadPermissive: cfg.LegacyReadPermissive}
 			promotionEvaluator = app.NewPromotionEvaluator(app.PromotionEvaluatorOptions{Store: gatewayStore, Authorizer: authorization.RepositoryAuthorizer{Grants: gatewayStore, Legacy: authority},
-				Owner: cfg.InstanceID + "/" + runtimeSessionID, Interval: cfg.Promotion.EvaluatorInterval, Concurrency: cfg.Promotion.EvaluatorConcurrency})
+				MaxHops: cfg.Promotion.MaxHops, Owner: cfg.InstanceID + "/" + runtimeSessionID, Interval: cfg.Promotion.EvaluatorInterval, Concurrency: cfg.Promotion.EvaluatorConcurrency})
 		}
 	}
 	metrics := (&app.Metrics{}).

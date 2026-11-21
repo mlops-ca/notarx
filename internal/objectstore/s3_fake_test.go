@@ -122,6 +122,8 @@ func (f *fakeS3) handle(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case query.Has("uploads"):
 		label = "CreateMultipartUpload"
+	case query.Has("partNumber") && r.Header.Get("x-amz-copy-source") != "":
+		label = "UploadPartCopy"
 	case query.Has("partNumber"):
 		label = "UploadPart"
 	case query.Has("uploadId") && r.Method == http.MethodPost:
@@ -208,6 +210,27 @@ func (f *fakeS3) handle(w http.ResponseWriter, r *http.Request) {
 		upload.parts[number] = body
 		w.Header().Set("ETag", `"`+fmt.Sprintf("%x", md5.Sum(body))+`"`)
 		w.WriteHeader(http.StatusOK)
+	case "UploadPartCopy":
+		source, _ := url.PathUnescape(r.Header.Get("x-amz-copy-source"))
+		original, ok := f.objects[strings.TrimPrefix(source, f.bucket+"/")]
+		upload, uploaded := f.uploads[query.Get("uploadId")]
+		if !ok || !uploaded {
+			writeError(w, http.StatusNotFound, "NoSuchKey")
+			return
+		}
+		var first, last int
+		if _, err := fmt.Sscanf(r.Header.Get("x-amz-copy-source-range"), "bytes=%d-%d", &first, &last); err != nil || last >= len(original.body) {
+			writeError(w, http.StatusBadRequest, "InvalidArgument")
+			return
+		}
+		number, _ := strconv.Atoi(query.Get("partNumber"))
+		if f.failPart != 0 && number == f.failPart {
+			writeError(w, http.StatusInternalServerError, "InternalError")
+			return
+		}
+		upload.parts[number] = original.body[first : last+1]
+		w.Header().Set("Content-Type", "application/xml")
+		_, _ = io.WriteString(w, `<CopyPartResult><ETag>"part"</ETag><LastModified>2026-01-01T00:00:00.000Z</LastModified></CopyPartResult>`)
 	case "CompleteMultipartUpload":
 		upload, ok := f.uploads[query.Get("uploadId")]
 		if !ok {
