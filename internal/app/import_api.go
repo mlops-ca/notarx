@@ -467,14 +467,15 @@ func (h importHandler) CommitImport(w http.ResponseWriter, r *http.Request, impo
 			h.writeImporterError(w, err)
 			return
 		}
-		if err = h.sessions.CompleteImportSession(ctx, session.ID, h.now()); err != nil {
+		// A concurrent or retried commit of the same session may have completed it first; the import is published either way.
+		if err = h.sessions.CompleteImportSession(ctx, session.ID, h.now()); err != nil && !errors.Is(err, repository.ErrImportSessionClosed) {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "complete the import session failed")
 			return
 		}
 		h.auditCommit(ctx, principal, target, session)
 		committed, err := h.sessions.GetImportSession(ctx, session.ID)
-		if err != nil {
-			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "get the import session failed")
+		if err != nil || committed.State != repository.ImportSessionCommitted {
+			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "the import session is not committed")
 			return
 		}
 		h.writeSession(w, r, http.StatusOK, committed)

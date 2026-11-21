@@ -17,6 +17,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/events"
+	formatmodule "github.com/mlops-ca/notarx/internal/format"
+	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -395,6 +397,44 @@ func TestImportUploadDeletesTheObjectItStagedWhenTheSessionClosed(t *testing.T) 
 	}
 	if keys, _ := f.staging.List(context.Background(), "native/imports/"); len(keys) != 0 {
 		t.Fatalf("a closed session kept %v", keys)
+	}
+}
+
+// A commit that lost the race against another commit of the same session still answers 200: the artifact is published.
+type racingCompleteStore struct{ repository.ImportSessionStore }
+
+func (s racingCompleteStore) CompleteImportSession(ctx context.Context, id string, now time.Time) error {
+	if err := s.ImportSessionStore.CompleteImportSession(ctx, id, now); err != nil {
+		return err
+	}
+	return repository.ErrImportSessionClosed
+}
+
+func TestImportCommitThatLostTheRaceToAnotherCommitStillSucceeds(t *testing.T) {
+	f := newImportFixture(t)
+	const content = "race"
+	_, session := f.open(claim("race.txt", content, "r1", ""))
+	id := session["id"].(string)
+	if got := f.upload(id, sha(content), content); got.Code != http.StatusNoContent {
+		t.Fatalf("upload = %d", got.Code)
+	}
+	scope := newManagementScope(f.store, f.store, f.store, f.store, testAuthenticator(), nil)
+	registry, err := formatmodule.New(rawformat.New(rawformat.Options{Store: f.store, Repositories: f.store, Objects: objectstore.NewMemoryStore()}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newImportHandler(importHandlerOptions{Scope: scope, Store: f.store, Registry: registry, Staging: f.staging})
+	handler.sessions = racingCompleteStore{f.store}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /imports/{importId}/commit", func(w http.ResponseWriter, r *http.Request) {
+		handler.CommitImport(w, r, uuid.MustParse(r.PathValue("importId")))
+	})
+	r := httptest.NewRequest(http.MethodPost, "/imports/"+id+"/commit", nil)
+	authorize(r, "admin-secret")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"state":"committed"`) {
+		t.Fatalf("commit = %d %s", w.Code, w.Body.String())
 	}
 }
 
