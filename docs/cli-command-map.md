@@ -207,6 +207,12 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `PUT /remote-instances/{remoteInstanceId}`<br>`updateRemoteInstance` | `remote update <id>` | #98 | M2 | A | C |
 | `DELETE /remote-instances/{remoteInstanceId}`<br>`deleteRemoteInstance` | `remote delete <id>` | #98 | M2 | A | W |
 | `POST /remote-instances/{remoteInstanceId}/test`<br>`testRemoteInstance` | `remote test <id>` | #98 | M2 | A | W |
+| `GET /promotion-rules`<br>`listPromotionRules` | `promotion rule list` | #98 | M2 | FA | Q |
+| `POST /promotion-rules`<br>`createPromotionRule` | `promotion rule create` | #98 | M2 | RA×2 | W |
+| `GET /promotion-rules/{ruleId}`<br>`getPromotionRule` | `promotion rule show <id>` | #98 | M2 | RA | Q |
+| `PUT /promotion-rules/{ruleId}`<br>`updatePromotionRule` | `promotion rule update <id>` | #98 | M2 | RA×2 | C |
+| `DELETE /promotion-rules/{ruleId}`<br>`deletePromotionRule` | `promotion rule delete <id>` | #98 | M2 | RA | W |
+| `POST /promotion-rules/{ruleId}/dry-run`<br>`dryRunPromotionRule` | `promotion rule dry-run <id>` | #98 | M2 | RA×2 | D |
 | `GET /webhook-deliveries`<br>`listWebhookDeliveries` | `webhook delivery list` | #137 | M2 | A | Q |
 | `GET /webhook-deliveries/{deliveryId}`<br>`getWebhookDelivery` | `webhook delivery show <id>` | #137 | M2 | A | Q |
 | `POST /webhook-deliveries/{deliveryId}:replay`<br>`replayWebhookDelivery` | `webhook delivery replay <id>` | #137 | M2 | A | W |

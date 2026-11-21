@@ -3194,6 +3194,188 @@ export type RemoteInstanceTestResult = {
   error?: string;
 };
 
+export type PromotionRuleTargetKind = "local" | "remote";
+
+export type PromotionRuleTarget = {
+  kind: PromotionRuleTargetKind;
+  /**
+   * Required for a local target; forbidden for a remote one.
+   */
+  repositoryId?: string;
+  /**
+   * Required for a remote target; the id of a registered remote instance.
+   */
+  remoteInstanceId?: string;
+  /**
+   * Required for a remote target; the repository name on the remote instance.
+   */
+  remoteRepository?: string;
+};
+
+/**
+ * Exactly one of glob and regex. A glob matches the whole canonical coordinate; * does not cross a slash and ** does. A regex is Go RE2, anchored to the whole coordinate.
+ */
+export type PromotionRuleCoordinate = {
+  glob?: string;
+  regex?: string;
+};
+
+export type PromotionRuleVersionRange = {
+  /**
+   * A semantic version range such as ">=1.2.0 <2.0.0". A version that is not a semantic version never matches.
+   */
+  range: string;
+};
+
+export type PromotionRuleMatch = {
+  coordinate: PromotionRuleCoordinate;
+  version?: PromotionRuleVersionRange;
+  /**
+   * Globs over the mutable refs (OCI tags, npm dist-tags) that point at the artifact; only for formats with tags.
+   */
+  refs?: Array<string>;
+  /**
+   * Property key to a glob over its value; only for a versioned generic repository, where properties are frozen when a version is sealed.
+   */
+  properties?: {
+    [key: string]: string;
+  };
+  /**
+   * release promotes the whole release of a matching coordinate and is available only for formats with the ReleaseSet capability.
+   */
+  scope?: "coordinate" | "release";
+};
+
+export type PromotionRuleScanCondition = {
+  completed: boolean;
+  /**
+   * Highest severity a finding may have; requires completed.
+   */
+  maxSeverity?: "none" | "low" | "medium" | "high" | "critical";
+};
+
+/**
+ * All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.
+ */
+export type PromotionRuleConditions = {
+  /**
+   * The target repository's admission policy admits the artifact.
+   */
+  securityPolicy?: "pass";
+  scan?: PromotionRuleScanCondition;
+  /**
+   * Minimum time since publication as a duration such as 72h.
+   */
+  minAge?: string;
+  requireSignature?: boolean;
+  requireSbom?: boolean;
+  requireProvenance?: boolean;
+};
+
+/**
+ * Promotion copies; move and overwrite are not offered and the source is never changed.
+ */
+export type PromotionRuleMode = "copy";
+
+export type PromotionRule = {
+  id: string;
+  name: string;
+  sourceRepositoryId: string;
+  target: PromotionRuleTarget;
+  match: PromotionRuleMatch;
+  conditions: PromotionRuleConditions;
+  mode: PromotionRuleMode;
+  /**
+   * The service account the rule runs as; source read and target write are authorized for it at every evaluation.
+   */
+  runAsServiceAccountId: string;
+  enabled: boolean;
+  /**
+   * Increments on every edit.
+   */
+  version: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type PromotionRulePage = {
+  items: Array<PromotionRule>;
+  /**
+   * Present while more rules follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
+
+export type CreatePromotionRule = {
+  name: string;
+  sourceRepositoryId: string;
+  target: PromotionRuleTarget;
+  match: PromotionRuleMatch;
+  conditions?: PromotionRuleConditions;
+  mode?: PromotionRuleMode;
+  runAsServiceAccountId: string;
+  enabled?: boolean;
+};
+
+export type UpdatePromotionRule = {
+  name: string;
+  target: PromotionRuleTarget;
+  match: PromotionRuleMatch;
+  conditions?: PromotionRuleConditions;
+  mode?: PromotionRuleMode;
+  runAsServiceAccountId: string;
+  enabled: boolean;
+};
+
+export type PromotionRuleConditionName =
+  | "notQuarantined"
+  | "securityPolicy"
+  | "scan"
+  | "minAge"
+  | "requireSignature"
+  | "requireSbom"
+  | "requireProvenance";
+
+export type PromotionRuleConditionVerdict = {
+  condition: PromotionRuleConditionName;
+  verdict: "pass" | "fail" | "not_evaluated";
+  /**
+   * A stable code or a short explanation; present for fail and not_evaluated.
+   */
+  reason?: string;
+};
+
+export type PromotionRuleDryRunItem = {
+  coordinate: string;
+  version?: string;
+  digest: string;
+  /**
+   * blocked when a condition fails, undetermined when none fails but one was not evaluated.
+   */
+  outcome: "eligible" | "blocked" | "undetermined";
+  conditions: Array<PromotionRuleConditionVerdict>;
+};
+
+export type PromotionRuleDryRun = {
+  ruleId: string;
+  ruleVersion: string;
+  /**
+   * Artifacts of the source repository the evaluation looked at.
+   */
+  examined: number;
+  /**
+   * Examined artifacts that the match selected.
+   */
+  matched: number;
+  /**
+   * True when the examination cap or the limit cut the answer short.
+   */
+  truncated: boolean;
+  items: Array<PromotionRuleDryRunItem>;
+};
+
 export type WebhookDeliveryState =
   "pending" | "delivering" | "retrying" | "succeeded" | "dead";
 
@@ -5051,6 +5233,8 @@ export type HelmPreviewIdempotencyKey = string;
 export type ArtifactSearchMatch = "prefix" | "contains";
 
 export type RemoteInstanceId = string;
+
+export type PromotionRuleId = string;
 
 export type UserGroupId = string;
 
@@ -11742,6 +11926,280 @@ export type TestRemoteInstanceResponses = {
 
 export type TestRemoteInstanceResponse =
   TestRemoteInstanceResponses[keyof TestRemoteInstanceResponses];
+
+export type ListPromotionRulesData = {
+  body?: never;
+  path?: never;
+  query?: {
+    limit?: number;
+    sourceRepositoryId?: string;
+    pageToken?: string;
+  };
+  url: "/promotion-rules";
+};
+
+export type ListPromotionRulesErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type ListPromotionRulesError =
+  ListPromotionRulesErrors[keyof ListPromotionRulesErrors];
+
+export type ListPromotionRulesResponses = {
+  /**
+   * Promotion rules
+   */
+  200: PromotionRulePage;
+};
+
+export type ListPromotionRulesResponse =
+  ListPromotionRulesResponses[keyof ListPromotionRulesResponses];
+
+export type CreatePromotionRuleData = {
+  body: CreatePromotionRule;
+  path?: never;
+  query?: never;
+  url: "/promotion-rules";
+};
+
+export type CreatePromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type CreatePromotionRuleError =
+  CreatePromotionRuleErrors[keyof CreatePromotionRuleErrors];
+
+export type CreatePromotionRuleResponses = {
+  /**
+   * Promotion rule
+   */
+  201: PromotionRule;
+};
+
+export type CreatePromotionRuleResponse =
+  CreatePromotionRuleResponses[keyof CreatePromotionRuleResponses];
+
+export type DeletePromotionRuleData = {
+  body?: never;
+  path: {
+    ruleId: string;
+  };
+  query?: never;
+  url: "/promotion-rules/{ruleId}";
+};
+
+export type DeletePromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type DeletePromotionRuleError =
+  DeletePromotionRuleErrors[keyof DeletePromotionRuleErrors];
+
+export type DeletePromotionRuleResponses = {
+  /**
+   * The promotion rule was deleted
+   */
+  204: void;
+};
+
+export type DeletePromotionRuleResponse =
+  DeletePromotionRuleResponses[keyof DeletePromotionRuleResponses];
+
+export type GetPromotionRuleData = {
+  body?: never;
+  path: {
+    ruleId: string;
+  };
+  query?: never;
+  url: "/promotion-rules/{ruleId}";
+};
+
+export type GetPromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetPromotionRuleError =
+  GetPromotionRuleErrors[keyof GetPromotionRuleErrors];
+
+export type GetPromotionRuleResponses = {
+  /**
+   * Promotion rule
+   */
+  200: PromotionRule;
+};
+
+export type GetPromotionRuleResponse =
+  GetPromotionRuleResponses[keyof GetPromotionRuleResponses];
+
+export type UpdatePromotionRuleData = {
+  body: UpdatePromotionRule;
+  headers: {
+    "If-Match": string;
+  };
+  path: {
+    ruleId: string;
+  };
+  query?: never;
+  url: "/promotion-rules/{ruleId}";
+};
+
+export type UpdatePromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  412: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type UpdatePromotionRuleError =
+  UpdatePromotionRuleErrors[keyof UpdatePromotionRuleErrors];
+
+export type UpdatePromotionRuleResponses = {
+  /**
+   * Promotion rule
+   */
+  200: PromotionRule;
+};
+
+export type UpdatePromotionRuleResponse =
+  UpdatePromotionRuleResponses[keyof UpdatePromotionRuleResponses];
+
+export type DryRunPromotionRuleData = {
+  body?: never;
+  path: {
+    ruleId: string;
+  };
+  query?: {
+    /**
+     * Most matched artifacts returned.
+     */
+    limit?: number;
+  };
+  url: "/promotion-rules/{ruleId}/dry-run";
+};
+
+export type DryRunPromotionRuleErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type DryRunPromotionRuleError =
+  DryRunPromotionRuleErrors[keyof DryRunPromotionRuleErrors];
+
+export type DryRunPromotionRuleResponses = {
+  /**
+   * Matched artifacts with a verdict per condition; nothing was enqueued
+   */
+  200: PromotionRuleDryRun;
+};
+
+export type DryRunPromotionRuleResponse =
+  DryRunPromotionRuleResponses[keyof DryRunPromotionRuleResponses];
 
 export type ListWebhookDeliveriesData = {
   body?: never;

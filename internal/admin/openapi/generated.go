@@ -1729,16 +1729,16 @@ func (e GlobalArtifactSearchHitMatch) Valid() bool {
 
 // Defines values for GlobalArtifactSearchHitMatchKind.
 const (
-	Coordinate GlobalArtifactSearchHitMatchKind = "coordinate"
-	Digest     GlobalArtifactSearchHitMatchKind = "digest"
+	GlobalArtifactSearchHitMatchKindCoordinate GlobalArtifactSearchHitMatchKind = "coordinate"
+	GlobalArtifactSearchHitMatchKindDigest     GlobalArtifactSearchHitMatchKind = "digest"
 )
 
 // Valid indicates whether the value is a known member of the GlobalArtifactSearchHitMatchKind enum.
 func (e GlobalArtifactSearchHitMatchKind) Valid() bool {
 	switch e {
-	case Coordinate:
+	case GlobalArtifactSearchHitMatchKindCoordinate:
 		return true
-	case Digest:
+	case GlobalArtifactSearchHitMatchKindDigest:
 		return true
 	default:
 		return false
@@ -3719,6 +3719,174 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeVersionTombstoned:
 		return true
 	case ProblemCodeVisibilityConflict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionRuleConditionName.
+const (
+	PromotionRuleConditionNameMinAge            PromotionRuleConditionName = "minAge"
+	PromotionRuleConditionNameNotQuarantined    PromotionRuleConditionName = "notQuarantined"
+	PromotionRuleConditionNameRequireProvenance PromotionRuleConditionName = "requireProvenance"
+	PromotionRuleConditionNameRequireSbom       PromotionRuleConditionName = "requireSbom"
+	PromotionRuleConditionNameRequireSignature  PromotionRuleConditionName = "requireSignature"
+	PromotionRuleConditionNameScan              PromotionRuleConditionName = "scan"
+	PromotionRuleConditionNameSecurityPolicy    PromotionRuleConditionName = "securityPolicy"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleConditionName enum.
+func (e PromotionRuleConditionName) Valid() bool {
+	switch e {
+	case PromotionRuleConditionNameMinAge:
+		return true
+	case PromotionRuleConditionNameNotQuarantined:
+		return true
+	case PromotionRuleConditionNameRequireProvenance:
+		return true
+	case PromotionRuleConditionNameRequireSbom:
+		return true
+	case PromotionRuleConditionNameRequireSignature:
+		return true
+	case PromotionRuleConditionNameScan:
+		return true
+	case PromotionRuleConditionNameSecurityPolicy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionRuleConditionVerdictVerdict.
+const (
+	PromotionRuleConditionVerdictVerdictFail         PromotionRuleConditionVerdictVerdict = "fail"
+	PromotionRuleConditionVerdictVerdictNotEvaluated PromotionRuleConditionVerdictVerdict = "not_evaluated"
+	PromotionRuleConditionVerdictVerdictPass         PromotionRuleConditionVerdictVerdict = "pass"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleConditionVerdictVerdict enum.
+func (e PromotionRuleConditionVerdictVerdict) Valid() bool {
+	switch e {
+	case PromotionRuleConditionVerdictVerdictFail:
+		return true
+	case PromotionRuleConditionVerdictVerdictNotEvaluated:
+		return true
+	case PromotionRuleConditionVerdictVerdictPass:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionRuleConditionsSecurityPolicy.
+const (
+	PromotionRuleConditionsSecurityPolicyPass PromotionRuleConditionsSecurityPolicy = "pass"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleConditionsSecurityPolicy enum.
+func (e PromotionRuleConditionsSecurityPolicy) Valid() bool {
+	switch e {
+	case PromotionRuleConditionsSecurityPolicyPass:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionRuleDryRunItemOutcome.
+const (
+	PromotionRuleDryRunItemOutcomeBlocked      PromotionRuleDryRunItemOutcome = "blocked"
+	PromotionRuleDryRunItemOutcomeEligible     PromotionRuleDryRunItemOutcome = "eligible"
+	PromotionRuleDryRunItemOutcomeUndetermined PromotionRuleDryRunItemOutcome = "undetermined"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleDryRunItemOutcome enum.
+func (e PromotionRuleDryRunItemOutcome) Valid() bool {
+	switch e {
+	case PromotionRuleDryRunItemOutcomeBlocked:
+		return true
+	case PromotionRuleDryRunItemOutcomeEligible:
+		return true
+	case PromotionRuleDryRunItemOutcomeUndetermined:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionRuleMatchScope.
+const (
+	PromotionRuleMatchScopeCoordinate PromotionRuleMatchScope = "coordinate"
+	PromotionRuleMatchScopeRelease    PromotionRuleMatchScope = "release"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleMatchScope enum.
+func (e PromotionRuleMatchScope) Valid() bool {
+	switch e {
+	case PromotionRuleMatchScopeCoordinate:
+		return true
+	case PromotionRuleMatchScopeRelease:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionRuleMode.
+const (
+	Copy PromotionRuleMode = "copy"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleMode enum.
+func (e PromotionRuleMode) Valid() bool {
+	switch e {
+	case Copy:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionRuleScanConditionMaxSeverity.
+const (
+	PromotionRuleScanConditionMaxSeverityCritical PromotionRuleScanConditionMaxSeverity = "critical"
+	PromotionRuleScanConditionMaxSeverityHigh     PromotionRuleScanConditionMaxSeverity = "high"
+	PromotionRuleScanConditionMaxSeverityLow      PromotionRuleScanConditionMaxSeverity = "low"
+	PromotionRuleScanConditionMaxSeverityMedium   PromotionRuleScanConditionMaxSeverity = "medium"
+	PromotionRuleScanConditionMaxSeverityNone     PromotionRuleScanConditionMaxSeverity = "none"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleScanConditionMaxSeverity enum.
+func (e PromotionRuleScanConditionMaxSeverity) Valid() bool {
+	switch e {
+	case PromotionRuleScanConditionMaxSeverityCritical:
+		return true
+	case PromotionRuleScanConditionMaxSeverityHigh:
+		return true
+	case PromotionRuleScanConditionMaxSeverityLow:
+		return true
+	case PromotionRuleScanConditionMaxSeverityMedium:
+		return true
+	case PromotionRuleScanConditionMaxSeverityNone:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionRuleTargetKind.
+const (
+	PromotionRuleTargetKindLocal  PromotionRuleTargetKind = "local"
+	PromotionRuleTargetKindRemote PromotionRuleTargetKind = "remote"
+)
+
+// Valid indicates whether the value is a known member of the PromotionRuleTargetKind enum.
+func (e PromotionRuleTargetKind) Valid() bool {
+	switch e {
+	case PromotionRuleTargetKindLocal:
+		return true
+	case PromotionRuleTargetKindRemote:
 		return true
 	default:
 		return false
@@ -6664,6 +6832,21 @@ type CreateMavenPublishSession struct {
 // CreateMavenPublishSessionFormat defines model for CreateMavenPublishSession.Format.
 type CreateMavenPublishSessionFormat string
 
+// CreatePromotionRule defines model for CreatePromotionRule.
+type CreatePromotionRule struct {
+	// Conditions All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.
+	Conditions *PromotionRuleConditions `json:"conditions,omitempty"`
+	Enabled    *bool                    `json:"enabled,omitempty"`
+	Match      PromotionRuleMatch       `json:"match"`
+
+	// Mode Promotion copies; move and overwrite are not offered and the source is never changed.
+	Mode                  *PromotionRuleMode  `json:"mode,omitempty"`
+	Name                  string              `json:"name"`
+	RunAsServiceAccountId openapi_types.UUID  `json:"runAsServiceAccountId"`
+	SourceRepositoryId    openapi_types.UUID  `json:"sourceRepositoryId"`
+	Target                PromotionRuleTarget `json:"target"`
+}
+
 // CreateProviderLink defines model for CreateProviderLink.
 type CreateProviderLink struct {
 	// Subject The login subject the provider asserts (OIDC sub, Entra tid:oid, SAML NameID).
@@ -9083,6 +9266,161 @@ type PromotionRequest struct {
 	TargetRepositoryId openapi_types.UUID `json:"targetRepositoryId"`
 }
 
+// PromotionRule defines model for PromotionRule.
+type PromotionRule struct {
+	// Conditions All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.
+	Conditions PromotionRuleConditions `json:"conditions"`
+	CreatedAt  time.Time               `json:"createdAt"`
+	CreatedBy  string                  `json:"createdBy"`
+	Enabled    bool                    `json:"enabled"`
+	Id         openapi_types.UUID      `json:"id"`
+	Match      PromotionRuleMatch      `json:"match"`
+
+	// Mode Promotion copies; move and overwrite are not offered and the source is never changed.
+	Mode PromotionRuleMode `json:"mode"`
+	Name string            `json:"name"`
+
+	// RunAsServiceAccountId The service account the rule runs as; source read and target write are authorized for it at every evaluation.
+	RunAsServiceAccountId openapi_types.UUID  `json:"runAsServiceAccountId"`
+	SourceRepositoryId    openapi_types.UUID  `json:"sourceRepositoryId"`
+	Target                PromotionRuleTarget `json:"target"`
+	UpdatedAt             time.Time           `json:"updatedAt"`
+	UpdatedBy             string              `json:"updatedBy"`
+
+	// Version Increments on every edit.
+	Version string `json:"version"`
+}
+
+// PromotionRuleConditionName defines model for PromotionRuleConditionName.
+type PromotionRuleConditionName string
+
+// PromotionRuleConditionVerdict defines model for PromotionRuleConditionVerdict.
+type PromotionRuleConditionVerdict struct {
+	Condition PromotionRuleConditionName `json:"condition"`
+
+	// Reason A stable code or a short explanation; present for fail and not_evaluated.
+	Reason  *string                              `json:"reason,omitempty"`
+	Verdict PromotionRuleConditionVerdictVerdict `json:"verdict"`
+}
+
+// PromotionRuleConditionVerdictVerdict defines model for PromotionRuleConditionVerdict.Verdict.
+type PromotionRuleConditionVerdictVerdict string
+
+// PromotionRuleConditions All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.
+type PromotionRuleConditions struct {
+	// MinAge Minimum time since publication as a duration such as 72h.
+	MinAge            *string                     `json:"minAge,omitempty"`
+	RequireProvenance *bool                       `json:"requireProvenance,omitempty"`
+	RequireSbom       *bool                       `json:"requireSbom,omitempty"`
+	RequireSignature  *bool                       `json:"requireSignature,omitempty"`
+	Scan              *PromotionRuleScanCondition `json:"scan,omitempty"`
+
+	// SecurityPolicy The target repository's admission policy admits the artifact.
+	SecurityPolicy *PromotionRuleConditionsSecurityPolicy `json:"securityPolicy,omitempty"`
+}
+
+// PromotionRuleConditionsSecurityPolicy The target repository's admission policy admits the artifact.
+type PromotionRuleConditionsSecurityPolicy string
+
+// PromotionRuleCoordinate Exactly one of glob and regex. A glob matches the whole canonical coordinate; * does not cross a slash and ** does. A regex is Go RE2, anchored to the whole coordinate.
+type PromotionRuleCoordinate struct {
+	Glob  *string `json:"glob,omitempty"`
+	Regex *string `json:"regex,omitempty"`
+}
+
+// PromotionRuleDryRun defines model for PromotionRuleDryRun.
+type PromotionRuleDryRun struct {
+	// Examined Artifacts of the source repository the evaluation looked at.
+	Examined int32                     `json:"examined"`
+	Items    []PromotionRuleDryRunItem `json:"items"`
+
+	// Matched Examined artifacts that the match selected.
+	Matched     int32              `json:"matched"`
+	RuleId      openapi_types.UUID `json:"ruleId"`
+	RuleVersion string             `json:"ruleVersion"`
+
+	// Truncated True when the examination cap or the limit cut the answer short.
+	Truncated bool `json:"truncated"`
+}
+
+// PromotionRuleDryRunItem defines model for PromotionRuleDryRunItem.
+type PromotionRuleDryRunItem struct {
+	Conditions []PromotionRuleConditionVerdict `json:"conditions"`
+	Coordinate string                          `json:"coordinate"`
+	Digest     string                          `json:"digest"`
+
+	// Outcome blocked when a condition fails, undetermined when none fails but one was not evaluated.
+	Outcome PromotionRuleDryRunItemOutcome `json:"outcome"`
+	Version *string                        `json:"version,omitempty"`
+}
+
+// PromotionRuleDryRunItemOutcome blocked when a condition fails, undetermined when none fails but one was not evaluated.
+type PromotionRuleDryRunItemOutcome string
+
+// PromotionRuleMatch defines model for PromotionRuleMatch.
+type PromotionRuleMatch struct {
+	// Coordinate Exactly one of glob and regex. A glob matches the whole canonical coordinate; * does not cross a slash and ** does. A regex is Go RE2, anchored to the whole coordinate.
+	Coordinate PromotionRuleCoordinate `json:"coordinate"`
+
+	// Properties Property key to a glob over its value; only for a versioned generic repository, where properties are frozen when a version is sealed.
+	Properties *map[string]string `json:"properties,omitempty"`
+
+	// Refs Globs over the mutable refs (OCI tags, npm dist-tags) that point at the artifact; only for formats with tags.
+	Refs *[]string `json:"refs,omitempty"`
+
+	// Scope release promotes the whole release of a matching coordinate and is available only for formats with the ReleaseSet capability.
+	Scope   *PromotionRuleMatchScope   `json:"scope,omitempty"`
+	Version *PromotionRuleVersionRange `json:"version,omitempty"`
+}
+
+// PromotionRuleMatchScope release promotes the whole release of a matching coordinate and is available only for formats with the ReleaseSet capability.
+type PromotionRuleMatchScope string
+
+// PromotionRuleMode Promotion copies; move and overwrite are not offered and the source is never changed.
+type PromotionRuleMode string
+
+// PromotionRulePage defines model for PromotionRulePage.
+type PromotionRulePage struct {
+	Items []PromotionRule `json:"items"`
+
+	// NextPageToken Present while more rules follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// PromotionRuleScanCondition defines model for PromotionRuleScanCondition.
+type PromotionRuleScanCondition struct {
+	Completed bool `json:"completed"`
+
+	// MaxSeverity Highest severity a finding may have; requires completed.
+	MaxSeverity *PromotionRuleScanConditionMaxSeverity `json:"maxSeverity,omitempty"`
+}
+
+// PromotionRuleScanConditionMaxSeverity Highest severity a finding may have; requires completed.
+type PromotionRuleScanConditionMaxSeverity string
+
+// PromotionRuleTarget defines model for PromotionRuleTarget.
+type PromotionRuleTarget struct {
+	Kind PromotionRuleTargetKind `json:"kind"`
+
+	// RemoteInstanceId Required for a remote target; the id of a registered remote instance.
+	RemoteInstanceId *openapi_types.UUID `json:"remoteInstanceId,omitempty"`
+
+	// RemoteRepository Required for a remote target; the repository name on the remote instance.
+	RemoteRepository *string `json:"remoteRepository,omitempty"`
+
+	// RepositoryId Required for a local target; forbidden for a remote one.
+	RepositoryId *openapi_types.UUID `json:"repositoryId,omitempty"`
+}
+
+// PromotionRuleTargetKind defines model for PromotionRuleTargetKind.
+type PromotionRuleTargetKind string
+
+// PromotionRuleVersionRange defines model for PromotionRuleVersionRange.
+type PromotionRuleVersionRange struct {
+	// Range A semantic version range such as ">=1.2.0 <2.0.0". A version that is not a semantic version never matches.
+	Range string `json:"range"`
+}
+
 // ProxyCacheAsset defines model for ProxyCacheAsset.
 type ProxyCacheAsset struct {
 	ContentType *string `json:"contentType,omitempty"`
@@ -10401,6 +10739,20 @@ type TestWorkloadPolicyRequest struct {
 	Token    *string                 `json:"token,omitempty"`
 }
 
+// UpdatePromotionRule defines model for UpdatePromotionRule.
+type UpdatePromotionRule struct {
+	// Conditions All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.
+	Conditions *PromotionRuleConditions `json:"conditions,omitempty"`
+	Enabled    bool                     `json:"enabled"`
+	Match      PromotionRuleMatch       `json:"match"`
+
+	// Mode Promotion copies; move and overwrite are not offered and the source is never changed.
+	Mode                  *PromotionRuleMode  `json:"mode,omitempty"`
+	Name                  string              `json:"name"`
+	RunAsServiceAccountId openapi_types.UUID  `json:"runAsServiceAccountId"`
+	Target                PromotionRuleTarget `json:"target"`
+}
+
 // UpdateRemoteInstance defines model for UpdateRemoteInstance.
 type UpdateRemoteInstance struct {
 	Audience *string                `json:"audience,omitempty"`
@@ -10943,6 +11295,9 @@ type PageSize = int
 // PageToken defines model for PageToken.
 type PageToken = string
 
+// PromotionRuleId defines model for PromotionRuleId.
+type PromotionRuleId = openapi_types.UUID
+
 // RawPackageName defines model for RawPackageName.
 type RawPackageName = string
 
@@ -11008,6 +11363,9 @@ type OCIImageList = OCIImagePage
 
 // OCIManifestSummaryList defines model for OCIManifestSummaryList.
 type OCIManifestSummaryList = OCIManifestSummaryPage
+
+// PromotionRuleList defines model for PromotionRuleList.
+type PromotionRuleList = PromotionRulePage
 
 // RemoteInstanceList defines model for RemoteInstanceList.
 type RemoteInstanceList = RemoteInstancePage
@@ -11377,6 +11735,24 @@ type RetryRubyGemsPreviewReplicationJobParams struct {
 // CreateRubyGemsPreviewRepositoryParams defines parameters for CreateRubyGemsPreviewRepository.
 type CreateRubyGemsPreviewRepositoryParams struct {
 	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// ListPromotionRulesParams defines parameters for ListPromotionRules.
+type ListPromotionRulesParams struct {
+	Limit              *int                `form:"limit,omitempty" json:"limit,omitempty"`
+	SourceRepositoryId *openapi_types.UUID `form:"sourceRepositoryId,omitempty" json:"sourceRepositoryId,omitempty"`
+	PageToken          *PageToken          `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// UpdatePromotionRuleParams defines parameters for UpdatePromotionRule.
+type UpdatePromotionRuleParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// DryRunPromotionRuleParams defines parameters for DryRunPromotionRule.
+type DryRunPromotionRuleParams struct {
+	// Limit Most matched artifacts returned.
+	Limit *int `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ReplacePublicAccessPolicyParams defines parameters for ReplacePublicAccessPolicy.
@@ -12083,6 +12459,12 @@ type ChangeRubyGemsPreviewGovernanceJSONRequestBody = RubyGemsPreviewGovernanceC
 
 // ReplaceRubyGemsPreviewQuarantineReadPolicyJSONRequestBody defines body for ReplaceRubyGemsPreviewQuarantineReadPolicy for application/json ContentType.
 type ReplaceRubyGemsPreviewQuarantineReadPolicyJSONRequestBody = RubyGemsPreviewQuarantineReadPolicyChange
+
+// CreatePromotionRuleJSONRequestBody defines body for CreatePromotionRule for application/json ContentType.
+type CreatePromotionRuleJSONRequestBody = CreatePromotionRule
+
+// UpdatePromotionRuleJSONRequestBody defines body for UpdatePromotionRule for application/json ContentType.
+type UpdatePromotionRuleJSONRequestBody = UpdatePromotionRule
 
 // ReplacePublicAccessPolicyJSONRequestBody defines body for ReplacePublicAccessPolicy for application/json ContentType.
 type ReplacePublicAccessPolicyJSONRequestBody = PublicAccessPolicy
@@ -13478,6 +13860,24 @@ type ServerInterface interface {
 
 	// (PUT /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy)
 	ReplaceRubyGemsPreviewQuarantineReadPolicy(w http.ResponseWriter, r *http.Request, repositoryId openapi_types.UUID)
+
+	// (GET /promotion-rules)
+	ListPromotionRules(w http.ResponseWriter, r *http.Request, params ListPromotionRulesParams)
+
+	// (POST /promotion-rules)
+	CreatePromotionRule(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /promotion-rules/{ruleId})
+	DeletePromotionRule(w http.ResponseWriter, r *http.Request, ruleId PromotionRuleId)
+
+	// (GET /promotion-rules/{ruleId})
+	GetPromotionRule(w http.ResponseWriter, r *http.Request, ruleId PromotionRuleId)
+
+	// (PUT /promotion-rules/{ruleId})
+	UpdatePromotionRule(w http.ResponseWriter, r *http.Request, ruleId PromotionRuleId, params UpdatePromotionRuleParams)
+
+	// (POST /promotion-rules/{ruleId}/dry-run)
+	DryRunPromotionRule(w http.ResponseWriter, r *http.Request, ruleId PromotionRuleId, params DryRunPromotionRuleParams)
 
 	// (GET /public-access-policy)
 	GetPublicAccessPolicy(w http.ResponseWriter, r *http.Request)
@@ -19576,6 +19976,227 @@ func (siw *ServerInterfaceWrapper) ReplaceRubyGemsPreviewQuarantineReadPolicy(w 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReplaceRubyGemsPreviewQuarantineReadPolicy(w, r, repositoryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListPromotionRules operation middleware
+func (siw *ServerInterfaceWrapper) ListPromotionRules(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListPromotionRulesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "sourceRepositoryId" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "sourceRepositoryId", r.URL.Query(), &params.SourceRepositoryId, runtime.BindQueryParameterOptions{Type: "string", Format: "uuid"})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sourceRepositoryId"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sourceRepositoryId", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPromotionRules(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePromotionRule operation middleware
+func (siw *ServerInterfaceWrapper) CreatePromotionRule(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePromotionRule(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePromotionRule operation middleware
+func (siw *ServerInterfaceWrapper) DeletePromotionRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId PromotionRuleId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", r.PathValue("ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePromotionRule(w, r, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPromotionRule operation middleware
+func (siw *ServerInterfaceWrapper) GetPromotionRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId PromotionRuleId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", r.PathValue("ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPromotionRule(w, r, ruleId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePromotionRule operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePromotionRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId PromotionRuleId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", r.PathValue("ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdatePromotionRuleParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePromotionRule(w, r, ruleId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DryRunPromotionRule operation middleware
+func (siw *ServerInterfaceWrapper) DryRunPromotionRule(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "ruleId" -------------
+	var ruleId PromotionRuleId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "ruleId", r.PathValue("ruleId"), &ruleId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ruleId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DryRunPromotionRuleParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DryRunPromotionRule(w, r, ruleId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -26808,6 +27429,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/remote-instances/{remoteInstanceId}", wrapper.GetRemoteInstance)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/remote-instances/{remoteInstanceId}", wrapper.UpdateRemoteInstance)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/remote-instances/{remoteInstanceId}/test", wrapper.TestRemoteInstance)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/promotion-rules", wrapper.ListPromotionRules)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/promotion-rules", wrapper.CreatePromotionRule)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/promotion-rules/{ruleId}", wrapper.DeletePromotionRule)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/promotion-rules/{ruleId}", wrapper.GetPromotionRule)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/promotion-rules/{ruleId}", wrapper.UpdatePromotionRule)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/promotion-rules/{ruleId}/dry-run", wrapper.DryRunPromotionRule)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-deliveries", wrapper.ListWebhookDeliveries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-deliveries/{deliveryId}", wrapper.GetWebhookDelivery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/webhook-deliveries/{deliveryId}:replay", wrapper.ReplayWebhookDelivery)
@@ -27120,6 +27747,19 @@ type OCIManifestSummaryListJSONResponse OCIManifestSummaryPage
 type OIDCConnectionTestJSONResponse OIDCConnectionTest
 
 type ProblemApplicationProblemPlusJSONResponse Problem
+
+type PromotionRuleResponseHeaders struct {
+	ETag string
+}
+type PromotionRuleJSONResponse struct {
+	Body PromotionRule
+
+	Headers PromotionRuleResponseHeaders
+}
+
+type PromotionRuleDryRunJSONResponse PromotionRuleDryRun
+
+type PromotionRuleListJSONResponse PromotionRulePage
 
 type ProxyCacheBrowsePageJSONResponse ProxyCacheBrowsePage
 
@@ -39838,6 +40478,558 @@ func (response ReplaceRubyGemsPreviewQuarantineReadPolicy500ApplicationProblemPl
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPromotionRulesRequestObject struct {
+	Params ListPromotionRulesParams
+}
+
+type ListPromotionRulesResponseObject interface {
+	VisitListPromotionRulesResponse(w http.ResponseWriter) error
+}
+
+type ListPromotionRules200JSONResponse struct{ PromotionRuleListJSONResponse }
+
+func (response ListPromotionRules200JSONResponse) VisitListPromotionRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPromotionRules400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListPromotionRules400ApplicationProblemPlusJSONResponse) VisitListPromotionRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPromotionRules401ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPromotionRules401ApplicationProblemPlusJSONResponse) VisitListPromotionRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListPromotionRules403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListPromotionRules403ApplicationProblemPlusJSONResponse) VisitListPromotionRulesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionRuleRequestObject struct {
+	Body *CreatePromotionRuleJSONRequestBody
+}
+
+type CreatePromotionRuleResponseObject interface {
+	VisitCreatePromotionRuleResponse(w http.ResponseWriter) error
+}
+
+type CreatePromotionRule201JSONResponse struct{ PromotionRuleJSONResponse }
+
+func (response CreatePromotionRule201JSONResponse) VisitCreatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionRule400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreatePromotionRule400ApplicationProblemPlusJSONResponse) VisitCreatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionRule401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionRule401ApplicationProblemPlusJSONResponse) VisitCreatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionRule403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionRule403ApplicationProblemPlusJSONResponse) VisitCreatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionRule404ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionRule404ApplicationProblemPlusJSONResponse) VisitCreatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionRule409ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionRule409ApplicationProblemPlusJSONResponse) VisitCreatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionRule422ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionRule422ApplicationProblemPlusJSONResponse) VisitCreatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePromotionRuleRequestObject struct {
+	RuleId PromotionRuleId `json:"ruleId"`
+}
+
+type DeletePromotionRuleResponseObject interface {
+	VisitDeletePromotionRuleResponse(w http.ResponseWriter) error
+}
+
+type DeletePromotionRule204Response struct {
+}
+
+func (response DeletePromotionRule204Response) VisitDeletePromotionRuleResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeletePromotionRule400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeletePromotionRule400ApplicationProblemPlusJSONResponse) VisitDeletePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePromotionRule401ApplicationProblemPlusJSONResponse Problem
+
+func (response DeletePromotionRule401ApplicationProblemPlusJSONResponse) VisitDeletePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePromotionRule403ApplicationProblemPlusJSONResponse Problem
+
+func (response DeletePromotionRule403ApplicationProblemPlusJSONResponse) VisitDeletePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeletePromotionRule404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeletePromotionRule404ApplicationProblemPlusJSONResponse) VisitDeletePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionRuleRequestObject struct {
+	RuleId PromotionRuleId `json:"ruleId"`
+}
+
+type GetPromotionRuleResponseObject interface {
+	VisitGetPromotionRuleResponse(w http.ResponseWriter) error
+}
+
+type GetPromotionRule200JSONResponse struct{ PromotionRuleJSONResponse }
+
+func (response GetPromotionRule200JSONResponse) VisitGetPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionRule400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetPromotionRule400ApplicationProblemPlusJSONResponse) VisitGetPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionRule401ApplicationProblemPlusJSONResponse Problem
+
+func (response GetPromotionRule401ApplicationProblemPlusJSONResponse) VisitGetPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionRule403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetPromotionRule403ApplicationProblemPlusJSONResponse) VisitGetPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionRule404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetPromotionRule404ApplicationProblemPlusJSONResponse) VisitGetPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePromotionRuleRequestObject struct {
+	RuleId PromotionRuleId `json:"ruleId"`
+	Params UpdatePromotionRuleParams
+	Body   *UpdatePromotionRuleJSONRequestBody
+}
+
+type UpdatePromotionRuleResponseObject interface {
+	VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error
+}
+
+type UpdatePromotionRule200JSONResponse struct{ PromotionRuleJSONResponse }
+
+func (response UpdatePromotionRule200JSONResponse) VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePromotionRule400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response UpdatePromotionRule400ApplicationProblemPlusJSONResponse) VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePromotionRule401ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdatePromotionRule401ApplicationProblemPlusJSONResponse) VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePromotionRule403ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdatePromotionRule403ApplicationProblemPlusJSONResponse) VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePromotionRule404ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdatePromotionRule404ApplicationProblemPlusJSONResponse) VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePromotionRule409ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdatePromotionRule409ApplicationProblemPlusJSONResponse) VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePromotionRule412ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdatePromotionRule412ApplicationProblemPlusJSONResponse) VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdatePromotionRule422ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdatePromotionRule422ApplicationProblemPlusJSONResponse) VisitUpdatePromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DryRunPromotionRuleRequestObject struct {
+	RuleId PromotionRuleId `json:"ruleId"`
+	Params DryRunPromotionRuleParams
+}
+
+type DryRunPromotionRuleResponseObject interface {
+	VisitDryRunPromotionRuleResponse(w http.ResponseWriter) error
+}
+
+type DryRunPromotionRule200JSONResponse struct {
+	PromotionRuleDryRunJSONResponse
+}
+
+func (response DryRunPromotionRule200JSONResponse) VisitDryRunPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DryRunPromotionRule400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DryRunPromotionRule400ApplicationProblemPlusJSONResponse) VisitDryRunPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DryRunPromotionRule401ApplicationProblemPlusJSONResponse Problem
+
+func (response DryRunPromotionRule401ApplicationProblemPlusJSONResponse) VisitDryRunPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DryRunPromotionRule403ApplicationProblemPlusJSONResponse Problem
+
+func (response DryRunPromotionRule403ApplicationProblemPlusJSONResponse) VisitDryRunPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DryRunPromotionRule404ApplicationProblemPlusJSONResponse Problem
+
+func (response DryRunPromotionRule404ApplicationProblemPlusJSONResponse) VisitDryRunPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DryRunPromotionRule409ApplicationProblemPlusJSONResponse Problem
+
+func (response DryRunPromotionRule409ApplicationProblemPlusJSONResponse) VisitDryRunPromotionRuleResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -52976,6 +54168,24 @@ type StrictServerInterface interface {
 	// (PUT /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy)
 	ReplaceRubyGemsPreviewQuarantineReadPolicy(ctx context.Context, request ReplaceRubyGemsPreviewQuarantineReadPolicyRequestObject) (ReplaceRubyGemsPreviewQuarantineReadPolicyResponseObject, error)
 
+	// (GET /promotion-rules)
+	ListPromotionRules(ctx context.Context, request ListPromotionRulesRequestObject) (ListPromotionRulesResponseObject, error)
+
+	// (POST /promotion-rules)
+	CreatePromotionRule(ctx context.Context, request CreatePromotionRuleRequestObject) (CreatePromotionRuleResponseObject, error)
+
+	// (DELETE /promotion-rules/{ruleId})
+	DeletePromotionRule(ctx context.Context, request DeletePromotionRuleRequestObject) (DeletePromotionRuleResponseObject, error)
+
+	// (GET /promotion-rules/{ruleId})
+	GetPromotionRule(ctx context.Context, request GetPromotionRuleRequestObject) (GetPromotionRuleResponseObject, error)
+
+	// (PUT /promotion-rules/{ruleId})
+	UpdatePromotionRule(ctx context.Context, request UpdatePromotionRuleRequestObject) (UpdatePromotionRuleResponseObject, error)
+
+	// (POST /promotion-rules/{ruleId}/dry-run)
+	DryRunPromotionRule(ctx context.Context, request DryRunPromotionRuleRequestObject) (DryRunPromotionRuleResponseObject, error)
+
 	// (GET /public-access-policy)
 	GetPublicAccessPolicy(ctx context.Context, request GetPublicAccessPolicyRequestObject) (GetPublicAccessPolicyResponseObject, error)
 
@@ -57844,6 +59054,176 @@ func (sh *strictHandler) ReplaceRubyGemsPreviewQuarantineReadPolicy(w http.Respo
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReplaceRubyGemsPreviewQuarantineReadPolicyResponseObject); ok {
 		if err := validResponse.VisitReplaceRubyGemsPreviewQuarantineReadPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListPromotionRules operation middleware
+func (sh *strictHandler) ListPromotionRules(w http.ResponseWriter, r *http.Request, params ListPromotionRulesParams) {
+	var request ListPromotionRulesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListPromotionRules(ctx, request.(ListPromotionRulesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListPromotionRules")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListPromotionRulesResponseObject); ok {
+		if err := validResponse.VisitListPromotionRulesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreatePromotionRule operation middleware
+func (sh *strictHandler) CreatePromotionRule(w http.ResponseWriter, r *http.Request) {
+	var request CreatePromotionRuleRequestObject
+
+	var body CreatePromotionRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreatePromotionRule(ctx, request.(CreatePromotionRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreatePromotionRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreatePromotionRuleResponseObject); ok {
+		if err := validResponse.VisitCreatePromotionRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeletePromotionRule operation middleware
+func (sh *strictHandler) DeletePromotionRule(w http.ResponseWriter, r *http.Request, ruleId PromotionRuleId) {
+	var request DeletePromotionRuleRequestObject
+
+	request.RuleId = ruleId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeletePromotionRule(ctx, request.(DeletePromotionRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeletePromotionRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeletePromotionRuleResponseObject); ok {
+		if err := validResponse.VisitDeletePromotionRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPromotionRule operation middleware
+func (sh *strictHandler) GetPromotionRule(w http.ResponseWriter, r *http.Request, ruleId PromotionRuleId) {
+	var request GetPromotionRuleRequestObject
+
+	request.RuleId = ruleId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPromotionRule(ctx, request.(GetPromotionRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPromotionRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPromotionRuleResponseObject); ok {
+		if err := validResponse.VisitGetPromotionRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdatePromotionRule operation middleware
+func (sh *strictHandler) UpdatePromotionRule(w http.ResponseWriter, r *http.Request, ruleId PromotionRuleId, params UpdatePromotionRuleParams) {
+	var request UpdatePromotionRuleRequestObject
+
+	request.RuleId = ruleId
+	request.Params = params
+
+	var body UpdatePromotionRuleJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdatePromotionRule(ctx, request.(UpdatePromotionRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdatePromotionRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdatePromotionRuleResponseObject); ok {
+		if err := validResponse.VisitUpdatePromotionRuleResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DryRunPromotionRule operation middleware
+func (sh *strictHandler) DryRunPromotionRule(w http.ResponseWriter, r *http.Request, ruleId PromotionRuleId, params DryRunPromotionRuleParams) {
+	var request DryRunPromotionRuleRequestObject
+
+	request.RuleId = ruleId
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DryRunPromotionRule(ctx, request.(DryRunPromotionRuleRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DryRunPromotionRule")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DryRunPromotionRuleResponseObject); ok {
+		if err := validResponse.VisitDryRunPromotionRuleResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

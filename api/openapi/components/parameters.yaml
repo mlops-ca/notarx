@@ -213,3 +213,10 @@ RemoteInstanceId:
   schema:
     type: string
     format: uuid
+PromotionRuleId:
+  name: ruleId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
