@@ -54,7 +54,7 @@ func TestMemorySCIMWritesAreAuditedAtomically(t *testing.T) {
 	if now, _ := store.GetUser(ctx, user.User.ID); now.State != UserActive {
 		t.Fatal("the deactivation took effect without its audit")
 	}
-	if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, audit); !errors.Is(err, failing) {
+	if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, nil, audit); !errors.Is(err, failing) {
 		t.Fatalf("delete with a failing audit: %v", err)
 	}
 	token := SCIMToken{ProviderID: provider, Name: "t", SecretHash: "h", ExpiresAt: time.Now().Add(time.Hour)}

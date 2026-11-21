@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // SCIM provisioning (ADR 0018 section 4). The SCIM server authenticates with a per-provider bearer token and acts
@@ -22,6 +24,11 @@ const MaxSCIMTokenNameLength = 128
 // without an externalId (Okta does not send one): the identity row needs one key, and the account id is stable and
 // unique. A generated value is never shown as the externalId of the resource and never matches a login attribute.
 const SCIMGeneratedExternalIDPrefix = "notarx-scim-user:"
+
+// SCIMDeletedExternalIDPrefix marks the scim_external_id of an identity whose SCIM link was removed by DELETE /Users:
+// the row stays (it may carry the login subject and the account is only disabled), but SCIM no longer sees the
+// account, and only the same provider can bring it back by creating the user again.
+const SCIMDeletedExternalIDPrefix = "notarx-scim-deleted:"
 
 // SCIMMaxPageSize bounds one page the store reads; the server clamps count to NOTARX_SCIM_MAX_PAGE first.
 const SCIMMaxPageSize = 1000
@@ -61,7 +68,7 @@ var (
 // expiry in the future and at most MaxSCIMTokenLifetime ahead.
 func NormalizeSCIMToken(token SCIMToken, now time.Time) (SCIMToken, error) {
 	token.Name = strings.TrimSpace(token.Name)
-	if len(token.Name) < 1 || len(token.Name) > MaxSCIMTokenNameLength || token.SecretHash == "" || token.ProviderID == "" {
+	if length := utf8.RuneCountInString(token.Name); length < 1 || length > MaxSCIMTokenNameLength || token.SecretHash == "" || token.ProviderID == "" {
 		return SCIMToken{}, ErrSCIMTokenInvalid
 	}
 	if token.ExpiresAt.IsZero() || !token.ExpiresAt.After(now) || token.ExpiresAt.After(now.Add(MaxSCIMTokenLifetime)) {
@@ -93,13 +100,27 @@ type SCIMUser struct {
 
 // ExternalID is the externalId the IdP set, empty when the store generated the identity key.
 func (u SCIMUser) ExternalID() string {
-	if strings.HasPrefix(u.Identity.SCIMExternalID, SCIMGeneratedExternalIDPrefix) {
+	if strings.HasPrefix(u.Identity.SCIMExternalID, SCIMGeneratedExternalIDPrefix) || scimLinkRemoved(u.Identity.SCIMExternalID) {
 		return ""
 	}
 	return u.Identity.SCIMExternalID
 }
 
+// scimLinkRemoved reports the tombstone a DELETE leaves in scim_external_id.
+func scimLinkRemoved(externalID string) bool {
+	return strings.HasPrefix(externalID, SCIMDeletedExternalIDPrefix)
+}
+
+// scimVersionAllowed reports whether the current version satisfies an If-Match list; an empty list is unconditional.
+func scimVersionAllowed(current string, ifVersions []string) bool {
+	return len(ifVersions) == 0 || slices.Contains(ifVersions, current)
+}
+
 // SCIMUserCreate is a SCIM create. The account gets level none; Active false creates it disabled by SCIM.
+//
+// A user the provider deleted earlier (its link carries the tombstone) is brought back by a create with the same
+// userName: the account must still be unprivileged and without a password, and it is re-activated or left disabled
+// as the request says.
 type SCIMUserCreate struct {
 	ProviderID  string
 	UserName    string
@@ -116,6 +137,9 @@ type SCIMUserChange struct {
 	Email       *string
 	ExternalID  *string
 	Active      *bool
+	// IfVersions are the versions the If-Match header allows; the change is ErrVersionConflict unless the
+	// account's version is one of them, checked under the row lock. Empty means unconditional.
+	IfVersions []string
 }
 
 // SCIMUserQuery lists the users of one provider by keyset on (created_at, id) of their link. UserName and
@@ -126,6 +150,8 @@ type SCIMUserQuery struct {
 	ExternalID string
 	Limit      int
 	Cursor     string
+	// SkipTotal leaves the count out of the page (Total is zero), for the pages that are only read to find a cursor.
+	SkipTotal bool
 }
 
 // filterKey binds a cursor to the query that produced it.
@@ -156,6 +182,8 @@ type SCIMGroupChange struct {
 	AddMembers     []string
 	RemoveMembers  []string
 	ReplaceMembers *[]string
+	// IfVersions are the versions the If-Match header allows (see SCIMUserChange.IfVersions).
+	IfVersions []string
 }
 
 // SCIMGroupQuery lists the SCIM groups of one provider by keyset on (created_at, id).
@@ -165,6 +193,7 @@ type SCIMGroupQuery struct {
 	ExternalID  string
 	Limit       int
 	Cursor      string
+	SkipTotal   bool
 }
 
 func (q SCIMGroupQuery) filterKey() string {
@@ -190,8 +219,9 @@ type SCIMStore interface {
 	// its sessions in the same transaction; active=true on an account an administrator disabled is
 	// ErrSCIMAdminDisabled.
 	UpdateSCIMUser(ctx context.Context, providerID, userID string, change SCIMUserChange, audit ...AuditRecord) (SCIMUser, error)
-	// DeleteSCIMUser removes the SCIM link and disables the account; it never deletes the account.
-	DeleteSCIMUser(ctx context.Context, providerID, userID string, audit ...AuditRecord) error
+	// DeleteSCIMUser removes the SCIM link (the identity row keeps a tombstone, so SCIM no longer sees the account)
+	// and disables the account; it never deletes the account. ifVersions is the If-Match list (empty: unconditional).
+	DeleteSCIMUser(ctx context.Context, providerID, userID string, ifVersions []string, audit ...AuditRecord) error
 
 	CreateSCIMGroup(ctx context.Context, in SCIMGroupCreate, audit ...AuditRecord) (UserGroup, error)
 	GetSCIMGroup(ctx context.Context, providerID, groupID string) (UserGroup, error)
@@ -199,9 +229,12 @@ type SCIMStore interface {
 	UpdateSCIMGroup(ctx context.Context, providerID, groupID string, change SCIMGroupChange, audit ...AuditRecord) (UserGroup, error)
 	// DeleteSCIMGroup deletes a group of the provider with its memberships and grants; a group recreated later
 	// starts again at global role none.
-	DeleteSCIMGroup(ctx context.Context, providerID, groupID string, audit ...AuditRecord) error
-	// ListSCIMGroupMembers returns the members of a group of the provider, keyset-paged by user id.
-	ListSCIMGroupMembers(ctx context.Context, providerID, groupID string, limit int, cursor string) ([]UserGroupMember, string, error)
+	DeleteSCIMGroup(ctx context.Context, providerID, groupID string, ifVersions []string, audit ...AuditRecord) error
+	// ListSCIMGroupMembers returns at most limit members of a group of the provider, ordered by user id, in one query.
+	ListSCIMGroupMembers(ctx context.Context, providerID, groupID string, limit int) ([]UserGroupMember, error)
+	// ListSCIMGroupsMembers returns at most perGroup members of each of the named groups of the provider, in one
+	// query; a group with no members has no entry.
+	ListSCIMGroupsMembers(ctx context.Context, providerID string, groupIDs []string, perGroup int) (map[string][]UserGroupMember, error)
 }
 
 // UserIdentityLinker binds a login subject to the account an administrator names (ADR 0018 section 4, the admin

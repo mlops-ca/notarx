@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -259,59 +261,105 @@ func TestSCIMRoutesAre404WhileDisabledAndNeedAValidToken(t *testing.T) {
 	}
 }
 
-func TestSCIMFailedAuthenticationsAreRateLimited(t *testing.T) {
+func TestSCIMFailedAuthenticationsAreRateLimitedButValidTokensAreNever(t *testing.T) {
 	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
-	for attempt := 0; attempt < scimAuthFailureBurst; attempt++ {
-		expectSCIMError(t, h.scimAs(scimTokenPrefix+"guess", http.MethodGet, "/Users", "", nil), http.StatusUnauthorized, "")
+	for attempt := 0; attempt < samlRateBurst; attempt++ {
+		got := h.scimAs(scimTokenPrefix+"guess", http.MethodGet, "/Users", "", nil)
+		expectSCIMError(t, got, http.StatusUnauthorized, "")
 	}
 	limited := h.scimAs(scimTokenPrefix+"guess", http.MethodGet, "/Users", "", nil)
 	if limited.Code != http.StatusTooManyRequests || limited.Header().Get("Retry-After") == "" {
 		t.Fatalf("after the burst = %d %v", limited.Code, limited.Header())
 	}
-	// The peer stays blocked even with a valid token until the window passes; another peer is not affected.
-	if got := h.scim(http.MethodGet, "/ServiceProviderConfig", ""); got.Code != http.StatusTooManyRequests {
-		t.Errorf("a blocked peer with a valid token = %d", got.Code)
+	// Someone guessing tokens must not lock the identity provider out, even behind a proxy that gives every client one
+	// address: a valid token is served whatever the peer's failures.
+	if got := h.scim(http.MethodGet, "/ServiceProviderConfig", ""); got.Code != http.StatusOK {
+		t.Fatalf("a valid token from a peer over its failure budget = %d %s", got.Code, got.Body.String())
 	}
-	request := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2/ServiceProviderConfig", nil)
-	request.RemoteAddr = "203.0.113.9:4000"
-	request.Header.Set("Authorization", "Bearer "+h.token)
+	// The failures after the budget are neither audited nor counted as new audit rows.
+	failures := 0
+	for _, record := range h.store.Audits {
+		if record.Operation == "scim.authenticate" {
+			failures++
+		}
+	}
+	if failures != samlRateBurst {
+		t.Errorf("%d authentication failures were audited, want exactly the %d inside the budget", failures, samlRateBurst)
+	}
+	other := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2/Users", nil)
+	other.Header.Set("X-Forwarded-For", "203.0.113.9")
+	other.Header.Set("Authorization", "Bearer "+scimTokenPrefix+"guess")
 	recorder := httptest.NewRecorder()
-	h.handler.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK {
-		t.Errorf("another peer = %d %s", recorder.Code, recorder.Body.String())
+	h.handler.ServeHTTP(recorder, other)
+	expectSCIMError(t, recorder, http.StatusUnauthorized, "")
+}
+
+// failingSCIMStore makes the token or provider lookup fail like a database outage.
+type failingSCIMStore struct {
+	scimStore
+	tokenErr, providerErr error
+}
+
+func (f failingSCIMStore) FindActiveSCIMTokenByHash(ctx context.Context, hash string) (repository.SCIMToken, error) {
+	if f.tokenErr != nil {
+		return repository.SCIMToken{}, f.tokenErr
+	}
+	return f.scimStore.FindActiveSCIMTokenByHash(ctx, hash)
+}
+
+func (f failingSCIMStore) GetIdentityProvider(ctx context.Context, id string) (identity.Provider, error) {
+	if f.providerErr != nil {
+		return identity.Provider{}, f.providerErr
+	}
+	return f.scimStore.GetIdentityProvider(ctx, id)
+}
+
+func TestSCIMStoreOutagesAre503AndNeverCountAsFailedAuthentications(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	outage := errors.New("database down")
+	for name, store := range map[string]scimStore{
+		"token lookup":    failingSCIMStore{scimStore: h.store, tokenErr: outage},
+		"provider lookup": failingSCIMStore{scimStore: h.store, providerErr: outage},
+	} {
+		server := newSCIMServer(SCIMOptions{Enabled: true}, store, nil)
+		for attempt := 0; attempt < samlRateBurst+5; attempt++ {
+			request := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2/Users", nil)
+			request.Header.Set("Authorization", "Bearer "+h.token)
+			recorder := httptest.NewRecorder()
+			server.ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusServiceUnavailable {
+				t.Fatalf("%s outage = %d %s", name, recorder.Code, recorder.Body.String())
+			}
+		}
+		if len(server.failures.buckets) != 0 {
+			t.Fatalf("%s: an outage was counted against the peer: %+v", name, server.failures.buckets)
+		}
 	}
 }
 
-func TestSCIMFailureLimiterWindowAndBound(t *testing.T) {
-	limiter := &scimFailureLimiter{}
-	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC)
-	for index := 0; index < scimAuthFailureBurst; index++ {
-		if limiter.blocked("a", now) {
-			t.Fatalf("blocked after %d failures", index)
-		}
-		limiter.fail("a", now)
+func TestSCIMTokensOfADisabledProviderStopAuthenticating(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	if got := h.scim(http.MethodGet, "/Users", ""); got.Code != http.StatusOK {
+		t.Fatalf("enabled provider = %d", got.Code)
 	}
-	if !limiter.blocked("a", now) || limiter.blocked("b", now) {
-		t.Fatal("the burst did not block exactly the failing peer")
+	current, err := h.store.GetIdentityProvider(t.Context(), h.provider.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if limiter.blocked("a", now.Add(scimAuthFailureWindow)) {
-		t.Fatal("the block outlived its window")
+	current.Enabled = false
+	if _, err := h.store.ReplaceIdentityProvider(t.Context(), current, current.Version); err != nil {
+		t.Fatal(err)
 	}
-	limiter.fail("a", now.Add(scimAuthFailureWindow))
-	if limiter.windows["a"].count != 1 {
-		t.Fatalf("a failure after the window must start a new one: %+v", limiter.windows["a"])
+	h.runtime.invalidate()
+	expectSCIMError(t, h.scim(http.MethodGet, "/Users", ""), http.StatusUnauthorized, "")
+	expectSCIMError(t, h.scim(http.MethodPost, "/Users", `{"userName":"late"}`), http.StatusUnauthorized, "")
+	current, _ = h.store.GetIdentityProvider(t.Context(), h.provider.ID)
+	current.Enabled = true
+	if _, err := h.store.ReplaceIdentityProvider(t.Context(), current, current.Version); err != nil {
+		t.Fatal(err)
 	}
-	full := &scimFailureLimiter{windows: map[string]scimFailureWindow{}}
-	for index := 0; index < scimAuthFailureTrack; index++ {
-		full.windows["peer-"+strconv.Itoa(index)] = scimFailureWindow{start: now, count: 1}
-	}
-	full.fail("new-peer", now)
-	if len(full.windows) > scimAuthFailureTrack {
-		t.Fatalf("the limiter grew past its bound: %d", len(full.windows))
-	}
-	full.fail("another-peer", now.Add(2*scimAuthFailureWindow))
-	if _, kept := full.windows["peer-1"]; kept {
-		t.Fatal("expired windows were not dropped when the limiter was full")
+	if got := h.scim(http.MethodGet, "/Users", ""); got.Code != http.StatusOK {
+		t.Fatalf("re-enabled provider = %d", got.Code)
 	}
 }
 

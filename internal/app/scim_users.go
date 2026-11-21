@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/scim"
 )
@@ -38,7 +38,7 @@ func (s *scimServer) users(w http.ResponseWriter, r *http.Request, caller scimCa
 		}
 		return s.methodNotAllowed(w, r, caller, "GET, POST")
 	}
-	if _, err := uuid.Parse(id); err != nil {
+	if !ids.Valid(id) {
 		return s.respond(w, r, caller, "scim.user.read", scim.NewError(http.StatusNotFound, "", "User not found"))
 	}
 	switch r.Method {
@@ -59,15 +59,16 @@ func (s *scimServer) getUser(w http.ResponseWriter, r *http.Request, caller scim
 	if err != nil {
 		return s.respond(w, r, caller, "scim.user.read", s.storeFailure(err, "User"))
 	}
-	return s.writeUser(w, r, caller, "scim.user.read", http.StatusOK, user)
+	return s.writeUser(w, r, caller, "scim.user.read", http.StatusOK, user, true)
 }
 
-func (s *scimServer) writeUser(w http.ResponseWriter, r *http.Request, caller scimCaller, operation string, status int, user repository.SCIMUser) int {
+// writeUser answers with the User; audit is false when the change already committed its audit record.
+func (s *scimServer) writeUser(w http.ResponseWriter, r *http.Request, caller scimCaller, operation string, status int, user repository.SCIMUser, audit bool) int {
 	headers := map[string]string{"ETag": scim.ETag(user.User.Version)}
 	if status == http.StatusCreated {
 		headers["Location"] = s.base(r) + "/Users/" + user.User.ID
 	}
-	return s.writeJSON(w, r, caller, operation, "/Users/"+user.User.ID, status, s.userDocument(s.base(r), user), headers)
+	return s.writeJSON(w, r, caller, operation, "/Users/"+user.User.ID, status, s.userDocument(s.base(r), user), headers, audit)
 }
 
 func (s *scimServer) listUsers(w http.ResponseWriter, r *http.Request, caller scimCaller) int {
@@ -90,6 +91,7 @@ func (s *scimServer) listUsers(w http.ResponseWriter, r *http.Request, caller sc
 	query.Cursor = parameters.cursor
 	if query.Cursor == "" && startIndex > 1 {
 		hop := query
+		hop.SkipTotal = true
 		cursor, ok, failure, err := scimCursorHop(startIndex, func(cursor string, limit int) (int, string, error) {
 			hop.Cursor, hop.Limit = cursor, limit
 			page, err := s.store.ListSCIMUsers(r.Context(), hop)
@@ -121,7 +123,7 @@ func (s *scimServer) listUsers(w http.ResponseWriter, r *http.Request, caller sc
 	} else {
 		response.NextCursor = ""
 	}
-	return s.writeJSON(w, r, caller, "scim.user.list", "/Users", http.StatusOK, response, nil)
+	return s.writeJSON(w, r, caller, "scim.user.list", "/Users", http.StatusOK, response, nil, true)
 }
 
 // emptyList answers a startIndex past the last row: no resources, and the total of the filter.
@@ -130,7 +132,7 @@ func (s *scimServer) emptyList(w http.ResponseWriter, r *http.Request, caller sc
 	if err != nil {
 		return s.respond(w, r, caller, operation, s.storeFailure(err, "resource"))
 	}
-	return s.writeJSON(w, r, caller, operation, resource, http.StatusOK, scim.ListResponse{TotalResults: value, StartIndex: startIndex}, nil)
+	return s.writeJSON(w, r, caller, operation, resource, http.StatusOK, scim.ListResponse{TotalResults: value, StartIndex: startIndex}, nil, true)
 }
 
 // validateUserInput applies the limits the account fields have.
@@ -168,7 +170,7 @@ func (s *scimServer) createUser(w http.ResponseWriter, r *http.Request, caller s
 	if err != nil {
 		return s.respond(w, r, caller, "scim.user.create", s.storeFailure(err, "User"))
 	}
-	return s.writeUser(w, r, caller, "scim.user.create", http.StatusCreated, user)
+	return s.writeUser(w, r, caller, "scim.user.create", http.StatusCreated, user, false)
 }
 
 // userChange converts a replace body to the change the store applies: displayName and the email are replaced
@@ -230,15 +232,17 @@ func (s *scimServer) changeUser(w http.ResponseWriter, r *http.Request, caller s
 	if err != nil {
 		return s.respond(w, r, caller, operation, s.storeFailure(err, "User"))
 	}
-	if !scimIfMatch(r, current.User.Version) {
+	versions := scimIfMatchVersions(r)
+	if !scimVersionMatches(r, current.User.Version) {
 		return s.respond(w, r, caller, operation, s.preconditionFailed())
 	}
 	if len(ignored) > 0 {
 		slog.Info("SCIM request named attributes the server does not store; they were ignored", "provider", caller.Slug, "operation", operation, "attributes", ignored)
 	}
 	if len(changed) == 0 {
-		return s.writeUser(w, r, caller, operation, http.StatusOK, current)
+		return s.writeUser(w, r, caller, operation, http.StatusOK, current, true)
 	}
+	change.IfVersions = versions
 	evidence := map[string]string{"attributes": strings.Join(changed, ",")}
 	if len(ignored) > 0 {
 		evidence["ignored"] = strings.Join(ignored, ",")
@@ -247,7 +251,7 @@ func (s *scimServer) changeUser(w http.ResponseWriter, r *http.Request, caller s
 	if err != nil {
 		return s.respond(w, r, caller, operation, s.storeFailure(err, "User"))
 	}
-	return s.writeUser(w, r, caller, operation, http.StatusOK, updated)
+	return s.writeUser(w, r, caller, operation, http.StatusOK, updated, false)
 }
 
 func (s *scimServer) deleteUser(w http.ResponseWriter, r *http.Request, caller scimCaller, id string) int {
@@ -255,10 +259,10 @@ func (s *scimServer) deleteUser(w http.ResponseWriter, r *http.Request, caller s
 	if err != nil {
 		return s.respond(w, r, caller, "scim.user.delete", s.storeFailure(err, "User"))
 	}
-	if !scimIfMatch(r, current.User.Version) {
+	if !scimVersionMatches(r, current.User.Version) {
 		return s.respond(w, r, caller, "scim.user.delete", s.preconditionFailed())
 	}
-	if err := s.store.DeleteSCIMUser(r.Context(), caller.ProviderID, id, s.writeAudit(r, caller, "scim.user.delete", "/Users/"+id, http.StatusNoContent, nil)...); err != nil {
+	if err := s.store.DeleteSCIMUser(r.Context(), caller.ProviderID, id, scimIfMatchVersions(r), s.writeAudit(r, caller, "scim.user.delete", "/Users/"+id, http.StatusNoContent, nil)...); err != nil {
 		return s.respond(w, r, caller, "scim.user.delete", s.storeFailure(err, "User"))
 	}
 	w.WriteHeader(http.StatusNoContent)

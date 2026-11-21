@@ -87,7 +87,8 @@ func (s *MemoryStore) FindActiveSCIMTokenByHash(_ context.Context, hash string) 
 	return SCIMToken{}, ErrNotFound
 }
 
-// scimIdentityLocked finds the identity row of an account at a provider. The caller holds s.mu.
+// scimIdentityLocked finds the identity row of an account at a provider, whether or not SCIM still sees it. The
+// caller holds s.mu.
 func (s *MemoryStore) scimIdentityLocked(providerID, userID string) (UserIdentity, bool) {
 	for _, identity := range s.userIdentities {
 		if identity.ProviderID == providerID && identity.UserID == userID {
@@ -97,6 +98,12 @@ func (s *MemoryStore) scimIdentityLocked(providerID, userID string) (UserIdentit
 	return UserIdentity{}, false
 }
 
+// scimVisibleIdentityLocked is scimIdentityLocked for the accounts SCIM can see: a link a DELETE removed is hidden.
+func (s *MemoryStore) scimVisibleIdentityLocked(providerID, userID string) (UserIdentity, bool) {
+	identity, ok := s.scimIdentityLocked(providerID, userID)
+	return identity, ok && !scimLinkRemoved(identity.SCIMExternalID)
+}
+
 func (s *MemoryStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, audit ...AuditRecord) (SCIMUser, error) {
 	provider, ok := s.providerForSCIM(in.ProviderID)
 	if !ok {
@@ -104,15 +111,20 @@ func (s *MemoryStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, aud
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, existing := range s.users {
-		if strings.EqualFold(existing.Name, in.UserName) {
-			return SCIMUser{}, ErrNameExists
-		}
-	}
 	for _, existing := range s.userIdentities {
 		if in.ExternalID != "" && existing.ProviderID == in.ProviderID && existing.SCIMExternalID == in.ExternalID {
 			return SCIMUser{}, ErrIdentityExists
 		}
+	}
+	for _, existing := range s.users {
+		if !strings.EqualFold(existing.Name, in.UserName) {
+			continue
+		}
+		identity, linked := s.scimIdentityLocked(in.ProviderID, existing.ID)
+		if !linked || !scimLinkRemoved(identity.SCIMExternalID) || existing.Role == userRoleAdmin || existing.SecretHash != "" {
+			return SCIMUser{}, ErrNameExists
+		}
+		return s.reviveSCIMUserLocked(ctx, existing, identity, in, audit)
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return SCIMUser{}, err
@@ -138,6 +150,33 @@ func (s *MemoryStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, aud
 	return SCIMUser{User: user, Identity: identity}, nil
 }
 
+// reviveSCIMUserLocked brings back an account the same provider deleted earlier: the tombstone is replaced by the new
+// key and the account takes the profile of the request. It is active again only when the request says so.
+func (s *MemoryStore) reviveSCIMUserLocked(ctx context.Context, user User, identity UserIdentity, in SCIMUserCreate, audit []AuditRecord) (SCIMUser, error) {
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return SCIMUser{}, err
+	}
+	now := time.Now().UTC()
+	externalID := in.ExternalID
+	if externalID == "" {
+		externalID = SCIMGeneratedExternalIDPrefix + user.ID
+	}
+	if !strings.EqualFold(in.Email, user.Email) {
+		user = clearEmailVerification(user)
+	}
+	user.DisplayName, user.Email = in.DisplayName, in.Email
+	user.State, user.DisabledReason = UserActive, ""
+	if !in.Active {
+		user.State, user.DisabledReason = UserDisabled, DisabledBySCIM
+	}
+	user.Version = nextHostedGroupVersion(user.Version)
+	user.UpdatedAt = now
+	identity.SCIMExternalID, identity.Email, identity.DisplayName, identity.UpdatedAt = externalID, in.Email, in.DisplayName, now
+	s.users[user.ID] = user
+	s.userIdentities[identity.ID] = identity
+	return SCIMUser{User: user, Identity: identity}, nil
+}
+
 func (s *MemoryStore) GetSCIMUser(_ context.Context, providerID, userID string) (SCIMUser, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -145,7 +184,7 @@ func (s *MemoryStore) GetSCIMUser(_ context.Context, providerID, userID string) 
 }
 
 func (s *MemoryStore) scimUserLocked(providerID, userID string) (SCIMUser, error) {
-	identity, ok := s.scimIdentityLocked(providerID, userID)
+	identity, ok := s.scimVisibleIdentityLocked(providerID, userID)
 	user, userOK := s.users[userID]
 	if !ok || !userOK {
 		return SCIMUser{}, ErrNotFound
@@ -167,7 +206,7 @@ func (s *MemoryStore) ListSCIMUsers(_ context.Context, query SCIMUserQuery) (SCI
 			continue
 		}
 		user, ok := s.users[identity.UserID]
-		if !ok || query.UserName != "" && !strings.EqualFold(user.Name, query.UserName) || query.ExternalID != "" && identity.SCIMExternalID != query.ExternalID {
+		if !ok || scimLinkRemoved(identity.SCIMExternalID) || query.UserName != "" && !strings.EqualFold(user.Name, query.UserName) || query.ExternalID != "" && identity.SCIMExternalID != query.ExternalID {
 			continue
 		}
 		matches = append(matches, SCIMUser{User: user, Identity: identity})
@@ -179,7 +218,10 @@ func (s *MemoryStore) ListSCIMUsers(_ context.Context, query SCIMUserQuery) (SCI
 		}
 		return a.CreatedAt.Before(b.CreatedAt)
 	})
-	page := SCIMUserPage{Total: BoundedListTotal(int64(len(matches)))}
+	page := SCIMUserPage{}
+	if !query.SkipTotal {
+		page.Total = BoundedListTotal(int64(len(matches)))
+	}
 	if after {
 		start := sort.Search(len(matches), func(i int) bool {
 			identity := matches[i].Identity
@@ -209,6 +251,9 @@ func (s *MemoryStore) UpdateSCIMUser(ctx context.Context, providerID, userID str
 	user, identity := current.User, current.Identity
 	if user.Role == userRoleAdmin {
 		return SCIMUser{}, ErrSCIMAdminProtected
+	}
+	if !scimVersionAllowed(user.Version, change.IfVersions) {
+		return SCIMUser{}, ErrVersionConflict
 	}
 	if change.UserName != nil && !strings.EqualFold(*change.UserName, user.Name) {
 		for _, existing := range s.users {
@@ -267,7 +312,7 @@ func (s *MemoryStore) UpdateSCIMUser(ctx context.Context, providerID, userID str
 	return SCIMUser{User: user, Identity: identity}, nil
 }
 
-func (s *MemoryStore) DeleteSCIMUser(ctx context.Context, providerID, userID string, audit ...AuditRecord) error {
+func (s *MemoryStore) DeleteSCIMUser(ctx context.Context, providerID, userID string, ifVersions []string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	current, err := s.scimUserLocked(providerID, userID)
@@ -277,17 +322,16 @@ func (s *MemoryStore) DeleteSCIMUser(ctx context.Context, providerID, userID str
 	if current.User.Role == userRoleAdmin {
 		return ErrSCIMAdminProtected
 	}
+	if !scimVersionAllowed(current.User.Version, ifVersions) {
+		return ErrVersionConflict
+	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return err
 	}
 	now := time.Now().UTC()
 	user, identity := current.User, current.Identity
-	if identity.Subject == "" {
-		delete(s.userIdentities, identity.ID)
-	} else {
-		identity.SCIMExternalID, identity.UpdatedAt = "", now
-		s.userIdentities[identity.ID] = identity
-	}
+	identity.SCIMExternalID, identity.UpdatedAt = SCIMDeletedExternalIDPrefix+user.ID, now
+	s.userIdentities[identity.ID] = identity
 	if user.State != UserDisabled {
 		user.State, user.DisabledReason = UserDisabled, DisabledBySCIM
 	}
@@ -358,7 +402,7 @@ func (s *MemoryStore) CreateSCIMGroup(ctx context.Context, in SCIMGroupCreate, a
 		}
 	}
 	for _, memberID := range in.MemberIDs {
-		if _, ok := s.scimIdentityLocked(in.ProviderID, memberID); !ok {
+		if _, ok := s.scimVisibleIdentityLocked(in.ProviderID, memberID); !ok {
 			return UserGroup{}, ErrSCIMInvalid
 		}
 	}
@@ -423,7 +467,10 @@ func (s *MemoryStore) ListSCIMGroups(_ context.Context, query SCIMGroupQuery) (S
 		}
 		return matches[i].CreatedAt.Before(matches[j].CreatedAt)
 	})
-	page := SCIMGroupPage{Total: BoundedListTotal(int64(len(matches)))}
+	page := SCIMGroupPage{}
+	if !query.SkipTotal {
+		page.Total = BoundedListTotal(int64(len(matches)))
+	}
 	if after {
 		start := sort.Search(len(matches), func(i int) bool {
 			if matches[i].CreatedAt.Equal(afterAt) {
@@ -448,6 +495,9 @@ func (s *MemoryStore) UpdateSCIMGroup(ctx context.Context, providerID, groupID s
 	if err != nil {
 		return UserGroup{}, err
 	}
+	if !scimVersionAllowed(group.Version, change.IfVersions) {
+		return UserGroup{}, ErrVersionConflict
+	}
 	state := s.userGroupsLocked()
 	if change.DisplayName != nil {
 		name, err := NormalizeUserGroupName(*change.DisplayName)
@@ -468,7 +518,7 @@ func (s *MemoryStore) UpdateSCIMGroup(ctx context.Context, providerID, groupID s
 		added = append(added, *change.ReplaceMembers...)
 	}
 	for _, memberID := range added {
-		if _, ok := s.scimIdentityLocked(providerID, memberID); !ok {
+		if _, ok := s.scimVisibleIdentityLocked(providerID, memberID); !ok {
 			return UserGroup{}, ErrSCIMInvalid
 		}
 	}
@@ -508,12 +558,15 @@ func (s *MemoryStore) UpdateSCIMGroup(ctx context.Context, providerID, groupID s
 	return group, nil
 }
 
-func (s *MemoryStore) DeleteSCIMGroup(ctx context.Context, providerID, groupID string, audit ...AuditRecord) error {
+func (s *MemoryStore) DeleteSCIMGroup(ctx context.Context, providerID, groupID string, ifVersions []string, audit ...AuditRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	group, err := s.scimGroupLocked(providerID, groupID)
 	if err != nil {
 		return err
+	}
+	if !scimVersionAllowed(group.Version, ifVersions) {
+		return ErrVersionConflict
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return err
@@ -526,14 +579,44 @@ func (s *MemoryStore) DeleteSCIMGroup(ctx context.Context, providerID, groupID s
 	return nil
 }
 
-func (s *MemoryStore) ListSCIMGroupMembers(ctx context.Context, providerID, groupID string, limit int, cursor string) ([]UserGroupMember, string, error) {
+func (s *MemoryStore) ListSCIMGroupMembers(_ context.Context, providerID, groupID string, limit int) ([]UserGroupMember, error) {
 	s.mu.Lock()
-	_, err := s.scimGroupLocked(providerID, groupID)
-	s.mu.Unlock()
-	if err != nil {
-		return nil, "", err
+	defer s.mu.Unlock()
+	if _, err := s.scimGroupLocked(providerID, groupID); err != nil {
+		return nil, err
 	}
-	return s.ListUserGroupMembers(ctx, groupID, limit, cursor)
+	return s.scimMembersLocked(groupID, limit), nil
+}
+
+func (s *MemoryStore) ListSCIMGroupsMembers(_ context.Context, providerID string, groupIDs []string, perGroup int) (map[string][]UserGroupMember, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	members := make(map[string][]UserGroupMember, len(groupIDs))
+	for _, groupID := range groupIDs {
+		if _, err := s.scimGroupLocked(providerID, groupID); err != nil {
+			continue
+		}
+		if list := s.scimMembersLocked(groupID, perGroup); len(list) > 0 {
+			members[groupID] = list
+		}
+	}
+	return members, nil
+}
+
+// scimMembersLocked returns at most limit members of a group ordered by user id. The caller holds s.mu.
+func (s *MemoryStore) scimMembersLocked(groupID string, limit int) []UserGroupMember {
+	list := make([]UserGroupMember, 0, len(s.userGroupsLocked().members[groupID]))
+	for _, member := range s.userGroupsLocked().members[groupID] {
+		if user, ok := s.users[member.UserID]; ok {
+			member.UserName = user.Name
+		}
+		list = append(list, member)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].UserID < list[j].UserID })
+	if limit > 0 && len(list) > limit {
+		list = list[:limit]
+	}
+	return list
 }
 
 func (s *MemoryStore) LinkProviderIdentity(ctx context.Context, link ProviderIdentityLink, audit ...AuditRecord) (UserIdentity, error) {

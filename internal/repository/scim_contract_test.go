@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,8 +209,25 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 			t.Errorf("the refused re-activation changed the account: %+v", still)
 		}
 
-		// Delete removes the link of a never-logged-in account and disables it; the account stays.
-		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID); err != nil {
+		// A stale If-Match version is refused under the row lock, and the right one goes through.
+		current, err := store.GetSCIMUser(ctx, provider, user.User.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		stale := []string{"0", current.User.Version + "9"}
+		if _, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{DisplayName: ptr("stale"), IfVersions: stale}); !errors.Is(err, ErrVersionConflict) {
+			t.Errorf("an update with a stale version: %v", err)
+		}
+		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, stale); !errors.Is(err, ErrVersionConflict) {
+			t.Errorf("a delete with a stale version: %v", err)
+		}
+		latest, _ := store.GetSCIMUser(ctx, provider, user.User.ID)
+		if matched, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{DisplayName: ptr("David F"), IfVersions: []string{"0", latest.User.Version}}); err != nil || matched.User.DisplayName != "David F" {
+			t.Errorf("an update with the current version = %+v, %v", matched, err)
+		}
+
+		// Delete hides the account from SCIM and disables it; the account stays.
+		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, nil); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := store.GetSCIMUser(ctx, provider, user.User.ID); !errors.Is(err, ErrNotFound) {
@@ -219,8 +237,44 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if err != nil || kept.State != UserDisabled || kept.DisabledReason != DisabledBySCIM {
 			t.Errorf("the account after DELETE = %+v, %v", kept, err)
 		}
-		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID); !errors.Is(err, ErrNotFound) {
+		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, nil); !errors.Is(err, ErrNotFound) {
 			t.Errorf("a second delete: %v", err)
+		}
+		active = true
+		if _, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{Active: &active}); !errors.Is(err, ErrNotFound) {
+			t.Errorf("a PATCH active=true brought a deleted account back: %v", err)
+		}
+		if page, _ := store.ListSCIMUsers(ctx, SCIMUserQuery{ProviderID: provider, UserName: renamed}); len(page.Items) != 0 {
+			t.Errorf("a deleted account is still listed: %+v", page.Items)
+		}
+		if page, _ := store.ListSCIMUsers(ctx, SCIMUserQuery{ProviderID: provider, ExternalID: external}); len(page.Items) != 0 {
+			t.Errorf("a deleted account is still found by its old externalId: %+v", page.Items)
+		}
+		if _, err := store.CreateSCIMGroup(ctx, SCIMGroupCreate{ProviderID: provider, DisplayName: "Ghosts", MemberIDs: []string{user.User.ID}}); !errors.Is(err, ErrSCIMInvalid) {
+			t.Errorf("a deleted account joined a group: %v", err)
+		}
+
+		// Only the same provider can bring the account back, by creating the user again.
+		if _, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: other, UserName: renamed, Active: true}); !errors.Is(err, ErrNameExists) {
+			t.Errorf("another provider took over a deleted account: %v", err)
+		}
+		revived, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: strings.ToUpper(renamed), DisplayName: "Back", Email: "back@example.com", ExternalID: name("ext-back"), Active: true})
+		if err != nil || revived.User.ID != user.User.ID || revived.User.State != UserActive || revived.User.DisabledReason != "" || revived.User.DisplayName != "Back" ||
+			revived.ExternalID() != name("ext-back") || revived.User.Name != renamed {
+			t.Fatalf("revive = %+v, %v", revived, err)
+		}
+		if again, err := store.GetSCIMUser(ctx, provider, user.User.ID); err != nil || again.User.Version == current.User.Version {
+			t.Errorf("the revived account = %+v, %v", again, err)
+		}
+		if err := store.DeleteSCIMUser(ctx, provider, user.User.ID, nil); err != nil {
+			t.Fatal(err)
+		}
+		// An account that gained a password or the administrator level in the meantime is not brought back.
+		if _, err := store.UpdateUser(ctx, UserUpdate{ID: user.User.ID, Role: ptr("admin")}, mustVersion(t, store, user.User.ID)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: renamed, Active: true}); !errors.Is(err, ErrNameExists) {
+			t.Errorf("an administrator was brought back by SCIM: %v", err)
 		}
 	})
 
@@ -239,7 +293,7 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if _, err := store.UpdateSCIMUser(ctx, provider, admin.ID, SCIMUserChange{DisplayName: ptr("pwned")}); !errors.Is(err, ErrSCIMAdminProtected) {
 			t.Errorf("editing an administrator: %v", err)
 		}
-		if err := store.DeleteSCIMUser(ctx, provider, admin.ID); !errors.Is(err, ErrSCIMAdminProtected) {
+		if err := store.DeleteSCIMUser(ctx, provider, admin.ID, nil); !errors.Is(err, ErrSCIMAdminProtected) {
 			t.Errorf("deleting an administrator: %v", err)
 		}
 		if still, _ := store.GetUser(ctx, admin.ID); still.State != UserActive || still.DisplayName != "" || still.SessionVersion != admin.SessionVersion {
@@ -278,6 +332,9 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 			t.Fatalf("paging visited %d users (%d distinct)", len(seen), len(slices.Compact(slices.Sorted(slices.Values(seen)))))
 		}
 		page, _ := store.ListSCIMUsers(ctx, SCIMUserQuery{ProviderID: pager, Limit: 10})
+		if skipped, err := store.ListSCIMUsers(ctx, SCIMUserQuery{ProviderID: pager, Limit: 10, SkipTotal: true}); err != nil || skipped.Total.Value != 0 || len(skipped.Items) != 10 || skipped.NextCursor != page.NextCursor {
+			t.Errorf("a page without its total = %+v, %v", skipped, err)
+		}
 		if _, err := store.ListSCIMUsers(ctx, SCIMUserQuery{ProviderID: pager, UserName: "x", Limit: 10, Cursor: page.NextCursor}); !errors.Is(err, ErrInvalidPageToken) {
 			t.Errorf("a cursor of another filter: %v", err)
 		}
@@ -314,7 +371,7 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if _, err := store.GetSCIMGroup(ctx, other, group.ID); !errors.Is(err, ErrNotFound) {
 			t.Errorf("a group visible to another provider: %v", err)
 		}
-		if err := store.DeleteSCIMGroup(ctx, other, group.ID); !errors.Is(err, ErrNotFound) {
+		if err := store.DeleteSCIMGroup(ctx, other, group.ID, nil); !errors.Is(err, ErrNotFound) {
 			t.Errorf("a group deleted through another provider: %v", err)
 		}
 		local, err := store.CreateUserGroup(ctx, UserGroup{DisplayName: name("local-group"), Source: UserGroupSourceLocal})
@@ -324,13 +381,13 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if _, err := store.GetSCIMGroup(ctx, provider, local.ID); !errors.Is(err, ErrNotFound) {
 			t.Errorf("SCIM reached a local group: %v", err)
 		}
-		if err := store.DeleteSCIMGroup(ctx, provider, local.ID); !errors.Is(err, ErrNotFound) {
+		if err := store.DeleteSCIMGroup(ctx, provider, local.ID, nil); !errors.Is(err, ErrNotFound) {
 			t.Errorf("SCIM deleted a local group: %v", err)
 		}
 		if err := store.AddUserGroupMember(ctx, group.ID, stranger.User.ID, UserGroupSourceLocal); err != nil {
 			t.Fatal(err) // an administrator's membership of the SCIM group
 		}
-		members, _, err := store.ListSCIMGroupMembers(ctx, provider, group.ID, 50, "")
+		members, err := store.ListSCIMGroupMembers(ctx, provider, group.ID, 50)
 		if err != nil || len(members) != 2 {
 			t.Fatalf("members = %+v, %v", members, err)
 		}
@@ -341,7 +398,7 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if err != nil || renamed.DisplayName != "Platform engineers" || renamed.Version != "2" || renamed.GlobalRole != UserGroupRoleNone {
 			t.Fatalf("update = %+v, %v", renamed, err)
 		}
-		members, _, _ = store.ListSCIMGroupMembers(ctx, provider, group.ID, 50, "")
+		members, _ = store.ListSCIMGroupMembers(ctx, provider, group.ID, 50)
 		var ids []string
 		for _, entry := range members {
 			ids = append(ids, entry.UserID)
@@ -355,7 +412,7 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if _, err := store.UpdateSCIMGroup(ctx, provider, group.ID, SCIMGroupChange{AddMembers: []string{member.User.ID, second.User.ID}, RemoveMembers: []string{second.User.ID}}); err != nil {
 			t.Fatal(err)
 		}
-		if members, _, _ = store.ListSCIMGroupMembers(ctx, provider, group.ID, 50, ""); len(members) != 2 || members[0].UserID == second.User.ID && members[1].UserID == second.User.ID {
+		if members, _ = store.ListSCIMGroupMembers(ctx, provider, group.ID, 50); len(members) != 2 || members[0].UserID == second.User.ID && members[1].UserID == second.User.ID {
 			t.Errorf("members after add and remove = %+v", members)
 		}
 		if _, err := store.UpdateSCIMGroup(ctx, provider, group.ID, SCIMGroupChange{AddMembers: []string{stranger.User.ID}}); !errors.Is(err, ErrSCIMInvalid) {
@@ -375,7 +432,14 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if err != nil || afterRename.GlobalRole != UserGroupRoleAdmin || afterRename.Version == flagged.Version {
 			t.Fatalf("a SCIM update changed the administrator's flag: %+v, %v", afterRename, err)
 		}
-		if err := store.DeleteSCIMGroup(ctx, provider, group.ID); err != nil {
+		if err := store.DeleteSCIMGroup(ctx, provider, group.ID, []string{"0"}); !errors.Is(err, ErrVersionConflict) {
+			t.Errorf("a group delete with a stale version: %v", err)
+		}
+		if _, err := store.UpdateSCIMGroup(ctx, provider, group.ID, SCIMGroupChange{DisplayName: ptr("Stale"), IfVersions: []string{"0"}}); !errors.Is(err, ErrVersionConflict) {
+			t.Errorf("a group update with a stale version: %v", err)
+		}
+		latestGroup, _ := store.GetSCIMGroup(ctx, provider, group.ID)
+		if err := store.DeleteSCIMGroup(ctx, provider, group.ID, []string{latestGroup.Version}); err != nil {
 			t.Fatal(err)
 		}
 		recreated, err := store.CreateSCIMGroup(ctx, SCIMGroupCreate{ProviderID: provider, DisplayName: "Platform again", ExternalID: name("g-eng")})
@@ -398,6 +462,29 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		}
 		if _, err := store.ListSCIMGroups(ctx, SCIMGroupQuery{ProviderID: provider, Cursor: "garbage"}); !errors.Is(err, ErrInvalidPageToken) {
 			t.Errorf("a malformed cursor: %v", err)
+		}
+
+		// The members of a page of groups come back in one call, capped per group and confined to the provider.
+		busy, err := store.CreateSCIMGroup(ctx, SCIMGroupCreate{ProviderID: provider, DisplayName: "Busy", MemberIDs: []string{member.User.ID, second.User.ID}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		foreign, err := store.CreateSCIMGroup(ctx, SCIMGroupCreate{ProviderID: other, DisplayName: "Foreign", MemberIDs: []string{stranger.User.ID}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		batch, err := store.ListSCIMGroupsMembers(ctx, provider, []string{recreated.ID, busy.ID, foreign.ID}, 1)
+		if err != nil || len(batch) != 1 || len(batch[busy.ID]) != 1 || batch[busy.ID][0].UserName == "" {
+			t.Errorf("batch members = %+v, %v", batch, err)
+		}
+		if all, _ := store.ListSCIMGroupsMembers(ctx, provider, []string{busy.ID}, 10); len(all[busy.ID]) != 2 {
+			t.Errorf("batch members without a cap = %+v", all)
+		}
+		if limited, _ := store.ListSCIMGroupMembers(ctx, provider, busy.ID, 1); len(limited) != 1 {
+			t.Errorf("a capped member list = %+v", limited)
+		}
+		if _, err := store.ListSCIMGroupMembers(ctx, other, busy.ID, 10); !errors.Is(err, ErrNotFound) {
+			t.Errorf("another provider's member list: %v", err)
 		}
 	})
 

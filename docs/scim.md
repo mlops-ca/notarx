@@ -36,8 +36,9 @@ curl -sS -X POST "$NOTARX/api/v2/authentication/providers/$PROVIDER_ID/scim-toke
   plaintext, and neither logs nor audits it. Lose it and you create a new token.
 - `GET` on the same path lists the tokens with their state (`active`, `expired`, `revoked`); `DELETE
   .../scim-tokens/{tokenId}` revokes one at once. Creating and revoking are audited.
-- Every failed authentication is the same 401. A peer address that fails 30 times in a minute gets 429 until the
-  window passes.
+- Every failed authentication is the same 401, and a token of a disabled provider stops authenticating with the
+  provider's logins. A peer address whose failures exceed the 120 per minute budget of the anonymous routes gets 429 for
+  its further failures; a valid token is never throttled.
 
 Send it as `Authorization: Bearer nxscim_...`.
 
@@ -63,7 +64,10 @@ Send it as `Authorization: Bearer nxscim_...`.
   revokes its sessions in one transaction. Identity rows and grants stay, so `active=true` restores access. An
   account an administrator disabled stays disabled: re-activating it through SCIM is `409`.
 - `DELETE /Users/{id}` removes the SCIM link and disables the account; it never deletes the account (that stays a
-  console action). Re-provisioning a deleted user needs an administrator to delete or link the account.
+  console action). SCIM no longer sees the account (`404`, not listed, `PATCH active=true` cannot bring it back);
+  the login subject stays bound. The same provider brings it back by creating the user again: a `POST /Users` with
+  the same `userName` re-links and re-activates it as long as it is still unprivileged and has no local password,
+  while another provider still gets `409`.
 - SCIM can never modify or deactivate a platform administrator: every write answers `403`.
 - Groups are created with source `scim` and global role `none`; a request cannot name a role, and SCIM changes never
   touch an administrator's flag. Memberships SCIM writes are authoritative for the SCIM-managed ones; an
@@ -79,9 +83,9 @@ Send it as `Authorization: Bearer nxscim_...`.
 | Paging | Keyset on creation time and id. `count` is capped at `NOTARX_SCIM_MAX_PAGE`; `startIndex` up to 10001 is mapped onto a cursor by hopping keyset pages, and every list response carries an RFC 9865 `nextCursor` for anything further. `totalResults` is exact up to 10000 rows and a lower bound beyond |
 | PATCH | Any letter case for `op`; `active` as a boolean or `"True"`/`"False"`; simple paths, `attr[type eq "x"].sub`, `members[value eq "id"]`, member arrays and pathless replace objects (Okta) |
 | Unsupported attributes | Logged and ignored with `200`; only `userName`, `externalId`, `active` and `id` answer `400 invalidPath` |
-| ETag | Weak ETags on resources; `If-Match` on PUT, PATCH and DELETE, `412` on a mismatch |
+| ETag | Weak ETags on resources; `If-Match` on PUT, PATCH and DELETE is compared under the row lock, `412` on a mismatch |
 | Bulk, sort, change password | Not supported |
-| Groups | `excludedAttributes=members` is honoured; a group returns at most 10000 members |
+| Groups | `excludedAttributes=members` is honoured; a group read returns at most 10000 members and a list returns at most 1000 per group (use `excludedAttributes=members`, as Entra ID does, or read the group) |
 
 The account stores one display name and one email: `name.formatted` and `emails` map to them, the other name
 parts are ignored.

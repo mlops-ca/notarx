@@ -168,38 +168,7 @@ func (s *PostgresStore) SetUserGroupGlobalRole(ctx context.Context, id, role, ex
 // the affected repositories are versioned like any grant change.
 func (s *PostgresStore) DeleteUserGroup(ctx context.Context, id string, audit ...AuditRecord) error {
 	repositoryIDs, err := runAudited(ctx, s, audit, func(q sqlRunner) ([]string, error) {
-		if !isUUID(id) {
-			return nil, ErrNotFound
-		}
-		result, err := q.ExecContext(ctx, `DELETE FROM user_groups WHERE id=$1::uuid`, id)
-		if err != nil {
-			return nil, err
-		}
-		if affected, _ := result.RowsAffected(); affected == 0 {
-			return nil, ErrNotFound
-		}
-		// Templates that name the group would recreate dangling grants when applied.
-		if _, err := q.ExecContext(ctx, `UPDATE authorization_templates SET grants=COALESCE((SELECT jsonb_agg(g) FROM jsonb_array_elements(grants) g WHERE g->>'principal' <> $1),'[]'::jsonb),version=version+1,updated_at=now()
-WHERE grants @> jsonb_build_array(jsonb_build_object('principal',$1::text))`, groupPrincipal(id)); err != nil {
-			return nil, err
-		}
-		rows, err := q.QueryContext(ctx, `WITH removed AS (DELETE FROM repository_grants WHERE principal=$1 RETURNING repository_id),
-touched AS (SELECT DISTINCT repository_id FROM removed),
-sets AS (UPDATE repository_grant_sets s SET version=s.version+1 FROM touched t WHERE s.repository_id=t.repository_id RETURNING s.repository_id)
-UPDATE hosted_repositories r SET grants_version=r.grants_version+1 FROM touched t WHERE r.id=t.repository_id RETURNING r.id::text`, groupPrincipal(id))
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = rows.Close() }()
-		var touched []string
-		for rows.Next() {
-			var repositoryID string
-			if err := rows.Scan(&repositoryID); err != nil {
-				return nil, err
-			}
-			touched = append(touched, repositoryID)
-		}
-		return touched, rows.Err()
+		return deleteUserGroupOn(ctx, q, id)
 	})
 	if err == nil {
 		s.invalidateLocalScope(CacheScopeUserGroup)
@@ -208,6 +177,43 @@ UPDATE hosted_repositories r SET grants_version=r.grants_version+1 FROM touched 
 		}
 	}
 	return err
+}
+
+// deleteUserGroupOn deletes the group, the template grants and the repository grants that name it on the pool or
+// inside a transaction, and returns the repositories whose grant sets changed so the caller evicts them.
+func deleteUserGroupOn(ctx context.Context, q sqlRunner, id string) ([]string, error) {
+	if !isUUID(id) {
+		return nil, ErrNotFound
+	}
+	result, err := q.ExecContext(ctx, `DELETE FROM user_groups WHERE id=$1::uuid`, id)
+	if err != nil {
+		return nil, err
+	}
+	if affected, _ := result.RowsAffected(); affected == 0 {
+		return nil, ErrNotFound
+	}
+	// Templates that name the group would recreate dangling grants when applied.
+	if _, err := q.ExecContext(ctx, `UPDATE authorization_templates SET grants=COALESCE((SELECT jsonb_agg(g) FROM jsonb_array_elements(grants) g WHERE g->>'principal' <> $1),'[]'::jsonb),version=version+1,updated_at=now()
+WHERE grants @> jsonb_build_array(jsonb_build_object('principal',$1::text))`, groupPrincipal(id)); err != nil {
+		return nil, err
+	}
+	rows, err := q.QueryContext(ctx, `WITH removed AS (DELETE FROM repository_grants WHERE principal=$1 RETURNING repository_id),
+touched AS (SELECT DISTINCT repository_id FROM removed),
+sets AS (UPDATE repository_grant_sets s SET version=s.version+1 FROM touched t WHERE s.repository_id=t.repository_id RETURNING s.repository_id)
+UPDATE hosted_repositories r SET grants_version=r.grants_version+1 FROM touched t WHERE r.id=t.repository_id RETURNING r.id::text`, groupPrincipal(id))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var touched []string
+	for rows.Next() {
+		var repositoryID string
+		if err := rows.Scan(&repositoryID); err != nil {
+			return nil, err
+		}
+		touched = append(touched, repositoryID)
+	}
+	return touched, rows.Err()
 }
 
 func (s *PostgresStore) AddUserGroupMember(ctx context.Context, groupID, userID string, source UserGroupSource, audit ...AuditRecord) error {

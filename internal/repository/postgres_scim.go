@@ -83,6 +83,13 @@ func (s *PostgresStore) FindActiveSCIMTokenByHash(ctx context.Context, hash stri
 	return token, err
 }
 
+// scimVisible is the condition of the identity rows SCIM can see: a link that DELETE /Users removed carries a
+// tombstone in scim_external_id and is hidden. scimVisibleBare is the same for statements without the i alias.
+const (
+	scimVisible     = `(i.scim_external_id IS NULL OR i.scim_external_id NOT LIKE '` + SCIMDeletedExternalIDPrefix + `%')`
+	scimVisibleBare = `(scim_external_id IS NULL OR scim_external_id NOT LIKE '` + SCIMDeletedExternalIDPrefix + `%')`
+)
+
 const scimUserColumns = `u.id::text, u.name, u.display_name, u.email, u.description, u.secret_hash, u.role, u.state, u.last_login_at, u.password_changed_at, u.failed_login_attempts, u.locked_until, u.must_change_password, u.session_version, u.email_verified_by_admin, u.email_verified_at, u.email_verified_by, u.created_at, u.updated_at, u.version::text, COALESCE(u.disabled_reason, ''),
 	i.id::text,i.user_id::text,i.kind,i.provider_id::text,i.issuer,COALESCE(i.subject,''),COALESCE(i.scim_external_id,''),i.email,i.display_name,i.email_verified,i.last_login_at,i.created_at,i.updated_at`
 
@@ -109,7 +116,7 @@ func getSCIMUserOn(ctx context.Context, q sqlRunner, providerID, userID string, 
 	if !isUUID(providerID) || !isUUID(userID) {
 		return SCIMUser{}, ErrNotFound
 	}
-	query := `SELECT ` + scimUserColumns + ` FROM user_identities i JOIN users u ON u.id=i.user_id WHERE i.provider_id=$1::uuid AND i.user_id=$2::uuid`
+	query := `SELECT ` + scimUserColumns + ` FROM user_identities i JOIN users u ON u.id=i.user_id WHERE i.provider_id=$1::uuid AND i.user_id=$2::uuid AND ` + scimVisible
 	if lock {
 		query += ` FOR UPDATE OF u, i`
 	}
@@ -133,11 +140,14 @@ func (s *PostgresStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, a
 		if err != nil {
 			return SCIMUser{}, err
 		}
-		userID := ids.New()
 		state, reason := UserActive, ""
 		if !in.Active {
 			state, reason = UserDisabled, DisabledBySCIM
 		}
+		if revived, found, err := reviveSCIMUser(ctx, q, in, state, reason); err != nil || found {
+			return revived, err
+		}
+		userID := ids.New()
 		var user User
 		err = scanUser(q.QueryRowContext(ctx, `INSERT INTO users (id,name,display_name,email,description,secret_hash,role,state,disabled_reason,session_version) VALUES ($1::uuid,$2,$3,$4,'','','none',$5,NULLIF($6,''),1) RETURNING `+userColumns,
 			userID, in.UserName, in.DisplayName, in.Email, state, reason), &user)
@@ -168,12 +178,63 @@ func (s *PostgresStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, a
 	return created, err
 }
 
+// reviveSCIMUser brings back an account the same provider deleted earlier (its link carries the tombstone): the
+// account must still be unprivileged and without a password, the tombstone is replaced by the new key and the account
+// takes the profile of the request. found is false when no such account exists, and the create goes on.
+func reviveSCIMUser(ctx context.Context, q sqlRunner, in SCIMUserCreate, state, reason string) (SCIMUser, bool, error) {
+	var userID, identityID string
+	err := q.QueryRowContext(ctx, `SELECT u.id::text, i.id::text FROM users u JOIN user_identities i ON i.user_id=u.id AND i.provider_id=$1::uuid
+		WHERE lower(u.name)=lower($2) AND i.scim_external_id LIKE '`+SCIMDeletedExternalIDPrefix+`%' AND u.role<>'admin' AND u.secret_hash='' FOR UPDATE OF u, i`, in.ProviderID, in.UserName).Scan(&userID, &identityID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SCIMUser{}, false, nil
+	}
+	if err != nil {
+		return SCIMUser{}, false, err
+	}
+	current, err := getSCIMUserRowsOn(ctx, q, identityID)
+	if err != nil {
+		return SCIMUser{}, false, err
+	}
+	externalID := in.ExternalID
+	if externalID == "" {
+		externalID = SCIMGeneratedExternalIDPrefix + userID
+	}
+	verified := current.User
+	if !strings.EqualFold(in.Email, current.User.Email) {
+		verified = clearEmailVerification(current.User)
+	}
+	var user User
+	if err = scanUser(q.QueryRowContext(ctx, `UPDATE users SET display_name=$2, email=$3, email_verified_by_admin=$4, email_verified_at=$5, email_verified_by=$6, state=$7, disabled_reason=NULLIF($8,''), version=version+1, updated_at=now() WHERE id=$1::uuid RETURNING `+userColumns,
+		userID, in.DisplayName, in.Email, verified.EmailVerifiedByAdmin, verified.EmailVerifiedAt, verified.EmailVerifiedBy, state, reason), &user); err != nil {
+		return SCIMUser{}, false, err
+	}
+	var identity UserIdentity
+	err = scanUserIdentity(q.QueryRowContext(ctx, `UPDATE user_identities SET scim_external_id=$2, email=$3, display_name=$4, updated_at=now() WHERE id=$1::uuid RETURNING `+userIdentityColumns,
+		identityID, externalID, in.Email, in.DisplayName), &identity)
+	if isUnique(err) {
+		return SCIMUser{}, false, ErrIdentityExists
+	}
+	if err != nil {
+		return SCIMUser{}, false, err
+	}
+	return SCIMUser{User: user, Identity: identity}, true, nil
+}
+
+// getSCIMUserRowsOn reads an account and its identity row by the identity id, whatever the state of the link.
+func getSCIMUserRowsOn(ctx context.Context, q sqlRunner, identityID string) (SCIMUser, error) {
+	user, err := scanSCIMUser(q.QueryRowContext(ctx, `SELECT `+scimUserColumns+` FROM user_identities i JOIN users u ON u.id=i.user_id WHERE i.id=$1::uuid`, identityID))
+	if errors.Is(err, sql.ErrNoRows) {
+		return SCIMUser{}, ErrNotFound
+	}
+	return user, err
+}
+
 func (s *PostgresStore) GetSCIMUser(ctx context.Context, providerID, userID string) (SCIMUser, error) {
 	return getSCIMUserOn(ctx, s.db, providerID, userID, false)
 }
 
 // scimUserFilter is the FROM and WHERE of a SCIM user list without the cursor, shared by the count and the page.
-const scimUserFilter = `user_identities i JOIN users u ON u.id=i.user_id WHERE i.provider_id=$1::uuid AND ($2='' OR lower(u.name)=lower($2)) AND ($3='' OR i.scim_external_id=$3)`
+const scimUserFilter = `user_identities i JOIN users u ON u.id=i.user_id WHERE i.provider_id=$1::uuid AND ` + scimVisible + ` AND ($2='' OR lower(u.name)=lower($2)) AND ($3='' OR i.scim_external_id=$3)`
 
 // scimUserPageQuery is one keyset page of a provider's users, served by user_identities_provider_created_idx.
 const scimUserPageQuery = `SELECT ` + scimUserColumns + ` FROM ` + scimUserFilter + ` AND ($4::timestamptz IS NULL OR (i.created_at,i.id)>($4::timestamptz,$5::uuid)) ORDER BY i.created_at, i.id LIMIT $6`
@@ -187,9 +248,11 @@ func (s *PostgresStore) ListSCIMUsers(ctx context.Context, query SCIMUserQuery) 
 		return SCIMUserPage{Items: []SCIMUser{}, Total: BoundedListTotal(0)}, nil
 	}
 	limit := clampSCIMPage(query.Limit)
-	total, err := boundedTotal(ctx, s.db, "", scimUserFilter, query.ProviderID, query.UserName, query.ExternalID)
-	if err != nil {
-		return SCIMUserPage{}, err
+	var total ListTotal
+	if !query.SkipTotal {
+		if total, err = boundedTotal(ctx, s.db, "", scimUserFilter, query.ProviderID, query.UserName, query.ExternalID); err != nil {
+			return SCIMUserPage{}, err
+		}
 	}
 	var cursorAt sql.NullTime
 	var cursorID sql.NullString
@@ -231,6 +294,9 @@ func (s *PostgresStore) UpdateSCIMUser(ctx context.Context, providerID, userID s
 		user, identity := current.User, current.Identity
 		if user.Role == userRoleAdmin {
 			return SCIMUser{}, ErrSCIMAdminProtected
+		}
+		if !scimVersionAllowed(user.Version, change.IfVersions) {
+			return SCIMUser{}, ErrVersionConflict
 		}
 		if change.ExternalID != nil && *change.ExternalID == "" && identity.Subject == "" {
 			return SCIMUser{}, ErrSCIMInvalid
@@ -284,7 +350,7 @@ func (s *PostgresStore) UpdateSCIMUser(ctx context.Context, providerID, userID s
 	return updated, err
 }
 
-func (s *PostgresStore) DeleteSCIMUser(ctx context.Context, providerID, userID string, audit ...AuditRecord) error {
+func (s *PostgresStore) DeleteSCIMUser(ctx context.Context, providerID, userID string, ifVersions []string, audit ...AuditRecord) error {
 	_, err := runTransactional(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
 		current, err := getSCIMUserOn(ctx, q, providerID, userID, true)
 		if err != nil {
@@ -293,13 +359,12 @@ func (s *PostgresStore) DeleteSCIMUser(ctx context.Context, providerID, userID s
 		if current.User.Role == userRoleAdmin {
 			return struct{}{}, ErrSCIMAdminProtected
 		}
-		if current.Identity.Subject == "" {
-			// Nothing else binds this row to a login: dropping the SCIM key leaves no key at all.
-			_, err = q.ExecContext(ctx, `DELETE FROM user_identities WHERE id=$1::uuid`, current.Identity.ID)
-		} else {
-			_, err = q.ExecContext(ctx, `UPDATE user_identities SET scim_external_id=NULL, updated_at=now() WHERE id=$1::uuid`, current.Identity.ID)
+		if !scimVersionAllowed(current.User.Version, ifVersions) {
+			return struct{}{}, ErrVersionConflict
 		}
-		if err != nil {
+		// The row stays: it may carry the login subject, and the tombstone hides the account from SCIM until the same
+		// provider creates the user again.
+		if _, err = q.ExecContext(ctx, `UPDATE user_identities SET scim_external_id=$2, updated_at=now() WHERE id=$1::uuid`, current.Identity.ID, SCIMDeletedExternalIDPrefix+userID); err != nil {
 			return struct{}{}, err
 		}
 		if _, err = q.ExecContext(ctx, `UPDATE users SET state='disabled', disabled_reason=CASE WHEN state='disabled' THEN disabled_reason ELSE 'scim' END, session_version=session_version+1, version=version+1, updated_at=now() WHERE id=$1::uuid`, userID); err != nil {
@@ -326,7 +391,7 @@ func scimMembersLinked(ctx context.Context, q sqlRunner, providerID string, memb
 		}
 	}
 	var linked int
-	err := q.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id=$1::uuid AND user_id IN (SELECT m::uuid FROM unnest($2::text[]) AS m)`, providerID, memberIDs).Scan(&linked)
+	err := q.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id=$1::uuid AND `+scimVisibleBare+` AND user_id IN (SELECT m::uuid FROM unnest($2::text[]) AS m)`, providerID, memberIDs).Scan(&linked)
 	return linked == len(memberIDs), err
 }
 
@@ -409,9 +474,11 @@ func (s *PostgresStore) ListSCIMGroups(ctx context.Context, query SCIMGroupQuery
 		return SCIMGroupPage{Items: []UserGroup{}, Total: BoundedListTotal(0)}, nil
 	}
 	limit := clampSCIMPage(query.Limit)
-	total, err := boundedTotal(ctx, s.db, "", scimGroupFilter, query.ProviderID, query.DisplayName, query.ExternalID)
-	if err != nil {
-		return SCIMGroupPage{}, err
+	var total ListTotal
+	if !query.SkipTotal {
+		if total, err = boundedTotal(ctx, s.db, "", scimGroupFilter, query.ProviderID, query.DisplayName, query.ExternalID); err != nil {
+			return SCIMGroupPage{}, err
+		}
 	}
 	var cursorAt sql.NullTime
 	var cursorID sql.NullString
@@ -455,6 +522,9 @@ func (s *PostgresStore) UpdateSCIMGroup(ctx context.Context, providerID, groupID
 		group, err := getSCIMGroupOn(ctx, q, providerID, groupID, true)
 		if err != nil {
 			return UserGroup{}, err
+		}
+		if !scimVersionAllowed(group.Version, change.IfVersions) {
+			return UserGroup{}, ErrVersionConflict
 		}
 		added := append([]string(nil), change.AddMembers...)
 		if change.ReplaceMembers != nil {
@@ -500,18 +570,82 @@ func (s *PostgresStore) UpdateSCIMGroup(ctx context.Context, providerID, groupID
 	return updated, err
 }
 
-func (s *PostgresStore) DeleteSCIMGroup(ctx context.Context, providerID, groupID string, audit ...AuditRecord) error {
-	if _, err := getSCIMGroupOn(ctx, s.db, providerID, groupID, false); err != nil {
-		return err
+func (s *PostgresStore) DeleteSCIMGroup(ctx context.Context, providerID, groupID string, ifVersions []string, audit ...AuditRecord) error {
+	repositoryIDs, err := runTransactional(ctx, s, audit, func(q sqlRunner) ([]string, error) {
+		group, err := getSCIMGroupOn(ctx, q, providerID, groupID, true)
+		if err != nil {
+			return nil, err
+		}
+		if !scimVersionAllowed(group.Version, ifVersions) {
+			return nil, ErrVersionConflict
+		}
+		return deleteUserGroupOn(ctx, q, group.ID)
+	})
+	if err == nil {
+		s.invalidateLocalScope(CacheScopeUserGroup)
+		for _, repositoryID := range repositoryIDs {
+			s.invalidateGrants(repositoryID)
+		}
 	}
-	return s.DeleteUserGroup(ctx, groupID, audit...)
+	return err
 }
 
-func (s *PostgresStore) ListSCIMGroupMembers(ctx context.Context, providerID, groupID string, limit int, cursor string) ([]UserGroupMember, string, error) {
+func (s *PostgresStore) ListSCIMGroupMembers(ctx context.Context, providerID, groupID string, limit int) ([]UserGroupMember, error) {
 	if _, err := getSCIMGroupOn(ctx, s.db, providerID, groupID, false); err != nil {
-		return nil, "", err
+		return nil, err
 	}
-	return s.ListUserGroupMembers(ctx, groupID, limit, cursor)
+	rows, err := s.db.QueryContext(ctx, `SELECT m.group_id::text,m.user_id::text,u.name,m.source,m.created_at FROM user_group_members m JOIN users u ON u.id=m.user_id WHERE m.group_id=$1::uuid ORDER BY m.user_id LIMIT $2`, groupID, max(limit, 1))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	return scanSCIMMembers(rows)
+}
+
+func (s *PostgresStore) ListSCIMGroupsMembers(ctx context.Context, providerID string, groupIDs []string, perGroup int) (map[string][]UserGroupMember, error) {
+	members := make(map[string][]UserGroupMember, len(groupIDs))
+	if !isUUID(providerID) || len(groupIDs) == 0 {
+		return members, nil
+	}
+	for _, id := range groupIDs {
+		if !isUUID(id) {
+			return nil, ErrNotFound
+		}
+	}
+	// One pass over the page: the window numbers each group's members by user id and keeps the first perGroup; the
+	// join to user_groups confines it to the groups of the provider.
+	rows, err := s.db.QueryContext(ctx, `SELECT group_id, user_id, name, source, created_at FROM (
+		SELECT m.group_id::text AS group_id, m.user_id::text AS user_id, u.name AS name, m.source AS source, m.created_at AS created_at,
+			row_number() OVER (PARTITION BY m.group_id ORDER BY m.user_id) AS position
+		FROM user_group_members m JOIN users u ON u.id=m.user_id JOIN user_groups g ON g.id=m.group_id
+		WHERE g.provider_id=$1::uuid AND g.source='scim' AND m.group_id IN (SELECT x::uuid FROM unnest($2::text[]) AS x)) ranked
+		WHERE position <= $3 ORDER BY group_id, user_id`, providerID, groupIDs, max(perGroup, 1))
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	list, err := scanSCIMMembers(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, member := range list {
+		members[member.GroupID] = append(members[member.GroupID], member)
+	}
+	return members, nil
+}
+
+func scanSCIMMembers(rows *sql.Rows) ([]UserGroupMember, error) {
+	items := []UserGroupMember{}
+	for rows.Next() {
+		var member UserGroupMember
+		var source string
+		if err := rows.Scan(&member.GroupID, &member.UserID, &member.UserName, &source, &member.CreatedAt); err != nil {
+			return nil, err
+		}
+		member.Source = UserGroupSource(source)
+		items = append(items, member)
+	}
+	return items, rows.Err()
 }
 
 func (s *PostgresStore) LinkProviderIdentity(ctx context.Context, link ProviderIdentityLink, audit ...AuditRecord) (UserIdentity, error) {

@@ -3,6 +3,7 @@ package scim
 import (
 	"bytes"
 	"encoding/json"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -159,9 +160,16 @@ func decodePatch(body []byte) ([]patchOperation, *Error) {
 	return request.Operations, nil
 }
 
+// maxPatchDepth bounds how deep a pathless value object is flattened: {"name":{"givenName":"A"}} is two levels,
+// which is as deep as any supported attribute goes.
+const maxPatchDepth = 3
+
 // flatten turns a pathless value object into attribute assignments: a nested object becomes dotted names, so
 // {"name":{"givenName":"A"}} and {"name.givenName":"A"} are the same assignment, as Okta and Entra ID send them.
-func flatten(prefix string, raw json.RawMessage, emit func(name string, value json.RawMessage) *Error) *Error {
+func flatten(prefix string, raw json.RawMessage, depth int, emit func(name string, value json.RawMessage) *Error) *Error {
+	if depth > maxPatchDepth {
+		return invalidValue("the value is nested too deeply")
+	}
 	var object map[string]json.RawMessage
 	if json.Unmarshal(raw, &object) != nil {
 		return invalidValue("a pathless operation needs an object value")
@@ -177,9 +185,8 @@ func flatten(prefix string, raw json.RawMessage, emit func(name string, value js
 		if prefix != "" {
 			full = prefix + "." + name
 		}
-		var nested map[string]json.RawMessage
-		if !strings.HasPrefix(strings.ToLower(name), "urn:") && !strings.Contains(name, "[") && json.Unmarshal(value, &nested) == nil && nested != nil {
-			if err := flatten(full, value, emit); err != nil {
+		if isJSONObject(value) && !strings.HasPrefix(strings.ToLower(name), "urn:") && !strings.Contains(name, "[") {
+			if err := flatten(full, value, depth+1, emit); err != nil {
 				return err
 			}
 			continue
@@ -189,6 +196,12 @@ func flatten(prefix string, raw json.RawMessage, emit func(name string, value js
 		}
 	}
 	return nil
+}
+
+// isJSONObject reports whether the raw value starts an object, without parsing it.
+func isJSONObject(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) > 0 && trimmed[0] == '{'
 }
 
 // NormalizeUserPatch normalizes a PATCH body of a User (RFC 7644 section 3.5.2).
@@ -207,7 +220,7 @@ func NormalizeUserPatch(body []byte) (UserPatch, *Error) {
 			if op == "remove" {
 				return UserPatch{}, NewError(400, TypeNoTarget, "a remove operation needs a path")
 			}
-			if failure := flatten("", operation.Value, func(name string, value json.RawMessage) *Error {
+			if failure := flatten("", operation.Value, 1, func(name string, value json.RawMessage) *Error {
 				return patch.apply(op, name, value)
 			}); failure != nil {
 				return UserPatch{}, failure
@@ -262,7 +275,7 @@ func (p *UserPatch) apply(op, rawPath string, value json.RawMessage) *Error {
 			p.Active = &active
 		case "username", "externalid":
 			text, ok := parseString(value)
-			if !ok || strings.TrimSpace(text) == "" {
+			if text = strings.TrimSpace(text); !ok || text == "" {
 				return invalidValue(parsed.attr + " must be a non-empty string")
 			}
 			if parsed.attr == "username" {
@@ -282,6 +295,7 @@ func (p *UserPatch) apply(op, rawPath string, value json.RawMessage) *Error {
 				return invalidValue("displayName must be a string")
 			}
 		}
+		text = strings.TrimSpace(text)
 		p.DisplayName = &text
 	case "name":
 		return p.applyName(op, parsed, value)
@@ -303,13 +317,15 @@ func (p *UserPatch) applyName(op string, parsed path, value json.RawMessage) *Er
 				return invalidValue("name.formatted must be a string")
 			}
 		}
+		text = strings.TrimSpace(text)
 		p.DisplayName = &text
 	case "":
 		var name struct {
 			Formatted *string `json:"formatted"`
 		}
 		if op != "remove" && json.Unmarshal(value, &name) == nil && name.Formatted != nil {
-			p.DisplayName = name.Formatted
+			formatted := strings.TrimSpace(*name.Formatted)
+			p.DisplayName = &formatted
 		} else {
 			p.ignore("name")
 		}
@@ -349,6 +365,7 @@ func (p *UserPatch) applyEmails(op string, parsed path, value json.RawMessage) *
 		if !ok {
 			return invalidValue("emails.value must be a string")
 		}
+		text = strings.TrimSpace(text)
 		p.Email = &text
 		return nil
 	}
@@ -407,7 +424,7 @@ func NormalizeGroupPatch(body []byte) (GroupPatch, *Error) {
 			if op == "remove" {
 				return GroupPatch{}, NewError(400, TypeNoTarget, "a remove operation needs a path")
 			}
-			if failure := flatten("", operation.Value, func(name string, value json.RawMessage) *Error {
+			if failure := flatten("", operation.Value, 1, func(name string, value json.RawMessage) *Error {
 				return patch.apply(op, name, value)
 			}); failure != nil {
 				return GroupPatch{}, failure
@@ -471,7 +488,7 @@ func (p *GroupPatch) apply(op, rawPath string, value json.RawMessage) *Error {
 			return invalidPath("displayName cannot be addressed this way")
 		}
 		text, ok := parseString(value)
-		if !ok || strings.TrimSpace(text) == "" {
+		if text = strings.TrimSpace(text); !ok || text == "" {
 			return invalidValue("displayName must be a non-empty string")
 		}
 		p.DisplayName = &text
@@ -483,6 +500,7 @@ func (p *GroupPatch) apply(op, rawPath string, value json.RawMessage) *Error {
 				return invalidValue("externalId must be a string")
 			}
 		}
+		text = strings.TrimSpace(text)
 		p.ExternalID = &text
 	case "members":
 		return p.applyMembers(op, parsed, value)
@@ -504,17 +522,16 @@ func (p *GroupPatch) applyMembers(op string, parsed path, value json.RawMessage)
 		}
 		switch op {
 		case "remove":
-			p.RemoveMembers = append(p.RemoveMembers, parsed.selector.value)
+			p.removeMember(parsed.selector.value)
 		default:
-			p.AddMembers = append(p.AddMembers, parsed.selector.value)
+			p.addMember(parsed.selector.value)
 		}
 		return nil
 	}
 	if !hasValue(value) {
 		if op == "remove" {
 			// Removing members without naming any removes every member.
-			none := []string{}
-			p.ReplaceMembers, p.AddMembers, p.RemoveMembers = &none, nil, nil
+			p.replaceMembers(nil)
 			return nil
 		}
 		return invalidValue("members needs a value")
@@ -525,11 +542,53 @@ func (p *GroupPatch) applyMembers(op string, parsed path, value json.RawMessage)
 	}
 	switch op {
 	case "add":
-		p.AddMembers = append(p.AddMembers, members...)
+		for _, id := range members {
+			p.addMember(id)
+		}
 	case "remove":
-		p.RemoveMembers = append(p.RemoveMembers, members...)
+		for _, id := range members {
+			p.removeMember(id)
+		}
 	default:
-		p.ReplaceMembers, p.AddMembers, p.RemoveMembers = &members, nil, nil
+		p.replaceMembers(members)
 	}
 	return nil
+}
+
+// The member operations of one request are folded in order into a net effect, so [remove X, add X] ends with X a
+// member and [add X, remove X] ends without it, whatever order the store applies the three sets in. After a replace
+// every later operation edits the replacement set itself.
+
+func (p *GroupPatch) addMember(id string) {
+	if p.ReplaceMembers != nil {
+		if !slices.Contains(*p.ReplaceMembers, id) {
+			*p.ReplaceMembers = append(*p.ReplaceMembers, id)
+		}
+		return
+	}
+	p.RemoveMembers = slices.DeleteFunc(p.RemoveMembers, func(existing string) bool { return existing == id })
+	if !slices.Contains(p.AddMembers, id) {
+		p.AddMembers = append(p.AddMembers, id)
+	}
+}
+
+func (p *GroupPatch) removeMember(id string) {
+	if p.ReplaceMembers != nil {
+		*p.ReplaceMembers = slices.DeleteFunc(*p.ReplaceMembers, func(existing string) bool { return existing == id })
+		return
+	}
+	p.AddMembers = slices.DeleteFunc(p.AddMembers, func(existing string) bool { return existing == id })
+	if !slices.Contains(p.RemoveMembers, id) {
+		p.RemoveMembers = append(p.RemoveMembers, id)
+	}
+}
+
+func (p *GroupPatch) replaceMembers(ids []string) {
+	replacement := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if !slices.Contains(replacement, id) {
+			replacement = append(replacement, id)
+		}
+	}
+	p.ReplaceMembers, p.AddMembers, p.RemoveMembers = &replacement, nil, nil
 }

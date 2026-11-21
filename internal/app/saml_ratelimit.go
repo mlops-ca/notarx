@@ -15,7 +15,8 @@ const (
 	samlRateMaxClients = 10000
 )
 
-// samlRateLimiter is a per-key token bucket that refills samlRateBurst tokens per samlRateWindow.
+// samlRateLimiter is a per-key token bucket that refills samlRateBurst tokens per samlRateWindow. The SCIM server
+// spends it on failed token authentications (scim_server.go).
 type samlRateLimiter struct {
 	mu      sync.Mutex
 	buckets map[string]samlBucket

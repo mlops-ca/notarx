@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	adminopenapi "github.com/mlops-ca/notarx/internal/admin/openapi"
@@ -96,7 +97,7 @@ func (h identityManagementHandler) CreateSCIMToken(w http.ResponseWriter, r *htt
 	}
 	now := time.Now().UTC()
 	name := strings.TrimSpace(request.Name)
-	if name == "" || len(name) > repository.MaxSCIMTokenNameLength {
+	if length := utf8.RuneCountInString(name); length == 0 || length > repository.MaxSCIMTokenNameLength {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "name is required and at most 128 characters")
 		return
 	}

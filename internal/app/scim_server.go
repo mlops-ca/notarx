@@ -8,12 +8,11 @@ import (
 	"io"
 	"log/slog"
 	"mime"
-	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/authorization"
@@ -40,12 +39,9 @@ const (
 	// scimMaxReturnedMembers bounds the members one Group resource returns; clients that need larger groups
 	// exclude the members, as Entra ID does.
 	scimMaxReturnedMembers = 10000
-	scimMemberPage         = 200
-	// scimAuthFailureBurst failed authentications per scimAuthFailureWindow and peer address are answered, after
-	// that the peer gets 429 until the window passes. Successful requests are not limited here.
-	scimAuthFailureBurst  = 30
-	scimAuthFailureWindow = time.Minute
-	scimAuthFailureTrack  = 10000
+	// scimMaxListedMembers bounds the members of each group in a list response, which reads a whole page of groups in
+	// one query.
+	scimMaxListedMembers = 1000
 )
 
 // scimStore is the part of the repository the SCIM server uses.
@@ -58,10 +54,13 @@ type scimStore interface {
 // scimServer is the root-mounted SCIM 2.0 server. It answers every /scim/v2/ route with 404 while disabled and
 // authenticates every other request with the bearer token of one provider, which scopes everything it can see.
 type scimServer struct {
-	options  SCIMOptions
-	store    scimStore
-	audit    repository.AuditRecorder
-	failures *scimFailureLimiter
+	options SCIMOptions
+	store   scimStore
+	audit   repository.AuditRecorder
+	// failures rate limits the failed token authentications of one peer address (the limiter of the anonymous
+	// routes, ADR 0018 section 1). It is spent on failures only, so a valid token is never throttled and someone
+	// guessing tokens cannot lock the identity provider out, even behind a proxy that gives every client one address.
+	failures *samlRateLimiter
 	started  time.Time
 }
 
@@ -69,7 +68,7 @@ func newSCIMServer(options SCIMOptions, store scimStore, audit repository.AuditR
 	if options.MaxPage <= 0 {
 		options.MaxPage = config.DefaultSCIMMaxPage
 	}
-	return &scimServer{options: options, store: store, audit: audit, failures: &scimFailureLimiter{}, started: time.Now().UTC()}
+	return &scimServer{options: options, store: store, audit: audit, failures: &samlRateLimiter{}, started: time.Now().UTC()}
 }
 
 // scimCaller is the authenticated provider of a request.
@@ -80,82 +79,31 @@ type scimCaller struct {
 
 func (c scimCaller) actor() string { return "scim:" + c.Slug }
 
-// scimFailureLimiter counts failed token authentications per peer address in a fixed window.
-type scimFailureLimiter struct {
-	mu      sync.Mutex
-	windows map[string]scimFailureWindow
-}
-
-type scimFailureWindow struct {
-	start time.Time
-	count int
-}
-
-// blocked reports whether the peer used up its failures in the current window.
-func (l *scimFailureLimiter) blocked(peer string, now time.Time) bool {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	window, ok := l.windows[peer]
-	return ok && now.Sub(window.start) < scimAuthFailureWindow && window.count >= scimAuthFailureBurst
-}
-
-func (l *scimFailureLimiter) fail(peer string, now time.Time) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.windows == nil {
-		l.windows = map[string]scimFailureWindow{}
-	}
-	if len(l.windows) >= scimAuthFailureTrack {
-		for key, window := range l.windows {
-			if now.Sub(window.start) >= scimAuthFailureWindow {
-				delete(l.windows, key)
-			}
-		}
-	}
-	window, ok := l.windows[peer]
-	if !ok || now.Sub(window.start) >= scimAuthFailureWindow {
-		if !ok && len(l.windows) >= scimAuthFailureTrack {
-			return
-		}
-		window = scimFailureWindow{start: now}
-	}
-	window.count++
-	l.windows[peer] = window
-}
-
-func scimPeer(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
-
 func (s *scimServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !s.options.Enabled {
 		http.NotFound(w, r)
 		return
 	}
-	now := time.Now().UTC()
-	peer := scimPeer(r)
-	if s.failures.blocked(peer, now) {
-		w.Header().Set("Retry-After", strconv.Itoa(int(scimAuthFailureWindow.Seconds())))
-		scim.NewError(http.StatusTooManyRequests, "", "too many failed authentications; retry later").Write(w)
-		return
-	}
 	caller, failure := s.authenticate(r)
 	if failure != nil {
-		s.failures.fail(peer, now)
-		s.recordFailure(r, "scim:unauthenticated", failure)
-		w.Header().Set("WWW-Authenticate", `Bearer realm="notarx-scim"`)
+		if failure.Status == http.StatusUnauthorized {
+			if !s.failures.allow(requestIPAddress(r), time.Now().UTC()) {
+				w.Header().Set("Retry-After", strconv.Itoa(int(samlRateWindow.Seconds())))
+				scim.NewError(http.StatusTooManyRequests, "", "too many failed authentications; retry later").Write(w)
+				return
+			}
+			w.Header().Set("WWW-Authenticate", `Bearer realm="notarx-scim"`)
+			s.recordFailure(r, "scim:unauthenticated", failure)
+		}
 		failure.Write(w)
 		return
 	}
 	s.route(w, r, caller)
 }
 
-// authenticate resolves the bearer token. Every failure is the same 401, so a caller cannot tell an unknown
-// token from an expired, revoked or malformed one.
+// authenticate resolves the bearer token. Every credential failure is the same 401, so a caller cannot tell an unknown
+// token from an expired, revoked, malformed or disabled-provider one; a store failure is 503 and never counts against
+// the peer.
 func (s *scimServer) authenticate(r *http.Request) (scimCaller, *scim.Error) {
 	unauthorized := scim.NewError(http.StatusUnauthorized, "", "a valid SCIM bearer token is required")
 	scheme, token, found := strings.Cut(strings.TrimSpace(r.Header.Get("Authorization")), " ")
@@ -164,18 +112,29 @@ func (s *scimServer) authenticate(r *http.Request) (scimCaller, *scim.Error) {
 		return scimCaller{}, unauthorized
 	}
 	hash := authorization.HashAPIKey(token)
+	unavailable := scim.NewError(http.StatusServiceUnavailable, "", "the SCIM server is temporarily unavailable")
 	stored, err := s.store.FindActiveSCIMTokenByHash(r.Context(), hash)
-	if err != nil {
-		if !errors.Is(err, repository.ErrNotFound) {
-			slog.Error("look up the SCIM token failed", "error", err)
-		}
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
 		return scimCaller{}, unauthorized
+	case err != nil:
+		slog.Error("look up the SCIM token failed", "error", err)
+		return scimCaller{}, unavailable
 	}
 	if subtle.ConstantTimeCompare([]byte(stored.SecretHash), []byte(hash)) != 1 {
 		return scimCaller{}, unauthorized
 	}
 	provider, err := s.store.GetIdentityProvider(r.Context(), stored.ProviderID)
-	if err != nil {
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
+		return scimCaller{}, unauthorized
+	case err != nil:
+		slog.Error("load the identity provider of a SCIM token failed", "error", err)
+		return scimCaller{}, unavailable
+	}
+	// A disabled provider provisions nothing: an administrator who switches an identity provider off expects its
+	// logins and its provisioning to stop together.
+	if !provider.Enabled {
 		return scimCaller{}, unauthorized
 	}
 	return scimCaller{ProviderID: provider.ID, Slug: provider.Slug}, nil
@@ -227,7 +186,9 @@ func (s *scimServer) respond(w http.ResponseWriter, r *http.Request, caller scim
 	return failure.Status
 }
 
-func (s *scimServer) writeJSON(w http.ResponseWriter, r *http.Request, caller scimCaller, operation, resource string, status int, body any, headers map[string]string) int {
+// writeJSON answers with a SCIM document. audit says whether the call is recorded here: a change whose audit record
+// already committed with it in the store transaction is not recorded a second time.
+func (s *scimServer) writeJSON(w http.ResponseWriter, r *http.Request, caller scimCaller, operation, resource string, status int, body any, headers map[string]string, audit bool) int {
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return s.respond(w, r, caller, operation, scim.NewError(http.StatusInternalServerError, "", "the response could not be built"))
@@ -238,7 +199,9 @@ func (s *scimServer) writeJSON(w http.ResponseWriter, r *http.Request, caller sc
 	}
 	w.WriteHeader(status)
 	_, _ = w.Write(encoded)
-	s.record(r, caller, operation, resource, status, nil)
+	if audit {
+		s.record(r, caller, operation, resource, status, nil)
+	}
 	return status
 }
 
@@ -249,7 +212,7 @@ func (s *scimServer) discovery(w http.ResponseWriter, r *http.Request, caller sc
 	if r.Method != http.MethodGet {
 		return s.methodNotAllowed(w, r, caller, "GET")
 	}
-	return s.writeJSON(w, r, caller, "scim.discovery.read", "/"+resource, http.StatusOK, build(s.base(r)), nil)
+	return s.writeJSON(w, r, caller, "scim.discovery.read", "/"+resource, http.StatusOK, build(s.base(r)), nil, true)
 }
 
 func (s *scimServer) discoveryList(w http.ResponseWriter, r *http.Request, caller scimCaller, resource, id string, build func(base string) []map[string]any) int {
@@ -263,11 +226,11 @@ func (s *scimServer) discoveryList(w http.ResponseWriter, r *http.Request, calle
 			items = append(items, document)
 		}
 		return s.writeJSON(w, r, caller, "scim.discovery.read", "/"+resource, http.StatusOK,
-			scim.ListResponse{TotalResults: int64(len(items)), StartIndex: 1, Resources: items}, nil)
+			scim.ListResponse{TotalResults: int64(len(items)), StartIndex: 1, Resources: items}, nil, true)
 	}
 	for _, document := range documents {
 		if document["id"] == id || document["name"] == id {
-			return s.writeJSON(w, r, caller, "scim.discovery.read", "/"+resource+"/"+id, http.StatusOK, document, nil)
+			return s.writeJSON(w, r, caller, "scim.discovery.read", "/"+resource+"/"+id, http.StatusOK, document, nil, true)
 		}
 	}
 	return s.respond(w, r, caller, "scim.discovery.read", scim.NewError(http.StatusNotFound, "", "unknown SCIM resource"))
@@ -347,6 +310,8 @@ func (s *scimServer) storeFailure(err error, kind string) *scim.Error {
 	switch {
 	case errors.Is(err, repository.ErrInvalidPageToken):
 		return scim.NewError(http.StatusBadRequest, scim.TypeInvalidValue, "the cursor is not valid for this request")
+	case errors.Is(err, repository.ErrVersionConflict):
+		return s.preconditionFailed()
 	case errors.Is(err, repository.ErrNotFound):
 		return scim.NewError(http.StatusNotFound, "", kind+" not found")
 	case errors.Is(err, repository.ErrSCIMAdminProtected):
@@ -362,18 +327,32 @@ func (s *scimServer) storeFailure(err error, kind string) *scim.Error {
 	return scim.NewError(http.StatusInternalServerError, "", "the request could not be completed")
 }
 
-// scimIfMatch reports whether the If-Match header allows the write: absent, *, or the current weak ETag.
-func scimIfMatch(r *http.Request, version string) bool {
+// scimIfMatchVersions reads the If-Match header into the versions the store compares under its row lock: absent or *
+// is unconditional (nil); otherwise the weak or strong entity tags, whose opaque value is the version. A header that
+// names no usable tag yields a list nothing can match, so the write is refused with 412.
+func scimIfMatchVersions(r *http.Request) []string {
 	header := strings.TrimSpace(r.Header.Get("If-Match"))
 	if header == "" || header == "*" {
-		return true
+		return nil
 	}
+	versions := []string{}
 	for _, candidate := range strings.Split(header, ",") {
-		if strings.TrimPrefix(strings.TrimSpace(candidate), "W/") == strings.TrimPrefix(scim.ETag(version), "W/") {
-			return true
+		tag := strings.Trim(strings.TrimPrefix(strings.TrimSpace(candidate), "W/"), `"`)
+		if tag != "" {
+			versions = append(versions, tag)
 		}
 	}
-	return false
+	if len(versions) == 0 {
+		return []string{""}
+	}
+	return versions
+}
+
+// scimVersionMatches reports whether the current version satisfies If-Match: for the writes that change nothing and
+// so never reach the store, whose own check is the authoritative one.
+func scimVersionMatches(r *http.Request, version string) bool {
+	versions := scimIfMatchVersions(r)
+	return len(versions) == 0 || slices.Contains(versions, version)
 }
 
 func (s *scimServer) preconditionFailed() *scim.Error {

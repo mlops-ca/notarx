@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/scim"
 )
@@ -21,7 +21,7 @@ func (s *scimServer) groups(w http.ResponseWriter, r *http.Request, caller scimC
 		}
 		return s.methodNotAllowed(w, r, caller, "GET, POST")
 	}
-	if _, err := uuid.Parse(id); err != nil {
+	if !ids.Valid(id) {
 		return s.respond(w, r, caller, "scim.group.read", scim.NewError(http.StatusNotFound, "", "Group not found"))
 	}
 	switch r.Method {
@@ -56,44 +56,45 @@ func membersExcluded(r *http.Request) bool {
 	return false
 }
 
-// groupDocument builds the resource; members are read up to scimMaxReturnedMembers unless excluded.
-func (s *scimServer) groupDocument(r *http.Request, caller scimCaller, group repository.UserGroup, withMembers bool) (scim.GroupDocument, error) {
+// groupDocument builds the resource from the members the caller read (nil when they are excluded).
+func (s *scimServer) groupDocument(r *http.Request, group repository.UserGroup, members []repository.UserGroupMember, withMembers bool) scim.GroupDocument {
 	base := s.base(r)
 	document := scim.GroupDocument{
 		ID: group.ID, ExternalID: group.ExternalID, DisplayName: group.DisplayName, WithMembers: withMembers,
 		Meta: scim.Meta{ResourceType: "Group", Created: group.CreatedAt, LastModified: group.UpdatedAt, Location: base + "/Groups/" + group.ID, Version: scim.ETag(group.Version)},
 	}
-	if !withMembers {
-		return document, nil
+	for _, member := range members {
+		document.Members = append(document.Members, scim.GroupMember{Value: member.UserID, Display: member.UserName, Ref: base + "/Users/" + member.UserID, Type: "User"})
 	}
-	cursor := ""
-	for len(document.Members) < scimMaxReturnedMembers {
-		members, next, err := s.store.ListSCIMGroupMembers(r.Context(), caller.ProviderID, group.ID, scimMemberPage, cursor)
-		if err != nil {
-			return scim.GroupDocument{}, err
-		}
-		for _, member := range members {
-			document.Members = append(document.Members, scim.GroupMember{Value: member.UserID, Display: member.UserName, Ref: base + "/Users/" + member.UserID, Type: "User"})
-		}
-		if next == "" {
-			return document, nil
-		}
-		cursor = next
-	}
-	slog.Warn("a SCIM group has more members than one response returns", "provider", caller.Slug, "group", group.ID, "limit", scimMaxReturnedMembers)
-	return document, nil
+	return document
 }
 
-func (s *scimServer) writeGroup(w http.ResponseWriter, r *http.Request, caller scimCaller, operation string, status int, group repository.UserGroup, withMembers bool) int {
-	document, err := s.groupDocument(r, caller, group, withMembers)
+// readMembers reads the members of one group, at most scimMaxReturnedMembers, in one query.
+func (s *scimServer) readMembers(r *http.Request, caller scimCaller, group repository.UserGroup) ([]repository.UserGroupMember, error) {
+	members, err := s.store.ListSCIMGroupMembers(r.Context(), caller.ProviderID, group.ID, scimMaxReturnedMembers+1)
 	if err != nil {
-		return s.respond(w, r, caller, operation, s.storeFailure(err, "Group"))
+		return nil, err
+	}
+	if len(members) > scimMaxReturnedMembers {
+		slog.Warn("a SCIM group has more members than one response returns", "provider", caller.Slug, "group", group.ID, "limit", scimMaxReturnedMembers)
+		members = members[:scimMaxReturnedMembers]
+	}
+	return members, nil
+}
+
+func (s *scimServer) writeGroup(w http.ResponseWriter, r *http.Request, caller scimCaller, operation string, status int, group repository.UserGroup, withMembers, audit bool) int {
+	var members []repository.UserGroupMember
+	if withMembers {
+		var err error
+		if members, err = s.readMembers(r, caller, group); err != nil {
+			return s.respond(w, r, caller, operation, s.storeFailure(err, "Group"))
+		}
 	}
 	headers := map[string]string{"ETag": scim.ETag(group.Version)}
 	if status == http.StatusCreated {
 		headers["Location"] = s.base(r) + "/Groups/" + group.ID
 	}
-	return s.writeJSON(w, r, caller, operation, "/Groups/"+group.ID, status, document, headers)
+	return s.writeJSON(w, r, caller, operation, "/Groups/"+group.ID, status, s.groupDocument(r, group, members, withMembers), headers, audit)
 }
 
 func (s *scimServer) getGroup(w http.ResponseWriter, r *http.Request, caller scimCaller, id string) int {
@@ -101,7 +102,7 @@ func (s *scimServer) getGroup(w http.ResponseWriter, r *http.Request, caller sci
 	if err != nil {
 		return s.respond(w, r, caller, "scim.group.read", s.storeFailure(err, "Group"))
 	}
-	return s.writeGroup(w, r, caller, "scim.group.read", http.StatusOK, group, !membersExcluded(r))
+	return s.writeGroup(w, r, caller, "scim.group.read", http.StatusOK, group, !membersExcluded(r), true)
 }
 
 func (s *scimServer) listGroups(w http.ResponseWriter, r *http.Request, caller scimCaller) int {
@@ -123,6 +124,7 @@ func (s *scimServer) listGroups(w http.ResponseWriter, r *http.Request, caller s
 	startIndex := parameters.startIndex
 	if query.Cursor == "" && startIndex > 1 {
 		hop := query
+		hop.SkipTotal = true
 		cursor, ok, failure, err := scimCursorHop(startIndex, func(cursor string, limit int) (int, string, error) {
 			hop.Cursor, hop.Limit = cursor, limit
 			page, err := s.store.ListSCIMGroups(r.Context(), hop)
@@ -148,17 +150,29 @@ func (s *scimServer) listGroups(w http.ResponseWriter, r *http.Request, caller s
 	response := scim.ListResponse{TotalResults: page.Total.Value, StartIndex: startIndex, NextCursor: page.NextCursor}
 	if parameters.count > 0 {
 		withMembers := !membersExcluded(r)
-		for _, group := range page.Items {
-			document, err := s.groupDocument(r, caller, group, withMembers)
-			if err != nil {
+		var members map[string][]repository.UserGroupMember
+		if withMembers && len(page.Items) > 0 {
+			// One query for the whole page, capped per group: a client that needs larger groups reads them one by one
+			// or excludes the members, as Entra ID does.
+			groupIDs := make([]string, 0, len(page.Items))
+			for _, group := range page.Items {
+				groupIDs = append(groupIDs, group.ID)
+			}
+			var err error
+			if members, err = s.store.ListSCIMGroupsMembers(r.Context(), caller.ProviderID, groupIDs, scimMaxListedMembers); err != nil {
 				return s.respond(w, r, caller, "scim.group.list", s.storeFailure(err, "Group"))
 			}
-			response.Resources = append(response.Resources, document)
+		}
+		for _, group := range page.Items {
+			if len(members[group.ID]) >= scimMaxListedMembers {
+				slog.Warn("a SCIM group list truncated the members of a group", "provider", caller.Slug, "group", group.ID, "limit", scimMaxListedMembers)
+			}
+			response.Resources = append(response.Resources, s.groupDocument(r, group, members[group.ID], withMembers))
 		}
 	} else {
 		response.NextCursor = ""
 	}
-	return s.writeJSON(w, r, caller, "scim.group.list", "/Groups", http.StatusOK, response, nil)
+	return s.writeJSON(w, r, caller, "scim.group.list", "/Groups", http.StatusOK, response, nil, true)
 }
 
 func validateScimGroup(displayName string, externalID *string) *scim.Error {
@@ -190,7 +204,7 @@ func (s *scimServer) createGroup(w http.ResponseWriter, r *http.Request, caller 
 	if err != nil {
 		return s.respond(w, r, caller, "scim.group.create", s.storeFailure(err, "Group"))
 	}
-	return s.writeGroup(w, r, caller, "scim.group.create", http.StatusCreated, group, true)
+	return s.writeGroup(w, r, caller, "scim.group.create", http.StatusCreated, group, true, false)
 }
 
 func (s *scimServer) replaceGroup(w http.ResponseWriter, r *http.Request, caller scimCaller, id string) int {
@@ -250,15 +264,16 @@ func (s *scimServer) changeGroup(w http.ResponseWriter, r *http.Request, caller 
 	if err != nil {
 		return s.respond(w, r, caller, operation, s.storeFailure(err, "Group"))
 	}
-	if !scimIfMatch(r, current.Version) {
+	if !scimVersionMatches(r, current.Version) {
 		return s.respond(w, r, caller, operation, s.preconditionFailed())
 	}
 	if len(ignored) > 0 {
 		slog.Info("SCIM request named attributes the server does not store; they were ignored", "provider", caller.Slug, "operation", operation, "attributes", ignored)
 	}
 	if len(changed) == 0 {
-		return s.writeGroup(w, r, caller, operation, http.StatusOK, current, !membersExcluded(r))
+		return s.writeGroup(w, r, caller, operation, http.StatusOK, current, !membersExcluded(r), true)
 	}
+	change.IfVersions = scimIfMatchVersions(r)
 	evidence := map[string]string{"attributes": strings.Join(changed, ",")}
 	if len(ignored) > 0 {
 		evidence["ignored"] = strings.Join(ignored, ",")
@@ -267,7 +282,7 @@ func (s *scimServer) changeGroup(w http.ResponseWriter, r *http.Request, caller 
 	if err != nil {
 		return s.respond(w, r, caller, operation, s.storeFailure(err, "Group"))
 	}
-	return s.writeGroup(w, r, caller, operation, http.StatusOK, updated, !membersExcluded(r))
+	return s.writeGroup(w, r, caller, operation, http.StatusOK, updated, !membersExcluded(r), false)
 }
 
 func (s *scimServer) deleteGroup(w http.ResponseWriter, r *http.Request, caller scimCaller, id string) int {
@@ -275,10 +290,10 @@ func (s *scimServer) deleteGroup(w http.ResponseWriter, r *http.Request, caller 
 	if err != nil {
 		return s.respond(w, r, caller, "scim.group.delete", s.storeFailure(err, "Group"))
 	}
-	if !scimIfMatch(r, current.Version) {
+	if !scimVersionMatches(r, current.Version) {
 		return s.respond(w, r, caller, "scim.group.delete", s.preconditionFailed())
 	}
-	if err := s.store.DeleteSCIMGroup(r.Context(), caller.ProviderID, id, s.writeAudit(r, caller, "scim.group.delete", "/Groups/"+id, http.StatusNoContent, nil)...); err != nil {
+	if err := s.store.DeleteSCIMGroup(r.Context(), caller.ProviderID, id, scimIfMatchVersions(r), s.writeAudit(r, caller, "scim.group.delete", "/Groups/"+id, http.StatusNoContent, nil)...); err != nil {
 		return s.respond(w, r, caller, "scim.group.delete", s.storeFailure(err, "Group"))
 	}
 	w.WriteHeader(http.StatusNoContent)

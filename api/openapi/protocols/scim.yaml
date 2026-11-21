@@ -102,7 +102,9 @@ ScimGroup:
     displayName: {type: string}
     members:
       type: array
-      description: Omitted when excludedAttributes=members is sent. Each member carries value, display, type and a $ref link to its User.
+      description: >
+        Omitted when excludedAttributes=members is sent. Each member carries value, display, type and a $ref link to
+        its User. A group read returns at most 10000 members and a list at most 1000 per group.
       items:
         type: object
         properties:
@@ -421,7 +423,9 @@ scim_users_id:
         "$ref": "#/responses/ScimError"
   delete:
     operationId: deleteSCIMUser
-    description: Removes the SCIM link and disables the account; it never deletes the account.
+    description: >
+      Removes the SCIM link and disables the account; it never deletes the account. SCIM no longer sees the account
+      (404); creating the same userName again through the same provider brings it back.
     security: [{scimBearerAuth: []}]
     parameters:
     - {"$ref": "#/parameters/ifMatch"}

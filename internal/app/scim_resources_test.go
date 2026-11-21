@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -435,6 +436,12 @@ func TestSCIMEveryCallIsAuditedWithTheProviderActor(t *testing.T) {
 			t.Errorf("missing audit %s in %v", operation, byOperation)
 		}
 	}
+	// A write is audited once: its record commits with the change and the response does not add a second one.
+	for _, operation := range []string{"scim.user.create", "scim.user.patch", "scim.user.delete"} {
+		if got := len(byOperation[operation]); got != 1 {
+			t.Errorf("%s was audited %d times, want once", operation, got)
+		}
+	}
 	patchRecord := byOperation["scim.user.patch"][0]
 	if patchRecord.Actor != "scim:entra" || patchRecord.Evidence["attributes"] != "displayName" || patchRecord.Evidence["ignored"] != "title" || patchRecord.Resource != "scim/Users/"+id || patchRecord.Status != http.StatusOK || patchRecord.AuthorizationSource != "scim" {
 		t.Fatalf("patch audit = %+v", patchRecord)
@@ -546,4 +553,129 @@ func attemptStubLogin(t *testing.T, handler http.Handler, idp *stubOIDCProvider,
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, callback)
 	return response
+}
+
+func TestSCIMDeleteHidesTheAccountAndOnlyTheSameProviderCanCreateItAgain(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	other, err := h.runtime.Create(t.Context(), scimProviderInput("okta"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherToken := h.createToken(other.ID, "okta", time.Hour)
+	id := h.createUser("leaver@example.com", "ext-leaver")
+	if _, err := h.store.LinkProviderIdentity(t.Context(), repository.ProviderIdentityLink{ProviderID: h.provider.ID, UserID: id, Subject: "leaver-sub", Issuer: "https://login.example.test", Kind: repository.UserIdentityOIDC}); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.scim(http.MethodDelete, "/Users/"+id, ""); got.Code != http.StatusNoContent {
+		t.Fatalf("delete = %d %s", got.Code, got.Body.String())
+	}
+	// SCIM no longer sees the account, even though the login subject stays bound and the row is kept.
+	expectSCIMError(t, h.scim(http.MethodGet, "/Users/"+id, ""), http.StatusNotFound, "")
+	expectSCIMError(t, h.scim(http.MethodDelete, "/Users/"+id, ""), http.StatusNotFound, "")
+	expectSCIMError(t, h.scim(http.MethodPatch, "/Users/"+id, `{"Operations":[{"op":"replace","path":"active","value":true}]}`), http.StatusNotFound, "")
+	if list := decodeSCIM(t, h.scim(http.MethodGet, "/Users?filter="+url.QueryEscape(`userName eq "leaver@example.com"`), "")); list["totalResults"] != float64(0) {
+		t.Fatalf("a deleted account is still found: %v", list)
+	}
+	if user, _ := h.store.GetUser(t.Context(), id); user.State != repository.UserDisabled || user.DisabledReason != repository.DisabledBySCIM {
+		t.Fatalf("the account after DELETE = %+v", user)
+	}
+	// Another provider cannot take it over; the same provider brings it back with a create.
+	expectSCIMError(t, h.scimAs(otherToken, http.MethodPost, "/Users", `{"userName":"leaver@example.com"}`, nil), http.StatusConflict, "uniqueness")
+	back := h.scim(http.MethodPost, "/Users", `{"userName":"Leaver@Example.com","externalId":"ext-leaver-2","displayName":"Back again"}`)
+	body := decodeSCIM(t, back)
+	if back.Code != http.StatusCreated || body["id"] != id || body["active"] != true || body["externalId"] != "ext-leaver-2" || body["displayName"] != "Back again" {
+		t.Fatalf("recreate = %d %s", back.Code, back.Body.String())
+	}
+	if user, _ := h.store.GetUser(t.Context(), id); user.State != repository.UserActive || user.DisabledReason != "" {
+		t.Fatalf("the revived account = %+v", user)
+	}
+}
+
+func TestSCIMIfMatchHeaderParsing(t *testing.T) {
+	for header, want := range map[string][]string{
+		"":                 nil,
+		"*":                nil,
+		`W/"3"`:            {"3"},
+		`"3"`:              {"3"},
+		`W/"3", "4",W/"5"`: {"3", "4", "5"},
+		"garbage":          {"garbage"},
+		`""`:               {""},
+		" , ":              {""},
+	} {
+		request := httptest.NewRequest(http.MethodPut, "/scim/v2/Users/x", nil)
+		if header != "" {
+			request.Header.Set("If-Match", header)
+		}
+		got := scimIfMatchVersions(request)
+		if strings.Join(got, "|") != strings.Join(want, "|") || (got == nil) != (want == nil) {
+			t.Errorf("If-Match %q = %#v, want %#v", header, got, want)
+		}
+	}
+	request := httptest.NewRequest(http.MethodPut, "/scim/v2/Users/x", nil)
+	request.Header.Set("If-Match", `""`)
+	if scimVersionMatches(request, "1") {
+		t.Error("an empty entity tag matched a version")
+	}
+}
+
+// countingSCIMStore records how the server reads: one member query per page of groups, and no count on the pages that
+// are only read to find a cursor.
+type countingSCIMStore struct {
+	scimStore
+	singleMemberReads, batchMemberReads int
+	userPages                           []bool
+}
+
+func (c *countingSCIMStore) ListSCIMGroupMembers(ctx context.Context, providerID, groupID string, limit int) ([]repository.UserGroupMember, error) {
+	c.singleMemberReads++
+	return c.scimStore.ListSCIMGroupMembers(ctx, providerID, groupID, limit)
+}
+
+func (c *countingSCIMStore) ListSCIMGroupsMembers(ctx context.Context, providerID string, groupIDs []string, perGroup int) (map[string][]repository.UserGroupMember, error) {
+	c.batchMemberReads++
+	return c.scimStore.ListSCIMGroupsMembers(ctx, providerID, groupIDs, perGroup)
+}
+
+func (c *countingSCIMStore) ListSCIMUsers(ctx context.Context, query repository.SCIMUserQuery) (repository.SCIMUserPage, error) {
+	c.userPages = append(c.userPages, query.SkipTotal)
+	return c.scimStore.ListSCIMUsers(ctx, query)
+}
+
+func TestSCIMListsReadMembersInOnePassAndSkipTheCountWhileHopping(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true, MaxPage: 3})
+	member := h.createUser("m@example.com", "")
+	for index := 0; index < 5; index++ {
+		h.createGroup("G"+strconv.Itoa(index), "g-"+strconv.Itoa(index), member)
+	}
+	for index := 0; index < 7; index++ {
+		h.createUser("u"+strconv.Itoa(index)+"@example.com", "")
+	}
+	counting := &countingSCIMStore{scimStore: h.store}
+	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: 3}, counting, nil)
+	call := func(path string) map[string]any {
+		request := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2"+path, nil)
+		request.Header.Set("Authorization", "Bearer "+h.token)
+		recorder := httptest.NewRecorder()
+		server.ServeHTTP(recorder, request)
+		if recorder.Code != http.StatusOK {
+			t.Fatalf("%s = %d %s", path, recorder.Code, recorder.Body.String())
+		}
+		return decodeSCIM(t, recorder)
+	}
+	list := call("/Groups")
+	if resources := list["Resources"].([]any); len(resources) != 3 || len(resources[0].(map[string]any)["members"].([]any)) != 1 {
+		t.Fatalf("groups = %v", list)
+	}
+	if counting.batchMemberReads != 1 || counting.singleMemberReads != 0 {
+		t.Fatalf("members were read %d times in batches and %d times one group at a time", counting.batchMemberReads, counting.singleMemberReads)
+	}
+	call("/Groups/" + list["Resources"].([]any)[0].(map[string]any)["id"].(string))
+	if counting.singleMemberReads != 1 {
+		t.Fatalf("a single group read %d member queries", counting.singleMemberReads)
+	}
+	call("/Users?startIndex=7")
+	// Hops skip the total; the page that is served carries it.
+	if len(counting.userPages) < 2 || !counting.userPages[0] || counting.userPages[len(counting.userPages)-1] {
+		t.Fatalf("user pages read with SkipTotal = %v", counting.userPages)
+	}
 }

@@ -61,8 +61,6 @@ func TestParseFilter(t *testing.T) {
 	}
 }
 
-func str(value string) *string { return &value }
-
 func TestNormalizeUserPatchEntraShapes(t *testing.T) {
 	// Entra ID without aadOptscim062020: capitalized ops and string booleans.
 	off, failure := NormalizeUserPatch([]byte(`{"schemas":["urn:ietf:params:scim:api:messages:2.0:PatchOp"],"Operations":[
@@ -250,5 +248,59 @@ func TestDiscoveryMatchesAdvertisedCapabilities(t *testing.T) {
 	schemas := Schemas("https://x/scim/v2")
 	if len(schemas) != 2 || schemas[0]["id"] != SchemaUser || schemas[1]["id"] != SchemaGroup {
 		t.Fatalf("schemas = %v", schemas)
+	}
+}
+
+func TestGroupMemberOperationsFoldInOrder(t *testing.T) {
+	for name, test := range map[string]struct {
+		body             string
+		add, remove      string
+		replace          string
+		replaceSpecified bool
+	}{
+		"remove then add keeps the member":  {`{"Operations":[{"op":"remove","path":"members[value eq \"x\"]"},{"op":"add","path":"members","value":[{"value":"x"}]}]}`, "x", "", "", false},
+		"add then remove drops the member":  {`{"Operations":[{"op":"add","path":"members","value":[{"value":"x"}]},{"op":"remove","path":"members[value eq \"x\"]"}]}`, "", "x", "", false},
+		"replace then add":                  {`{"Operations":[{"op":"replace","path":"members","value":[{"value":"a"}]},{"op":"add","path":"members","value":[{"value":"b"}]}]}`, "", "", "a,b", true},
+		"replace then remove":               {`{"Operations":[{"op":"replace","path":"members","value":[{"value":"a"},{"value":"b"}]},{"op":"remove","path":"members[value eq \"a\"]"}]}`, "", "", "b", true},
+		"add then replace discards the add": {`{"Operations":[{"op":"add","path":"members","value":[{"value":"x"}]},{"op":"replace","path":"members","value":[{"value":"y"},{"value":"y"}]}]}`, "", "", "y", true},
+		"remove all then add":               {`{"Operations":[{"op":"remove","path":"members"},{"op":"add","path":"members","value":[{"value":"z"}]}]}`, "", "", "z", true},
+	} {
+		patch, failure := NormalizeGroupPatch([]byte(test.body))
+		if failure != nil {
+			t.Fatalf("%s: %v", name, failure)
+		}
+		if got := strings.Join(patch.AddMembers, ","); got != test.add {
+			t.Errorf("%s: add = %q, want %q", name, got, test.add)
+		}
+		if got := strings.Join(patch.RemoveMembers, ","); got != test.remove {
+			t.Errorf("%s: remove = %q, want %q", name, got, test.remove)
+		}
+		if (patch.ReplaceMembers != nil) != test.replaceSpecified || patch.ReplaceMembers != nil && strings.Join(*patch.ReplaceMembers, ",") != test.replace {
+			t.Errorf("%s: replace = %v, want %q", name, patch.ReplaceMembers, test.replace)
+		}
+	}
+}
+
+func TestPatchValuesAreTrimmedLikeCreateAndReplace(t *testing.T) {
+	patch, failure := NormalizeUserPatch([]byte(`{"Operations":[
+		{"op":"replace","path":"externalId","value":" emp-7 "},{"op":"replace","path":"userName","value":" ada "},
+		{"op":"replace","path":"displayName","value":" Ada "},{"op":"replace","path":"emails[type eq \"work\"].value","value":" a@b.c "}]}`))
+	if failure != nil || stringOrNil(patch.ExternalID) != "emp-7" || stringOrNil(patch.UserName) != "ada" || stringOrNil(patch.DisplayName) != "Ada" || stringOrNil(patch.Email) != "a@b.c" {
+		t.Fatalf("user patch = %+v, %v", patch, failure)
+	}
+	group, failure := NormalizeGroupPatch([]byte(`{"Operations":[{"op":"replace","path":"displayName","value":" Eng "},{"op":"replace","path":"externalId","value":" g-1 "}]}`))
+	if failure != nil || stringOrNil(group.DisplayName) != "Eng" || stringOrNil(group.ExternalID) != "g-1" {
+		t.Fatalf("group patch = %+v, %v", group, failure)
+	}
+}
+
+func TestPathlessValuesAreBoundedInDepth(t *testing.T) {
+	deep := strings.Repeat(`{"a":`, 5000) + "1" + strings.Repeat("}", 5000)
+	_, failure := NormalizeUserPatch([]byte(`{"Operations":[{"op":"replace","value":` + deep + `}]}`))
+	if failure == nil || failure.Type != TypeInvalidValue {
+		t.Fatalf("a deeply nested value = %v, want invalidValue", failure)
+	}
+	if _, failure := NormalizeUserPatch([]byte(`{"Operations":[{"op":"replace","value":{"name":{"givenName":"A"}}}]}`)); failure != nil {
+		t.Fatalf("the nesting of a supported attribute was refused: %v", failure)
 	}
 }
