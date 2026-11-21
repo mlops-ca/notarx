@@ -81,6 +81,12 @@ func (s *MemoryStore) UpdateRemoteInstance(ctx context.Context, value RemoteInst
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return RemoteInstance{}, err
 	}
+	switch {
+	case value.AuthKind != RemoteInstanceAuthStaticToken:
+		value.TokenSealed = ""
+	case value.TokenSealed == "":
+		value.TokenSealed = current.TokenSealed
+	}
 	value.Version = nextHostedGroupVersion(current.Version)
 	value.CreatedAt, value.UpdatedAt = current.CreatedAt, time.Now().UTC()
 	s.remoteInstances[value.ID] = value
@@ -105,12 +111,15 @@ func (s *MemoryStore) DeleteRemoteInstance(ctx context.Context, id string, audit
 	return nil
 }
 
-func (s *MemoryStore) RecordRemoteInstanceCheck(_ context.Context, id, state string, checkedAt time.Time) (RemoteInstance, error) {
+func (s *MemoryStore) RecordRemoteInstanceCheck(_ context.Context, id, state string, checkedAt time.Time, expectedVersion string) (RemoteInstance, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value, ok := s.remoteInstances[id]
 	if !ok {
 		return RemoteInstance{}, ErrNotFound
+	}
+	if value.Version != expectedVersion {
+		return RemoteInstance{}, ErrVersionConflict
 	}
 	value.State, value.LastCheckedAt, value.UpdatedAt = state, checkedAt.UTC(), time.Now().UTC()
 	s.remoteInstances[id] = value

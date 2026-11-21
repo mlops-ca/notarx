@@ -153,13 +153,29 @@ func TestPeerClientVerifiesTLSAndRefusesPlainHTTP(t *testing.T) {
 	}
 }
 
-func TestPeerAddressBlocked(t *testing.T) {
+func TestNonPublicAddress(t *testing.T) {
 	for _, public := range []string{"93.184.216.34", "8.8.8.8", "2606:4700:4700::1111"} {
-		if PeerAddressBlocked(net.ParseIP(public)) {
+		if NonPublicAddress(net.ParseIP(public)) {
 			t.Errorf("%s must be allowed", public)
 		}
 	}
-	if !PeerAddressBlocked(nil) || !PeerAddressBlocked(net.IP{1, 2, 3}) {
+	if !NonPublicAddress(nil) || !NonPublicAddress(net.IP{1, 2, 3}) {
 		t.Error("an invalid address must be blocked")
+	}
+}
+
+func TestNonPublicAddressSpecialPurposeRanges(t *testing.T) {
+	for _, blocked := range []string{
+		"0.0.0.0", "0.1.2.3", "192.0.2.1", "198.51.100.7", "203.0.113.9", "192.88.99.1", "100.64.0.1", "198.19.255.1", "192.0.0.9", "255.255.255.255",
+		"100::1", "2001:db8::1", "2001::1", "3fff::1", "::ffff:192.0.2.1", "64:ff9b::1", "2002::1", "fec0::1",
+	} {
+		if !NonPublicAddress(net.ParseIP(blocked)) {
+			t.Errorf("%s must be non-public", blocked)
+		}
+	}
+	for _, public := range []string{"93.184.216.34", "192.0.3.1", "198.51.101.1", "203.0.114.1", "2606:4700:4700::1111"} {
+		if NonPublicAddress(net.ParseIP(public)) {
+			t.Errorf("%s must be public", public)
+		}
 	}
 }

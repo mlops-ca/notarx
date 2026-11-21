@@ -292,7 +292,8 @@ func (h remoteInstanceHandler) UpdateRemoteInstance(w http.ResponseWriter, r *ht
 			return
 		}
 	case current.TokenSealed != "":
-		sealed = current.TokenSealed
+		// Leave sealed empty: the store carries the stored token forward inside the write, so a rotation that
+		// lands after the read above is never reverted.
 	default:
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "token is required for static_token")
 		return
@@ -375,9 +376,14 @@ func (h remoteInstanceHandler) TestRemoteInstance(w http.ResponseWriter, r *http
 			state = repository.RemoteInstanceStateUnreachable
 		}
 	}
-	if _, err = h.store.RecordRemoteInstanceCheck(r.Context(), current.ID, state, checkedAt); errors.Is(err, repository.ErrNotFound) {
+	if _, err = h.store.RecordRemoteInstanceCheck(r.Context(), current.ID, state, checkedAt, current.Version); errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "remote instance not found")
 		return
+	} else if errors.Is(err, repository.ErrVersionConflict) {
+		// The instance was edited or disabled while the check ran: report the probe result without recording it.
+		if latest, getErr := h.store.GetRemoteInstance(r.Context(), current.ID); getErr == nil {
+			state = latest.State
+		}
 	} else if err != nil {
 		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "record remote instance check failed")
 		return

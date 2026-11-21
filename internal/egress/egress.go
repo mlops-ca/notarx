@@ -167,15 +167,7 @@ func pinnedClientContext(ctx context.Context, client *http.Client, u *url.URL, h
 		if port != "" {
 			requestPort = port
 		}
-		var lastErr error
-		for _, ip := range ips {
-			connection, err := hooks.DialContext(ctx, network, net.JoinHostPort(ip.String(), requestPort))
-			if err == nil {
-				return connection, nil
-			}
-			lastErr = err
-		}
-		return nil, lastErr
+		return dialPinned(ctx, hooks, ips, network, requestPort)
 	}
 	copy.Transport = pinnedTransport
 	return &copy, nil
@@ -350,6 +342,62 @@ func hasLegacyDialTLS(transport *http.Transport) bool {
 // unspecified, or multicast.
 func PrivateAddress(ip net.IP) bool {
 	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() || ip.IsMulticast()
+}
+
+// specialPurposePrefixes are the ranges that netip.Addr.IsGlobalUnicast accepts but that are not public
+// destinations: "this network", documentation, 6to4 relay anycast, IETF assignments, CGNAT, benchmarking,
+// reserved space and the IPv6 transition and documentation ranges (some of which embed an arbitrary IPv4 address).
+var specialPurposePrefixes = []netip.Prefix{
+	netip.MustParsePrefix("0.0.0.0/8"),       // this network
+	netip.MustParsePrefix("100.64.0.0/10"),   // carrier-grade NAT
+	netip.MustParsePrefix("192.0.0.0/24"),    // IETF protocol assignments
+	netip.MustParsePrefix("192.0.2.0/24"),    // TEST-NET-1
+	netip.MustParsePrefix("192.88.99.0/24"),  // deprecated 6to4 relay anycast
+	netip.MustParsePrefix("198.18.0.0/15"),   // benchmarking
+	netip.MustParsePrefix("198.51.100.0/24"), // TEST-NET-2
+	netip.MustParsePrefix("203.0.113.0/24"),  // TEST-NET-3
+	netip.MustParsePrefix("240.0.0.0/4"),     // reserved, includes the broadcast address
+	netip.MustParsePrefix("64:ff9b::/96"),    // NAT64
+	netip.MustParsePrefix("100::/64"),        // discard-only
+	netip.MustParsePrefix("2001::/32"),       // Teredo
+	netip.MustParsePrefix("2001:db8::/32"),   // documentation
+	netip.MustParsePrefix("2002::/16"),       // 6to4
+	netip.MustParsePrefix("3fff::/20"),       // documentation
+	netip.MustParsePrefix("fec0::/10"),       // deprecated site-local
+}
+
+// NonPublicAddress is the strict address policy: it reports whether ip is anything but a publicly routable
+// unicast address (PrivateAddress plus every special-purpose range). An invalid address is non-public. Remote
+// instance requests use it; repository upstreams keep the narrower PrivateAddress.
+func NonPublicAddress(ip net.IP) bool {
+	address, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return true
+	}
+	address = address.Unmap()
+	if PrivateAddress(ip) || !address.IsGlobalUnicast() {
+		return true
+	}
+	for _, prefix := range specialPurposePrefixes {
+		if prefix.Contains(address) {
+			return true
+		}
+	}
+	return false
+}
+
+// dialPinned connects to the first of the already-checked addresses that accepts the connection, so a second
+// name resolution can never rebind the connection.
+func dialPinned(ctx context.Context, hooks Hooks, addresses []net.IP, network, port string) (net.Conn, error) {
+	var last error
+	for _, ip := range addresses {
+		connection, err := hooks.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		if err == nil {
+			return connection, nil
+		}
+		last = err
+	}
+	return nil, last
 }
 
 func privateEndpointAllowed(host string, ip net.IP, rules map[string][]netip.Prefix) bool {
