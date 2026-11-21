@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -304,14 +305,24 @@ func TestCachedGrantSetIsACopy(t *testing.T) {
 	}
 }
 
-// An authenticated protocol read on a warm cache issues no statement for user, repository, group, policy,
-// quarantine and grant resolution (the acceptance bound is one).
+// An authenticated protocol read on a warm cache issues no statement for user, group membership, repository,
+// group, policy, quarantine and grant resolution (the acceptance bound is one).
 func TestWarmAuthenticatedReadResolvesEverythingWithoutStatements(t *testing.T) {
 	f := newFixture(t, 5*time.Second)
 	ctx := context.Background()
 	user := f.addUser(t)
 	f.grant(t, "user:ada")
+	group, err := f.source.CreateUserGroup(ctx, repository.UserGroup{ID: uuid.NewString(), DisplayName: "team", Source: repository.UserGroupSourceLocal})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.source.AddUserGroupMember(ctx, group.ID, user.ID, repository.UserGroupSourceLocal); err != nil {
+		t.Fatal(err)
+	}
 	resolve := func() {
+		if _, err := f.caches.ListUserGroupMemberships(ctx, user.ID); err != nil {
+			t.Fatal(err)
+		}
 		f.resolveAll(t, ctx)
 		if _, err := f.caches.GetUserByName(ctx, user.Name); err != nil {
 			t.Fatal(err)

@@ -424,6 +424,52 @@ func TestWorkloadVerifiedTokenIsCachedAndRevocationIsBounded(t *testing.T) {
 	}
 }
 
+// A bumped issuer or service-account epoch turns a cached verdict into a miss without any eviction of the entry itself,
+// and the cache key is a digest, never request text.
+func TestWorkloadIssuerEpochBumpTurnsACachedVerdictIntoAMiss(t *testing.T) {
+	f := newWorkloadFixture(t, 5*time.Second, false)
+	now := time.Now()
+	f.registry.SetClock(func() time.Time { return now })
+	auth := f.authenticator()
+	token := f.token(t, nil)
+	ctx := context.Background()
+	if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); !ok {
+		t.Fatal("first request refused")
+	}
+	issuer, err := f.store.GetWorkloadIssuer(ctx, f.issuer.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	issuer.Audiences = []string{"https://other.example.test"}
+	if _, err := f.store.UpdateWorkloadIssuer(ctx, issuer, issuer.Version); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); !ok {
+		t.Fatal("inside the window with no notification the cached verdict is still served")
+	}
+	for _, scope := range []string{repository.CacheScopeWorkloadIssuer, repository.CacheScopeServiceAccount} {
+		f.registry.Invalidate(scope, "unrelated-id")
+		if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); ok {
+			t.Fatalf("a bumped %s epoch left the cached verdict in force", scope)
+		}
+		// Restore the audience so the next scope starts from a cached success.
+		current, _ := f.store.GetWorkloadIssuer(ctx, f.issuer.ID)
+		current.Audiences = []string{testWorkloadAudience}
+		if _, err := f.store.UpdateWorkloadIssuer(ctx, current, current.Version); err != nil {
+			t.Fatal(err)
+		}
+		now = now.Add(2 * time.Second)
+		if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); !ok {
+			t.Fatal("the restored issuer refused the token")
+		}
+		current, _ = f.store.GetWorkloadIssuer(ctx, f.issuer.ID)
+		current.Audiences = []string{"https://other.example.test"}
+		if _, err := f.store.UpdateWorkloadIssuer(ctx, current, current.Version); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestWorkloadPrincipalTokenIsRevalidated(t *testing.T) {
 	f := newWorkloadFixture(t, 0, false)
 	auth := f.authenticator()
