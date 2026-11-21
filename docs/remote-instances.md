@@ -41,7 +41,7 @@ Every notarx instance answers `GET /.well-known/notarx` at the server root, anon
 {
   "instanceId": "0197c0de-0000-7000-8000-000000000001",
   "apiVersion": "1",
-  "formats": [],
+  "formats": ["raw"],
   "limits": {"maxBlobBytes": 10737418240, "maxSessionBytes": 53687091200, "maxBlobsPerSession": 2000, "maxOpenSessionsPerPrincipal": 4}
 }
 ```
@@ -70,8 +70,7 @@ Requests to remote instances go through `internal/egress`:
 A push from another notarx instance is received through an import session (ADR 0021, Remote targets). The `ImportWrite`
 permission (`repositories:import`) lets a principal create sessions in a repository; it implies no read access. Each
 session records what the sender claims and the blobs it intends to send, under these limits, which the instance document
-advertises. The session store enforces them; the endpoints that create sessions come with the Raw importer (issue 582), so
-until then nothing creates a session:
+advertises. The session store enforces them and each limit has its own problem code (below):
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
@@ -84,3 +83,39 @@ until then nothing creates a session:
 
 A request over a limit is refused and writes nothing. Every node runs the reaper once a minute; a finished session row is
 pruned by the retention janitor once its staging objects are gone.
+
+## Receiving a push
+
+The receiver exposes three endpoints under `/api/v2`, all needing `ImportWrite` on the target repository (the same
+permission `repositories:import`, which implies no read). Only the principal that opened a session may use it; any other
+caller is answered `404`. The target must be an active hosted repository whose format has an importer; Raw is the first, and
+the instance document lists the formats that accept imports.
+
+1. `POST /repositories/{repositoryId}/imports` with `{coordinate, digest, formatManifest, blobs: [{digest, size}], chainPath,
+   idempotencyKey, evidence}` opens a session and answers `201` with the blobs still `missing`. A repeat of the key by the
+   same principal for the same format, coordinate, digest, manifest and blobs answers `200` with the same session and checks no limit; any
+   other request under the key is `409 idempotency_conflict`. A blob is dropped from `missing` only once this session holds
+   its verified bytes: the answer never depends on what other repositories hold or what the caller may read. Limit refusals are
+   `413 import_blob_too_large`, `413 import_session_too_large`, `422 import_too_many_blobs`,
+   `429 import_too_many_sessions` and `507 import_staging_quota_exceeded`. A `chainPath` longer than
+   `NOTARX_PROMOTION_MAX_HOPS` is `422 chain_too_long`, one that already holds this instance and the target repository is
+   `422 chain_loop`; every hop needs an `instance` and a `repository` (`422 invalid_chain_path`), the receiver appends its own hop, and a
+   missing path is depth 0.
+2. `PUT /imports/{importId}/blobs/{sha256}` streams one blob. The server hashes the bytes while it writes them to a staging
+   key and refuses a digest or size that differs from the claim (`422 digest_mismatch`, `422 size_mismatch`) before anything is
+   visible. Uploading a blob the session already holds answers `204` without reading it. A session that is not open is
+   `409 import_session_closed`.
+3. `POST /imports/{importId}/commit` re-checks every staged blob, evaluates the target's security policy and quarantine, and
+   publishes through the format's importer. The sender's evidence is stored as a claim and never counted: the receiver's policy
+   decides (`422 admission_refused`, `422 artifact_quarantined`): a policy that requires a signature, an SBOM, provenance, a
+   scan or a license therefore refuses every import until the sender's evidence can count (`trust_evidence`, with the remote
+   push sender). A commit is idempotent: a committed session answers `200` again, and an interrupted commit can be sent
+   again. A commit the format refuses (`422 import_mismatch`, `422 import_invalid_unit`, `422 unsupported_layout`,
+   `409 import_conflict`) aborts the session, so the sender's retry under the same key opens a new one; a failure of storage
+   leaves it committing, where the commit can be sent again.
+
+For a flat Raw repository the `formatManifest` is `{"path": "dir/file.bin", "contentType": "..."}`, the unit has exactly one
+blob, and its digest is the artifact digest. The importer recomputes the coordinate, size and digest from the bytes it copies;
+a coordinate that is not the manifest path, a digest the bytes do not have or a manifest with other fields is rejected
+(`422 import_mismatch`, `422 import_invalid_unit`). A name ending in `.sha256` or `.sha512` is the verification sidecar of a path in a flat repository and is refused. A path that already holds the same digest is a replay; another digest is
+`409 import_conflict`. A versioned Raw repository does not accept imports (`422 unsupported_layout`).

@@ -470,6 +470,16 @@ asks for: the dead one keeps its row for the reaper under a renamed key. Only an
 so a running commit never loses its staging objects to the reaper. An upload that the store refuses with a closed session
 deletes the object it staged, since the reaper may already have emptied the staging keys.
 
+Receiver behaviour as built (slice 7b part 2): the `missing` list drops a blob only once the session itself holds its verified bytes, which
+the ADR permits (everything not provably present is missing) and which never depends on what the caller may read. A commit checks the
+session's blobs against the staging store, evaluates the target's security policy without any sender evidence, takes the artifact
+distribution admission lock (quarantine) and only then begins the commit and publishes through the importer. The Raw
+`formatManifest` is `{path, contentType?}`; the unit has one blob whose digest is the artifact digest, a versioned Raw
+target is refused, and the importer hashes the bytes while it copies them into the content-addressed object. The hop cap is
+`NOTARX_PROMOTION_MAX_HOPS` (8, at most 64); every reported hop names an instance and a repository. Only the principal that opened a session may use it.
+A commit that the importer refuses on the unit itself aborts the session. The receiver's policy is evaluated without sender
+evidence, so a policy that requires evidence refuses imports until `trust_evidence` lands with slice 8.
+
 OCI: the unit is the manifest digest plus all child manifests/blobs plus
 referrers (signatures, SBOMs as referrer manifests) by digest. Blob sharing
 (`MountOCIBlobFrom`) is local only; across instances every missing blob is

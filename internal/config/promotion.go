@@ -12,6 +12,13 @@ const DefaultPromotionMaxRulesPerRepository = 32
 // cap must stay small.
 const MaxPromotionMaxRulesPerRepository = 1024
 
+// DefaultPromotionMaxHops is the default of NOTARX_PROMOTION_MAX_HOPS (ADR 0021, Chains): the longest chain_path an
+// import accepts.
+const DefaultPromotionMaxHops = 8
+
+// MaxPromotionMaxHops bounds the configurable cap: a chain of rules is a handful of stages, not a graph walk.
+const MaxPromotionMaxHops = 64
+
 // DefaultPromotionEvaluatorInterval and DefaultPromotionEvaluatorConcurrency are the defaults of
 // NOTARX_PROMOTION_EVALUATOR_INTERVAL and NOTARX_PROMOTION_EVALUATOR_CONCURRENCY (ADR 0021, Evaluator).
 const (
@@ -25,6 +32,7 @@ const MaxPromotionEvaluatorConcurrency = 64
 var (
 	errMaxRulesPerRepository = errors.New("NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY must be at most 1024")
 	errEvaluatorConcurrency  = errors.New("NOTARX_PROMOTION_EVALUATOR_CONCURRENCY must be at most 64")
+	errMaxHops               = errors.New("NOTARX_PROMOTION_MAX_HOPS must be at most 64")
 )
 
 // PromotionConfig holds the promotion rule policy of ADR 0021 ("Configuration").
@@ -32,6 +40,9 @@ type PromotionConfig struct {
 	// MaxRulesPerRepository is the most promotion rules one source repository can have
 	// (NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY, default 32, at most 1024).
 	MaxRulesPerRepository int
+	// MaxHops is the longest chain_path an import accepts, and the depth a chain of rules may have
+	// (NOTARX_PROMOTION_MAX_HOPS, default 8, at most 64).
+	MaxHops int
 	// Disabled turns the evaluator off (NOTARX_PROMOTION_ENABLED=false): rules stay configuration, publications
 	// write no evaluations and no worker runs. The default is enabled.
 	Disabled bool
@@ -58,6 +69,17 @@ func promotionConfigFromEnv(current PromotionConfig) (PromotionConfig, error) {
 		return current, errMaxRulesPerRepository
 	}
 	current.MaxRulesPerRepository = value
+	if current.MaxHops == 0 {
+		current.MaxHops = DefaultPromotionMaxHops
+	}
+	hops, err := positiveIntEnv("NOTARX_PROMOTION_MAX_HOPS", current.MaxHops, false)
+	if err != nil {
+		return current, err
+	}
+	if hops > MaxPromotionMaxHops {
+		return current, errMaxHops
+	}
+	current.MaxHops = hops
 	enabled, err := boolEnv("NOTARX_PROMOTION_ENABLED", !current.Disabled)
 	if err != nil {
 		return current, err

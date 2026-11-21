@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/access"
+	"github.com/mlops-ca/notarx/internal/config"
 	helmformat "github.com/mlops-ca/notarx/internal/format/helm"
 	huggingfaceformat "github.com/mlops-ca/notarx/internal/format/huggingface"
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
@@ -84,9 +85,15 @@ type GatewayOptions struct {
 	// private networks. RemoteDiscoverer replaces the egress-backed instance document client (tests).
 	RemoteAllowPrivateNetworks bool
 	RemoteDiscoverer           remoteinstance.Discoverer
-	// ImportLimits are the import limits this instance enforces (NOTARX_IMPORT_MAX_*, ADR 0021), advertised in
-	// GET /.well-known/notarx; the zero value advertises the defaults.
-	ImportLimits remoteinstance.Limits
+	// ImportConfig holds the limits and the session lifetime of the import endpoints (NOTARX_IMPORT_*, ADR 0021). The limits
+	// are advertised in GET /.well-known/notarx; the zero value enforces no limit, advertises the defaults and gives a
+	// session the default lifetime.
+	ImportConfig config.ImportConfig
+	// ImportStaging is the object store the blobs of an import session are staged in, under native/imports/; nil
+	// leaves the import endpoints answering 503 import_unavailable.
+	ImportStaging ObjectStore
+	// PromotionMaxHops is NOTARX_PROMOTION_MAX_HOPS: the longest chainPath an import accepts; zero means the default of 8.
+	PromotionMaxHops int
 	// PromotionMaxRulesPerRepository is NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY (ADR 0021); zero means the default of 32.
 	PromotionMaxRulesPerRepository int
 	// SCIM configures the SCIM 2.0 server (NOTARX_SCIM_*, ADR 0018 section 4); the zero value leaves it off and

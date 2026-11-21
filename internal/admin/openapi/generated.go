@@ -2525,6 +2525,33 @@ func (e IdentityProviderSAMLSettingsNameIdFormat) Valid() bool {
 	}
 }
 
+// Defines values for ImportSessionState.
+const (
+	ImportSessionStateAborted    ImportSessionState = "aborted"
+	ImportSessionStateCommitted  ImportSessionState = "committed"
+	ImportSessionStateCommitting ImportSessionState = "committing"
+	ImportSessionStateExpired    ImportSessionState = "expired"
+	ImportSessionStateOpen       ImportSessionState = "open"
+)
+
+// Valid indicates whether the value is a known member of the ImportSessionState enum.
+func (e ImportSessionState) Valid() bool {
+	switch e {
+	case ImportSessionStateAborted:
+		return true
+	case ImportSessionStateCommitted:
+		return true
+	case ImportSessionStateCommitting:
+		return true
+	case ImportSessionStateExpired:
+		return true
+	case ImportSessionStateOpen:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for IssuerKeyAlg.
 const (
 	IssuerKeyAlgES256 IssuerKeyAlg = "ES256"
@@ -6929,6 +6956,25 @@ type CreateIdentityProviderKind string
 // CreateIdentityProviderProvisioningMode defines model for CreateIdentityProvider.ProvisioningMode.
 type CreateIdentityProviderProvisioningMode string
 
+// CreateImport What the sender claims to push. Every field is recorded as received and verified against the bytes.
+type CreateImport struct {
+	Blobs []ImportBlobClaim `json:"blobs"`
+
+	// ChainPath The hops the artifact has taken so far; absent means depth 0.
+	ChainPath  *[]PromotionChainHop `json:"chainPath,omitempty"`
+	Coordinate string               `json:"coordinate"`
+
+	// Digest Digest of the artifact (a Raw file: its content digest).
+	Digest string `json:"digest"`
+
+	// Evidence The sender's unverified scan, SBOM and signature claims; stored as claims and never counted toward the receiver's policy.
+	Evidence *map[string]interface{} `json:"evidence,omitempty"`
+
+	// FormatManifest The format's own description of the unit, parsed by the importer of the target format. Raw: {path, contentType?}.
+	FormatManifest map[string]interface{} `json:"formatManifest"`
+	IdempotencyKey string                 `json:"idempotencyKey"`
+}
+
 // CreateMavenPublishSession defines model for CreateMavenPublishSession.
 type CreateMavenPublishSession struct {
 	Coordinate string                          `json:"coordinate"`
@@ -8318,6 +8364,12 @@ type IdentityProviderSAMLSettings struct {
 // IdentityProviderSAMLSettingsNameIdFormat defines model for IdentityProviderSAMLSettings.NameIdFormat.
 type IdentityProviderSAMLSettingsNameIdFormat string
 
+// ImportBlobClaim defines model for ImportBlobClaim.
+type ImportBlobClaim struct {
+	Digest string `json:"digest"`
+	Size   int64  `json:"size"`
+}
+
 // ImportIdentityProviderMetadata Exactly one of url and xml.
 type ImportIdentityProviderMetadata struct {
 	// Url HTTPS URL of the IdP metadata, fetched through the SSRF guard (no private ranges, 5 s timeout, 1 MiB).
@@ -8326,6 +8378,26 @@ type ImportIdentityProviderMetadata struct {
 	// Xml Pasted IdP metadata XML.
 	Xml *string `json:"xml,omitempty"`
 }
+
+// ImportSession defines model for ImportSession.
+type ImportSession struct {
+	// Bytes Total of the claimed blob sizes.
+	Bytes      int64              `json:"bytes"`
+	Coordinate string             `json:"coordinate"`
+	CreatedAt  time.Time          `json:"createdAt"`
+	Digest     string             `json:"digest"`
+	ExpiresAt  time.Time          `json:"expiresAt"`
+	Format     string             `json:"format"`
+	Id         openapi_types.UUID `json:"id"`
+
+	// Missing The blobs still to upload, by digest.
+	Missing      []ImportBlobClaim  `json:"missing"`
+	RepositoryId openapi_types.UUID `json:"repositoryId"`
+	State        ImportSessionState `json:"state"`
+}
+
+// ImportSessionState defines model for ImportSessionState.
+type ImportSessionState string
 
 // InstanceLimits defines model for InstanceLimits.
 type InstanceLimits struct {
@@ -11461,6 +11533,9 @@ type IdempotencyKey = string
 // IfMatch defines model for IfMatch.
 type IfMatch = string
 
+// ImportId defines model for ImportId.
+type ImportId = openapi_types.UUID
+
 // LifecycleJobId defines model for LifecycleJobId.
 type LifecycleJobId = openapi_types.UUID
 
@@ -12721,6 +12796,9 @@ type UpsertGrantJSONRequestBody = Grant
 // ReplaceGrantsJSONRequestBody defines body for ReplaceGrants for application/json ContentType.
 type ReplaceGrantsJSONRequestBody = GrantList
 
+// CreateRepositoryImportJSONRequestBody defines body for CreateRepositoryImport for application/json ContentType.
+type CreateRepositoryImportJSONRequestBody = CreateImport
+
 // CreateRawVersionJSONRequestBody defines body for CreateRawVersion for application/json ContentType.
 type CreateRawVersionJSONRequestBody = RawVersionCreate
 
@@ -13807,6 +13885,12 @@ type ServerInterface interface {
 	// (GET /identity)
 	GetCurrentIdentity(w http.ResponseWriter, r *http.Request)
 
+	// (PUT /imports/{importId}/blobs/{sha256})
+	UploadImportBlob(w http.ResponseWriter, r *http.Request, importId ImportId, sha256 string)
+
+	// (POST /imports/{importId}/commit)
+	CommitImport(w http.ResponseWriter, r *http.Request, importId ImportId)
+
 	// (GET /issuer)
 	GetIssuerStatus(w http.ResponseWriter, r *http.Request)
 
@@ -14259,6 +14343,9 @@ type ServerInterface interface {
 
 	// (PUT /repositories/{repositoryId}/grants)
 	ReplaceGrants(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params ReplaceGrantsParams)
+
+	// (POST /repositories/{repositoryId}/imports)
+	CreateRepositoryImport(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId)
 
 	// (GET /repositories/{repositoryId}/lifecycle-jobs)
 	ListRepositoryLifecycleJobs(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId, params ListRepositoryLifecycleJobsParams)
@@ -16964,6 +17051,67 @@ func (siw *ServerInterfaceWrapper) GetCurrentIdentity(w http.ResponseWriter, r *
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetCurrentIdentity(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadImportBlob operation middleware
+func (siw *ServerInterfaceWrapper) UploadImportBlob(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "importId" -------------
+	var importId ImportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "importId", r.PathValue("importId"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "importId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "sha256" -------------
+	var sha256 string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "sha256", r.PathValue("sha256"), &sha256, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sha256", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadImportBlob(w, r, importId, sha256)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CommitImport operation middleware
+func (siw *ServerInterfaceWrapper) CommitImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "importId" -------------
+	var importId ImportId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "importId", r.PathValue("importId"), &importId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "importId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CommitImport(w, r, importId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -23161,6 +23309,32 @@ func (siw *ServerInterfaceWrapper) ReplaceGrants(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// CreateRepositoryImport operation middleware
+func (siw *ServerInterfaceWrapper) CreateRepositoryImport(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "repositoryId" -------------
+	var repositoryId RepositoryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "repositoryId", r.PathValue("repositoryId"), &repositoryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "repositoryId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRepositoryImport(w, r, repositoryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListRepositoryLifecycleJobs operation middleware
 func (siw *ServerInterfaceWrapper) ListRepositoryLifecycleJobs(w http.ResponseWriter, r *http.Request) {
 
@@ -27695,6 +27869,9 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/webhook-subscriptions", wrapper.CreateWebhookSubscription)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-subscriptions/{subscriptionId}", wrapper.GetWebhookSubscription)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/webhook-subscriptions/{subscriptionId}", wrapper.UpdateWebhookSubscription)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/imports", wrapper.CreateRepositoryImport)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/imports/{importId}/blobs/{sha256}", wrapper.UploadImportBlob)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/imports/{importId}/commit", wrapper.CommitImport)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/remote-instances", wrapper.ListRemoteInstances)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/remote-instances", wrapper.CreateRemoteInstance)
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/remote-instances/{remoteInstanceId}", wrapper.DeleteRemoteInstance)
@@ -33012,6 +33189,246 @@ func (response GetCurrentIdentity401ApplicationProblemPlusJSONResponse) VisitGet
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadImportBlobRequestObject struct {
+	ImportId ImportId `json:"importId"`
+	Sha256   string   `json:"sha256"`
+	Body     io.Reader
+}
+
+type UploadImportBlobResponseObject interface {
+	VisitUploadImportBlobResponse(w http.ResponseWriter) error
+}
+
+type UploadImportBlob204Response struct {
+}
+
+func (response UploadImportBlob204Response) VisitUploadImportBlobResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type UploadImportBlob400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response UploadImportBlob400ApplicationProblemPlusJSONResponse) VisitUploadImportBlobResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadImportBlob401ApplicationProblemPlusJSONResponse Problem
+
+func (response UploadImportBlob401ApplicationProblemPlusJSONResponse) VisitUploadImportBlobResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadImportBlob403ApplicationProblemPlusJSONResponse Problem
+
+func (response UploadImportBlob403ApplicationProblemPlusJSONResponse) VisitUploadImportBlobResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadImportBlob404ApplicationProblemPlusJSONResponse Problem
+
+func (response UploadImportBlob404ApplicationProblemPlusJSONResponse) VisitUploadImportBlobResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadImportBlob409ApplicationProblemPlusJSONResponse Problem
+
+func (response UploadImportBlob409ApplicationProblemPlusJSONResponse) VisitUploadImportBlobResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadImportBlob422ApplicationProblemPlusJSONResponse Problem
+
+func (response UploadImportBlob422ApplicationProblemPlusJSONResponse) VisitUploadImportBlobResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UploadImportBlob503ApplicationProblemPlusJSONResponse Problem
+
+func (response UploadImportBlob503ApplicationProblemPlusJSONResponse) VisitUploadImportBlobResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CommitImportRequestObject struct {
+	ImportId ImportId `json:"importId"`
+}
+
+type CommitImportResponseObject interface {
+	VisitCommitImportResponse(w http.ResponseWriter) error
+}
+
+type CommitImport200JSONResponse ImportSession
+
+func (response CommitImport200JSONResponse) VisitCommitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CommitImport400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CommitImport400ApplicationProblemPlusJSONResponse) VisitCommitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CommitImport401ApplicationProblemPlusJSONResponse Problem
+
+func (response CommitImport401ApplicationProblemPlusJSONResponse) VisitCommitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CommitImport403ApplicationProblemPlusJSONResponse Problem
+
+func (response CommitImport403ApplicationProblemPlusJSONResponse) VisitCommitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CommitImport404ApplicationProblemPlusJSONResponse Problem
+
+func (response CommitImport404ApplicationProblemPlusJSONResponse) VisitCommitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CommitImport409ApplicationProblemPlusJSONResponse Problem
+
+func (response CommitImport409ApplicationProblemPlusJSONResponse) VisitCommitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CommitImport422ApplicationProblemPlusJSONResponse Problem
+
+func (response CommitImport422ApplicationProblemPlusJSONResponse) VisitCommitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CommitImport503ApplicationProblemPlusJSONResponse Problem
+
+func (response CommitImport503ApplicationProblemPlusJSONResponse) VisitCommitImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -46317,6 +46734,185 @@ func (response ReplaceGrants412ApplicationProblemPlusJSONResponse) VisitReplaceG
 	return err
 }
 
+type CreateRepositoryImportRequestObject struct {
+	RepositoryId RepositoryId `json:"repositoryId"`
+	Body         *CreateRepositoryImportJSONRequestBody
+}
+
+type CreateRepositoryImportResponseObject interface {
+	VisitCreateRepositoryImportResponse(w http.ResponseWriter) error
+}
+
+type CreateRepositoryImport200JSONResponse ImportSession
+
+func (response CreateRepositoryImport200JSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport201JSONResponse ImportSession
+
+func (response CreateRepositoryImport201JSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreateRepositoryImport400ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport401ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport403ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport404ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport404ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport409ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport409ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport413ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport413ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(413)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport422ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport422ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport429ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport429ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(429)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport503ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport503ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRepositoryImport507ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRepositoryImport507ApplicationProblemPlusJSONResponse) VisitCreateRepositoryImportResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(507)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRepositoryLifecycleJobsRequestObject struct {
 	RepositoryId RepositoryId `json:"repositoryId"`
 	Params       ListRepositoryLifecycleJobsParams
@@ -54382,6 +54978,12 @@ type StrictServerInterface interface {
 	// (GET /identity)
 	GetCurrentIdentity(ctx context.Context, request GetCurrentIdentityRequestObject) (GetCurrentIdentityResponseObject, error)
 
+	// (PUT /imports/{importId}/blobs/{sha256})
+	UploadImportBlob(ctx context.Context, request UploadImportBlobRequestObject) (UploadImportBlobResponseObject, error)
+
+	// (POST /imports/{importId}/commit)
+	CommitImport(ctx context.Context, request CommitImportRequestObject) (CommitImportResponseObject, error)
+
 	// (GET /issuer)
 	GetIssuerStatus(ctx context.Context, request GetIssuerStatusRequestObject) (GetIssuerStatusResponseObject, error)
 
@@ -54834,6 +55436,9 @@ type StrictServerInterface interface {
 
 	// (PUT /repositories/{repositoryId}/grants)
 	ReplaceGrants(ctx context.Context, request ReplaceGrantsRequestObject) (ReplaceGrantsResponseObject, error)
+
+	// (POST /repositories/{repositoryId}/imports)
+	CreateRepositoryImport(ctx context.Context, request CreateRepositoryImportRequestObject) (CreateRepositoryImportResponseObject, error)
 
 	// (GET /repositories/{repositoryId}/lifecycle-jobs)
 	ListRepositoryLifecycleJobs(ctx context.Context, request ListRepositoryLifecycleJobsRequestObject) (ListRepositoryLifecycleJobsResponseObject, error)
@@ -57061,6 +57666,61 @@ func (sh *strictHandler) GetCurrentIdentity(w http.ResponseWriter, r *http.Reque
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCurrentIdentityResponseObject); ok {
 		if err := validResponse.VisitGetCurrentIdentityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadImportBlob operation middleware
+func (sh *strictHandler) UploadImportBlob(w http.ResponseWriter, r *http.Request, importId ImportId, sha256 string) {
+	var request UploadImportBlobRequestObject
+
+	request.ImportId = importId
+	request.Sha256 = sha256
+
+	request.Body = r.Body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadImportBlob(ctx, request.(UploadImportBlobRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadImportBlob")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadImportBlobResponseObject); ok {
+		if err := validResponse.VisitUploadImportBlobResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CommitImport operation middleware
+func (sh *strictHandler) CommitImport(w http.ResponseWriter, r *http.Request, importId ImportId) {
+	var request CommitImportRequestObject
+
+	request.ImportId = importId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CommitImport(ctx, request.(CommitImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CommitImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CommitImportResponseObject); ok {
+		if err := validResponse.VisitCommitImportResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -61492,6 +62152,39 @@ func (sh *strictHandler) ReplaceGrants(w http.ResponseWriter, r *http.Request, r
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReplaceGrantsResponseObject); ok {
 		if err := validResponse.VisitReplaceGrantsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateRepositoryImport operation middleware
+func (sh *strictHandler) CreateRepositoryImport(w http.ResponseWriter, r *http.Request, repositoryId RepositoryId) {
+	var request CreateRepositoryImportRequestObject
+
+	request.RepositoryId = repositoryId
+
+	var body CreateRepositoryImportJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateRepositoryImport(ctx, request.(CreateRepositoryImportRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateRepositoryImport")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateRepositoryImportResponseObject); ok {
+		if err := validResponse.VisitCreateRepositoryImportResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -14,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/mlops-ca/notarx/internal/config"
+	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/remoteinstance"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/secrets"
@@ -323,7 +325,7 @@ func TestRemoteInstanceAPIListPagesByName(t *testing.T) {
 
 func TestWellKnownInstanceDocumentIsAnonymousAndStable(t *testing.T) {
 	store := repository.NewMemoryStore()
-	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	handler := newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), ImportStaging: objectstore.NewMemoryStore()})
 	get := func() *httptest.ResponseRecorder {
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/.well-known/notarx", nil))
@@ -335,7 +337,7 @@ func TestWellKnownInstanceDocumentIsAnonymousAndStable(t *testing.T) {
 		t.Fatalf("well-known = %d %s", first.Code, first.Body.String())
 	}
 	local, _ := store.LocalInstanceID(context.Background())
-	if document.InstanceID != local || document.APIVersion != remoteinstance.APIVersion || document.Limits != remoteinstance.DefaultLimits() || document.Formats == nil {
+	if document.InstanceID != local || document.APIVersion != remoteinstance.APIVersion || document.Limits != remoteinstance.DefaultLimits() || len(document.Formats) != 1 || document.Formats[0] != "raw" {
 		t.Fatalf("document = %#v local=%s", document, local)
 	}
 	if _, err := document.Validate(); err != nil {
@@ -438,7 +440,7 @@ func TestRemoteInstanceAPIDeleteConflictNamesTheBlockingRules(t *testing.T) {
 // receiver's own configuration would refuse.
 func TestWellKnownInstanceDocumentAdvertisesTheConfiguredImportLimits(t *testing.T) {
 	limits := remoteinstance.Limits{MaxBlobBytes: 1 << 20, MaxSessionBytes: 8 << 20, MaxBlobsPerSession: 7, MaxOpenSessionsPerPrincipal: 2}
-	handler := newTestGateway(t, GatewayOptions{Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator(), ImportLimits: limits})
+	handler := newTestGateway(t, GatewayOptions{Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator(), ImportConfig: config.ImportConfig{MaxBlobBytes: 1 << 20, MaxSessionBytes: 8 << 20, MaxBlobsPerSession: 7, MaxOpenSessionsPerPrincipal: 2}})
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/.well-known/notarx", nil))
 	var document remoteinstance.Document

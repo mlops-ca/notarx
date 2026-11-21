@@ -233,7 +233,7 @@ func TestRegistryRegistersAllNineFormatsAndDeclaresTheirCapabilities(t *testing.
 	}
 	// The optional capabilities are declared where the format package can honour them.
 	for format, want := range map[repository.Format]string{
-		repository.FormatRaw:   "promotion,promotion-publisher,release-set",
+		repository.FormatRaw:   "promotion,promotion-publisher,importer,release-set",
 		repository.FormatMaven: "promotion,promotion-publisher,release-set",
 		repository.FormatNPM:   "promotion,promotion-publisher,tagged",
 		repository.FormatOCI:   "promotion,promotion-publisher,tagged",

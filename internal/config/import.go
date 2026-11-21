@@ -21,9 +21,8 @@ const (
 	MinImportSessionTTL = time.Minute
 )
 
-// ImportConfig holds the import limits of ADR 0021 (NOTARX_IMPORT_*). The session store enforces Limits() and the instance
-// document advertises Advertised() today; SessionTTL and Limits() are passed to the store by the import endpoints that create
-// sessions (ADR 0021 slice 7b, part 2, issue 582), which do not exist yet.
+// ImportConfig holds the import limits of ADR 0021 (NOTARX_IMPORT_*). The session store enforces Limits(), the import
+// endpoints create sessions under Limits() and SessionTTL, and the instance document advertises Advertised().
 type ImportConfig struct {
 	// SessionTTL is how long an import session lives before the reaper expires it and deletes its staging objects
 	// (NOTARX_IMPORT_SESSION_TTL, default 24h).

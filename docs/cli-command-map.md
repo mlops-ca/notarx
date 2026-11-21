@@ -55,7 +55,8 @@ must be rejected truthfully, and the CLI adds no authorization:
   where impersonating another subject needs platform admin.
 - A: platform admin; R/W/RA/RI: the repository's
   repositories:read/write/admin/intelligence (the server keeps its existing
-  platform-admin behaviour).
+  platform-admin behaviour); RM: the repository's repositories:import
+  (ImportWrite, ADR 0021), which implies no read.
 - R*: the read authorization of the repository/Group browse helper plus an
   explicitly configured anonymous read branch; it must not be anonymous by
   default.
@@ -207,6 +208,9 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `PUT /remote-instances/{remoteInstanceId}`<br>`updateRemoteInstance` | `remote update <id>` | #98 | M2 | A | C |
 | `DELETE /remote-instances/{remoteInstanceId}`<br>`deleteRemoteInstance` | `remote delete <id>` | #98 | M2 | A | W |
 | `POST /remote-instances/{remoteInstanceId}/test`<br>`testRemoteInstance` | `remote test <id>` | #98 | M2 | A | W |
+| `POST /repositories/{repositoryId}/imports`<br>`createRepositoryImport` | N: machine-to-machine push receiver; the sending instance calls it | #582 | N/A | RM | N: no CLI command registered; the sender of a remote promotion calls it |
+| `PUT /imports/{importId}/blobs/{sha256}`<br>`uploadImportBlob` | N: machine-to-machine push receiver; the sending instance calls it | #582 | N/A | RM | N: no CLI command registered; the sender of a remote promotion calls it |
+| `POST /imports/{importId}/commit`<br>`commitImport` | N: machine-to-machine push receiver; the sending instance calls it | #582 | N/A | RM | N: no CLI command registered; the sender of a remote promotion calls it |
 | `GET /promotion-rules`<br>`listPromotionRules` | `promotion rule list` | #98 | M2 | FA | Q |
 | `POST /promotion-rules`<br>`createPromotionRule` | `promotion rule create` | #98 | M2 | RA×2 | W |
 | `GET /promotion-rules/{ruleId}`<br>`getPromotionRule` | `promotion rule show <id>` | #98 | M2 | RA | Q |

@@ -40,7 +40,7 @@ func (s *MemoryStore) CreateImportSession(_ context.Context, session ImportSessi
 				freed = id
 				continue
 			}
-			if !equivalentImportRequest(existing, session) {
+			if !equivalentImportRequest(existing, sortedImportBlobs(s.importBlobs[existing.ID]), session, deduped) {
 				return ImportSession{}, false, ErrIdempotencyConflict
 			}
 			return cloneImportSession(existing), true, nil
@@ -92,6 +92,37 @@ func (s *MemoryStore) GetImportSession(_ context.Context, id string) (ImportSess
 		return ImportSession{}, ErrNotFound
 	}
 	return cloneImportSession(session), nil
+}
+
+// GetImportBlob implements ImportSessionStore.
+func (s *MemoryStore) GetImportBlob(_ context.Context, sessionID, digest string) (ImportBlob, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	blob, ok := s.importBlobs[sessionID][digest]
+	if !ok {
+		return ImportBlob{}, ErrNotFound
+	}
+	return blob, nil
+}
+
+// ListImportBlobs implements ImportSessionStore.
+func (s *MemoryStore) ListImportBlobs(_ context.Context, sessionID string) ([]ImportBlob, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if _, ok := s.importSessions[sessionID]; !ok {
+		return nil, ErrNotFound
+	}
+	return sortedImportBlobs(s.importBlobs[sessionID]), nil
+}
+
+// sortedImportBlobs lists the blobs of a session by digest.
+func sortedImportBlobs(blobs map[string]ImportBlob) []ImportBlob {
+	sorted := make([]ImportBlob, 0, len(blobs))
+	for _, blob := range blobs {
+		sorted = append(sorted, blob)
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Digest < sorted[j].Digest })
+	return sorted
 }
 
 // MissingImportBlobs implements ImportSessionStore.
@@ -197,6 +228,25 @@ func (s *MemoryStore) AbortImportSession(_ context.Context, sessionID string, no
 	session.State, session.UpdatedAt = ImportSessionAborted, now
 	s.importSessions[sessionID] = session
 	return nil
+}
+
+// FailImportCommit implements ImportSessionStore.
+func (s *MemoryStore) FailImportCommit(_ context.Context, sessionID string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.importSessions[sessionID]
+	if !ok {
+		return ErrNotFound
+	}
+	switch session.State {
+	case ImportSessionAborted:
+		return nil
+	case ImportSessionCommitting:
+		session.State, session.UpdatedAt = ImportSessionAborted, now
+		s.importSessions[sessionID] = session
+		return nil
+	}
+	return ErrImportSessionClosed
 }
 
 // ReapImportSessions implements ImportSessionStore. A session being reaped is marked, so overlapping passes divide the work

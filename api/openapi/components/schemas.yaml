@@ -5457,3 +5457,46 @@ PromotionRuleDryRun:
       type: array
       items:
         "$ref": "#/PromotionRuleDryRunItem"
+ImportBlobClaim:
+  type: object
+  required: [digest, size]
+  properties:
+    digest: {type: string, pattern: "^sha256:[a-f0-9]{64}$"}
+    size: {type: integer, format: int64, minimum: 0}
+CreateImport:
+  type: object
+  required: [coordinate, digest, formatManifest, blobs, idempotencyKey]
+  description: What the sender claims to push. Every field is recorded as received and verified against the bytes.
+  properties:
+    coordinate: {type: string, minLength: 1, maxLength: 1024}
+    digest: {type: string, pattern: "^sha256:[a-f0-9]{64}$", description: "Digest of the artifact (a Raw file: its content digest)."}
+    formatManifest: {type: object, additionalProperties: true, description: "The format's own description of the unit, parsed by the importer of the target format. Raw: {path, contentType?}."}
+    blobs:
+      type: array
+      items: {"$ref": "#/ImportBlobClaim"}
+    chainPath:
+      type: array
+      description: The hops the artifact has taken so far; absent means depth 0.
+      items: {"$ref": "#/PromotionChainHop"}
+    idempotencyKey: {type: string, minLength: 1, maxLength: 255}
+    evidence: {type: object, additionalProperties: true, description: "The sender's unverified scan, SBOM and signature claims; stored as claims and never counted toward the receiver's policy."}
+ImportSessionState:
+  type: string
+  enum: [open, committing, committed, aborted, expired]
+ImportSession:
+  type: object
+  required: [id, repositoryId, format, coordinate, digest, state, bytes, missing, createdAt, expiresAt]
+  properties:
+    id: {type: string, format: uuid}
+    repositoryId: {type: string, format: uuid}
+    format: {type: string}
+    coordinate: {type: string}
+    digest: {type: string}
+    state: {"$ref": "#/ImportSessionState"}
+    bytes: {type: integer, format: int64, minimum: 0, description: Total of the claimed blob sizes.}
+    missing:
+      type: array
+      description: The blobs still to upload, by digest.
+      items: {"$ref": "#/ImportBlobClaim"}
+    createdAt: {type: string, format: date-time}
+    expiresAt: {type: string, format: date-time}

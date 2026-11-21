@@ -102,14 +102,61 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	if got := missingDigests(session.ID); len(got) != 2 || got[0] != min(dg("a"), dg("b")) || got[1] != max(dg("a"), dg("b")) {
 		t.Fatalf("missing = %v", got)
 	}
+	if got, blobErr := store.GetImportBlob(ctx, session.ID, dg("a")); blobErr != nil || got.Size != 10 || got.Verified || got.StagingKey != ImportStagingKey(session.ID, dg("a")) {
+		t.Fatalf("blob = %+v %v", got, blobErr)
+	}
+	if all, listErr := store.ListImportBlobs(ctx, session.ID); listErr != nil || len(all) != 2 || all[0].Digest != min(dg("a"), dg("b")) || all[1].Digest != max(dg("a"), dg("b")) {
+		t.Fatalf("list = %+v %v", all, listErr)
+	}
+	if _, listErr := store.ListImportBlobs(ctx, uuid.NewString()); !errors.Is(listErr, ErrNotFound) {
+		t.Fatalf("list of an unknown session = %v", listErr)
+	}
+	if _, blobErr := store.GetImportBlob(ctx, session.ID, dg("zzz")); !errors.Is(blobErr, ErrNotFound) {
+		t.Fatalf("unclaimed blob = %v", blobErr)
+	}
+	if _, blobErr := store.GetImportBlob(ctx, uuid.NewString(), dg("a")); !errors.Is(blobErr, ErrNotFound) {
+		t.Fatalf("blob of an unknown session = %v", blobErr)
+	}
+	if got, blobErr := store.GetImportBlob(ctx, session.ID, dg("a")); blobErr != nil || got.Size != 10 || got.Verified || got.StagingKey != ImportStagingKey(session.ID, dg("a")) {
+		t.Fatalf("blob = %+v %v", got, blobErr)
+	}
+	if all, listErr := store.ListImportBlobs(ctx, session.ID); listErr != nil || len(all) != 2 || all[0].Digest != min(dg("a"), dg("b")) || all[1].Digest != max(dg("a"), dg("b")) {
+		t.Fatalf("list = %+v %v", all, listErr)
+	}
+	if _, listErr := store.ListImportBlobs(ctx, uuid.NewString()); !errors.Is(listErr, ErrNotFound) {
+		t.Fatalf("list of an unknown session = %v", listErr)
+	}
+	if _, blobErr := store.GetImportBlob(ctx, session.ID, dg("zzz")); !errors.Is(blobErr, ErrNotFound) {
+		t.Fatalf("unclaimed blob = %v", blobErr)
+	}
+	if _, blobErr := store.GetImportBlob(ctx, uuid.NewString(), dg("a")); !errors.Is(blobErr, ErrNotFound) {
+		t.Fatalf("blob of an unknown session = %v", blobErr)
+	}
 	if _, missErr := store.MissingImportBlobs(ctx, uuid.NewString()); !errors.Is(missErr, ErrNotFound) {
 		t.Fatalf("missing of an unknown session = %v", missErr)
 	}
 
 	// The idempotency key: the same request finds its session, any other request under the key conflicts.
-	again, replayed, err := f.create("k1", "pkg@1.0", blob(dg("a"), 10))
+	again, replayed, err := f.create("k1", "pkg@1.0", blob(dg("b"), 40), blob(dg("a"), 10))
 	if err != nil || !replayed || again.ID != session.ID {
 		t.Fatalf("replay = %+v replayed=%t %v", again, replayed, err)
+	}
+	// The claims are part of the request: another blob set or manifest under the same key is a conflict, not a replay.
+	if _, _, err = f.create("k1", "pkg@1.0", blob(dg("a"), 10)); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatalf("another blob set under the key = %v", err)
+	}
+	if _, _, err = f.create("k1", "pkg@1.0", blob(dg("b"), 41), blob(dg("a"), 10)); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatalf("another blob size under the key = %v", err)
+	}
+	respaced := f.session(principal, "k1", "pkg@1.0")
+	respaced.FormatManifest = json.RawMessage(`{ "claimed" : true }`)
+	if again, replayed, err = store.CreateImportSession(ctx, respaced, []ImportBlob{blob(dg("a"), 10), blob(dg("b"), 40)}, f.limits); err != nil || !replayed || again.ID != session.ID {
+		t.Fatalf("replay with respaced manifest = %+v replayed=%t %v", again, replayed, err)
+	}
+	changed := f.session(principal, "k1", "pkg@1.0")
+	changed.FormatManifest = json.RawMessage(`{"claimed":false}`)
+	if _, _, err = store.CreateImportSession(ctx, changed, []ImportBlob{blob(dg("a"), 10), blob(dg("b"), 40)}, f.limits); !errors.Is(err, ErrIdempotencyConflict) {
+		t.Fatalf("another manifest under the key = %v", err)
 	}
 	if _, _, err = f.create("k1", "other@1.0", blob(dg("a"), 10)); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatalf("a different request under the key = %v", err)
@@ -191,7 +238,7 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	if old, getErr := store.GetImportSession(ctx, session.ID); getErr != nil || old.State != ImportSessionAborted {
 		t.Fatalf("the aborted session must stay for the reaper: %+v %v", old, getErr)
 	}
-	if again, replayed, createErr := unlimited.create("k1", "pkg@1.0"); createErr != nil || !replayed || again.ID != retry.ID {
+	if again, replayed, createErr := unlimited.create("k1", "pkg@1.0", blob(dg("a"), 10)); createErr != nil || !replayed || again.ID != retry.ID {
 		t.Fatalf("the retry is itself replayable: %+v replayed=%t %v", again, replayed, createErr)
 	}
 	late := unlimited
@@ -290,6 +337,33 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	}
 	if err = store.AbortImportSession(ctx, live.ID, f.now); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("aborting a session under its commit = %v", err)
+	}
+	// A commit the format refused is failed (aborted), once or twice; a session that is not committing is not.
+	unbounded := f
+	unbounded.limits = ImportLimits{}
+	failing, _, err := unbounded.create("failing", "pkg@failing", blob(dg("r"), 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = store.FailImportCommit(ctx, failing.ID, f.now); !errors.Is(err, ErrImportSessionClosed) {
+		t.Fatalf("failing a session that is not committing = %v", err)
+	}
+	if err = store.RecordImportBlob(ctx, failing.ID, dg("r"), 5, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.BeginImportCommit(ctx, failing.ID, f.now); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		if err = store.FailImportCommit(ctx, failing.ID, f.now); err != nil {
+			t.Fatalf("failing a committing session = %v", err)
+		}
+	}
+	if got, _ := store.GetImportSession(ctx, failing.ID); got.State != ImportSessionAborted {
+		t.Fatalf("state after a failed commit = %s", got.State)
+	}
+	if err = store.FailImportCommit(ctx, uuid.NewString(), f.now); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("failing an unknown session = %v", err)
 	}
 	if err = store.RecordImportBlob(ctx, live.ID, dg("y"), 7, f.now); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("a blob while committing = %v", err)

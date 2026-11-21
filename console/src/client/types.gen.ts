@@ -3141,6 +3141,81 @@ export type UpdateWebhookSubscription = {
   enabled: boolean;
 };
 
+export type ImportBlobClaim = {
+  digest: string;
+  size: number;
+};
+
+/**
+ * One step of the path an artifact took to its repository. The list is appended to and never rewritten.
+ */
+export type PromotionChainHop = {
+  /**
+   * The remote instance the artifact came from; empty for this instance.
+   */
+  instance: string;
+  /**
+   * The repository the artifact was promoted from.
+   */
+  repository: string;
+  /**
+   * The promotion rule that promoted it; empty for a manual promotion.
+   */
+  ruleId: string;
+  at: string;
+};
+
+/**
+ * What the sender claims to push. Every field is recorded as received and verified against the bytes.
+ */
+export type CreateImport = {
+  coordinate: string;
+  /**
+   * Digest of the artifact (a Raw file: its content digest).
+   */
+  digest: string;
+  /**
+   * The format's own description of the unit, parsed by the importer of the target format. Raw: {path, contentType?}.
+   */
+  formatManifest: {
+    [key: string]: unknown;
+  };
+  blobs: Array<ImportBlobClaim>;
+  /**
+   * The hops the artifact has taken so far; absent means depth 0.
+   */
+  chainPath?: Array<PromotionChainHop>;
+  idempotencyKey: string;
+  /**
+   * The sender's unverified scan, SBOM and signature claims; stored as claims and never counted toward the receiver's policy.
+   */
+  evidence?: {
+    [key: string]: unknown;
+  };
+};
+
+export type ImportSessionState =
+  "open" | "committing" | "committed" | "aborted" | "expired";
+
+export type ImportSession = {
+  id: string;
+  repositoryId: string;
+  format: string;
+  coordinate: string;
+  digest: string;
+  state: ImportSessionState;
+  /**
+   * Total of the claimed blob sizes.
+   */
+  bytes: number;
+  /**
+   * The blobs still to upload, by digest.
+   */
+  missing: Array<ImportBlobClaim>;
+  createdAt: string;
+  expiresAt: string;
+};
+
 export type RemoteInstanceAuthKind = "workload_identity" | "static_token";
 
 export type RemoteInstanceState = "active" | "unreachable" | "disabled";
@@ -4228,25 +4303,6 @@ export type ArtifactPromotionState =
   | "expired"
   | "cancelled";
 
-/**
- * One step of the path an artifact took to its repository. The list is appended to and never rewritten.
- */
-export type PromotionChainHop = {
-  /**
-   * The remote instance the artifact came from; empty for this instance.
-   */
-  instance: string;
-  /**
-   * The repository the artifact was promoted from.
-   */
-  repository: string;
-  /**
-   * The promotion rule that promoted it; empty for a manual promotion.
-   */
-  ruleId: string;
-  at: string;
-};
-
 export type PromotionApproval = {
   approver: string;
   at: string;
@@ -5319,6 +5375,8 @@ export type HelmPreviewIdempotencyKey = string;
  * Explicit coordinate matching. contains is a case-insensitive literal substring; prefix is a case-sensitive literal prefix. Omitting match preserves the legacy behavior of each format (Cargo name substring; other formats prefix). Complete SHA-256 queries in global search remain exact digest matches. Contains requests have a five-second server budget; narrow the query if it expires.
  */
 export type ArtifactSearchMatch = "prefix" | "contains";
+
+export type ImportId = string;
 
 export type RemoteInstanceId = string;
 
@@ -11748,6 +11806,184 @@ export type UpdateWebhookSubscriptionResponses = {
 
 export type UpdateWebhookSubscriptionResponse =
   UpdateWebhookSubscriptionResponses[keyof UpdateWebhookSubscriptionResponses];
+
+export type CreateRepositoryImportData = {
+  body: CreateImport;
+  path: {
+    repositoryId: string;
+  };
+  query?: never;
+  url: "/repositories/{repositoryId}/imports";
+};
+
+export type CreateRepositoryImportErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  413: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+  /**
+   * Problem response
+   */
+  429: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+  /**
+   * Problem response
+   */
+  507: Problem;
+};
+
+export type CreateRepositoryImportError =
+  CreateRepositoryImportErrors[keyof CreateRepositoryImportErrors];
+
+export type CreateRepositoryImportResponses = {
+  /**
+   * The session of an earlier request under the same idempotencyKey.
+   */
+  200: ImportSession;
+  /**
+   * Session opened.
+   */
+  201: ImportSession;
+};
+
+export type CreateRepositoryImportResponse =
+  CreateRepositoryImportResponses[keyof CreateRepositoryImportResponses];
+
+export type UploadImportBlobData = {
+  body: string;
+  path: {
+    importId: string;
+    /**
+     * Lowercase hex SHA-256 of the blob, without the sha256 prefix.
+     */
+    sha256: string;
+  };
+  query?: never;
+  url: "/imports/{importId}/blobs/{sha256}";
+};
+
+export type UploadImportBlobErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type UploadImportBlobError =
+  UploadImportBlobErrors[keyof UploadImportBlobErrors];
+
+export type UploadImportBlobResponses = {
+  /**
+   * The blob is verified and staged.
+   */
+  204: void;
+};
+
+export type UploadImportBlobResponse =
+  UploadImportBlobResponses[keyof UploadImportBlobResponses];
+
+export type CommitImportData = {
+  body?: never;
+  path: {
+    importId: string;
+  };
+  query?: never;
+  url: "/imports/{importId}/commit";
+};
+
+export type CommitImportErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type CommitImportError = CommitImportErrors[keyof CommitImportErrors];
+
+export type CommitImportResponses = {
+  /**
+   * The artifact is published; state is committed.
+   */
+  200: ImportSession;
+};
+
+export type CommitImportResponse =
+  CommitImportResponses[keyof CommitImportResponses];
 
 export type ListRemoteInstancesData = {
   body?: never;

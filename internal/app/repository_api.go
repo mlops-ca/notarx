@@ -101,6 +101,9 @@ func isManagementObjectUpload(r *http.Request) bool {
 	if len(segments) == 8 && segments[0] == "api" && segments[1] == "v2" && segments[2] == "repositories" && segments[3] != "" && segments[4] == "apt" && segments[5] == "publication-sessions" && segments[6] != "" && segments[7] == "package" {
 		return true
 	}
+	if len(segments) == 6 && segments[0] == "api" && segments[1] == "v2" && segments[2] == "imports" && segments[3] != "" && segments[4] == "blobs" && segments[5] != "" {
+		return true
+	}
 	for index := 0; index+3 < len(segments); index++ {
 		if (segments[index] == "publish-sessions" || segments[index] == "conan-publish-sessions") && segments[index+1] != "" && segments[index+2] == "objects" && segments[index+3] != "" {
 			return index+4 == len(segments)
@@ -273,7 +276,6 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("GET /readyz", dependencies.ready)
 	registerIssuerRoutes(mux, options.Issuer)
-	registerInstanceRoutes(mux, newInstanceDocumentHandler(store, options.ImportLimits))
 	if metrics == nil {
 		metrics = &Metrics{}
 	}
@@ -389,6 +391,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	scope := newManagementScope(store, store, store, store, authenticator, metrics)
+	importAPI := newImportHandler(importHandlerOptions{Scope: scope, Store: store, Registry: formatModules, Staging: options.ImportStaging, Config: options.ImportConfig, MaxHops: options.PromotionMaxHops})
+	registerInstanceRoutes(mux, newInstanceDocumentHandler(store, options.ImportConfig.Advertised(), importAPI.advertisedFormats()))
 	mux.Handle("GET /metrics", http.HandlerFunc(metrics.Handler))
 	mux.Handle("/api/v1/oci/groups", api)
 	mux.Handle("/api/v1/oci/groups/", api)
@@ -443,7 +448,6 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	if candidate, ok := any(store).(repository.ArtifactSearchStore); ok {
 		searchProjection = candidate
 	}
-	scope := newManagementScope(store, store, store, store, authenticator, metrics)
 	repositoriesAPI := newRepositoryManagementHandler(repositoryManagementOptions{GroupVisibilityMode: options.GroupVisibilityMode, Scope: scope, Repositories: store, Groups: store, Capacities: store, Maintenance: maintenance, ArtifactScanner: dependencies.ArtifactScanner, ArtifactScanFormats: dependencies.ArtifactScannerFormats})
 	identities, _ := any(store).(repository.ArtifactIdentityStore)
 	artifactsAPI := newArtifactManagementHandler(artifactManagementOptions{
@@ -481,7 +485,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	remoteAPI := newRemoteInstanceHandler(scope, store, remoteDiscoverer)
 	legacyAPI := generatedRepositoryAPIAdapter{BatchAdapter: migrationapi.New(dependencies.MigrationService, authenticator, store).WithSchedules(dependencies.MigrationSchedules), Adapter: sourceapi.New(dependencies.SourceService, authenticator, store), managementScope: scope, store: store, sessions: nativeMaven, npmRestore: options.NPMRestore, aptPublication: aptPublication, aptSnapshotPublisher: aptSnapshotPublisher, aptSnapshotImporter: aptSnapshotImporter, aptSnapshotExporter: aptpublication.SnapshotArchiveExporter{Store: store, Objects: nativeAPTObjects}, aptPublications: store, retentionPolicies: store, securityPolicies: store, quarantineReadPolicies: store, capacities: store, tombstones: store, intelligence: store, quarantine: store, lifecycleJobs: store, auditRetention: store, publicAccess: store, siteSettings: store, overview: newOverviewCache(options.ReadCache, options.OverviewCacheTTL), authzCacheTTL: options.AuthzCacheTTL, consoleThemePackages: store, consoleThemes: dependencies.ConsoleThemes, replication: store, oci: store, cargo: store, conan: store, audit: store, maintenance: maintenance, searchProjection: searchProjection, runtimeNodes: store, scheduledTasks: store, webhooks: store, emailTargets: store, quotaAlerts: store, queueStats: store, diagnostics: dependencies, objects: options.Storage, logBuffer: dependencies.LogBuffer, artifactScanner: dependencies.ArtifactScanner, artifactScanFormats: dependencies.ArtifactScannerFormats}
 	promotionRulesAPI := newPromotionRuleHandler(scope, store, legacyAPI, options.PromotionMaxRulesPerRepository)
-	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, workloadIdentityHandler: workloadAPI, remoteInstanceHandler: remoteAPI, promotionRuleHandler: promotionRulesAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
+	adminopenapi.HandlerWithOptions(managementServer{Boundary: helmapi.New(helmPreview), Adapter: nugetapi.New(nugetPreview), RubyGemsBoundary: rubygemsapi.New(rubyGemsPreview), repositoryManagementHandler: repositoriesAPI, artifactManagementHandler: artifactsAPI, accessManagementHandler: accessAPI, identityManagementHandler: identityAPI, workloadIdentityHandler: workloadAPI, remoteInstanceHandler: remoteAPI, promotionRuleHandler: promotionRulesAPI, importHandler: importAPI, pypiYankManagementHandler: pypiYankAPI, rawVersionManagementHandler: rawVersionAPI, generatedRepositoryAPIAdapter: legacyAPI}, adminopenapi.StdHTTPServerOptions{
 		BaseURL:    "/api/v2",
 		BaseRouter: openAPIServeMux{mux: mux, authorize: hostedRepositories.authenticateManagementRequest},
 		ErrorHandlerFunc: func(w http.ResponseWriter, _ *http.Request, err error) {
