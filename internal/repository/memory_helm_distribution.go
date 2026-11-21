@@ -21,7 +21,7 @@ func (s *MemoryStore) helmReplicationAuthorityLocked(j dist.Job) (dist.Authority
 	}
 	a.Source = helmReplicationGrantSet(src, s.repositoryGrants[src.ID])
 	a.Target = helmReplicationGrantSet(dst, s.repositoryGrants[dst.ID])
-	if !helmReplicationActorValid(j) {
+	if !durableactor.ActorValid(j.ActorKind, j.Actor, j.CredentialID) {
 		return a, dist.ErrAccessDenied
 	}
 	switch durableactor.ClassOf(j.ActorKind) {

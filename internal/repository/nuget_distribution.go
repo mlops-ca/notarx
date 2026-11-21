@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/mlops-ca/notarx/internal/durableactor"
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 )
 
@@ -126,7 +125,4 @@ func nuGetReplicationRetry(j dist.Job, expected string, indexes []int) (dist.Job
 }
 func nuGetReplicationLease(j dist.Job, lease dist.Lease) bool {
 	return j.State == "running" && lease.JobID == j.ID && j.Lease.Owner == lease.Owner && j.Lease.Token == lease.Token && j.Lease.Fence == lease.Fence && j.Lease.Until.After(time.Now())
-}
-func nuGetReplicationActorValid(j dist.Job) bool {
-	return durableactor.ActorShapeValid(j.ActorKind, j.Actor) && (!durableactor.CredentialRequired(j.ActorKind) || j.CredentialID != "")
 }

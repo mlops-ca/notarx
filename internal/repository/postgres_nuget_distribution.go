@@ -78,7 +78,7 @@ func (s *PostgresStore) nuGetReplicationTransaction(ctx context.Context, lease d
 	return tx, j, nil
 }
 func nuGetReplicationActorTx(ctx context.Context, tx *sql.Tx, j dist.Job, a *dist.Authority) error {
-	if !nuGetReplicationActorValid(j) {
+	if !durableactor.ActorValid(j.ActorKind, j.Actor, j.CredentialID) {
 		return dist.ErrAccessDenied
 	}
 	a.Actor = j.Actor

@@ -4,8 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"strings"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/durableactor"
 )
 
 // WorkloadAuthority is the current authority of a durable workload_federation actor (ADR 0019,
@@ -18,10 +19,7 @@ type WorkloadAuthority struct {
 }
 
 // WorkloadActorAccount returns the service account id of a workload actor and whether the actor has that shape.
-func WorkloadActorAccount(actor string) (string, bool) {
-	id, ok := strings.CutPrefix(actor, "service-account:")
-	return id, ok && id != ""
-}
+func WorkloadActorAccount(actor string) (string, bool) { return durableactor.ServiceAccountID(actor) }
 
 func workloadAuthority(policy WorkloadTrustPolicy, issuerState WorkloadState, accountActive bool, now time.Time) WorkloadAuthority {
 	a := WorkloadAuthority{}

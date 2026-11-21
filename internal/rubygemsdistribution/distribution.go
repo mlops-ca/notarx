@@ -234,22 +234,20 @@ func RetryDigest(version string, indexes []int) (string, error) {
 // ValidSubject validates only identity references captured after authentication;
 // current authority and original credential expiry are re-read at every commit.
 func ValidSubject(s Subject) bool {
-	if s.Actor == "" || len(s.Actor) > 256 || strings.ContainsAny(s.Actor, "\x00\r\n") || s.SessionVersion < 0 {
+	if s.Actor == "" || len(s.Actor) > 256 || strings.ContainsAny(s.Actor, "\x00\r\n") || s.SessionVersion < 0 || !durableactor.ActorValid(s.Kind, s.Actor, s.CredentialID) {
 		return false
 	}
 	switch durableactor.ClassOf(s.Kind) {
 	case durableactor.ClassStatic:
-		return s.CredentialID == "" && s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0 && s.ValidUntil.IsZero()
-	case durableactor.ClassAPIKey:
-		_, e := uuid.Parse(strings.TrimPrefix(s.Actor, "api-key:"))
-		return strings.HasPrefix(s.Actor, "api-key:") && e == nil && s.CredentialID == "" && s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0
-	case durableactor.ClassServiceAccountCredential, durableactor.ClassWorkload:
-		_, e := uuid.Parse(strings.TrimPrefix(s.Actor, "service-account:"))
-		_, ce := uuid.Parse(s.CredentialID)
-		return strings.HasPrefix(s.Actor, "service-account:") && e == nil && ce == nil && s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0
+		return s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0 && s.ValidUntil.IsZero()
+	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
+		return s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0
+	case durableactor.ClassWorkload:
+		// The job's expiry is the policy's, re-read at every commit; the short-lived bearer's own expiry is not.
+		return s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0 && s.ValidUntil.IsZero()
 	case durableactor.ClassUser:
 		_, e := uuid.Parse(s.UserID)
-		if !strings.HasPrefix(s.Actor, "user:") || e != nil || s.CredentialID != "" || s.ValidUntil.IsZero() {
+		if e != nil || s.ValidUntil.IsZero() {
 			return false
 		}
 		if s.SessionID != "" {

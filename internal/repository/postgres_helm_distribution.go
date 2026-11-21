@@ -74,7 +74,7 @@ func (s *PostgresStore) helmReplicationTransaction(ctx context.Context, lease di
 	return tx, j, nil
 }
 func helmReplicationActorTx(ctx context.Context, tx *sql.Tx, j dist.Job, a *dist.Authority) error {
-	if !helmReplicationActorValid(j) {
+	if !durableactor.ActorValid(j.ActorKind, j.Actor, j.CredentialID) {
 		return dist.ErrAccessDenied
 	}
 	a.Actor = j.Actor

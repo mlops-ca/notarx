@@ -184,3 +184,19 @@ func TestRubyGemsReplicationWorkerPreservesFailuresAndLeaseLoss(t *testing.T) {
 		t.Fatal("unsafe code")
 	}
 }
+
+func TestValidSubjectWorkloadCarriesNoBearerExpiry(t *testing.T) {
+	s := dist.Subject{Actor: "service-account:" + uuid.NewString(), Kind: "workload_federation", CredentialID: uuid.NewString()}
+	if !dist.ValidSubject(s) {
+		t.Fatal("workload subject refused")
+	}
+	s.ValidUntil = time.Now().Add(5 * time.Minute)
+	if dist.ValidSubject(s) {
+		t.Fatal("a workload job must not inherit the short-lived bearer's expiry")
+	}
+	s.ValidUntil = time.Time{}
+	s.Actor = "service-account:not-a-uuid"
+	if dist.ValidSubject(s) {
+		t.Fatal("workload actor must name a service account id")
+	}
+}

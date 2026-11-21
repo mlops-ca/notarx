@@ -45,6 +45,9 @@ func TestCredentialAndActorShape(t *testing.T) {
 		{ServiceAccountCredential, "service-account:" + id, "", true, false},
 		{WorkloadFederation, "service-account:" + id, "not-a-uuid", true, false},
 		{WorkloadFederation, "user:a", id, false, true},
+		{WorkloadFederation, "service-account:account", id, false, true},
+		{ServiceAccountCredential, "service-account:", id, false, true},
+		{APIKey, "api-key:key", "", false, true},
 		{"unknown", "x", "", false, false},
 	} {
 		if got := ActorShapeValid(tc.kind, tc.actor); got != tc.wantActor {
@@ -56,5 +59,17 @@ func TestCredentialAndActorShape(t *testing.T) {
 	}
 	if !CredentialRequired(WorkloadFederation) || !CredentialRequired(ServiceAccountCredential) || CredentialRequired(APIKey) {
 		t.Fatal("credential requirement mismatch")
+	}
+}
+
+func TestServiceAccountID(t *testing.T) {
+	id := uuid.NewString()
+	if got, ok := ServiceAccountID("service-account:" + id); !ok || got != id {
+		t.Fatalf("ServiceAccountID = %q, %v", got, ok)
+	}
+	for _, actor := range []string{"", "service-account:", "service-account:x", "user:" + id} {
+		if _, ok := ServiceAccountID(actor); ok {
+			t.Errorf("ServiceAccountID accepted %q", actor)
+		}
 	}
 }

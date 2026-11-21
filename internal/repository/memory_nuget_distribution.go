@@ -21,7 +21,7 @@ func (s *MemoryStore) nuGetReplicationAuthorityLocked(j dist.Job) (dist.Authorit
 	}
 	a.Source = nuGetReplicationGrantSet(src, s.repositoryGrants[src.ID])
 	a.Target = nuGetReplicationGrantSet(dst, s.repositoryGrants[dst.ID])
-	if !nuGetReplicationActorValid(j) {
+	if !durableactor.ActorValid(j.ActorKind, j.Actor, j.CredentialID) {
 		return a, dist.ErrAccessDenied
 	}
 	switch durableactor.ClassOf(j.ActorKind) {

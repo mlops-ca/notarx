@@ -6,6 +6,8 @@
 package durableactor
 
 import (
+	"slices"
+	"sort"
 	"strings"
 
 	"github.com/google/uuid"
@@ -20,6 +22,13 @@ const (
 	APIKey                   = "api_key"
 	ServiceAccountCredential = "service_account_credential"
 	WorkloadFederation       = "workload_federation"
+)
+
+// The actor prefixes of the kinds that name a user, an API key or a service account.
+const (
+	UserActorPrefix           = "user:"
+	APIKeyActorPrefix         = "api-key:"
+	ServiceAccountActorPrefix = "service-account:"
 )
 
 // Class selects the authority check a store runs for a durable actor.
@@ -40,11 +49,6 @@ const (
 	ClassWorkload
 )
 
-// Classes lists every class a store authority switch has to handle.
-func Classes() []Class {
-	return []Class{ClassStatic, ClassUser, ClassAPIKey, ClassServiceAccountCredential, ClassWorkload}
-}
-
 var classes = map[string]Class{
 	StaticAdmin:              ClassStatic,
 	StaticResolver:           ClassStatic,
@@ -55,9 +59,26 @@ var classes = map[string]Class{
 	WorkloadFederation:       ClassWorkload,
 }
 
-// Kinds returns every accepted actor kind.
+// Kinds returns every accepted actor kind, sorted.
 func Kinds() []string {
-	return []string{StaticAdmin, StaticResolver, LocalSession, OIDC, APIKey, ServiceAccountCredential, WorkloadFederation}
+	kinds := make([]string, 0, len(classes))
+	for kind := range classes {
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	return kinds
+}
+
+// Classes lists every class a store authority switch has to handle, in ascending order.
+func Classes() []Class {
+	var out []Class
+	for _, kind := range Kinds() {
+		if c := classes[kind]; !slices.Contains(out, c) {
+			out = append(out, c)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // ClassOf maps an actor kind to its authority class; unknown kinds are ClassNone.
@@ -86,18 +107,42 @@ func ValidCredential(kind, credential string) bool {
 	return credential == ""
 }
 
-// ActorShapeValid reports whether actor has the form the kind produces: the user, API key or service account
-// prefix, or any text without a NUL for the static kinds.
+// ActorShapeValid reports whether actor has the form the kind produces: the user prefix, the API key or service
+// account prefix followed by a UUID, or any text without a NUL for the static kinds.
 func ActorShapeValid(kind, actor string) bool {
 	switch ClassOf(kind) {
 	case ClassStatic:
 		return !strings.Contains(actor, "\x00")
 	case ClassUser:
-		return strings.HasPrefix(actor, "user:")
+		return strings.HasPrefix(actor, UserActorPrefix)
 	case ClassAPIKey:
-		return strings.HasPrefix(actor, "api-key:")
+		return prefixedUUID(actor, APIKeyActorPrefix)
 	case ClassServiceAccountCredential, ClassWorkload:
-		return strings.HasPrefix(actor, "service-account:")
+		return prefixedUUID(actor, ServiceAccountActorPrefix)
 	}
 	return false
+}
+
+// ActorValid reports whether a job's actor and credential id are both shaped as its kind requires.
+func ActorValid(kind, actor, credential string) bool {
+	return ActorShapeValid(kind, actor) && ValidCredential(kind, credential)
+}
+
+// ServiceAccountID returns the service account id of a service-account or workload actor.
+func ServiceAccountID(actor string) (string, bool) {
+	id, ok := strings.CutPrefix(actor, ServiceAccountActorPrefix)
+	if !ok {
+		return "", false
+	}
+	_, err := uuid.Parse(id)
+	return id, err == nil
+}
+
+func prefixedUUID(actor, prefix string) bool {
+	id, ok := strings.CutPrefix(actor, prefix)
+	if !ok {
+		return false
+	}
+	_, err := uuid.Parse(id)
+	return err == nil
 }
