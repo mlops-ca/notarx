@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mlops-ca/notarx/internal/events"
 )
@@ -26,9 +27,20 @@ func scanPromotionEvaluation(scanner interface{ Scan(...any) error }) (Promotion
 	return evaluation, nil
 }
 
+// RuleQuerier is the read side of a transaction or a pool that can list rules.
+type RuleQuerier interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
 // ListEnabledPromotionRules implements PromotionEvaluationStore; promotion_rules_source_idx serves it.
 func (s *PostgresStore) ListEnabledPromotionRules(ctx context.Context, sourceRepositoryID string) ([]PromotionRule, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT `+promotionRuleColumns+` FROM promotion_rules WHERE source_repository_id=$1::uuid AND enabled AND state='active' ORDER BY promotion_rules.id`, sourceRepositoryID)
+	return ListEnabledPromotionRulesFrom(ctx, s.db, sourceRepositoryID)
+}
+
+// ListEnabledPromotionRulesFrom lists the enabled, active rules of a source repository through q: the rule fan-out passes
+// the publishing transaction, so a cache miss does not take a second connection while the transaction holds one.
+func ListEnabledPromotionRulesFrom(ctx context.Context, q RuleQuerier, sourceRepositoryID string) ([]PromotionRule, error) {
+	rows, err := q.QueryContext(ctx, `SELECT `+promotionRuleColumns+` FROM promotion_rules WHERE source_repository_id=$1::uuid AND enabled AND state='active' ORDER BY promotion_rules.id`, sourceRepositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -108,12 +120,17 @@ FROM clock WHERE e.id=$1::uuid AND e.lease_token=$2::uuid AND e.lease_expires_at
 	return nil
 }
 
-// truncateReason keeps a recorded reason inside the column's bound.
+// truncateReason keeps a recorded reason inside the column's bound of 1024 characters, cutting at a character boundary
+// (a byte cut inside a multi-byte character is invalid UTF-8, which the database refuses).
 func truncateReason(reason string) string {
-	if len(reason) > 1024 {
-		return reason[:1024]
+	if len(reason) <= 1024 {
+		return reason
 	}
-	return reason
+	cut := 1024
+	for cut > 0 && !utf8.RuneStart(reason[cut]) {
+		cut--
+	}
+	return reason[:cut]
 }
 
 // ListPromotionEvaluations implements PromotionEvaluationStore.

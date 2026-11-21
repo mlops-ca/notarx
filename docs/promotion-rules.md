@@ -105,13 +105,17 @@ Publishing an artifact to a source repository writes `artifact.published`. In th
 `events.Emit` inserts one pending row of `promotion_evaluations` for every enabled, active rule of that repository whose
 `coordinate` and `version` can match. The rule set comes from an in-process cache that every rule change flushes on every
 node (`NOTARX_AUTHZ_CACHE_TTL` bounds a lost notification), so a created, enabled, disabled, edited or parked rule starts or
-stops fanning out within the TTL. A failure of the fan-out fails the publication, because a silently missed evaluation
-would break the chain; a publication that no rule matches does not touch the rules table in its transaction.
+stops fanning out within the TTL; an artifact published in that window on a node whose cache is behind is not evaluated by
+a rule created in it; the backfill of a later slice recovers such history. A cache miss reads the rules through the connection of the
+publishing transaction. A failure of the fan-out fails the publication, because a failed evaluation insert would break the
+chain; a publication that no rule matches does not touch the rules table in its transaction while the cache is warm.
 
 A worker with the `evaluator` kind claims due rows (`FOR UPDATE SKIP LOCKED`, woken by the `notarx_promotion_evaluations`
 channel and by a poll), and for each one:
 
-1. reloads the rule and the artifact and checks the rule is still enabled and active;
+1. reloads the rule and the artifact and checks the rule is still enabled and active (a disabled rule skips the evaluation; a
+   parked rule makes it wait like a failing condition, so the artifacts published meanwhile are promoted once an edit
+   restores the rule);
 2. re-authorizes the run-as service account: it must exist, be active, be able to read the source and write the target.
    A refusal parks the rule in state `authorization_lost`, announces `promotion.failed` with the rule id and the reason, and
    fails the evaluation (the park is conditional on the rule version the evaluation read, so a rule edited meanwhile is
@@ -119,18 +123,19 @@ channel and by a poll), and for each one:
    read is a transient error that retries the evaluation, never a reason to park;
 3. re-checks the match against the artifact as it is now (refs, and for a versioned Raw source the properties frozen at
    seal; a file of a versioned Raw source is evaluated as its version `name@version`, published when it is sealed, and
-   waits while the version is open);
-4. evaluates the conditions with the dry run's verdicts, reading the target's admission policy as it is now. An age
-   condition waits until `published + minAge` (never less than five seconds ahead). Any other failing condition (a scan
-   that has not completed, evidence that is missing, the target's policy, a quarantine) can still change, so the
-   evaluation waits and looks again after a quarter of the artifact's age, between one minute and one hour, and is
-   dropped with the reason `condition_failed:<condition>:<reason>` a week after publication. Findings above `maxSeverity`
-   are final and skip at once. The re-pend on a new scan result, which makes the recheck immediate, belongs to a later
-   slice;
-5. for `scope: release` expands the artifact through the format's `ReleaseSet`, admits every member before queueing any,
-   and calls `PromotionService.Request` for each member as the service account. A member whose digest the target already
+   waits while the version is open and still being written to; a version idle for a week is dropped);
+4. expands `scope: release` through the format's `ReleaseSet` and evaluates the conditions with the dry run's verdicts for
+   every artifact the rule promotes (every member of a release), reading the target's admission policy as it is now. An
+   age condition waits until `published + minAge` (never less than five seconds ahead). Any other failing condition (a
+   scan that has not completed or found too much, evidence that is missing, the target's policy, a quarantine) can still
+   change, so the evaluation waits and looks again after a quarter of the artifact's age, between one minute and one
+   hour, and is dropped with the reason `condition_failed:<condition>:<reason>` a week after publication. The re-pend on
+   a new scan result, which makes the recheck immediate, belongs to a later slice;
+5. admits every member against a target resolved once before queueing any, and calls `PromotionService.Request` for each
+   member as the service account (admission is not repeated inside the request); a rule whose members all have a live
+   attempt under their keys asks for nothing. A member whose digest the target already
    holds (a completed promotion into it) is a no-op; different bytes at its coordinate fail the evaluation with
-   `conflict`. Quarantine and the target's admission policy still apply: a refusal skips with its code.
+   `conflict` (targets are immutable) and a log line. Quarantine and the target's admission policy still apply: a refusal skips with its code.
 
 The outcome of a row is `queued` (promotion requested; the `artifact_promotions` row shows its progress), `waiting`,
 `skipped` or `failed`, with the reason in `last_reason`. A row that is claimed eight times without an outcome (a worker that dies on it every time) is failed by the claim with

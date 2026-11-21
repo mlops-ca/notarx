@@ -111,7 +111,7 @@ type countingSource struct {
 	err   error
 }
 
-func (s *countingSource) ListEnabledPromotionRules(context.Context, string) ([]repository.PromotionRule, error) {
+func (s *countingSource) list(context.Context, repository.RuleQuerier, string) ([]repository.PromotionRule, error) {
 	s.calls++
 	return s.rules, s.err
 }
@@ -119,10 +119,10 @@ func (s *countingSource) ListEnabledPromotionRules(context.Context, string) ([]r
 func TestIndexCachesTheRuleSetAndTheScopeFlushIsTheVersionBump(t *testing.T) {
 	registry := readcache.NewRegistry(time.Minute)
 	source := &countingSource{rules: []repository.PromotionRule{rule(t, "any", glob("**"))}}
-	index := New(source, registry, nil)
+	index := New(source.list, registry, nil)
 	event := events.Published("repo", "raw", "a.txt", "sha256:aa", "")
 	for range 3 {
-		got, err := index.MatchingRules(context.Background(), event)
+		got, err := index.MatchingRules(context.Background(), nil, event)
 		if err != nil || !slices.Equal(got, []string{"any"}) {
 			t.Fatalf("matched %v, %v", got, err)
 		}
@@ -133,22 +133,22 @@ func TestIndexCachesTheRuleSetAndTheScopeFlushIsTheVersionBump(t *testing.T) {
 	// A rule change announces the scope; the next publication reads the new set.
 	source.rules = []repository.PromotionRule{rule(t, "docs", glob("docs/**"))}
 	registry.HandleNotification(readcache.Payload(repository.CacheScopePromotionRule, ""))
-	got, err := index.MatchingRules(context.Background(), event)
+	got, err := index.MatchingRules(context.Background(), nil, event)
 	if err != nil || len(got) != 0 || source.calls != 2 {
 		t.Fatalf("after the flush: matched %v, %v, calls %d", got, err, source.calls)
 	}
 	// A bypassed read (the management API) goes to the store.
-	if _, err = index.MatchingRules(readcache.Bypass(context.Background()), event); err != nil || source.calls != 3 {
+	if _, err = index.MatchingRules(readcache.Bypass(context.Background()), nil, event); err != nil || source.calls != 3 {
 		t.Fatalf("bypass: %v, calls %d", err, source.calls)
 	}
 }
 
 func TestIndexWithTheCacheOffReadsEveryTimeAndReportsTheSourceError(t *testing.T) {
 	source := &countingSource{rules: []repository.PromotionRule{rule(t, "any", glob("**"))}}
-	index := New(source, readcache.NewRegistry(0), nil)
+	index := New(source.list, readcache.NewRegistry(0), nil)
 	event := events.Published("repo", "raw", "a.txt", "sha256:aa", "")
 	for range 2 {
-		if _, err := index.MatchingRules(context.Background(), event); err != nil {
+		if _, err := index.MatchingRules(context.Background(), nil, event); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -156,7 +156,7 @@ func TestIndexWithTheCacheOffReadsEveryTimeAndReportsTheSourceError(t *testing.T
 		t.Fatalf("calls = %d", source.calls)
 	}
 	source.err = errors.New("database down")
-	if _, err := index.MatchingRules(context.Background(), event); err == nil {
+	if _, err := index.MatchingRules(context.Background(), nil, event); err == nil {
 		t.Fatal("a failed rule read must fail the fan-out, and with it the publication")
 	}
 }

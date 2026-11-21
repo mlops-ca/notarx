@@ -451,7 +451,7 @@ func TestFailedConditionWaitsAndPromotesOnceItHolds(t *testing.T) {
 	}
 }
 
-func TestFindingsAboveTheLimitSkipForGoodAndAWeekOldWaitGivesUp(t *testing.T) {
+func TestFindingsAboveTheLimitWaitForARescanAndAWeekOldWaitGivesUp(t *testing.T) {
 	ctx := context.Background()
 	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), json.RawMessage(`{"scan":{"completed":true,"maxSeverity":"medium"}}`))
 	asset := f.publishRaw(f.source, "releases/widget.txt", "widget")
@@ -460,8 +460,17 @@ func TestFindingsAboveTheLimitSkipForGoodAndAWeekOldWaitGivesUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.runOnce()
-	if got := f.evaluations(repository.PromotionEvaluationSkipped); len(got) != 1 || got[0].LastReason != reasonConditionPrefix+"scan:severity_above_medium" {
+	waiting := f.evaluations(repository.PromotionEvaluationWaiting)
+	if len(waiting) != 1 || waiting[0].LastReason != reasonConditionPrefix+"scan:severity_above_medium" {
 		t.Fatalf("findings above the limit: %+v", f.evaluations())
+	}
+	// A rescan after the finding was fixed lets the same evaluation through.
+	if _, err := f.store.ReplaceArtifactIntelligence(ctx, repository.ArtifactIntelligence{RepositoryID: f.source.ID, Format: repository.FormatRaw, Coordinate: asset.Path, Digest: asset.Digest,
+		Vulnerability: &repository.ArtifactVulnerabilitySummary{Scanner: "test", Status: "clean", ScannedAt: f.now}}, "1"); err != nil {
+		t.Fatal(err)
+	}
+	if outcome, err := f.evaluator.evaluate(ctx, waiting[0]); err != nil || outcome.State != repository.PromotionEvaluationQueued {
+		t.Fatalf("after the rescan: %+v, %v", outcome, err)
 	}
 	// A condition that never holds stops being rechecked a week after publication.
 	unscanned := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: "releases/old.txt", Digest: "sha256:" + strings.Repeat("0", 64), EventOccurredAt: f.now.Add(-8 * 24 * time.Hour)}
@@ -795,5 +804,114 @@ func TestChainPromotesMavenFromDevThroughStagingToRelease(t *testing.T) {
 		if assets, err := c.store.ListMavenAssets(ctx, repo.ID, coordinate); err != nil || len(assets) != 1 {
 			t.Fatalf("%s holds %+v, %v", repo.Name, assets, err)
 		}
+	}
+}
+
+func TestEvaluationsOfAParkedRuleWaitAndPromoteOnceTheRuleIsEdited(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	f.publishRaw(f.source, "releases/first.txt", "first")
+	f.publishRaw(f.source, "releases/second.txt", "second")
+	disabled := repository.ServiceAccountDisabled
+	if _, err := f.store.UpdateServiceAccount(ctx, repository.ServiceAccountUpdate{ID: f.account.ID, State: &disabled}, f.account.Version); err != nil {
+		t.Fatal(err)
+	}
+	f.runOnce()
+	// One evaluation parked the rule and failed; the other found the rule parked and waits for it to come back.
+	if failedRows, waiting := f.evaluations(repository.PromotionEvaluationFailed), f.evaluations(repository.PromotionEvaluationWaiting); len(failedRows) != 1 || len(waiting) != 1 || waiting[0].LastReason != reasonRuleParkedPrefix+repository.PromotionRuleAuthorizationLost {
+		t.Fatalf("evaluations = %+v", f.evaluations())
+	}
+	waiting := f.evaluations(repository.PromotionEvaluationWaiting)[0]
+	active := repository.ServiceAccountActive
+	account, err := f.store.GetServiceAccount(ctx, f.account.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.UpdateServiceAccount(ctx, repository.ServiceAccountUpdate{ID: f.account.ID, State: &active}, account.Version); err != nil {
+		t.Fatal(err)
+	}
+	rule, err := f.store.GetPromotionRule(ctx, f.rule.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.UpdatePromotionRule(ctx, rule, rule.Version); err != nil {
+		t.Fatal(err)
+	}
+	if outcome, evalErr := f.evaluator.evaluate(ctx, waiting); evalErr != nil || outcome.State != repository.PromotionEvaluationQueued {
+		t.Fatalf("after the edit: %+v, %v", outcome, evalErr)
+	}
+}
+
+func TestReleaseConditionsHoldForEveryMember(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	store.SetPromotionRuleMatcher(PromotionRuleMatcher())
+	f := &evaluatorFixture{t: t, store: store, objects: objectstore.NewMemoryStore(), now: time.Now().UTC()}
+	f.source = func() repository.HostedRepository {
+		repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "tools-dev", Format: repository.FormatRaw, RawLayout: repository.RawLayoutVersioned, SealMode: repository.RawSealIdle})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return repo
+	}()
+	f.target = mustCreateRepository(t, store, "tools-release", repository.FormatRaw)
+	account, err := store.CreateServiceAccount(ctx, repository.ServiceAccount{ID: uuid.NewString(), Name: "promoter", State: repository.ServiceAccountActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.account = account
+	grantServiceAccount(t, store, f.source, account.ID, "repositories:read")
+	grantServiceAccount(t, store, f.target, account.ID, "repositories:write")
+	match := promotionrules.Match{Coordinate: promotionrules.Coordinate{Glob: "tool@*"}, Scope: promotionrules.ScopeRelease}
+	f.rule, err = store.CreatePromotionRule(ctx, repository.PromotionRule{ID: uuid.NewString(), Name: "release", SourceRepositoryID: f.source.ID, TargetKind: repository.PromotionTargetLocal, TargetRepositoryID: f.target.ID,
+		Match: ruleMatch(t, match), Conditions: json.RawMessage(`{"scan":{"completed":true}}`), RunAsServiceAccountID: account.ID, Enabled: true, CreatedBy: "alice"}, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.evaluator = NewPromotionEvaluator(PromotionEvaluatorOptions{Store: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: testAuthenticator()}, Owner: "test-worker", Now: func() time.Time { return f.now }})
+	first := f.publishRaw(f.source, "tool/1.0.0/bin/tool", "binary")
+	second := f.publishRaw(f.source, "tool/1.0.0/README.md", "readme")
+	if _, err = store.SealRawVersion(ctx, repository.SealRawVersionInput{RepositoryID: f.source.ID, Name: "tool", Version: "1.0.0", Actor: "ci"}); err != nil {
+		t.Fatal(err)
+	}
+	// Only one file of the release was scanned: the release as a whole waits.
+	if _, err = store.ReplaceArtifactIntelligence(ctx, repository.ArtifactIntelligence{RepositoryID: f.source.ID, Format: repository.FormatRaw, Coordinate: first.Path, Digest: first.Digest,
+		Vulnerability: &repository.ArtifactVulnerabilitySummary{Scanner: "test", Status: "clean", ScannedAt: f.now}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.runOnce()
+	if rows := f.promotionRows(f.target.ID); len(rows) != 0 {
+		t.Fatalf("a release with an unscanned member was promoted: %+v", rows)
+	}
+	if waiting := f.evaluations(repository.PromotionEvaluationWaiting); len(waiting) != 2 || waiting[0].LastReason != reasonConditionPrefix+"scan:scan_not_completed" {
+		t.Fatalf("evaluations = %+v", f.evaluations())
+	}
+	if _, err = store.ReplaceArtifactIntelligence(ctx, repository.ArtifactIntelligence{RepositoryID: f.source.ID, Format: repository.FormatRaw, Coordinate: second.Path, Digest: second.Digest,
+		Vulnerability: &repository.ArtifactVulnerabilitySummary{Scanner: "test", Status: "clean", ScannedAt: f.now}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, evaluation := range f.evaluations() {
+		if outcome, evalErr := f.evaluator.evaluate(ctx, evaluation); evalErr != nil || outcome.State != repository.PromotionEvaluationQueued {
+			t.Fatalf("with every member scanned: %+v, %v", outcome, evalErr)
+		}
+	}
+	if rows := f.promotionRows(f.target.ID); len(rows) != 2 {
+		t.Fatalf("rows = %+v", rows)
+	}
+}
+
+func TestTargetThatHoldsOtherBytesIsAConflict(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	asset := f.publishRaw(f.source, "releases/widget.txt", "widget")
+	f.runOnce()
+	if err := f.runRawPromotionJobs(); err != nil {
+		t.Fatal(err)
+	}
+	// The source coordinate is offered again with other bytes: the target is immutable, so this is a conflict, not a promotion.
+	other := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: asset.Path, Digest: "sha256:" + strings.Repeat("b", 64), EventOccurredAt: f.now}
+	outcome, err := f.evaluator.evaluate(ctx, other)
+	if err != nil || outcome.State != repository.PromotionEvaluationFailed || !strings.HasPrefix(outcome.Reason, reasonConflict+":"+asset.Path+" holds "+asset.Digest) {
+		t.Fatalf("conflict: %+v, %v", outcome, err)
 	}
 }

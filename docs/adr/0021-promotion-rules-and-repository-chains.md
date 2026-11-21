@@ -340,9 +340,9 @@ a version bump; an edit returns `authorization_lost` to `active`. The worker kin
 targets only; a remote target is skipped with `remote_target_not_supported` until slice 8. A target that already holds the digest is
 detected from completed provenance rows into it that are newer than the target's tombstone; bytes that differ from a completed
 promotion are `conflict`; a direct publication into the target that no promotion made is refused by the format's job, not
-by the evaluator. A condition that can still change (a scan, evidence, the target's policy, a quarantine, an open Raw version) makes the evaluation wait and
-look again, after a quarter of the artifact's age between one minute and one hour, until a week after publication; findings above the limit and the other
-final verdicts skip. A claim fails a row that used its eight attempts (`attempts_exhausted`), and parking a rule is conditional on the rule version the
+by the evaluator. A condition that can still change (a scan, findings above the limit, evidence, the target's policy, a quarantine, an open Raw version, a parked rule) makes the
+evaluation wait and look again, after a quarter of the artifact's age between one minute and one hour, until a week after publication; for `scope: release` the conditions
+hold for every member. An artifact published on a node whose cache lags a rule change is recovered by backfill. A cache miss of the rule set reads through the publishing transaction's connection. A claim fails a row that used its eight attempts (`attempts_exhausted`), and parking a rule is conditional on the rule version the
 evaluation read. A versioned Raw file event is evaluated as its version, which counts as published when it is sealed; `scope: release` on versioned Raw expands to the
 files of the version through `ReleaseSet`.
 

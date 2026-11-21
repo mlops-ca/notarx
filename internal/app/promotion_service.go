@@ -59,6 +59,9 @@ type PromotionRequest struct {
 	IdempotencyKey string
 	// Rule is set when a promotion rule requests the promotion (ADR 0021, Evaluator); a manual request leaves it nil.
 	Rule *PromotionRuleOrigin
+	// admitted tells request that the caller already ran the admission checks for this request against the same resolved
+	// target (a release admits every member before it queues any), so they are not run a second time.
+	admitted bool
 }
 
 // PromotionRuleOrigin ties a promotion to the rule that requested it. Key is the provenance idempotency key of the rule
@@ -184,13 +187,29 @@ func (s PromotionService) admit(ctx context.Context, in PromotionRequest, resolv
 	return promotionAdmission{target: target, publisher: publisher}, nil
 }
 
+// admission is the outcome of the admission checks of a request: the checks themselves, or, for a request the caller already
+// admitted, what they resolved.
+func (s PromotionService) admission(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (promotionAdmission, *PromotionError) {
+	if !in.admitted {
+		return s.admit(ctx, in, resolved)
+	}
+	publisher, ok := formatmodule.Capability[formatmodule.PromotionPublisher](s.registry, in.Source.Format)
+	if !ok {
+		return promotionAdmission{}, errUnsupportedPromotionFormat
+	}
+	if resolved.err != nil {
+		return promotionAdmission{}, resolved.err
+	}
+	return promotionAdmission{target: resolved.repo, publisher: publisher}, nil
+}
+
 // Request runs the admission checks and enqueues the promotion job.
 func (s PromotionService) Request(ctx context.Context, in PromotionRequest) (PromotionResult, *PromotionError) {
 	return s.request(ctx, in, s.resolveTarget(ctx, in.Source, in.TargetID))
 }
 
 func (s PromotionService) request(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (PromotionResult, *PromotionError) {
-	admission, perr := s.admit(ctx, in, resolved)
+	admission, perr := s.admission(ctx, in, resolved)
 	if perr != nil {
 		return PromotionResult{}, perr
 	}

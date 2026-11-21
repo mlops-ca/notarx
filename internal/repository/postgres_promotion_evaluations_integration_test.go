@@ -19,7 +19,7 @@ type staticFanout struct {
 	err   error
 }
 
-func (f staticFanout) MatchingRules(context.Context, events.Event) ([]string, error) {
+func (f staticFanout) MatchingRules(context.Context, events.DB, events.Event) ([]string, error) {
 	return f.rules, f.err
 }
 
@@ -345,5 +345,20 @@ func TestPostgresClaimFailsRowsThatUsedTheirAttempts(t *testing.T) {
 			t.Fatal("the exhausted row was never failed")
 		}
 		<-time.After(5 * time.Millisecond)
+	}
+}
+
+// The rule fan-out lists the rules through the connection of the publishing transaction.
+func TestPostgresRulesAreListedThroughTheTransaction(t *testing.T) {
+	f := newEvaluationFixture(t)
+	ctx := context.Background()
+	tx, err := f.store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	rules, err := ListEnabledPromotionRulesFrom(ctx, tx, f.source.ID)
+	if err != nil || len(rules) != 1 || rules[0].ID != f.rule.ID || rules[0].State != PromotionRuleActive {
+		t.Fatalf("rules = %+v, %v", rules, err)
 	}
 }

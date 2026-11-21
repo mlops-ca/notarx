@@ -297,7 +297,7 @@ type fakeFanout struct {
 	seen  []Event
 }
 
-func (f *fakeFanout) MatchingRules(_ context.Context, event Event) ([]string, error) {
+func (f *fakeFanout) MatchingRules(_ context.Context, _ DB, event Event) ([]string, error) {
 	f.seen = append(f.seen, event)
 	return f.rules, f.err
 }

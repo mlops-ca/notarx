@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +23,13 @@ import (
 // promotionEvaluationLease is how long a claimed evaluation belongs to its worker. An evaluation is a handful of reads
 // and one enqueue, so the lease is generous; a worker that dies leaves the row to become due again when it ends.
 const promotionEvaluationLease = 2 * time.Minute
+
+// promotionEvaluationTimeout bounds one evaluation below its lease, so a stuck read or a large release cannot outlive the claim
+// and be evaluated twice; promotionFinishTimeout bounds the write of its outcome, which must outlive a shutdown.
+const (
+	promotionEvaluationTimeout = promotionEvaluationLease - 30*time.Second
+	promotionFinishTimeout     = 15 * time.Second
+)
 
 // Reasons recorded on an evaluation (last_reason). They are stable codes, not worker error text.
 const (
@@ -108,8 +114,8 @@ func NewPromotionEvaluator(options PromotionEvaluatorOptions) *PromotionEvaluato
 
 // NewPromotionRuleFanout is the rule fan-out events.Emit consults in the publishing transaction: the cached enabled rules
 // of the source repository, matched on the coordinate and version. Install it with events.SetRuleFanout.
-func NewPromotionRuleFanout(store repository.PromotionEvaluationStore, caches *readcache.Registry) *promotionfanout.Index {
-	return promotionfanout.New(store, caches, promotionCoordinateValidator(promotionFormatRegistry(promotionModuleDeps{})))
+func NewPromotionRuleFanout(caches *readcache.Registry) *promotionfanout.Index {
+	return promotionfanout.New(repository.ListEnabledPromotionRulesFrom, caches, promotionCoordinateValidator(promotionFormatRegistry(promotionModuleDeps{})))
 }
 
 // PromotionRuleMatcher is the in-memory store's rule fan-out; it has no cache.
@@ -155,7 +161,9 @@ func (e *PromotionEvaluator) RunOnce(ctx context.Context) (int, error) {
 // until its attempts are exhausted; a lost lease drops the outcome, because another worker owns the row now.
 func (e *PromotionEvaluator) handle(ctx context.Context, evaluation repository.PromotionEvaluation) {
 	ctx = readcache.Bypass(ctx)
-	outcome, err := e.evaluate(ctx, evaluation)
+	evaluateCtx, cancel := context.WithTimeout(ctx, promotionEvaluationTimeout)
+	defer cancel()
+	outcome, err := e.evaluate(evaluateCtx, evaluation)
 	if err != nil {
 		if ctx.Err() != nil {
 			return // shutdown: the lease expires and the row is taken again
@@ -178,7 +186,8 @@ func (e *PromotionEvaluator) retryOutcome(evaluation repository.PromotionEvaluat
 
 // finish records the outcome under the live lease; a lost lease drops it, because another worker owns the row now.
 func (e *PromotionEvaluator) finish(ctx context.Context, evaluation repository.PromotionEvaluation, outcome repository.PromotionEvaluationOutcome) {
-	finishCtx := context.WithoutCancel(ctx)
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), promotionFinishTimeout)
+	defer cancel()
 	if finishErr := e.store.FinishPromotionEvaluation(finishCtx, evaluation.ID, evaluation.LeaseToken, outcome); finishErr != nil && !errors.Is(finishErr, repository.ErrPromotionEvaluationLeaseLost) {
 		slog.Warn("record promotion evaluation outcome failed", "component", "promotion_evaluator", "evaluationId", evaluation.ID, "error", finishErr)
 	}
@@ -206,7 +215,8 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 		return skipped(reasonRuleDisabled)
 	}
 	if rule.State != repository.PromotionRuleActive {
-		return skipped(reasonRuleParkedPrefix + rule.State)
+		// A parked rule comes back with an edit, and the artifacts published meanwhile must not be lost: wait.
+		return e.later(evaluation.EventOccurredAt, reasonRuleParkedPrefix+rule.State), nil
 	}
 	if rule.TargetKind != repository.PromotionTargetLocal {
 		return skipped(reasonRemoteUnsupported)
@@ -244,17 +254,29 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 	if err != nil || !matched {
 		return outcome, err
 	}
-	verdicts, found, err := run.verdicts(ctx, dryRunCandidate{Candidate: candidate, Digest: evaluation.Digest, CreatedAt: published})
+	members, err := e.members(ctx, run, evaluation)
+	if errors.Is(err, repository.ErrNotFound) {
+		return skipped(reasonSourceUnavailable)
+	}
 	if err != nil {
 		return repository.PromotionEvaluationOutcome{}, err
 	}
-	if !found {
-		return skipped(reasonSourceUnavailable)
+	// The conditions hold for every artifact the rule promotes: for scope release, every member of the release.
+	var verdicts []promotionrules.ConditionVerdict
+	for _, member := range members {
+		memberVerdicts, found, verdictErr := run.verdicts(ctx, dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: member.coordinate}, Digest: member.digest, CreatedAt: published})
+		if verdictErr != nil {
+			return repository.PromotionEvaluationOutcome{}, verdictErr
+		}
+		if !found {
+			return skipped(reasonSourceUnavailable)
+		}
+		verdicts = append(verdicts, memberVerdicts...)
 	}
 	if blocked, outcome := e.conditionOutcome(run, published, verdicts); blocked {
 		return outcome, nil
 	}
-	return e.promote(ctx, run, evaluation, published)
+	return e.promote(ctx, run, members, published)
 }
 
 func skippedOrError(err error, reason string) (repository.PromotionEvaluationOutcome, error) {
@@ -431,7 +453,12 @@ func (e *PromotionEvaluator) reload(ctx context.Context, run ruleRun, evaluation
 		return evaluation, nil, repository.PromotionEvaluationOutcome{}, err
 	}
 	if version.State != repository.RawVersionSealed {
-		return evaluation, nil, e.later(evaluation.EventOccurredAt, reasonVersionNotSealed), nil
+		// An open version is waited for as long as it keeps being written to: the clock is its last write, not the first file.
+		active := evaluation.EventOccurredAt
+		if version.UpdatedAt.After(active) {
+			active = version.UpdatedAt
+		}
+		return evaluation, nil, e.later(active, reasonVersionNotSealed), nil
 	}
 	evaluation.Coordinate, evaluation.Digest = version.Coordinate(), version.ManifestDigest
 	return evaluation, &version, repository.PromotionEvaluationOutcome{}, nil
@@ -455,17 +482,13 @@ func (e *PromotionEvaluator) matches(ctx context.Context, run ruleRun, evaluatio
 	return true, repository.PromotionEvaluationOutcome{}, nil
 }
 
-// permanentReasonPrefix starts the reasons of a verdict that no later event can turn: a scan that completed with findings
-// above the limit.
-const permanentReasonPrefix = "severity_above_"
-
 // conditionOutcome turns failed condition verdicts into an outcome. A rule whose only failing condition is the age waits
-// until the artifact is old enough; a verdict no later event can change (findings above the limit) skips the artifact with
-// the condition and its reason; any other failing condition (a scan, evidence, the target's policy, a quarantine) waits
-// and looks again, because it can still change. A not-evaluated verdict never blocks.
+// until the artifact is old enough; any other failing condition (a scan, findings above the limit, evidence, the target's
+// policy, a quarantine) waits and looks again, because a rescan, a refreshed database or a release can still change it. A
+// not-evaluated verdict never blocks.
 func (e *PromotionEvaluator) conditionOutcome(run ruleRun, published time.Time, verdicts []promotionrules.ConditionVerdict) (bool, repository.PromotionEvaluationOutcome) {
 	var first *promotionrules.ConditionVerdict
-	waitsForAge, permanent := false, (*promotionrules.ConditionVerdict)(nil)
+	waitsForAge := false
 	for i, verdict := range verdicts {
 		if verdict.Verdict != promotionrules.VerdictFail {
 			continue
@@ -473,17 +496,11 @@ func (e *PromotionEvaluator) conditionOutcome(run ruleRun, published time.Time, 
 		switch {
 		case verdict.Condition == "minAge":
 			waitsForAge = true
-		case strings.HasPrefix(verdict.Reason, permanentReasonPrefix):
-			if permanent == nil {
-				permanent = &verdicts[i]
-			}
 		case first == nil:
 			first = &verdicts[i]
 		}
 	}
 	switch {
-	case permanent != nil:
-		return true, repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationSkipped, Reason: reasonConditionPrefix + permanent.Condition + ":" + permanent.Reason}
 	case first != nil:
 		return true, e.later(published, reasonConditionPrefix+first.Condition+":"+first.Reason)
 	case waitsForAge:
@@ -525,14 +542,7 @@ func (e *PromotionEvaluator) members(ctx context.Context, run ruleRun, evaluatio
 // already holds is a success no-op; different bytes at its coordinate are a conflict; when every member already has a live
 // attempt under its key the evaluation is a replay and asks for nothing, which is what the second file event of a release
 // does.
-func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, evaluation repository.PromotionEvaluation, published time.Time) (repository.PromotionEvaluationOutcome, error) {
-	members, err := e.members(ctx, run, evaluation)
-	if errors.Is(err, repository.ErrNotFound) {
-		return skipped(reasonSourceUnavailable)
-	}
-	if err != nil {
-		return repository.PromotionEvaluationOutcome{}, err
-	}
+func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members []promotionMember, published time.Time) (repository.PromotionEvaluationOutcome, error) {
 	version, _ := strconv.ParseInt(run.rule.Version, 10, 64)
 	principal := serviceAccountPrincipal(run.rule.RunAsServiceAccountID)
 	requests := make([]PromotionRequest, 0, len(members))
@@ -543,6 +553,7 @@ func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, evaluatio
 			return repository.PromotionEvaluationOutcome{}, stateErr
 		}
 		if conflict != "" {
+			slog.Warn("promotion refused: the target holds different bytes at the coordinate", "component", "promotion_evaluator", "ruleId", run.rule.ID, "target", run.target.Name, "coordinate", member.coordinate, "held", conflict, "offered", member.digest)
 			return failed(reasonConflict + ":" + member.coordinate + " holds " + conflict)
 		}
 		if holds {
@@ -569,6 +580,7 @@ func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, evaluatio
 	}
 	promotionID := ""
 	for _, request := range requests {
+		request.admitted = true
 		result, perr := e.service.request(ctx, request, resolved)
 		if perr != nil {
 			return e.promotionRefusal(perr, published)

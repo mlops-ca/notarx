@@ -13,10 +13,8 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-// RuleSource lists the enabled, active rules of a source repository.
-type RuleSource interface {
-	ListEnabledPromotionRules(ctx context.Context, sourceRepositoryID string) ([]repository.PromotionRule, error)
-}
+// RuleSource lists the enabled, active rules of a source repository through the querier it is given.
+type RuleSource func(ctx context.Context, q repository.RuleQuerier, sourceRepositoryID string) ([]repository.PromotionRule, error)
 
 // CoordinateValidator returns the format's canonical-coordinate check, or nil when the format declares none.
 type CoordinateValidator func(format repository.Format) func(coordinate string) bool
@@ -148,10 +146,10 @@ func New(source RuleSource, registry *readcache.Registry, validate CoordinateVal
 	})}
 }
 
-// MatchingRules implements events.RuleFanout.
-func (i *Index) MatchingRules(ctx context.Context, event events.Event) ([]string, error) {
+// MatchingRules implements events.RuleFanout. A cache miss reads the rules through the publishing transaction.
+func (i *Index) MatchingRules(ctx context.Context, tx events.DB, event events.Event) ([]string, error) {
 	rules, err := i.cache.Get(ctx, event.RepositoryID, func(ctx context.Context) ([]compiledRule, error) {
-		stored, err := i.source.ListEnabledPromotionRules(ctx, event.RepositoryID)
+		stored, err := i.source(ctx, tx, event.RepositoryID)
 		if err != nil {
 			return nil, err
 		}

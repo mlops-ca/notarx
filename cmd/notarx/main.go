@@ -351,7 +351,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	// publication, in the publishing transaction. Every node that publishes installs it; only a worker evaluates.
 	var promotionEvaluator *app.PromotionEvaluator
 	if cfg.Promotion.Enabled() {
-		events.SetRuleFanout(app.NewPromotionRuleFanout(store, caches.registry))
+		events.SetRuleFanout(app.NewPromotionRuleFanout(caches.registry))
 		defer events.SetRuleFanout(nil)
 		if cfg.HasRole(config.NodeRoleWorker) {
 			authority := authorization.Authenticator{AdminToken: cfg.AdminToken, AdminActor: cfg.AdminActor, ResolverToken: cfg.ResolverToken, ResolverActor: cfg.ResolverActor, RepositoryReaders: cfg.RepositoryReaders, LegacyReadPermissive: cfg.LegacyReadPermissive}

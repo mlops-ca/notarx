@@ -106,17 +106,21 @@ func (e Event) Validate() error {
 // DB is the part of a transaction Emit needs.
 type DB interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
 // RuleFanout names the promotion rules that evaluate an event (ADR 0021, Evaluator). It reads the enabled rules of the
-// event's source repository from an in-process cache (ADR 0023 section 6) and never touches the database of the
-// publishing transaction, so a rules-table problem cannot block a publish that no rule matches.
+// event's source repository from an in-process cache (ADR 0023 section 6), so a publication that no rule can match does not
+// query the rules table. On a cache miss it loads the rules through tx, the connection of the publishing transaction: a
+// second pool connection taken while the transaction holds one could deadlock a saturated pool. The cache lags a rule
+// change on another node by at most NOTARX_AUTHZ_CACHE_TTL; an artifact published in that window is evaluated by a rule
+// created in it only through backfill (ADR 0021, Rules).
 type RuleFanout interface {
 	// MatchingRules returns the ids of the enabled rules whose match can accept the event. The evaluator re-checks the
 	// match against the artifact, so an implementation may over-approximate what it cannot know at publication (the
 	// tags that point at the artifact), and must never leave out a rule that could match.
-	MatchingRules(ctx context.Context, event Event) ([]string, error)
+	MatchingRules(ctx context.Context, tx DB, event Event) ([]string, error)
 }
 
 // fanOutTypes are the event types that start rule evaluations. artifact.scan.completed joins them with the conditions
@@ -151,7 +155,7 @@ func fanOut(ctx context.Context, tx DB, event Event, occurredAt time.Time) error
 	if fanout == nil || !fanOutTypes[event.Type] || event.RepositoryID == "" {
 		return nil
 	}
-	rules, err := (*fanout).MatchingRules(ctx, event)
+	rules, err := (*fanout).MatchingRules(ctx, tx, event)
 	if err != nil {
 		return fmt.Errorf("events: promotion rule fan-out: %w", err)
 	}
