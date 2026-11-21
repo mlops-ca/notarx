@@ -5,6 +5,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func TestPostgresPublishedEmissionIsTransactionalPerFormat(t *testing.T) {
 	attempt := 0
 	cases := map[string]func(repo HostedRepository) (string, error){
 		"raw": func(repo HostedRepository) (string, error) {
-			asset := rawFixture(repo, "docs/readme.txt", "hello "+repo.ID)
+			asset := rawFixture(repo, "docs/readme.txt", strings.Repeat("x", 100)+repo.ID)
 			_, err := store.PutRawAsset(ctx, asset)
 			return asset.Path, err
 		},

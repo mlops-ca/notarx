@@ -669,8 +669,7 @@ func (p *NexusMigrationPublication) Publish(ctx context.Context, entry nexusmigr
 		for _, asset := range assets {
 			native = append(native, asset.MavenAsset)
 		}
-		artifact, _, commitErr := p.store.CommitMavenPublishSessionIdempotently(ctx, entry.SessionID, "nexus-migration:"+entry.ID, nexusPublicationIdentity(entry), native, auditOf(session.Objects[0].Digest))
-		err, digest = commitErr, artifact.Digest
+		_, _, err = p.store.CommitMavenPublishSessionIdempotently(ctx, entry.SessionID, "nexus-migration:"+entry.ID, nexusPublicationIdentity(entry), native, auditOf(session.Objects[0].Digest))
 		if errors.Is(err, repository.ErrNameExists) {
 			return nexusmigration.Failed("target_conflict")
 		}
