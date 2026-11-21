@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -310,18 +309,12 @@ func TestCachedGrantSetIsACopy(t *testing.T) {
 func TestWarmAuthenticatedReadResolvesEverythingWithoutStatements(t *testing.T) {
 	f := newFixture(t, 5*time.Second)
 	ctx := context.Background()
-	user := f.addUser(t)
+	user, group := f.addGroupMember(t)
 	f.grant(t, "user:ada")
-	group, err := f.source.CreateUserGroup(ctx, repository.UserGroup{ID: uuid.NewString(), DisplayName: "team", Source: repository.UserGroupSourceLocal})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := f.source.AddUserGroupMember(ctx, group.ID, user.ID, repository.UserGroupSourceLocal); err != nil {
-		t.Fatal(err)
-	}
 	resolve := func() {
-		if _, err := f.caches.ListUserGroupMemberships(ctx, user.ID); err != nil {
-			t.Fatal(err)
+		memberships, err := f.caches.ListUserGroupMemberships(ctx, user.ID)
+		if err != nil || len(memberships) != 1 || memberships[0].GroupID != group.ID {
+			t.Fatalf("memberships = %v, %v", groupIDs(memberships), err)
 		}
 		f.resolveAll(t, ctx)
 		if _, err := f.caches.GetUserByName(ctx, user.Name); err != nil {
