@@ -725,7 +725,12 @@ test("repository detail keeps operational content above the fold", async ({
   await mockRepositoryDetail(page);
   // This layout scenario enters the grants tab, so its picker reads must also
   // be synthetic rather than falling through to a live Gateway.
-  for (const endpoint of ["users", "api-keys", "service-accounts"]) {
+  for (const endpoint of [
+    "users",
+    "user-groups",
+    "api-keys",
+    "service-accounts",
+  ]) {
     await page.route(`**/api/v2/${endpoint}**`, (route) =>
       route.fulfill({ json: { items: [] } }),
     );
