@@ -311,6 +311,12 @@ func (h remoteInstanceHandler) UpdateRemoteInstance(w http.ResponseWriter, r *ht
 		if !checked {
 			return
 		}
+		if !strings.EqualFold(document.InstanceID, current.InstanceID) && input.authKind == repository.RemoteInstanceAuthStaticToken && input.token == "" {
+			// The kept credential was issued for the instance registered, not for the one the host now reports; only a new
+			// token in the same request may adopt the new id.
+			writeHostedProblem(w, http.StatusUnprocessableEntity, "instance_changed", "the remote instance reports another instance id than the one registered; a new token is required to adopt it")
+			return
+		}
 		next.InstanceID, next.State, next.LastCheckedAt = document.InstanceID, repository.RemoteInstanceStateActive, time.Now().UTC()
 	}
 	updated, err := h.store.UpdateRemoteInstance(r.Context(), next, string(params.IfMatch), h.auditRecords(principal, current.ID, "remote_instance.update", http.StatusOK)...)

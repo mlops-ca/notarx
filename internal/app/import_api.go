@@ -26,6 +26,14 @@ const importBodyLimit = 4 << 20
 // importDigestPattern is the only digest a session accepts, the same one the session store requires.
 var importDigestPattern = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
+// promotionMaxHops is the hop cap of a chain path: the configured NOTARX_PROMOTION_MAX_HOPS, or the default when unset.
+func promotionMaxHops(configured int) int {
+	if configured <= 0 {
+		return config.DefaultPromotionMaxHops
+	}
+	return configured
+}
+
 // importHandler owns the receiving side of a push from another notarx instance (ADR 0021, "Remote targets"): it opens
 // sessions, stages and verifies blobs and commits through the importer of the target format. The sender is never
 // trusted: the claims are recorded as received, the bytes are hashed while they stream, the commit re-verifies them and
@@ -63,10 +71,7 @@ func newImportHandler(options importHandlerOptions) importHandler {
 	if ttl <= 0 {
 		ttl = config.DefaultImportSessionTTL
 	}
-	maxHops := options.MaxHops
-	if maxHops <= 0 {
-		maxHops = config.DefaultPromotionMaxHops
-	}
+	maxHops := promotionMaxHops(options.MaxHops)
 	return importHandler{managementScope: options.Scope, sessions: sessions, policies: options.Store, instance: options.Store, admission: options.Store,
 		registry: options.Registry, staging: options.Staging, limits: options.Config.Limits(), ttl: ttl, maxHops: maxHops, now: func() time.Time { return time.Now().UTC() }}
 }
@@ -436,6 +441,12 @@ func (h importHandler) CommitImport(w http.ResponseWriter, r *http.Request, impo
 			return
 		}
 		defer release()
+		// Read before anything is published: a failure after the importer committed would answer 500 for a published artifact.
+		provenance, err := h.importProvenance(ctx, principal, session, target)
+		if err != nil {
+			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "read the local instance id failed")
+			return
+		}
 		if err = h.sessions.BeginImportCommit(ctx, session.ID, now); err != nil {
 			if !writeImportStoreError(w, err) {
 				writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "begin the import commit failed")
@@ -468,7 +479,7 @@ func (h importHandler) CommitImport(w http.ResponseWriter, r *http.Request, impo
 			return
 		}
 		// A concurrent or retried commit of the same session may have completed it first; the import is published either way.
-		if err = h.sessions.CompleteImportSession(ctx, session.ID, h.now()); err != nil && !errors.Is(err, repository.ErrImportSessionClosed) {
+		if err = h.sessions.CompleteImportSession(ctx, session.ID, h.now(), provenance); err != nil && !errors.Is(err, repository.ErrImportSessionClosed) {
 			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "complete the import session failed")
 			return
 		}
@@ -480,6 +491,32 @@ func (h importHandler) CommitImport(w http.ResponseWriter, r *http.Request, impo
 		}
 		h.writeSession(w, r, http.StatusOK, committed)
 	})
+}
+
+// importProvenance is the provenance row of a committed import (ADR 0021, Chains): the origin is the source repository the
+// sender reported (its instance is recorded when it is not this one), and the chain path is the
+// path stored with the session, which ends with this instance's own hop. A later promotion of the artifact from the
+// target repository continues from it, so the hop cap and the cycle check cover the whole route.
+func (h importHandler) importProvenance(ctx context.Context, principal Principal, session repository.ImportSession, target repository.HostedRepository) (repository.ArtifactPromotion, error) {
+	local, err := h.instance.LocalInstanceID(ctx)
+	if err != nil {
+		return repository.ArtifactPromotion{}, err
+	}
+	provenance := repository.ArtifactPromotion{
+		ID: ids.New(), TargetRepositoryID: target.ID, Format: session.Format, Coordinate: session.Coordinate, Digest: session.Digest,
+		ChainPath: session.ChainPath, RequestedBy: principal.Actor,
+	}
+	if len(session.ChainPath) > 1 {
+		// The origin of a promotion is its source repository: for an import the last hop the sender reported, the one before
+		// this instance's own. Without a reported path the sender's repository is unknown (the path holds only this
+		// instance's own hop) and the origin stays empty rather than naming the receiving repository.
+		source := session.ChainPath[len(session.ChainPath)-2]
+		provenance.OriginRepository = source.Repository
+		if origin, parseErr := uuid.Parse(source.Instance); parseErr == nil && !strings.EqualFold(source.Instance, local) {
+			provenance.OriginInstanceID = origin.String()
+		}
+	}
+	return provenance, nil
 }
 
 // importRefusal reports whether err is a verdict of the importer on the unit itself, which a retry of the same session

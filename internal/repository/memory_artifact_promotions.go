@@ -36,6 +36,41 @@ func (s *MemoryStore) insertArtifactPromotionLocked(promotion ArtifactPromotion,
 	return nil
 }
 
+// routesArtifact reports whether a provenance row in this state brought, or is bringing, the artifact into its target.
+func routesArtifact(state ArtifactPromotionState) bool {
+	switch state {
+	case ArtifactPromotionPendingApproval, ArtifactPromotionQueued, ArtifactPromotionRunning, ArtifactPromotionCompleted:
+		return true
+	}
+	return false
+}
+
+// routedAt is the time that orders the routes of an artifact: completion, or creation while the row has not completed.
+func routedAt(promotion ArtifactPromotion) time.Time {
+	if promotion.CompletedAt.IsZero() {
+		return promotion.CreatedAt
+	}
+	return promotion.CompletedAt
+}
+
+// GetArtifactPromotionRoute implements ArtifactPromotionStore.
+func (s *MemoryStore) GetArtifactPromotionRoute(_ context.Context, targetRepositoryID string, format Format, coordinate, digest string) (ArtifactPromotion, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var newest ArtifactPromotion
+	found := false
+	for _, promotion := range s.artifactPromotions {
+		if promotion.TargetRepositoryID == targetRepositoryID && promotion.Format == format && promotion.Coordinate == coordinate && promotion.Digest == digest &&
+			routesArtifact(promotion.State) && (!found || newerFirst(routedAt(promotion), promotion.ID, routedAt(newest), newest.ID)) {
+			newest, found = promotion, true
+		}
+	}
+	if !found {
+		return ArtifactPromotion{}, ErrNotFound
+	}
+	return cloneArtifactPromotion(newest), nil
+}
+
 // latestArtifactPromotionLocked returns the newest attempt of the promotion owning the job.
 func (s *MemoryStore) latestArtifactPromotionLocked(jobID string) (ArtifactPromotion, bool) {
 	var latest ArtifactPromotion

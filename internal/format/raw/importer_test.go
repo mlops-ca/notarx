@@ -127,3 +127,69 @@ func TestImportUnitOnlyFillsAFlatHostedRepository(t *testing.T) {
 		t.Fatalf("unwired module = %v", err)
 	}
 }
+
+// A blob staged in the module's own object store is copied from its staging key on the recorded digest: the opener is
+// never called, and a staged object whose recorded digest contradicts the claim publishes nothing.
+func TestImportUnitCopiesAStagedBlobWithoutReadingIt(t *testing.T) {
+	ctx := context.Background()
+	store, objects, module, repo := importFixture(t)
+	refuse := func(formatmodule.BlobDescriptor) (io.ReadCloser, error) {
+		return nil, errors.New("the staged blob must not be streamed")
+	}
+	staged := func(content, stagedContent string) formatmodule.ExportedUnit {
+		unit := unitOf("staged/"+content+".txt", content)
+		unit.Blobs[0].ObjectKey = "native/imports/s/" + content
+		if err := objects.PutVerifiedReader(ctx, unit.Blobs[0].ObjectKey, bytes.NewReader([]byte(stagedContent)), int64(len(stagedContent)), sha(stagedContent)); err != nil {
+			t.Fatal(err)
+		}
+		return unit
+	}
+	if err := module.ImportUnit(ctx, repo.ID, staged("hello", "hello"), refuse); err != nil {
+		t.Fatal(err)
+	}
+	asset, err := store.GetRawAsset(ctx, repo.ID, "staged/hello.txt")
+	if err != nil || asset.Digest != sha("hello") {
+		t.Fatalf("asset = %+v %v", asset, err)
+	}
+	if info, statErr := objects.Stat(ctx, asset.ObjectKey); statErr != nil || info.Digest != sha("hello") {
+		t.Fatalf("object = %+v %v", info, statErr)
+	}
+	// The staging object holds other bytes than the claim: nothing is published.
+	if err = module.ImportUnit(ctx, repo.ID, staged("claimed", "swapped"), refuse); !errors.Is(err, formatmodule.ErrImportMismatch) {
+		t.Fatalf("staged bytes that contradict the claim = %v", err)
+	}
+	if _, err = store.GetRawAsset(ctx, repo.ID, "staged/claimed.txt"); !errors.Is(err, repository.ErrNotFound) {
+		t.Fatalf("a refused import published the asset: %v", err)
+	}
+}
+
+// noRecordedDigest hides the digest of every object, as a store that lost its metadata would.
+type noRecordedDigest struct{ objectstore.Store }
+
+func (s noRecordedDigest) Stat(ctx context.Context, key string) (objectstore.Info, error) {
+	info, err := s.Store.Stat(ctx, key)
+	info.Digest = ""
+	return info, err
+}
+
+// A staged object whose digest record is gone is hashed again from its bytes instead of refusing the import.
+func TestImportUnitStreamsAStagedBlobWithoutARecordedDigest(t *testing.T) {
+	ctx := context.Background()
+	store, objects := repository.NewMemoryStore(), objectstore.NewMemoryStore()
+	repo, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "imports", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	module := rawformat.New(rawformat.Options{Store: store, Repositories: store, Objects: noRecordedDigest{objects}})
+	unit := unitOf("staged/lost.txt", "lost")
+	unit.Blobs[0].ObjectKey = "native/imports/s/lost"
+	if err = objects.PutVerifiedReader(ctx, unit.Blobs[0].ObjectKey, bytes.NewReader([]byte("lost")), 4, sha("lost")); err != nil {
+		t.Fatal(err)
+	}
+	if err = module.ImportUnit(ctx, repo.ID, unit, opener("lost")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.GetRawAsset(ctx, repo.ID, "staged/lost.txt"); err != nil {
+		t.Fatal(err)
+	}
+}

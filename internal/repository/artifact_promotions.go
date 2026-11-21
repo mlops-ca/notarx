@@ -98,7 +98,15 @@ type ArtifactPromotionStore interface {
 	PageArtifactPromotions(ctx context.Context, query ArtifactPromotionQuery) (ArtifactPromotionPage, error)
 	// GetArtifactPromotionsByKeys returns the newest attempt of each given idempotency key that has a row, by key.
 	GetArtifactPromotionsByKeys(ctx context.Context, keys []string) (map[string]ArtifactPromotion, error)
+	// GetArtifactPromotionRoute returns the provenance row that brought the artifact into the repository, whose chain
+	// path a promotion out of the repository continues (ADR 0021, Chains): the newest row of a promotion or an import that
+	// is queued, running, awaiting approval or completed (a failed, rejected, expired or cancelled one brought nothing),
+	// by completion time, or by creation while it has not completed. ErrNotFound when no such row exists.
+	GetArtifactPromotionRoute(ctx context.Context, targetRepositoryID string, format Format, coordinate, digest string) (ArtifactPromotion, error)
 }
+
+// ImportPromotionKey is the idempotency key of the provenance row of a committed import session.
+func ImportPromotionKey(sessionID string) string { return "import:" + sessionID }
 
 type artifactPromotionContextKey struct{}
 

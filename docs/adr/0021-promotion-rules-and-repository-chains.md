@@ -279,7 +279,11 @@ Cross-instance cycles cannot be detected statically, so every promotion
 carries a `chain_path`. The importing instance does not trust it as the
 only control: it rejects a unit when `len(chain_path) > NOTARX_PROMOTION_MAX_HOPS`,
 when the path already contains its own `(instance_id, repository)`, and
-it always appends its own hop. A sender that omits `chain_path` is
+it always appends its own hop. A committed import records that path as the
+completed provenance row of the artifact in the target repository (key `import:<session id>`, written in the transaction
+that completes the session). A promotion out of a repository continues the path of the newest completed provenance row into
+it, whether an import or a local promotion, ending with the source's own hop (the empty instance of a hop is the instance that wrote the row), so the hop cap and the repeated
+`(instance, repository)` check cover the whole route (`422 chain_too_long`, `422 chain_loop`). A sender that omits `chain_path` is
 treated as depth 0 by the receiver and still bounded by the receiver's own
 per-rule rate and the idempotency key. A `remote_instances` row whose
 `instance_id` equals the local instance id is rejected at registration.

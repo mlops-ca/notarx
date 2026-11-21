@@ -151,7 +151,7 @@ func exerciseNexusOCICompletePublication(t *testing.T, store nexusOCIContractSto
 	p := NewNexusOCIMigrationPublication(store, objects)
 	// The closure's manifests emit artifact.published in the publish transaction and the scan consumer schedules their
 	// scans; the first pass creates the consumer's cursor.
-	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatOCI}, nil).Consumer()}}
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatOCI}, testEventRetention, nil).Consumer()}}
 	if _, err = dispatcher.RunOnce(ctx); err != nil {
 		t.Fatal(err)
 	}

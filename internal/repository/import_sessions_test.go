@@ -66,7 +66,10 @@ func dg(label string) string {
 // exerciseImportSessionStore is the contract of ImportSessionStore, run against the in-memory and PostgreSQL stores.
 // stagedNow reports the claimed bytes of every live session of the store, the ones of other tests included (a shared test
 // database), so the staging quota can be set relative to them.
-func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principal string, stagedNow func() int64) {
+func exerciseImportSessionStore(t *testing.T, store interface {
+	ImportSessionStore
+	ArtifactPromotionStore
+}, principal string, stagedNow func() int64) {
 	t.Helper()
 	ctx := context.Background()
 	f := importFixture{t: t, store: store, principal: principal, now: time.Now().UTC().Truncate(time.Microsecond),
@@ -368,14 +371,23 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	if err = store.RecordImportBlob(ctx, live.ID, dg("y"), 7, f.now); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("a blob while committing = %v", err)
 	}
-	if err = store.CompleteImportSession(ctx, live.ID, f.now); err != nil {
+	if err = store.CompleteImportSession(ctx, live.ID, f.now, importDraft(live)); err != nil {
 		t.Fatal(err)
+	}
+	if row, getErr := store.GetArtifactPromotionRoute(ctx, live.TargetRepositoryID, live.Format, live.Coordinate, live.Digest); getErr != nil || row.State != ArtifactPromotionCompleted || row.IdempotencyKey != ImportPromotionKey(live.ID) || row.JobID != "" || row.CompletedAt.IsZero() || row.RequestedBy != live.Principal || len(row.ChainPath) != len(live.ChainPath) {
+		t.Fatalf("import provenance = %+v %v", row, getErr)
 	}
 	if got, _ := store.GetImportSession(ctx, live.ID); got.State != ImportSessionCommitted {
 		t.Fatalf("state = %s", got.State)
 	}
-	if err = store.CompleteImportSession(ctx, live.ID, f.now); !errors.Is(err, ErrImportSessionClosed) {
+	if err = store.CompleteImportSession(ctx, live.ID, f.now, importDraft(live)); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("completing twice = %v", err)
+	}
+	if page, pageErr := store.PageArtifactPromotions(ctx, ArtifactPromotionQuery{TargetRepositoryID: live.TargetRepositoryID}); pageErr != nil || len(page.Items) != 1 {
+		t.Fatalf("completing twice wrote %d provenance rows: %v", len(page.Items), pageErr)
+	}
+	if _, getErr := store.GetArtifactPromotionRoute(ctx, live.TargetRepositoryID, live.Format, live.Coordinate, "sha256:"+strings.Repeat("0", 64)); !errors.Is(getErr, ErrNotFound) {
+		t.Fatalf("another digest = %v", getErr)
 	}
 	if err = store.AbortImportSession(ctx, live.ID, f.now); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("aborting a committed session = %v", err)
@@ -414,7 +426,7 @@ func exerciseImportReaper(t *testing.T, f importFixture) {
 	if err := store.BeginImportCommit(ctx, committed.ID, f.now); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.CompleteImportSession(ctx, committed.ID, f.now); err != nil {
+	if err := store.CompleteImportSession(ctx, committed.ID, f.now, importDraft(committed)); err != nil {
 		t.Fatal(err)
 	}
 	// The sessions made above expire an hour after f.now; "expired" is made past its expiry by reaping from the future,
@@ -537,4 +549,10 @@ func exerciseImportReaper(t *testing.T, f importFixture) {
 	if got, _ := store.GetImportSession(ctx, stuck.ID); got.State != ImportSessionOpen {
 		t.Fatalf("the stuck session = %s", got.State)
 	}
+}
+
+// importDraft is the provenance draft an import commit hands to CompleteImportSession.
+func importDraft(session ImportSession) ArtifactPromotion {
+	return ArtifactPromotion{ID: uuid.NewString(), TargetRepositoryID: session.TargetRepositoryID, Format: session.Format, Coordinate: session.Coordinate, Digest: session.Digest,
+		OriginRepository: "origin", ChainPath: session.ChainPath, RequestedBy: session.Principal}
 }

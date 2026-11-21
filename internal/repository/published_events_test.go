@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sort"
 	"testing"
 	"time"
@@ -189,5 +190,90 @@ func TestMemoryRawRewriteOfTheSameReferenceKeepsTheUpdateTime(t *testing.T) {
 	}
 	if stored, err = store.GetRawAsset(ctx, "r", "a.txt"); err != nil || !stored.UpdatedAt.After(first.UpdatedAt) {
 		t.Fatalf("a content type change kept the update time: %v (%v)", stored.UpdatedAt, err)
+	}
+}
+
+// A publication that keeps failing stays at the head of its candidate query; the pass pages past it so the publications
+// behind it are still reconciled.
+func TestDrainPublishedCandidatesPagesPastFailingCandidates(t *testing.T) {
+	const limit = 3
+	all := make([]publishedCandidate, 0, 8)
+	for _, name := range []string{"bad1", "bad2", "bad3", "good1", "good2", "good3", "good4"} {
+		all = append(all, publishedCandidate{RepositoryID: "r", Format: "raw", Coordinate: name, Digest: "sha256:" + name})
+	}
+	emitted := map[string]bool{}
+	fetch := func(pageSize int) ([]publishedCandidate, error) {
+		var pending []publishedCandidate
+		for _, candidate := range all {
+			if !emitted[candidate.Coordinate] {
+				pending = append(pending, candidate)
+			}
+		}
+		if len(pending) > pageSize {
+			pending = pending[:pageSize]
+		}
+		return pending, nil
+	}
+	emit := func(candidate publishedCandidate) (bool, error) {
+		if len(candidate.Coordinate) > 3 && candidate.Coordinate[:3] == "bad" {
+			return false, errors.New("boom")
+		}
+		emitted[candidate.Coordinate] = true
+		return true, nil
+	}
+	written, failures := drainPublishedCandidates(context.Background(), limit, fetch, emit)
+	if written != limit || len(failures) != 3 || !emitted["good1"] || !emitted["good2"] || !emitted["good3"] || emitted["good4"] {
+		t.Fatalf("written=%d failures=%v emitted=%v, want %d writes behind 3 failing candidates and no more", written, failures, emitted, limit)
+	}
+	// Nothing left but failures: the pass ends instead of looping.
+	written, failures = drainPublishedCandidates(context.Background(), 10, fetch, emit)
+	if written != 1 || len(failures) != 3 {
+		t.Fatalf("second pass written=%d failures=%v", written, failures)
+	}
+}
+
+// A format whose publications keep failing ends the pass at the cap instead of widening its pages without bound.
+func TestDrainPublishedCandidatesStopsAtTheFailureCap(t *testing.T) {
+	var fetches int
+	fetch := func(pageSize int) ([]publishedCandidate, error) {
+		fetches++
+		out := make([]publishedCandidate, pageSize)
+		for i := range out {
+			out[i] = publishedCandidate{RepositoryID: "r", Format: "raw", Coordinate: "bad" + string(rune('a'+i%26)) + string(rune('a'+i/26%26)) + string(rune('a'+i/676)), Digest: "d"}
+		}
+		return out, nil
+	}
+	emit := func(publishedCandidate) (bool, error) { return false, errors.New("boom") }
+	written, failures := drainPublishedCandidates(context.Background(), 5, fetch, emit)
+	if written != 0 || len(failures) <= maxPassedPublicationsPerPass || fetches > maxPassedPublicationsPerPass {
+		t.Fatalf("written=%d failures=%d fetches=%d", written, len(failures), fetches)
+	}
+}
+
+// Candidates that another reconciler wrote in the meantime are passed over like failed ones, so the publications behind a
+// head of them are still reconciled.
+func TestDrainPublishedCandidatesPagesPastCandidatesAnotherReconcilerWrote(t *testing.T) {
+	all := []publishedCandidate{{Coordinate: "taken1"}, {Coordinate: "taken2"}, {Coordinate: "mine1"}, {Coordinate: "mine2"}}
+	taken := map[string]bool{"taken1": true, "taken2": true}
+	mine := map[string]bool{}
+	fetch := func(pageSize int) ([]publishedCandidate, error) {
+		var pending []publishedCandidate
+		for _, candidate := range all {
+			if !mine[candidate.Coordinate] {
+				pending = append(pending, candidate)
+			}
+		}
+		return pending[:min(pageSize, len(pending))], nil
+	}
+	emit := func(candidate publishedCandidate) (bool, error) {
+		if taken[candidate.Coordinate] {
+			return false, nil
+		}
+		mine[candidate.Coordinate] = true
+		return true, nil
+	}
+	written, failures := drainPublishedCandidates(context.Background(), 2, fetch, emit)
+	if written != 2 || len(failures) != 0 || !mine["mine1"] || !mine["mine2"] {
+		t.Fatalf("written=%d failures=%v mine=%v", written, failures, mine)
 	}
 }

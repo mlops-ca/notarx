@@ -6996,7 +6996,7 @@
       },
       "put": {
         "operationId": "updateRemoteInstance",
-        "description": "Replaces the registration. The remote is checked again unless the instance is disabled. An omitted token keeps the sealed token only while baseUrl and audience are unchanged; changing either of a static_token instance requires a new token in the same request (422 token_required), so a credential sealed for one host is never sent to another. Switching to workload_identity removes it.",
+        "description": "Replaces the registration. The remote is checked again unless the instance is disabled. An omitted token keeps the sealed token only while baseUrl and audience are unchanged; changing either of a static_token instance requires a new token in the same request (422 token_required), so a credential sealed for one host is never sent to another. An enabling update that discovers another instance id than the registered one is refused with 422 instance_changed unless the same request supplies a new token. Switching to workload_identity removes it.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -27529,7 +27529,6 @@
           "requestedBy",
           "state",
           "attempt",
-          "idempotencyKey",
           "approvals",
           "createdAt"
         ],
@@ -27581,10 +27580,7 @@
           "attempt": {
             "type": "integer",
             "minimum": 1,
-            "description": "The try of the idempotencyKey this row records."
-          },
-          "idempotencyKey": {
-            "type": "string"
+            "description": "The try of the idempotency key this row records."
           },
           "jobId": {
             "type": "string",

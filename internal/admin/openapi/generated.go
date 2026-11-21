@@ -6261,7 +6261,7 @@ type ArtifactPage struct {
 type ArtifactPromotion struct {
 	Approvals []PromotionApproval `json:"approvals"`
 
-	// Attempt The try of the idempotencyKey this row records.
+	// Attempt The try of the idempotency key this row records.
 	Attempt            int                    `json:"attempt"`
 	ChainPath          []PromotionChainHop    `json:"chainPath"`
 	CompletedAt        *time.Time             `json:"completedAt,omitempty"`
@@ -6270,7 +6270,6 @@ type ArtifactPromotion struct {
 	Digest             string                 `json:"digest"`
 	Format             Format                 `json:"format"`
 	Id                 openapi_types.UUID     `json:"id"`
-	IdempotencyKey     string                 `json:"idempotencyKey"`
 	JobId              *openapi_types.UUID    `json:"jobId,omitempty"`
 	OriginInstanceId   *openapi_types.UUID    `json:"originInstanceId,omitempty"`
 	OriginRepository   string                 `json:"originRepository"`

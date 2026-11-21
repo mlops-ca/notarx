@@ -64,19 +64,34 @@ func insertArtifactPromotion(ctx context.Context, q sqlRunner, promotion Artifac
 	if promotion.JobID != "" {
 		jobID = promotion.JobID
 	}
-	var ruleVersion any
+	var ruleVersion, completedAt any
 	if promotion.RuleVersion != 0 {
 		ruleVersion = promotion.RuleVersion
 	}
-	_, err = q.ExecContext(ctx, `INSERT INTO artifact_promotions (id,target_repository_id,format,coordinate,digest,origin_instance_id,origin_repository,rule_id,rule_version,chain_path,requested_by,state,attempt,idempotency_key,job_id,approvals)
-VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6::uuid,$7,$8::uuid,$9::bigint,$10::jsonb,$11,$12,$13,$14,$15::uuid,$16::jsonb)`,
+	if !promotion.CompletedAt.IsZero() {
+		completedAt = promotion.CompletedAt
+	}
+	_, err = q.ExecContext(ctx, `INSERT INTO artifact_promotions (id,target_repository_id,format,coordinate,digest,origin_instance_id,origin_repository,rule_id,rule_version,chain_path,requested_by,state,attempt,idempotency_key,job_id,approvals,completed_at)
+VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6::uuid,$7,$8::uuid,$9::bigint,$10::jsonb,$11,$12,$13,$14,$15::uuid,$16::jsonb,$17::timestamptz)`,
 		promotion.ID, promotion.TargetRepositoryID, promotion.Format, promotion.Coordinate, promotion.Digest, originInstance, promotion.OriginRepository, ruleID,
-		ruleVersion, chain, promotion.RequestedBy, promotion.State, promotion.Attempt, promotion.IdempotencyKey, jobID, approvals)
+		ruleVersion, chain, promotion.RequestedBy, promotion.State, promotion.Attempt, promotion.IdempotencyKey, jobID, approvals, completedAt)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		return ErrIdempotencyConflict
 	}
 	return err
+}
+
+// GetArtifactPromotionRoute implements ArtifactPromotionStore.
+func (s *PostgresStore) GetArtifactPromotionRoute(ctx context.Context, targetRepositoryID string, format Format, coordinate, digest string) (ArtifactPromotion, error) {
+	var promotion ArtifactPromotion
+	err := scanArtifactPromotion(s.db.QueryRowContext(ctx, `SELECT `+artifactPromotionColumns+` FROM artifact_promotions
+WHERE target_repository_id=$1::uuid AND coordinate=$2 AND digest=$3 AND format=$4 AND state IN ('pending_approval','queued','running','completed')
+ORDER BY COALESCE(completed_at,created_at) DESC,artifact_promotions.id DESC LIMIT 1`, targetRepositoryID, coordinate, digest, string(format)), &promotion)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ArtifactPromotion{}, ErrNotFound
+	}
+	return promotion, err
 }
 
 // GetArtifactPromotionByJob implements ArtifactPromotionStore.

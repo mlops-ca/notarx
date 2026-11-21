@@ -4322,10 +4322,9 @@ export type ArtifactPromotion = {
   requestedBy: string;
   state: ArtifactPromotionState;
   /**
-   * The try of the idempotencyKey this row records.
+   * The try of the idempotency key this row records.
    */
   attempt: number;
-  idempotencyKey: string;
   jobId?: string;
   approvals: Array<PromotionApproval>;
   createdAt: string;

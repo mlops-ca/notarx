@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +27,9 @@ type PromotionService struct {
 	audit            repository.Store
 	promotions       repository.ArtifactPromotionStore
 	registry         *formatmodule.Registry
+	// instance names this instance in the chain paths of imported artifacts; maxHops is NOTARX_PROMOTION_MAX_HOPS.
+	instance localInstanceIDReader
+	maxHops  int
 	// quarantine rechecks that the source artifact exists and is distributable.
 	quarantine func(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest string) *PromotionError
 }
@@ -37,11 +41,21 @@ type promotionStores interface {
 	repository.PromotionBatchStore
 }
 
+// requirePromotionStores asserts the promotion ports of the gateway store once, at construction, so a store without them
+// fails the start of the gateway and never a request.
+func requirePromotionStores(store GatewayStore) (promotionStores, error) {
+	promotions, ok := store.(promotionStores)
+	if !ok {
+		return nil, errors.New("gateway store must implement the artifact promotion and promotion batch stores")
+	}
+	return promotions, nil
+}
+
 // newPromotionService wires the service from the management adapter's stores.
 func newPromotionService(h generatedRepositoryAPIAdapter) PromotionService {
 	return PromotionService{
-		store: h.sessions.store, securityPolicies: h.securityPolicies, intelligence: h.intelligence, audit: h.audit, promotions: h.sessions.store.(promotionStores),
-		registry: promotionFormatRegistry(promotionModuleDeps{Store: h.sessions.store}),
+		store: h.sessions.store, securityPolicies: h.securityPolicies, intelligence: h.intelligence, audit: h.audit, promotions: h.promotions,
+		registry: promotionFormatRegistry(promotionModuleDeps{Store: h.sessions.store}), instance: h.sessions.store, maxHops: promotionMaxHops(h.promotionMaxHops),
 		quarantine: func(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest string) *PromotionError {
 			return h.checkQuarantinedDistribution(ctx, principal, source, target, coordinate, digest, "promote")
 		},
@@ -59,9 +73,9 @@ type PromotionRequest struct {
 	IdempotencyKey string
 	// Rule is set when a promotion rule requests the promotion (ADR 0021, Evaluator); a manual request leaves it nil.
 	Rule *PromotionRuleOrigin
-	// admitted tells request that the caller already ran the admission checks for this request against the same resolved
-	// target (a release admits every member before it queues any), so they are not run a second time.
-	admitted bool
+	// admission is what the caller's admission checks of this request resolved against the same target (a batch or a
+	// release admits every member before it queues any); request uses it instead of running the checks a second time.
+	admission *promotionAdmission
 }
 
 // PromotionRuleOrigin ties a promotion to the rule that requested it. Key is the provenance idempotency key of the rule
@@ -141,6 +155,45 @@ func (s PromotionService) resolveTarget(ctx context.Context, source repository.H
 type promotionAdmission struct {
 	target    repository.HostedRepository
 	publisher formatmodule.PromotionPublisher
+	// chain is the chain path the artifact arrives with at the source repository: the stored path of an import, ending
+	// with this instance's hop there; nil for an artifact that was not imported.
+	chain []repository.PromotionChainHop
+}
+
+// sourceChain is the chain path the artifact carries at the source repository (ADR 0021, Chains): the path of the newest
+// completed promotion or import into the source, ending with the source's own hop (appended when the row is a local
+// promotion, whose path ends before its target), or just the source's hop for an artifact that was published there. A
+// promotion refuses a route that would exceed NOTARX_PROMOTION_MAX_HOPS (chain_too_long) or return to a repository of
+// this instance the artifact already passed (chain_loop).
+func (s PromotionService) sourceChain(ctx context.Context, in PromotionRequest, target repository.HostedRepository) ([]repository.PromotionChainHop, *PromotionError) {
+	var path []repository.PromotionChainHop
+	row, err := s.promotions.GetArtifactPromotionRoute(ctx, in.Source.ID, in.Source.Format, in.Coordinate, in.Digest)
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
+	case err != nil:
+		return nil, promotionError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
+	default:
+		path = slices.Clone(row.ChainPath)
+	}
+	local, err := s.instance.LocalInstanceID(ctx)
+	if err != nil {
+		return nil, promotionError(http.StatusInternalServerError, "internal_error", "read the local instance id failed")
+	}
+	onThisInstance := func(hop repository.PromotionChainHop, name string) bool {
+		return (hop.Instance == "" || strings.EqualFold(hop.Instance, local)) && hop.Repository == name
+	}
+	if len(path) == 0 || !onThisInstance(path[len(path)-1], in.Source.Name) {
+		path = append(path, repository.PromotionChainHop{Repository: in.Source.Name, At: time.Now().UTC()})
+	}
+	if len(path) > s.maxHops {
+		return nil, promotionError(http.StatusUnprocessableEntity, "chain_too_long", "the chain path of the artifact already has the maximum number of hops")
+	}
+	for _, hop := range path {
+		if onThisInstance(hop, target.Name) {
+			return nil, promotionError(http.StatusUnprocessableEntity, "chain_loop", "the artifact already passed the target repository")
+		}
+	}
+	return path, nil
 }
 
 // Admit runs the admission checks of a promotion (format capability, target, quarantine recheck, admission policy)
@@ -184,23 +237,20 @@ func (s PromotionService) admit(ctx context.Context, in PromotionRequest, resolv
 		}
 		return promotionAdmission{}, promotionError(http.StatusForbidden, "security_policy_denied", "promotion denied by security policy: "+strings.Join(evaluation.Reasons, ","))
 	}
-	return promotionAdmission{target: target, publisher: publisher}, nil
+	chain, perr := s.sourceChain(ctx, in, target)
+	if perr != nil {
+		return promotionAdmission{}, perr
+	}
+	return promotionAdmission{target: target, publisher: publisher, chain: chain}, nil
 }
 
 // admission is the outcome of the admission checks of a request: the checks themselves, or, for a request the caller already
 // admitted, what they resolved.
 func (s PromotionService) admission(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (promotionAdmission, *PromotionError) {
-	if !in.admitted {
-		return s.admit(ctx, in, resolved)
+	if in.admission != nil {
+		return *in.admission, nil
 	}
-	publisher, ok := formatmodule.Capability[formatmodule.PromotionPublisher](s.registry, in.Source.Format)
-	if !ok {
-		return promotionAdmission{}, errUnsupportedPromotionFormat
-	}
-	if resolved.err != nil {
-		return promotionAdmission{}, resolved.err
-	}
-	return promotionAdmission{target: resolved.repo, publisher: publisher}, nil
+	return s.admit(ctx, in, resolved)
 }
 
 // Request runs the admission checks and enqueues the promotion job.
@@ -215,10 +265,9 @@ func (s PromotionService) request(ctx context.Context, in PromotionRequest, reso
 	}
 	source, target, publisher := in.Source, admission.target, admission.publisher
 	audit := repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: in.Principal.Actor, Resource: in.Coordinate, Operation: "promote", Status: http.StatusAccepted}
-	now := time.Now().UTC()
 	provenance := repository.ArtifactPromotion{
 		ID: ids.New(), Format: source.Format, Coordinate: in.Coordinate, Digest: in.Digest, OriginRepository: source.Name,
-		ChainPath:   []repository.PromotionChainHop{{Repository: source.Name, At: now}},
+		ChainPath:   admission.chain,
 		RequestedBy: in.Principal.Actor, IdempotencyKey: promotionIdempotencyKey(target.ID, in.IdempotencyKey),
 	}
 	jobKey := in.IdempotencyKey
@@ -231,7 +280,7 @@ func (s PromotionService) request(ctx context.Context, in PromotionRequest, reso
 			return *replay, nil
 		}
 		provenance.IdempotencyKey, provenance.RuleID, provenance.RuleVersion, provenance.Attempt = in.Rule.Key, in.Rule.RuleID, in.Rule.RuleVersion, attempt
-		provenance.ChainPath[0].RuleID = in.Rule.RuleID
+		provenance.ChainPath[len(provenance.ChainPath)-1].RuleID = in.Rule.RuleID
 		jobKey = in.Rule.Key
 		if attempt > 1 {
 			jobKey += "#" + strconv.Itoa(attempt)

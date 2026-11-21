@@ -327,7 +327,7 @@ func TestManualPromotionReplayAfterTheJobIsPrunedReturnsTheStoredOutcome(t *test
 		t.Fatalf("promotion=%d %s", first.Code, first.Body.String())
 	}
 	pruned := prunedJobStore{f.store}
-	service := PromotionService{store: pruned, securityPolicies: f.store, intelligence: f.store, audit: f.store, promotions: f.store,
+	service := PromotionService{store: pruned, securityPolicies: f.store, intelligence: f.store, audit: f.store, promotions: f.store, instance: f.store, maxHops: 8,
 		registry: promotionFormatRegistry(promotionModuleDeps{Store: pruned}),
 		quarantine: func(context.Context, Principal, repository.HostedRepository, repository.HostedRepository, string, string) *PromotionError {
 			return nil

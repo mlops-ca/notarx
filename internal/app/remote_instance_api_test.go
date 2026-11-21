@@ -448,3 +448,46 @@ func TestWellKnownInstanceDocumentAdvertisesTheConfiguredImportLimits(t *testing
 		t.Fatalf("well-known = %d %s", w.Code, w.Body.String())
 	}
 }
+
+func TestRemoteInstanceUpdateRefusesAChangedInstanceIDUnderAKeptToken(t *testing.T) {
+	t.Setenv(secrets.KeyEnv, "0123456789abcdef0123456789abcdef")
+	store := repository.NewMemoryStore()
+	peerID, movedID := "0197c0de-0000-7000-8000-000000000001", "0197c0de-0000-7000-8000-000000000009"
+	discoverer := &fakeDiscoverer{documents: map[string]remoteinstance.Document{"https://peer.example.test": remoteDocument(peerID)}}
+	api := remoteAPI{t: t, handler: newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), RemoteDiscoverer: discoverer})}
+	path := "/api/v2/remote-instances"
+	created := api.do(http.MethodPost, path, "admin-secret", fmt.Sprintf(`{"name":"peer","baseUrl":"https://peer.example.test","authKind":"static_token","token":%q}`, remoteTestToken), "")
+	if created.Code != http.StatusCreated {
+		t.Fatalf("create = %d %s", created.Code, created.Body.String())
+	}
+	var instance struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &instance); err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.GetRemoteInstance(context.Background(), instance.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The host is repointed to another notarx instance.
+	discoverer.documents["https://peer.example.test"] = remoteDocument(movedID)
+	keep := `{"name":"peer","baseUrl":"https://peer.example.test","authKind":"static_token","enabled":true}`
+	if refused := api.do(http.MethodPut, path+"/"+instance.ID, "admin-secret", keep, "1"); refused.Code != http.StatusUnprocessableEntity || !strings.Contains(refused.Body.String(), "instance_changed") {
+		t.Fatalf("kept token under another instance id = %d %s", refused.Code, refused.Body.String())
+	}
+	if now, _ := store.GetRemoteInstance(context.Background(), instance.ID); now.InstanceID != peerID || now.TokenSealed != before.TokenSealed || now.Version != before.Version {
+		t.Fatalf("a refused update changed the instance: %+v", now)
+	}
+	// A disabled update does not discover, so it cannot adopt the id either.
+	if disabled := api.do(http.MethodPut, path+"/"+instance.ID, "admin-secret", `{"name":"peer","baseUrl":"https://peer.example.test","authKind":"static_token","enabled":false}`, "1"); disabled.Code != http.StatusOK {
+		t.Fatalf("disabled update = %d %s", disabled.Code, disabled.Body.String())
+	}
+	adopted := api.do(http.MethodPut, path+"/"+instance.ID, "admin-secret", `{"name":"peer","baseUrl":"https://peer.example.test","authKind":"static_token","token":"replacement-token-9876543210","enabled":true}`, "2")
+	if adopted.Code != http.StatusOK {
+		t.Fatalf("a new token may adopt the new id = %d %s", adopted.Code, adopted.Body.String())
+	}
+	if now, _ := store.GetRemoteInstance(context.Background(), instance.ID); now.InstanceID != movedID {
+		t.Fatalf("instance id = %s, want %s", now.InstanceID, movedID)
+	}
+}

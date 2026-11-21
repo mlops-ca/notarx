@@ -157,7 +157,7 @@ func TestPromotionBatchLoadsTargetAndPolicyOncePerStage(t *testing.T) {
 	counting := &countingPromotionStore{MemoryStore: f.store}
 	service := PromotionBatchService{
 		PromotionService: PromotionService{
-			store: counting, securityPolicies: counting, intelligence: f.store, promotions: f.store,
+			store: counting, securityPolicies: counting, intelligence: f.store, promotions: f.store, instance: f.store, maxHops: 8,
 			registry: promotionFormatRegistry(promotionModuleDeps{Store: f.store}),
 			quarantine: func(context.Context, Principal, repository.HostedRepository, repository.HostedRepository, string, string) *PromotionError {
 				return nil
@@ -174,9 +174,34 @@ func TestPromotionBatchLoadsTargetAndPolicyOncePerStage(t *testing.T) {
 	if perr != nil || len(view.Items) != len(items) {
 		t.Fatalf("batch=%+v err=%+v", view, perr)
 	}
-	// One read for admission of the whole batch and one for queueing it, however many items it holds.
-	if counting.targetReads != 2 || counting.policyReads != 2 {
-		t.Fatalf("target reads=%d policy reads=%d for %d items, want 2 and 2", counting.targetReads, counting.policyReads, len(items))
+	// One read admits and queues the whole batch, however many items it holds.
+	if counting.targetReads != 1 || counting.policyReads != 1 {
+		t.Fatalf("target reads=%d policy reads=%d for %d items, want 1 and 1", counting.targetReads, counting.policyReads, len(items))
+	}
+}
+
+// A replay admits the items that are still unqueued before it queues any, so an item refused since the batch was
+// recorded leaves the earlier ones unqueued too.
+func TestPromotionBatchReplayRefusedLateQueuesNothing(t *testing.T) {
+	f := newProvenanceFixture(t)
+	second := f.addRawAsset(t, "releases/second.txt")
+	items := []repository.PromotionBatchItem{{Coordinate: f.asset.Path, Digest: f.asset.Digest}, {Coordinate: second.Path, Digest: second.Digest}}
+	if _, _, err := f.store.CreatePromotionBatch(context.Background(), repository.PromotionBatch{
+		ID: "0198f8a0-0000-7000-8000-0000000000b1", SourceRepositoryID: f.source.ID, TargetRepositoryID: f.target.ID, RequestedBy: "promoter",
+		IdempotencyKey: "late", RequestHash: promotionBatchRequestHash(f.source.ID, f.target.ID, items), Items: items,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.ReplaceArtifactQuarantine(context.Background(), repository.ArtifactQuarantine{RepositoryID: f.source.ID, Format: repository.FormatRaw, Coordinate: second.Path, Digest: second.Digest, State: repository.ArtifactQuarantineStateQuarantined, Reason: "blocked", UpdatedBy: "user:security-admin"}, "0"); err != nil {
+		t.Fatal(err)
+	}
+	body := f.batchBody(batchItem(f.asset.Path, f.asset.Digest), batchItem(second.Path, second.Digest))
+	response := f.postBatch(t, body, "late", f.token)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "promotion_batch_rejected") {
+		t.Fatalf("replay=%d %s", response.Code, response.Body.String())
+	}
+	if rows := f.list(t, "", f.token); len(rows.Items) != 0 {
+		t.Fatalf("a batch refused at queue time left %d items queued", len(rows.Items))
 	}
 }
 
@@ -288,5 +313,14 @@ func TestPromotionBatchIsAuthorisedOnBothRepositories(t *testing.T) {
 	}
 	if response := f.getBatch(t, batch.Id.String(), ""); response.Code != http.StatusUnauthorized {
 		t.Fatalf("anonymous get=%d", response.Code)
+	}
+}
+
+func TestGatewayStoreWithoutThePromotionPortsFailsAtConstruction(t *testing.T) {
+	if _, err := requirePromotionStores(struct{ GatewayStore }{repository.NewMemoryStore()}); err == nil {
+		t.Fatal("a store without the promotion ports must be refused when the gateway is built")
+	}
+	if _, err := requirePromotionStores(repository.NewMemoryStore()); err != nil {
+		t.Fatal(err)
 	}
 }

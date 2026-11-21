@@ -138,26 +138,67 @@ func (s *PostgresStore) ReconcilePublishedEvents(ctx context.Context, floor time
 	written := 0
 	var failures []error
 	for _, query := range publishedCandidateQueries {
-		candidates, err := s.publishedCandidates(ctx, query, floor, limit)
-		if err != nil {
-			failures = append(failures, err)
-			continue
-		}
-		for _, candidate := range candidates {
-			emitted, err := s.emitPublishedOnce(ctx, candidate, floor)
-			if err != nil {
-				failures = append(failures, fmt.Errorf("%s publication %q in %s: %w", candidate.Format, candidate.Coordinate, candidate.RepositoryID, err))
-				continue
-			}
-			if emitted {
-				written++
-			}
-		}
+		queryWritten, queryFailures := drainPublishedCandidates(ctx, limit,
+			func(pageSize int) ([]publishedCandidate, error) {
+				return s.publishedCandidates(ctx, query, floor, pageSize)
+			},
+			func(candidate publishedCandidate) (bool, error) { return s.emitPublishedOnce(ctx, candidate, floor) })
+		written += queryWritten
+		failures = append(failures, queryFailures...)
 		if ctx.Err() != nil {
 			break
 		}
 	}
 	return written, errors.Join(failures...)
+}
+
+// maxPassedPublicationsPerPass bounds the pages of one format: a pass that met this many candidates it could not write
+// stops and reports it, so the window of a page cannot grow without limit.
+const maxPassedPublicationsPerPass = 256
+
+// drainPublishedCandidates emits the missing events of one format, at most limit of them. A candidate that is not written
+// (it failed, or another reconciler wrote it between the query and now) may keep matching the query and stay at its head,
+// so each page asks for as many extra candidates as were passed over in this pass and skips those: a publication that keeps
+// failing never hides the newer ones behind it (keyset paging would need the order key of every format's query; the
+// candidates passed over in one pass are few, and the pass stops at limit writes). A page asks for the writes still
+// allowed, so the pass ends once limit events were written or the candidates ran out. Only a cancelled context stops it
+// early.
+func drainPublishedCandidates(ctx context.Context, limit int, fetch func(pageSize int) ([]publishedCandidate, error), emit func(publishedCandidate) (bool, error)) (int, []error) {
+	written := 0
+	passed := map[publishedCandidate]bool{}
+	var failures []error
+	for written < limit && ctx.Err() == nil {
+		if len(passed) >= maxPassedPublicationsPerPass {
+			return written, append(failures, fmt.Errorf("%d publications were passed over in this pass; the rest of the format is left for the next one", len(passed)))
+		}
+		pageSize := limit - written + len(passed)
+		candidates, err := fetch(pageSize)
+		if err != nil {
+			return written, append(failures, err)
+		}
+		fresh := 0
+		for _, candidate := range candidates {
+			if passed[candidate] {
+				continue
+			}
+			fresh++
+			emitted, err := emit(candidate)
+			if err != nil {
+				failures = append(failures, fmt.Errorf("%s publication %q in %s: %w", candidate.Format, candidate.Coordinate, candidate.RepositoryID, err))
+				passed[candidate] = true
+				continue
+			}
+			if emitted {
+				written++
+				continue
+			}
+			passed[candidate] = true
+		}
+		if len(candidates) < pageSize || fresh == 0 {
+			break
+		}
+	}
+	return written, failures
 }
 
 func (s *PostgresStore) publishedCandidates(ctx context.Context, query string, floor time.Time, limit int) ([]publishedCandidate, error) {
