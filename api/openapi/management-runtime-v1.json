@@ -7418,6 +7418,68 @@
         }
       }
     },
+    "/assertion-subjects": {
+      "get": {
+        "operationId": "listAssertionSubjects",
+        "tags": [
+          "service-accounts"
+        ],
+        "description": "Lists the reserved assertion subjects (ADR 0020). A subject stays reserved after its service account is deleted; such an orphaned reservation is flagged and can be released. Administrator only.",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AssertionSubjectList"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/assertion-subjects/{subject}": {
+      "parameters": [
+        {
+          "name": "subject",
+          "in": "path",
+          "required": true,
+          "description": "The reserved subject, percent-encoded because it may contain reserved characters",
+          "schema": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "releaseAssertionSubject",
+        "tags": [
+          "service-accounts"
+        ],
+        "description": "Releases a reserved subject so that a new service account can take it (ADR 0020). Only a reservation without an owner can be released; a subject held by a live service account answers 409. The release is audited. Administrator only.",
+        "responses": {
+          "204": {
+            "description": "The subject was released"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/issuer": {
       "get": {
         "operationId": "getIssuerStatus",
@@ -24496,6 +24558,47 @@
           }
         }
       },
+      "AssertionSubject": {
+        "type": "object",
+        "required": [
+          "subject",
+          "orphaned",
+          "createdAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "subject": {
+            "type": "string"
+          },
+          "serviceAccountId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The owning service account; absent when the reservation is orphaned"
+          },
+          "orphaned": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AssertionSubjectList": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssertionSubject"
+            }
+          }
+        }
+      },
       "UserSession": {
         "type": "object",
         "required": [
@@ -28683,6 +28786,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/APIKey"
+            }
+          }
+        }
+      },
+      "AssertionSubjectList": {
+        "description": "Reserved assertion subjects",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/AssertionSubjectList"
             }
           }
         }

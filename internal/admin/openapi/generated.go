@@ -6058,6 +6058,21 @@ type ArtifactVulnerabilitySummary struct {
 // ArtifactVulnerabilitySummaryStatus defines model for ArtifactVulnerabilitySummary.Status.
 type ArtifactVulnerabilitySummaryStatus string
 
+// AssertionSubject defines model for AssertionSubject.
+type AssertionSubject struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Orphaned  bool      `json:"orphaned"`
+
+	// ServiceAccountId The owning service account; absent when the reservation is orphaned
+	ServiceAccountId *openapi_types.UUID `json:"serviceAccountId,omitempty"`
+	Subject          string              `json:"subject"`
+}
+
+// AssertionSubjectList defines model for AssertionSubjectList.
+type AssertionSubjectList struct {
+	Items []AssertionSubject `json:"items"`
+}
+
 // AuditCleanupJob defines model for AuditCleanupJob.
 type AuditCleanupJob struct {
 	BatchSize     int                  `json:"batchSize"`
@@ -12747,6 +12762,12 @@ type ServerInterface interface {
 	// (GET /artifact-search)
 	SearchArtifacts(w http.ResponseWriter, r *http.Request, params SearchArtifactsParams)
 
+	// (GET /assertion-subjects)
+	ListAssertionSubjects(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /assertion-subjects/{subject})
+	ReleaseAssertionSubject(w http.ResponseWriter, r *http.Request, subject string)
+
 	// (GET /audit-retention-policy)
 	GetAuditRetentionPolicy(w http.ResponseWriter, r *http.Request)
 
@@ -13799,6 +13820,46 @@ func (siw *ServerInterfaceWrapper) SearchArtifacts(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SearchArtifacts(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListAssertionSubjects operation middleware
+func (siw *ServerInterfaceWrapper) ListAssertionSubjects(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListAssertionSubjects(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReleaseAssertionSubject operation middleware
+func (siw *ServerInterfaceWrapper) ReleaseAssertionSubject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "subject" -------------
+	var subject string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "subject", r.PathValue("subject"), &subject, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subject", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReleaseAssertionSubject(w, r, subject)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -26125,6 +26186,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/assertion-audiences", wrapper.DeleteServiceAccountAssertionAudience)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/assertion-audiences", wrapper.ListServiceAccountAssertionAudiences)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/service-accounts/{serviceAccountId}/assertion-audiences", wrapper.PutServiceAccountAssertionAudience)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/assertion-subjects", wrapper.ListAssertionSubjects)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/assertion-subjects/{subject}", wrapper.ReleaseAssertionSubject)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/issuer", wrapper.GetIssuerStatus)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/issuer/rotation", wrapper.RotateIssuerKeys)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/issuer/keys/{kid}/revoke", wrapper.RevokeIssuerKey)
@@ -26312,6 +26375,8 @@ type ArtifactQuarantineJSONResponse struct {
 type ArtifactSummaryListJSONResponse ArtifactSummaryPage
 
 type ArtifactTombstoneListJSONResponse ArtifactTombstonePage
+
+type AssertionSubjectListJSONResponse AssertionSubjectList
 
 type AuditCleanupJobJSONResponse AuditCleanupJob
 
@@ -26763,6 +26828,147 @@ func (response SearchArtifacts501ApplicationProblemPlusJSONResponse) VisitSearch
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(501)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAssertionSubjectsRequestObject struct {
+}
+
+type ListAssertionSubjectsResponseObject interface {
+	VisitListAssertionSubjectsResponse(w http.ResponseWriter) error
+}
+
+type ListAssertionSubjects200JSONResponse struct {
+	AssertionSubjectListJSONResponse
+}
+
+func (response ListAssertionSubjects200JSONResponse) VisitListAssertionSubjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAssertionSubjects401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListAssertionSubjects401ApplicationProblemPlusJSONResponse) VisitListAssertionSubjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListAssertionSubjects403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListAssertionSubjects403ApplicationProblemPlusJSONResponse) VisitListAssertionSubjectsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReleaseAssertionSubjectRequestObject struct {
+	Subject string `json:"subject"`
+}
+
+type ReleaseAssertionSubjectResponseObject interface {
+	VisitReleaseAssertionSubjectResponse(w http.ResponseWriter) error
+}
+
+type ReleaseAssertionSubject204Response struct {
+}
+
+func (response ReleaseAssertionSubject204Response) VisitReleaseAssertionSubjectResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ReleaseAssertionSubject400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ReleaseAssertionSubject400ApplicationProblemPlusJSONResponse) VisitReleaseAssertionSubjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReleaseAssertionSubject401ApplicationProblemPlusJSONResponse Problem
+
+func (response ReleaseAssertionSubject401ApplicationProblemPlusJSONResponse) VisitReleaseAssertionSubjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReleaseAssertionSubject403ApplicationProblemPlusJSONResponse Problem
+
+func (response ReleaseAssertionSubject403ApplicationProblemPlusJSONResponse) VisitReleaseAssertionSubjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReleaseAssertionSubject404ApplicationProblemPlusJSONResponse Problem
+
+func (response ReleaseAssertionSubject404ApplicationProblemPlusJSONResponse) VisitReleaseAssertionSubjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ReleaseAssertionSubject409ApplicationProblemPlusJSONResponse Problem
+
+func (response ReleaseAssertionSubject409ApplicationProblemPlusJSONResponse) VisitReleaseAssertionSubjectResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -51033,6 +51239,12 @@ type StrictServerInterface interface {
 	// (GET /artifact-search)
 	SearchArtifacts(ctx context.Context, request SearchArtifactsRequestObject) (SearchArtifactsResponseObject, error)
 
+	// (GET /assertion-subjects)
+	ListAssertionSubjects(ctx context.Context, request ListAssertionSubjectsRequestObject) (ListAssertionSubjectsResponseObject, error)
+
+	// (DELETE /assertion-subjects/{subject})
+	ReleaseAssertionSubject(ctx context.Context, request ReleaseAssertionSubjectRequestObject) (ReleaseAssertionSubjectResponseObject, error)
+
 	// (GET /audit-retention-policy)
 	GetAuditRetentionPolicy(ctx context.Context, request GetAuditRetentionPolicyRequestObject) (GetAuditRetentionPolicyResponseObject, error)
 
@@ -52085,6 +52297,56 @@ func (sh *strictHandler) SearchArtifacts(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SearchArtifactsResponseObject); ok {
 		if err := validResponse.VisitSearchArtifactsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListAssertionSubjects operation middleware
+func (sh *strictHandler) ListAssertionSubjects(w http.ResponseWriter, r *http.Request) {
+	var request ListAssertionSubjectsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListAssertionSubjects(ctx, request.(ListAssertionSubjectsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListAssertionSubjects")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListAssertionSubjectsResponseObject); ok {
+		if err := validResponse.VisitListAssertionSubjectsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReleaseAssertionSubject operation middleware
+func (sh *strictHandler) ReleaseAssertionSubject(w http.ResponseWriter, r *http.Request, subject string) {
+	var request ReleaseAssertionSubjectRequestObject
+
+	request.Subject = subject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ReleaseAssertionSubject(ctx, request.(ReleaseAssertionSubjectRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReleaseAssertionSubject")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReleaseAssertionSubjectResponseObject); ok {
+		if err := validResponse.VisitReleaseAssertionSubjectResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -3482,6 +3482,20 @@ export type RuntimeLogPage = {
   source?: RuntimeLogSource;
 };
 
+export type AssertionSubject = {
+  subject: string;
+  /**
+   * The owning service account; absent when the reservation is orphaned
+   */
+  serviceAccountId?: string;
+  orphaned: boolean;
+  createdAt: string;
+};
+
+export type AssertionSubjectList = {
+  items: Array<AssertionSubject>;
+};
+
 export type UserSession = {
   id: string;
   userId: string;
@@ -12011,6 +12025,85 @@ export type PutServiceAccountAssertionAudienceResponses = {
 
 export type PutServiceAccountAssertionAudienceResponse =
   PutServiceAccountAssertionAudienceResponses[keyof PutServiceAccountAssertionAudienceResponses];
+
+export type ListAssertionSubjectsData = {
+  body?: never;
+  path?: never;
+  query?: never;
+  url: "/assertion-subjects";
+};
+
+export type ListAssertionSubjectsErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+};
+
+export type ListAssertionSubjectsError =
+  ListAssertionSubjectsErrors[keyof ListAssertionSubjectsErrors];
+
+export type ListAssertionSubjectsResponses = {
+  /**
+   * Reserved assertion subjects
+   */
+  200: AssertionSubjectList;
+};
+
+export type ListAssertionSubjectsResponse =
+  ListAssertionSubjectsResponses[keyof ListAssertionSubjectsResponses];
+
+export type ReleaseAssertionSubjectData = {
+  body?: never;
+  path: {
+    /**
+     * The reserved subject, percent-encoded because it may contain reserved characters
+     */
+    subject: string;
+  };
+  query?: never;
+  url: "/assertion-subjects/{subject}";
+};
+
+export type ReleaseAssertionSubjectErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+};
+
+export type ReleaseAssertionSubjectError =
+  ReleaseAssertionSubjectErrors[keyof ReleaseAssertionSubjectErrors];
+
+export type ReleaseAssertionSubjectResponses = {
+  /**
+   * The subject was released
+   */
+  204: void;
+};
+
+export type ReleaseAssertionSubjectResponse =
+  ReleaseAssertionSubjectResponses[keyof ReleaseAssertionSubjectResponses];
 
 export type GetIssuerStatusData = {
   body?: never;

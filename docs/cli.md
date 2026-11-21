@@ -857,6 +857,8 @@ issues it.
   mint OIDC assertions for (ADR 0020, see [the issuer guide](oidc-issuer.md)); `add` replaces the lifetime of an
   audience that is already allowed, and `remove` needs `--yes`. `notarxctl service-account show` prints the
   immutable assertion subject, and `service-account create --assertion-subject SUBJECT` sets a custom one.
+  `notarxctl service-account assertion-subject list` shows the reserved subjects, flagging the orphaned ones, and
+  `assertion-subject release SUBJECT --yes` frees an orphaned one (a subject held by a live account is refused).
 - Workload identity federation (ADR 0019) replaces stored secrets with the short-lived
   tokens CI platforms issue. `notarxctl workload issuer list|show|create|update|delete|probe`
   manages the trusted issuers (GitHub Actions, GitLab CI, Kubernetes, generic OIDC) and

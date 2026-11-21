@@ -221,6 +221,44 @@ func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, acco
 	return key, err
 }
 
+func (s *PostgresStore) ListAssertionSubjects(ctx context.Context) ([]AssertionSubject, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT subject, COALESCE(service_account_id::text, ''), created_at FROM service_account_assertion_subjects ORDER BY subject`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	subjects := []AssertionSubject{}
+	for rows.Next() {
+		var subject AssertionSubject
+		if err := rows.Scan(&subject.Subject, &subject.ServiceAccountID, &subject.CreatedAt); err != nil {
+			return nil, err
+		}
+		subjects = append(subjects, subject)
+	}
+	return subjects, rows.Err()
+}
+
+func (s *PostgresStore) ReleaseAssertionSubject(ctx context.Context, subject string, audit ...AuditRecord) error {
+	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
+		// The owner is read under a row lock so a concurrent delete of the account cannot change it between the check
+		// and the removal.
+		var owner sql.NullString
+		err := q.QueryRowContext(ctx, `SELECT service_account_id::text FROM service_account_assertion_subjects WHERE subject=$1 FOR UPDATE`, subject).Scan(&owner)
+		if errors.Is(err, sql.ErrNoRows) {
+			return struct{}{}, ErrNotFound
+		}
+		if err != nil {
+			return struct{}{}, err
+		}
+		if owner.Valid {
+			return struct{}{}, ErrAssertionSubjectHeld
+		}
+		_, err = q.ExecContext(ctx, `DELETE FROM service_account_assertion_subjects WHERE subject=$1`, subject)
+		return struct{}{}, err
+	})
+	return err
+}
+
 const assertionAudienceColumns = `service_account_id::text, audience, max_lifetime_seconds, created_at`
 
 func scanAssertionAudience(row interface{ Scan(...any) error }, entry *AssertionAudience) error {

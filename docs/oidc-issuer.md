@@ -81,6 +81,12 @@ hand, so the subject must be predictable and must never change silently.
   another account, so a new account of the same name cannot inherit the trust that was built on the
   old one. An account created before the issuer existed received the default subject when its name
   allows one, and has none otherwise.
+- Only an administrator can free a reservation. `notarxctl service-account assertion-subject list` shows every
+  reserved subject and flags the orphaned ones, whose service account was deleted. `notarxctl service-account
+  assertion-subject release SUBJECT --yes` removes an orphaned reservation and is audited
+  (`service_account.assertion_subject.release`); a subject held by a live account answers 409
+  `assertion_subject_held`. Release a subject only when the Entra federated credential built on it is gone,
+  because the next account that takes it inherits that trust.
 
 ## Entra setup
 

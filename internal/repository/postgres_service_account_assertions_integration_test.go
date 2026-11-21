@@ -122,3 +122,62 @@ func mustAccountByName(t *testing.T, store *PostgresStore, name string) string {
 	})
 	return id
 }
+
+func TestPostgresAssertionSubjectListAndRelease(t *testing.T) {
+	store := userGroupTestStore(t)
+	ctx := context.Background()
+	name := "release-" + uuid.NewString()[:8]
+	subject := DefaultAssertionSubjectPrefix + name
+	account, err := store.CreateServiceAccount(ctx, ServiceAccount{ID: uuid.NewString(), Name: name, AssertionSubject: subject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM service_account_assertion_subjects WHERE subject=$1`, subject)
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM service_accounts WHERE id=$1::uuid`, account.ID)
+	})
+	find := func() (AssertionSubject, bool) {
+		subjects, err := store.ListAssertionSubjects(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, item := range subjects {
+			if item.Subject == subject {
+				return item, true
+			}
+		}
+		return AssertionSubject{}, false
+	}
+	if item, ok := find(); !ok || item.Orphaned() || item.ServiceAccountID != account.ID || item.CreatedAt.IsZero() {
+		t.Fatalf("held reservation = %+v, %v", item, ok)
+	}
+	if err := store.ReleaseAssertionSubject(ctx, subject); !errors.Is(err, ErrAssertionSubjectHeld) {
+		t.Fatalf("release of a held subject err=%v", err)
+	}
+	if err := store.ReleaseAssertionSubject(ctx, subject+"-unknown"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("release of an unknown subject err=%v", err)
+	}
+	// Deleting the account nulls the owner (ON DELETE SET NULL) and keeps the reservation.
+	if _, err := store.db.ExecContext(ctx, `DELETE FROM service_accounts WHERE id=$1::uuid`, account.ID); err != nil {
+		t.Fatal(err)
+	}
+	if item, ok := find(); !ok || !item.Orphaned() {
+		t.Fatalf("orphaned reservation = %+v, %v", item, ok)
+	}
+	if _, err := store.CreateServiceAccount(ctx, ServiceAccount{ID: uuid.NewString(), Name: name, AssertionSubject: subject}); !errors.Is(err, ErrAssertionSubjectReserved) {
+		t.Fatalf("an orphaned subject must stay reserved, err=%v", err)
+	}
+	if err := store.ReleaseAssertionSubject(ctx, subject, AuditRecord{Actor: "test", Operation: "service_account.assertion_subject.release", Resource: "assertion-subjects", Status: 204}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := find(); ok {
+		t.Fatal("the released subject is still listed")
+	}
+	reborn, err := store.CreateServiceAccount(ctx, ServiceAccount{ID: uuid.NewString(), Name: name, AssertionSubject: subject})
+	if err != nil {
+		t.Fatalf("a released subject must be available again: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM service_accounts WHERE id=$1::uuid`, reborn.ID)
+	})
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDefaultAssertionSubject(t *testing.T) {
@@ -53,7 +54,7 @@ func TestMemoryAssertionSubjectsAreReservedForGood(t *testing.T) {
 	// The memory store has no delete; model the foreign key (ON DELETE SET NULL) directly.
 	store.mu.Lock()
 	delete(store.serviceAccounts, account.ID)
-	store.assertions.subjects[account.AssertionSubject] = ""
+	store.assertions.subjects[account.AssertionSubject] = memoryAssertionSubject{createdAt: time.Now().UTC()}
 	store.mu.Unlock()
 	if _, err := store.CreateServiceAccount(ctx, ServiceAccount{ID: "44444444-4444-4444-8444-444444444444", Name: "ci", AssertionSubject: "notarx:service-account:ci"}); !errors.Is(err, ErrAssertionSubjectReserved) {
 		t.Fatalf("a subject of a deleted account must stay reserved, err=%v", err)
@@ -149,5 +150,51 @@ func TestMemoryAssertionAudienceNeedsASubject(t *testing.T) {
 	account, _ := store.CreateServiceAccount(ctx, ServiceAccount{ID: "11111111-1111-4111-8111-111111111111", Name: "has space"})
 	if _, _, err := store.PutAssertionAudience(ctx, AssertionAudience{ServiceAccountID: account.ID, Audience: "a", MaxLifetimeSeconds: 60}); !errors.Is(err, ErrAssertionSubjectMissing) {
 		t.Fatalf("put for an account without a subject err=%v", err)
+	}
+}
+
+func TestMemoryAssertionSubjectListAndRelease(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	live, err := store.CreateServiceAccount(ctx, ServiceAccount{ID: "11111111-1111-4111-8111-111111111111", Name: "live", AssertionSubject: "notarx:service-account:live"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gone, err := store.CreateServiceAccount(ctx, ServiceAccount{ID: "22222222-2222-4222-8222-222222222222", Name: "gone", AssertionSubject: "notarx:service-account:gone"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The memory store has no delete; model the foreign key (ON DELETE SET NULL) directly.
+	store.mu.Lock()
+	delete(store.serviceAccounts, gone.ID)
+	reservation := store.assertions.subjects[gone.AssertionSubject]
+	reservation.accountID = ""
+	store.assertions.subjects[gone.AssertionSubject] = reservation
+	store.mu.Unlock()
+
+	subjects, err := store.ListAssertionSubjects(ctx)
+	if err != nil || len(subjects) != 2 || subjects[0].Subject != gone.AssertionSubject || !subjects[0].Orphaned() || subjects[1].ServiceAccountID != live.ID || subjects[1].Orphaned() || subjects[1].CreatedAt.IsZero() {
+		t.Fatalf("list = %+v, %v", subjects, err)
+	}
+	if err := store.ReleaseAssertionSubject(ctx, live.AssertionSubject); !errors.Is(err, ErrAssertionSubjectHeld) {
+		t.Fatalf("release of a held subject err=%v", err)
+	}
+	if err := store.ReleaseAssertionSubject(ctx, "notarx:service-account:unknown"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("release of an unknown subject err=%v", err)
+	}
+	audit := AuditRecord{Actor: "test", Operation: "service_account.assertion_subject.release", Resource: "assertion-subjects", Status: 204}
+	store.SetAuditFault(func(AuditRecord) error { return errors.New("audit store unavailable") })
+	if err := store.ReleaseAssertionSubject(ctx, gone.AssertionSubject, audit); err == nil {
+		t.Fatal("a release whose audit fails must fail")
+	}
+	store.SetAuditFault(nil)
+	if subjects, _ := store.ListAssertionSubjects(ctx); len(subjects) != 2 {
+		t.Fatalf("a failed audit rolled the release back, got %+v", subjects)
+	}
+	if err := store.ReleaseAssertionSubject(ctx, gone.AssertionSubject, audit); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateServiceAccount(ctx, ServiceAccount{ID: "44444444-4444-4444-8444-444444444444", Name: "gone", AssertionSubject: gone.AssertionSubject}); err != nil {
+		t.Fatalf("a released subject must be available again: %v", err)
 	}
 }

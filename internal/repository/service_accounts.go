@@ -40,6 +40,17 @@ type AssertionAudience struct {
 	CreatedAt          time.Time
 }
 
+// AssertionSubject is one reserved assertion subject (ADR 0020). ServiceAccountID is empty once the owning account was
+// deleted: the reservation then stays until an administrator releases it.
+type AssertionSubject struct {
+	Subject          string
+	ServiceAccountID string
+	CreatedAt        time.Time
+}
+
+// Orphaned reports whether no live service account owns the subject.
+func (s AssertionSubject) Orphaned() bool { return s.ServiceAccountID == "" }
+
 // Bounds of the assertion allow-list, mirrored by the check constraints of migration 000016.
 const (
 	MinAssertionLifetimeSeconds = 60
@@ -101,6 +112,11 @@ type ServiceAccountStore interface {
 	GetAssertionAudience(ctx context.Context, accountID, audience string) (AssertionAudience, error)
 	// PutAssertionAudience adds an entry or replaces the lifetime of an existing one and reports whether it was added.
 	PutAssertionAudience(ctx context.Context, entry AssertionAudience, audit ...AuditRecord) (AssertionAudience, bool, error)
+	// ListAssertionSubjects returns every reserved assertion subject ordered by subject, owned or orphaned.
+	ListAssertionSubjects(ctx context.Context) ([]AssertionSubject, error)
+	// ReleaseAssertionSubject deletes the reservation of an orphaned subject and records audit in the same transaction;
+	// ErrNotFound for an unknown subject and ErrAssertionSubjectHeld when a live account still owns it.
+	ReleaseAssertionSubject(ctx context.Context, subject string, audit ...AuditRecord) error
 	// DeleteAssertionAudience removes an entry; ErrNotFound when it does not exist.
 	DeleteAssertionAudience(ctx context.Context, accountID, audience string, audit ...AuditRecord) error
 }

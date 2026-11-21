@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -51,6 +52,29 @@ func newAssertionFixture(t *testing.T, enabled bool) *assertionFixture {
 type auditFaultStore struct {
 	*repository.MemoryStore
 	failing map[string]bool
+	// orphans are reserved subjects of deleted accounts; the memory store has no account delete to produce them.
+	orphans map[string]time.Time
+}
+
+func (s *auditFaultStore) ListAssertionSubjects(ctx context.Context) ([]repository.AssertionSubject, error) {
+	subjects, err := s.MemoryStore.ListAssertionSubjects(ctx)
+	for subject, createdAt := range s.orphans {
+		subjects = append(subjects, repository.AssertionSubject{Subject: subject, CreatedAt: createdAt})
+	}
+	return subjects, err
+}
+
+func (s *auditFaultStore) ReleaseAssertionSubject(ctx context.Context, subject string, audit ...repository.AuditRecord) error {
+	if _, ok := s.orphans[subject]; !ok {
+		return s.MemoryStore.ReleaseAssertionSubject(ctx, subject, audit...)
+	}
+	for _, record := range audit {
+		if err := s.MemoryStore.RecordAudit(ctx, record); err != nil {
+			return err
+		}
+	}
+	delete(s.orphans, subject)
+	return nil
 }
 
 func (s *auditFaultStore) RecordAudit(ctx context.Context, record repository.AuditRecord) error {
@@ -585,5 +609,66 @@ func TestIssuerAdminAPIWhileDisabled(t *testing.T) {
 	}
 	if response := f.call(http.MethodPost, "/api/v2/issuer/keys/k/revoke", "root", ""); response.Code != http.StatusNotFound {
 		t.Fatalf("revoke: %d", response.Code)
+	}
+}
+
+func TestAssertionSubjectListAndRelease(t *testing.T) {
+	f := newAssertionFixture(t, true)
+	account := f.account(`{"name":"keeper"}`)
+	orphan := "notarx:service-account:gone/with slash"
+	f.store.orphans = map[string]time.Time{orphan: time.Now().UTC()}
+	list := f.call(http.MethodGet, "/api/v2/assertion-subjects", "root", "")
+	var page struct {
+		Items []struct {
+			Subject          string `json:"subject"`
+			ServiceAccountID string `json:"serviceAccountId"`
+			Orphaned         bool   `json:"orphaned"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(list.Body.Bytes(), &page); err != nil || list.Code != http.StatusOK || len(page.Items) != 2 {
+		t.Fatalf("list: %d %s", list.Code, list.Body.String())
+	}
+	for _, item := range page.Items {
+		switch item.Subject {
+		case orphan:
+			if !item.Orphaned || item.ServiceAccountID != "" {
+				t.Fatalf("orphan = %+v", item)
+			}
+		case "notarx:service-account:keeper":
+			if item.Orphaned || item.ServiceAccountID != account.ID {
+				t.Fatalf("held = %+v", item)
+			}
+		default:
+			t.Fatalf("unexpected subject %+v", item)
+		}
+	}
+	held := "/api/v2/assertion-subjects/" + url.PathEscape("notarx:service-account:keeper")
+	if response := f.call(http.MethodDelete, held, "root", ""); response.Code != http.StatusConflict || problemCode(t, response) != problemAssertionSubjectHeld {
+		t.Fatalf("release of a held subject: %d %s", response.Code, response.Body.String())
+	}
+	if response := f.call(http.MethodDelete, "/api/v2/assertion-subjects/nope", "root", ""); response.Code != http.StatusNotFound {
+		t.Fatalf("release of an unknown subject: %d", response.Code)
+	}
+	if response := f.call(http.MethodDelete, held, account.Token, ""); response.Code != http.StatusForbidden {
+		t.Fatalf("a service account releases a subject: %d", response.Code)
+	}
+	if response := f.call(http.MethodGet, "/api/v2/assertion-subjects", account.Token, ""); response.Code != http.StatusForbidden {
+		t.Fatalf("a service account lists subjects: %d", response.Code)
+	}
+	if response := f.call(http.MethodDelete, "/api/v2/assertion-subjects/"+url.PathEscape(orphan), "root", ""); response.Code != http.StatusNoContent {
+		t.Fatalf("release of an orphan: %d %s", response.Code, response.Body.String())
+	}
+	if response := f.call(http.MethodDelete, "/api/v2/assertion-subjects/"+url.PathEscape(orphan), "root", ""); response.Code != http.StatusNotFound {
+		t.Fatalf("release twice: %d", response.Code)
+	}
+	records, _ := f.store.ListAudits(context.Background(), repository.AuditQuery{Limit: 100})
+	released := 0
+	for _, record := range records {
+		if record.Operation == "service_account.assertion_subject.release" && record.Evidence["subject"] == orphan {
+			released++
+		}
+	}
+	if released != 1 {
+		t.Fatalf("expected one release audit event, got %d", released)
 	}
 }

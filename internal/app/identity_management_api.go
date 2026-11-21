@@ -34,6 +34,8 @@ type identityAPIKeyStore interface {
 type identityServiceAccountStore interface {
 	GetServiceAccount(context.Context, string) (repository.ServiceAccount, error)
 	ListAssertionAudiences(ctx context.Context, accountID string) ([]repository.AssertionAudience, error)
+	ListAssertionSubjects(ctx context.Context) ([]repository.AssertionSubject, error)
+	ReleaseAssertionSubject(ctx context.Context, subject string, audit ...repository.AuditRecord) error
 	GetAssertionAudience(ctx context.Context, accountID, audience string) (repository.AssertionAudience, error)
 	PutAssertionAudience(ctx context.Context, entry repository.AssertionAudience, audit ...repository.AuditRecord) (repository.AssertionAudience, bool, error)
 	DeleteAssertionAudience(ctx context.Context, accountID, audience string, audit ...repository.AuditRecord) error
