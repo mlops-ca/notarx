@@ -6821,7 +6821,7 @@
       },
       "put": {
         "operationId": "updateRemoteInstance",
-        "description": "Replaces the registration. The remote is checked again unless the instance is disabled. An omitted token keeps the sealed token; switching to workload_identity removes it.",
+        "description": "Replaces the registration. The remote is checked again unless the instance is disabled. An omitted token keeps the sealed token only while baseUrl and audience are unchanged; changing either of a static_token instance requires a new token in the same request (422 token_required), so a credential sealed for one host is never sent to another. Switching to workload_identity removes it.",
         "parameters": [
           {
             "$ref": "#/components/parameters/IfMatch"
@@ -24316,7 +24316,7 @@
             "minLength": 8,
             "maxLength": 4096,
             "writeOnly": true,
-            "description": "Replaces the sealed token; omit it to keep the stored one."
+            "description": "Replaces the sealed token. Omit it to keep the stored one, which is allowed only while baseUrl and audience are unchanged; a changed destination needs a new token (422 token_required)."
           },
           "trustEvidence": {
             "type": "boolean",

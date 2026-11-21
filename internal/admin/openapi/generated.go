@@ -10887,7 +10887,7 @@ type UpdateRemoteInstance struct {
 	Enabled  bool                   `json:"enabled"`
 	Name     string                 `json:"name"`
 
-	// Token Replaces the sealed token; omit it to keep the stored one.
+	// Token Replaces the sealed token. Omit it to keep the stored one, which is allowed only while baseUrl and audience are unchanged; a changed destination needs a new token (422 token_required).
 	Token         *string `json:"token,omitempty"`
 	TrustEvidence *bool   `json:"trustEvidence,omitempty"`
 }
