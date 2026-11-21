@@ -223,7 +223,7 @@ func refuseClaimedPromotions(ctx context.Context, port claimedPromotionPort, cla
 		}
 		switch {
 		case errors.Is(err, ErrNotFound):
-			err, reason = nil, "target admission policy could not be evaluated: the target repository no longer exists"
+			reason = "target admission policy could not be evaluated: the target repository no longer exists"
 		case err != nil:
 			// Transient: the verdict is unknown, so the job goes back unrun and its attempt is not spent.
 			if releaseErr := port.releaseClaimed(ctx, job); releaseErr != nil {

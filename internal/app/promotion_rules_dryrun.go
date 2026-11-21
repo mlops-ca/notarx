@@ -152,7 +152,7 @@ func (d *dryRun) tagsOf(ctx context.Context, candidate dryRunCandidate) ([]strin
 	if !cached {
 		var err error
 		if lookup, err = d.tagged.TagsOfName(ctx, d.source.ID, name); errors.Is(err, repository.ErrNotFound) {
-			lookup, err = func(string, string) []string { return nil }, nil
+			lookup = func(string, string) []string { return nil }
 		} else if err != nil {
 			return nil, err
 		}
