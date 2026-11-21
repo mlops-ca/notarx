@@ -90,6 +90,7 @@ func TestPostgresContainsArtifactSearchHTTP(t *testing.T) {
 // public repositories of other integration tests, which every search reads too.
 type countedSearchStore struct {
 	GatewayStore
+	promotionStores
 	counted map[string]bool
 	mu      sync.Mutex
 	probes  int
@@ -166,7 +167,7 @@ func TestPostgresContainsGlobalSearchProbeBudget(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	counted := &countedSearchStore{GatewayStore: store, counted: own, probed: map[string]bool{}}
+	counted := &countedSearchStore{GatewayStore: store, promotionStores: store, counted: own, probed: map[string]bool{}}
 	auth := testAuthenticator()
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: counted, NPMMetadata: store, NPMRestore: store, Adapter: TestAdapter{}, Authenticator: auth})
 	// matchesNothing is unique to this run and so in no repository: its search probes every readable one.
