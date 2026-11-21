@@ -1523,7 +1523,8 @@ export type Problem = {
     | "version_not_sealed"
     | "version_empty"
     | "checksum_mismatch"
-    | "promotion_batch_rejected";
+    | "promotion_batch_rejected"
+    | "in_use";
   message: string;
   requestId: string;
   /**
@@ -1534,6 +1535,10 @@ export type Problem = {
    * Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
    */
   members?: Array<VisibilityConflictMember>;
+  /**
+   * Present on in_use when a remote instance is deleted while promotion rules still target it. The blocking rules by name, at most 20.
+   */
+  rules?: Array<PromotionRuleReference>;
 };
 
 export type RepositoryPage = {
@@ -1993,6 +1998,11 @@ export type VisibilityConflictMember = {
   repositoryId: string;
   name: string;
   visibility: Visibility;
+};
+
+export type PromotionRuleReference = {
+  ruleId: string;
+  name: string;
 };
 
 /**

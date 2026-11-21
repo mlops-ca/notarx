@@ -18660,7 +18660,8 @@
               "version_not_sealed",
               "version_empty",
               "checksum_mismatch",
-              "promotion_batch_rejected"
+              "promotion_batch_rejected",
+              "in_use"
             ]
           },
           "message": {
@@ -18681,6 +18682,13 @@
             "description": "Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.",
             "items": {
               "$ref": "#/components/schemas/VisibilityConflictMember"
+            }
+          },
+          "rules": {
+            "type": "array",
+            "description": "Present on in_use when a remote instance is deleted while promotion rules still target it. The blocking rules by name, at most 20.",
+            "items": {
+              "$ref": "#/components/schemas/PromotionRuleReference"
             }
           }
         }
@@ -18887,6 +18895,22 @@
           },
           "visibility": {
             "$ref": "#/components/schemas/Visibility"
+          }
+        }
+      },
+      "PromotionRuleReference": {
+        "type": "object",
+        "required": [
+          "ruleId",
+          "name"
+        ],
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },

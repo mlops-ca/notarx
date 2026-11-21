@@ -148,6 +148,37 @@ describe("remote instances page", () => {
     });
   });
 
+  it("names the promotion rules that block deleting an instance", async () => {
+    const user = userEvent.setup();
+    mockList.mockResolvedValue({ data: { items: [staging] } } as never);
+    mockDelete.mockResolvedValue({
+      error: {
+        status: 409,
+        code: "in_use",
+        message: "remote instance is still the target of a promotion rule",
+        rules: [
+          { ruleId: "7c0f0a52-6d5b-4a43-8d2d-1a1c4a9b0e11", name: "nightly" },
+          { ruleId: "9e3d6f7e-4f2e-4a4a-8e60-5b0b2d3c9f22", name: "release" },
+        ],
+      },
+    } as never);
+    renderPage();
+    await user.click(
+      await screen.findByRole("button", { name: "Delete staging" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(
+      Array.from(dialog.querySelectorAll("button")).find(
+        (button) => button.textContent === "Delete",
+      )!,
+    );
+    expect(
+      await screen.findByText(
+        /promotion rules still target it \(nightly, release\)/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("deletes an instance after confirmation", async () => {
     const user = userEvent.setup();
     mockList.mockResolvedValue({ data: { items: [staging] } } as never);

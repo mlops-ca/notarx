@@ -4317,6 +4317,7 @@ Problem:
       - version_empty
       - checksum_mismatch
       - promotion_batch_rejected
+      - in_use
     message:
       type: string
     requestId:
@@ -4331,6 +4332,17 @@ Problem:
       description: Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
       items:
         "$ref": "#/VisibilityConflictMember"
+    rules:
+      type: array
+      description: Present on in_use when a remote instance is deleted while promotion rules still target it. The blocking rules by name, at most 20.
+      items:
+        "$ref": "#/PromotionRuleReference"
+PromotionRuleReference:
+  type: object
+  required: [ruleId, name]
+  properties:
+    ruleId: {type: string, format: uuid}
+    name: {type: string}
 VisibilityConflictMember:
   type: object
   required: [repositoryId, name, visibility]

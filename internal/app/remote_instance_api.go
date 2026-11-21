@@ -345,7 +345,7 @@ func (h remoteInstanceHandler) DeleteRemoteInstance(w http.ResponseWriter, r *ht
 		return
 	}
 	if errors.Is(err, repository.ErrRemoteInstanceInUse) {
-		writeHostedProblem(w, http.StatusConflict, "in_use", "remote instance is still the target of a promotion rule")
+		writeRemoteInstanceInUse(w, err)
 		return
 	}
 	if err != nil {
@@ -353,6 +353,20 @@ func (h remoteInstanceHandler) DeleteRemoteInstance(w http.ResponseWriter, r *ht
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// writeRemoteInstanceInUse answers 409 in_use. The body names the promotion rules that still target the instance, so the
+// Console can tell the administrator which rules to retarget or delete first.
+func writeRemoteInstanceInUse(w http.ResponseWriter, err error) {
+	rules := []repository.PromotionRuleRef{}
+	var inUse *repository.RemoteInstanceInUseError
+	if errors.As(err, &inUse) && inUse.Rules != nil {
+		rules = inUse.Rules
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(http.StatusConflict)
+	_ = json.NewEncoder(w).Encode(map[string]any{"type": "about:blank", "title": http.StatusText(http.StatusConflict), "status": http.StatusConflict, "code": "in_use",
+		"message": "remote instance is still the target of a promotion rule", "requestId": "", "rules": rules})
 }
 
 func (h remoteInstanceHandler) TestRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceID adminopenapi.RemoteInstanceId) {

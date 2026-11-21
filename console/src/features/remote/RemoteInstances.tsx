@@ -21,6 +21,7 @@ import { ConfirmDanger } from "../../components/ui/Modal";
 import { formatDate } from "../../lib/format";
 import { usePreferences } from "../../lib/preferences";
 import { unwrap } from "../../lib/query/client";
+import { remoteInstanceInUse } from "../../lib/remoteInstanceInUse";
 import { RemoteInstanceDialog } from "./RemoteInstanceDialog";
 import {
   useInvalidateRemoteInstances,
@@ -257,7 +258,12 @@ export function RemoteInstancesPage() {
         onConfirm={(instance) =>
           unwrap(
             deleteRemoteInstance({ path: { remoteInstanceId: instance.id } }),
-          ).then(() => {})
+          ).then(
+            () => {},
+            (error: unknown) => {
+              throw remoteInstanceInUse(error, instance.name);
+            },
+          )
         }
         onClose={() => setToDelete(null)}
         onDone={() => void invalidate()}

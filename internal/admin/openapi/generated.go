@@ -3580,6 +3580,7 @@ const (
 	ProblemCodeEncryptionKeyUnavailable         ProblemCode = "encryption_key_unavailable"
 	ProblemCodeIdempotencyConflict              ProblemCode = "idempotency_conflict"
 	ProblemCodeIdentityMismatch                 ProblemCode = "identity_mismatch"
+	ProblemCodeInUse                            ProblemCode = "in_use"
 	ProblemCodeInternalError                    ProblemCode = "internal_error"
 	ProblemCodeInvalidCursor                    ProblemCode = "invalid_cursor"
 	ProblemCodeInvalidFilter                    ProblemCode = "invalid_filter"
@@ -3642,6 +3643,8 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeIdempotencyConflict:
 		return true
 	case ProblemCodeIdentityMismatch:
+		return true
+	case ProblemCodeInUse:
 		return true
 	case ProblemCodeInternalError:
 		return true
@@ -9322,9 +9325,12 @@ type Problem struct {
 	Members   *[]VisibilityConflictMember `json:"members,omitempty"`
 	Message   string                      `json:"message"`
 	RequestId string                      `json:"requestId"`
-	Status    int                         `json:"status"`
-	Title     string                      `json:"title"`
-	Type      string                      `json:"type"`
+
+	// Rules Present on in_use when a remote instance is deleted while promotion rules still target it. The blocking rules by name, at most 20.
+	Rules  *[]PromotionRuleReference `json:"rules,omitempty"`
+	Status int                       `json:"status"`
+	Title  string                    `json:"title"`
+	Type   string                    `json:"type"`
 }
 
 // ProblemCode defines model for Problem.Code.
@@ -9541,6 +9547,12 @@ type PromotionRulePage struct {
 
 	// NextPageToken Present while more rules follow; pass it as pageToken for the next page.
 	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// PromotionRuleReference defines model for PromotionRuleReference.
+type PromotionRuleReference struct {
+	Name   string             `json:"name"`
+	RuleId openapi_types.UUID `json:"ruleId"`
 }
 
 // PromotionRuleScanCondition defines model for PromotionRuleScanCondition.

@@ -38,6 +38,8 @@ export const remoteInstancesEnCA = {
   "remoteInstances.deleteTitle": "Delete remote instance",
   "remoteInstances.deleteMessage":
     "Delete {name}? Promotion rules that target it stop working.",
+  "remoteInstances.inUse":
+    "{name} cannot be deleted: promotion rules still target it ({rules}). Retarget or delete those rules first.",
   "remoteInstances.loading": "Loading remote instances",
   "remoteInstances.emptyTitle": "No remote instances",
   "remoteInstances.emptyHint":

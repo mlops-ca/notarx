@@ -124,6 +124,31 @@ WHERE id=$1::uuid AND version=$11::text::bigint RETURNING `+remoteInstanceColumn
 }
 
 func (s *PostgresStore) DeleteRemoteInstance(ctx context.Context, id string, audit ...AuditRecord) error {
+	err := s.deleteRemoteInstance(ctx, id, audit)
+	if !errors.Is(err, ErrRemoteInstanceInUse) {
+		return err
+	}
+	// The failed statement aborted its transaction, so the blocking rules are read after it, by name in byte order.
+	rows, queryErr := s.db.QueryContext(ctx, `SELECT id::text,name FROM promotion_rules WHERE remote_instance_id=$1::uuid ORDER BY name COLLATE "C",id LIMIT $2`, id, RemoteInstanceInUseRuleLimit)
+	if queryErr != nil {
+		return errors.Join(err, queryErr)
+	}
+	defer func() { _ = rows.Close() }()
+	inUse := &RemoteInstanceInUseError{}
+	for rows.Next() {
+		var rule PromotionRuleRef
+		if scanErr := rows.Scan(&rule.ID, &rule.Name); scanErr != nil {
+			return errors.Join(err, scanErr)
+		}
+		inUse.Rules = append(inUse.Rules, rule)
+	}
+	if rowsErr := rows.Err(); rowsErr != nil {
+		return errors.Join(err, rowsErr)
+	}
+	return inUse
+}
+
+func (s *PostgresStore) deleteRemoteInstance(ctx context.Context, id string, audit []AuditRecord) error {
 	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
 		result, execErr := q.ExecContext(ctx, `DELETE FROM remote_instances WHERE id=$1::uuid`, id)
 		if isForeignKeyViolation(execErr) {
