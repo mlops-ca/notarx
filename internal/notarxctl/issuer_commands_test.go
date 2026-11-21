@@ -171,3 +171,27 @@ func TestServiceAccountShowAndCreateCarryTheAssertionSubject(t *testing.T) {
 		t.Fatalf("body = %q", sent)
 	}
 }
+
+func TestAssertionSubjectCommands(t *testing.T) {
+	api := newRouteAPI(t, "")
+	expectUsage(t, api,
+		[]string{"service-account", "assertion-subject", "release"},
+		[]string{"service-account", "assertion-subject", "release", " padded "},
+		[]string{"service-account", "assertion-subject", "release", "notarx:service-account:gone"},
+	)
+	api.on("GET", "/api/v2/assertion-subjects", 200, `{"items":[{"subject":"notarx:service-account:gone","orphaned":true,"createdAt":"2026-10-01T00:00:00Z"},{"subject":"notarx:service-account:ci","serviceAccountId":"`+accountID+`","orphaned":false,"createdAt":"2026-10-01T00:00:00Z"}]}`)
+	if code, stdout, stderr := runCLI(t, "service-account", "assertion-subject", "list"); code != ExitOK || !strings.Contains(stdout, "orphaned") || !strings.Contains(stdout, "held") || !strings.Contains(stdout, accountID) {
+		t.Fatalf("list: %d %s %s", code, stdout, stderr)
+	}
+	api.on("GET", "/api/v2/assertion-subjects", 200, `{"items":[]}`)
+	if code, stdout, _ := runCLI(t, "service-account", "assertion-subject", "list"); code != ExitOK || !strings.Contains(stdout, "no assertion subjects") {
+		t.Fatalf("empty list: %d %s", code, stdout)
+	}
+	if code, stdout, _ := runCLI(t, "service-account", "assertion-subject", "release", "a/b c", "--dry-run"); code != ExitOK || !strings.Contains(stdout, "DELETE") || !strings.Contains(stdout, "a%2Fb%20c") {
+		t.Fatalf("release dry run: %d %s", code, stdout)
+	}
+	api.on("DELETE", "/api/v2/assertion-subjects/notarx:service-account:gone", 204, "")
+	if code, stdout, stderr := runCLI(t, "service-account", "assertion-subject", "release", "notarx:service-account:gone", "--yes", "--json"); code != ExitOK || !strings.Contains(stdout, `"released": true`) {
+		t.Fatalf("release: %d %s %s", code, stdout, stderr)
+	}
+}

@@ -1036,6 +1036,25 @@ ServiceAccountAssertionAudienceList:
     items:
       type: array
       items: {"$ref": "#/ServiceAccountAssertionAudience"}
+AssertionSubject:
+  type: object
+  required: [subject, orphaned, createdAt]
+  additionalProperties: false
+  properties:
+    subject: {type: string}
+    serviceAccountId: {type: string, format: uuid, description: The owning service account; absent when the reservation is orphaned}
+    orphaned: {type: boolean}
+    createdAt: {type: string, format: date-time}
+AssertionSubjectList:
+  type: object
+  required: [items]
+  additionalProperties: false
+  properties:
+    items:
+      type: array
+      items: {"$ref": "#/AssertionSubject"}
+    nextPageToken:
+      type: string
 PutServiceAccountAssertionAudience:
   type: object
   required: [audience]

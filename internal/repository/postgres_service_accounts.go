@@ -221,6 +221,48 @@ func (s *PostgresStore) RevokeServiceAccountCredential(ctx context.Context, acco
 	return key, err
 }
 
+func (s *PostgresStore) ListAssertionSubjects(ctx context.Context, limit int, afterSubject string) ([]AssertionSubject, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT subject, COALESCE(service_account_id::text, ''), created_at FROM service_account_assertion_subjects
+		WHERE subject > $1 ORDER BY subject LIMIT $2`, afterSubject, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	subjects := []AssertionSubject{}
+	for rows.Next() {
+		var subject AssertionSubject
+		if err := rows.Scan(&subject.Subject, &subject.ServiceAccountID, &subject.CreatedAt); err != nil {
+			return nil, err
+		}
+		subjects = append(subjects, subject)
+	}
+	return subjects, rows.Err()
+}
+
+func (s *PostgresStore) ReleaseAssertionSubject(ctx context.Context, subject string, audit ...AuditRecord) error {
+	_, err := runAudited(ctx, s, audit, func(q sqlRunner) (struct{}, error) {
+		// The owner check is part of the statement, so it holds with or without a surrounding transaction.
+		done, err := q.ExecContext(ctx, `DELETE FROM service_account_assertion_subjects WHERE subject=$1 AND service_account_id IS NULL`, subject)
+		if err != nil {
+			return struct{}{}, err
+		}
+		if n, err := done.RowsAffected(); err != nil {
+			return struct{}{}, err
+		} else if n > 0 {
+			return struct{}{}, nil
+		}
+		var exists bool
+		if err := q.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM service_account_assertion_subjects WHERE subject=$1)`, subject).Scan(&exists); err != nil {
+			return struct{}{}, err
+		}
+		if exists {
+			return struct{}{}, ErrAssertionSubjectHeld
+		}
+		return struct{}{}, ErrNotFound
+	})
+	return err
+}
+
 const assertionAudienceColumns = `service_account_id::text, audience, max_lifetime_seconds, created_at`
 
 func scanAssertionAudience(row interface{ Scan(...any) error }, entry *AssertionAudience) error {

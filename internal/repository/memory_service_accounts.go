@@ -26,9 +26,9 @@ func (s *MemoryStore) CreateServiceAccount(ctx context.Context, account ServiceA
 	}
 	if account.AssertionSubject != "" {
 		if s.assertions.subjects == nil {
-			s.assertions.subjects = map[string]string{}
+			s.assertions.subjects = map[string]memoryAssertionSubject{}
 		}
-		s.assertions.subjects[account.AssertionSubject] = account.ID
+		s.assertions.subjects[account.AssertionSubject] = memoryAssertionSubject{accountID: account.ID, createdAt: time.Now().UTC()}
 	}
 	now := time.Now().UTC()
 	account.State = ServiceAccountActive
@@ -160,8 +160,45 @@ func (s *MemoryStore) RevokeServiceAccountCredential(ctx context.Context, accoun
 type memoryAssertionState struct {
 	// audiences maps an account id to its allow-list keyed by audience.
 	audiences map[string]map[string]AssertionAudience
-	// subjects maps a reserved subject to its account id; an empty id is a subject whose account was deleted.
-	subjects map[string]string
+	// subjects maps a reserved subject to its reservation; an empty account id is a subject whose account was deleted.
+	subjects map[string]memoryAssertionSubject
+}
+
+type memoryAssertionSubject struct {
+	accountID string
+	createdAt time.Time
+}
+
+func (s *MemoryStore) ListAssertionSubjects(_ context.Context, limit int, afterSubject string) ([]AssertionSubject, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	subjects := make([]AssertionSubject, 0, len(s.assertions.subjects))
+	for subject, reservation := range s.assertions.subjects {
+		subjects = append(subjects, AssertionSubject{Subject: subject, ServiceAccountID: reservation.accountID, CreatedAt: reservation.createdAt})
+	}
+	sort.Slice(subjects, func(i, j int) bool { return subjects[i].Subject < subjects[j].Subject })
+	subjects = subjects[sort.Search(len(subjects), func(i int) bool { return subjects[i].Subject > afterSubject }):]
+	if len(subjects) > limit {
+		subjects = subjects[:limit]
+	}
+	return subjects, nil
+}
+
+func (s *MemoryStore) ReleaseAssertionSubject(ctx context.Context, subject string, audit ...AuditRecord) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	reservation, ok := s.assertions.subjects[subject]
+	if !ok {
+		return ErrNotFound
+	}
+	if reservation.accountID != "" {
+		return ErrAssertionSubjectHeld
+	}
+	if err := s.commitAuditLocked(ctx, audit); err != nil {
+		return err
+	}
+	delete(s.assertions.subjects, subject)
+	return nil
 }
 
 func (s *MemoryStore) ListAssertionAudiences(_ context.Context, accountID string) ([]AssertionAudience, error) {

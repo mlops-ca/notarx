@@ -751,6 +751,12 @@ ServiceAccountAssertionAudienceList:
     application/json:
       schema:
         "$ref": "../components/schemas.yaml#/ServiceAccountAssertionAudienceList"
+AssertionSubjectList:
+  description: Reserved assertion subjects
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/AssertionSubjectList"
 IssuerStatus:
   description: The OIDC issuer and its signing keys
   content:

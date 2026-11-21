@@ -389,3 +389,87 @@ func assertionAudienceRemoveCommand() command {
 		},
 	}
 }
+
+const assertionSubjectsPath = "/api/v2/assertion-subjects"
+
+func renderAssertionSubjects(w io.Writer, items []adminopenapi.AssertionSubject) error {
+	if len(items) == 0 {
+		return emptyLine(w, "assertion subjects")
+	}
+	table := [][]string{{"SUBJECT", "SERVICE ACCOUNT", "STATE", "RESERVED"}}
+	for _, item := range items {
+		owner, state := "-", "held"
+		if item.ServiceAccountId != nil {
+			owner = item.ServiceAccountId.String()
+		}
+		if item.Orphaned {
+			state = "orphaned"
+		}
+		table = append(table, []string{item.Subject, owner, state, item.CreatedAt.UTC().Format(time.RFC3339)})
+	}
+	return writeColumns(w, table)
+}
+
+func assertionSubjectListCommand() command {
+	list := &cursorList[adminopenapi.AssertionSubject]{
+		path:    assertionSubjectsPath,
+		command: "notarxctl service-account assertion-subject list",
+		noun:    "assertion subjects",
+		render:  renderAssertionSubjects,
+	}
+	return command{
+		name:     "service-account assertion-subject list",
+		synopsis: "list the reserved assertion subjects, with the orphaned ones that can be released",
+		usage:    "notarxctl service-account assertion-subject list [--page-size N] [--cursor TOKEN | --all [--max-pages N]] [--json]",
+		setFlags: list.setFlags,
+		meta: commandMeta{
+			Resource: "service-account", Scenarios: []string{"admin"}, Stage: "m2",
+			Endpoints: []string{"GET " + assertionSubjectsPath}, MinimumRole: "platform admin",
+			OutputSchema: "AssertionSubjectList", Pagination: true, DryRun: "unsupported", Retry: true,
+		},
+		run: list.run,
+	}
+}
+
+func assertionSubjectReleaseCommand() command {
+	return command{
+		name:        "service-account assertion-subject release",
+		synopsis:    "release the reservation of an orphaned assertion subject so a new account can take it",
+		usage:       "notarxctl service-account assertion-subject release SUBJECT --yes [--dry-run] [--json]",
+		positionals: 1,
+		argsUsage:   "SUBJECT",
+		meta: commandMeta{
+			Resource: "service-account", Scenarios: []string{"admin"}, Stage: "m2",
+			Endpoints: []string{"DELETE " + assertionSubjectsPath + "/{subject}"}, Mutating: true, MinimumRole: "platform admin",
+			DryRun: "client-plan",
+		},
+		run: func(ctx context.Context, env *commandContext) error {
+			subject := env.args[0]
+			if !repository.ValidAssertionText(subject) {
+				return &UsageError{Message: "SUBJECT must be 1 to 255 printable characters without surrounding spaces", Hint: "list the reserved subjects with notarxctl service-account assertion-subject list"}
+			}
+			if !env.globals.dryRun && !env.globals.yes {
+				return &UsageError{Message: "releasing a subject needs --yes: a new service account can then take it and inherit any federated credential built on it", Hint: "re-run with --yes, or with --dry-run to see the request"}
+			}
+			path := assertionSubjectsPath + "/" + url.PathEscape(subject)
+			if env.globals.dryRun {
+				plan := writePlan{Mode: "client-plan", Method: http.MethodDelete, Path: path, Headers: map[string]string{},
+					Verified: []string{"--yes is not needed for a plan"}, NotVerified: []string{"caller permission (platform admin)", "that the subject is reserved and orphaned"}}
+				return env.render(plan, nil, func(w io.Writer) error { return renderPlan(w, plan) })
+			}
+			client, err := env.client()
+			if err != nil {
+				return err
+			}
+			// Not retried: a repeat after a lost response answers 404 for the reservation it removed.
+			if _, err := client.sendJSON(ctx, http.MethodDelete, path, requestOptions{}, nil); err != nil {
+				return err
+			}
+			raw, _ := json.Marshal(map[string]any{"released": true, "subject": subject})
+			return env.render(json.RawMessage(raw), nil, func(w io.Writer) error {
+				_, err := fmt.Fprintf(w, "subject %s released\n", subject)
+				return err
+			})
+		},
+	}
+}

@@ -23,6 +23,7 @@ const (
 	problemAssertionLifetime           = "assertion_lifetime_exceeded"
 	problemAssertionSubjectMissing     = "assertion_subject_missing"
 	problemAssertionSubjectReserved    = "assertion_subject_reserved"
+	problemAssertionSubjectHeld        = "assertion_subject_held"
 	problemIssuerDisabled              = "issuer_disabled"
 	problemSigningUnavailable          = "signing_unavailable"
 )
@@ -261,4 +262,86 @@ func (h identityManagementHandler) assertionAudienceAudit(r *http.Request, accou
 		}
 	}
 	return records
+}
+
+func assertionSubjectResponse(subject repository.AssertionSubject) (adminopenapi.AssertionSubject, error) {
+	response := adminopenapi.AssertionSubject{Subject: subject.Subject, Orphaned: subject.Orphaned(), CreatedAt: subject.CreatedAt}
+	if !subject.Orphaned() {
+		id, err := uuid.Parse(subject.ServiceAccountID)
+		if err != nil {
+			return response, err
+		}
+		response.ServiceAccountId = &id
+	}
+	return response, nil
+}
+
+// ListAssertionSubjects implements GET /assertion-subjects: every reserved subject, with a flag for the orphaned ones
+// that an administrator may release (ADR 0020, "Subject stability").
+func (h identityManagementHandler) ListAssertionSubjects(w http.ResponseWriter, r *http.Request, params adminopenapi.ListAssertionSubjectsParams) {
+	if _, ok := h.authorize(w, r); !ok {
+		return
+	}
+	pageSize, after, ok := h.serviceAccountPageBounds(w, params.PageSize, params.PageToken, "assertion-subjects", "")
+	if !ok {
+		return
+	}
+	subjects, err := h.serviceAccounts.ListAssertionSubjects(r.Context(), pageSize+1, after)
+	if err != nil {
+		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list assertion subjects failed")
+		return
+	}
+	var nextPageToken *string
+	if len(subjects) > pageSize {
+		subjects = subjects[:pageSize]
+		nextPageToken = h.serviceAccountNextPageToken("assertion-subjects", "", subjects[len(subjects)-1].Subject)
+	}
+	items := make([]adminopenapi.AssertionSubject, 0, len(subjects))
+	for _, subject := range subjects {
+		item, err := assertionSubjectResponse(subject)
+		if err != nil {
+			slog.Error("assertion subject has a malformed owner", "subject", subject.Subject, "error", err)
+			writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "list assertion subjects failed")
+			return
+		}
+		items = append(items, item)
+	}
+	writeNativeMavenJSON(w, http.StatusOK, adminopenapi.AssertionSubjectList{Items: items, NextPageToken: nextPageToken})
+}
+
+// ReleaseAssertionSubject implements DELETE /assertion-subjects/{subject}. Only a reservation without an owner can be
+// released, so the Entra trust built on a live account's subject cannot be removed from under it. The release is
+// audited in the transaction of the delete.
+func (h identityManagementHandler) ReleaseAssertionSubject(w http.ResponseWriter, r *http.Request, subject string) {
+	if _, ok := h.authorize(w, r); !ok {
+		return
+	}
+	if !repository.ValidAssertionText(subject) {
+		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "a subject of 1 to 255 printable characters is required")
+		return
+	}
+	records := h.auditRecords(r, "assertion-subjects", "service_account.assertion_subject.release", http.StatusNoContent)
+	if len(records) == 0 {
+		// Freeing a subject hands its federated trust to the next account, so it is never done without a record.
+		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "an audit sink is required to release a subject")
+		return
+	}
+	for i := range records {
+		records[i].Class = repository.AuditClassSync
+		records[i].Evidence = map[string]string{"subject": subject}
+	}
+	err := h.serviceAccounts.ReleaseAssertionSubject(r.Context(), subject, records...)
+	if errors.Is(err, repository.ErrNotFound) {
+		writeHostedProblem(w, http.StatusNotFound, "not_found", "assertion subject not found")
+		return
+	}
+	if errors.Is(err, repository.ErrAssertionSubjectHeld) {
+		writeHostedProblem(w, http.StatusConflict, problemAssertionSubjectHeld, "the subject is held by a live service account and cannot be released")
+		return
+	}
+	if err != nil {
+		writeHostedProblem(w, http.StatusInternalServerError, "internal_error", "release assertion subject failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

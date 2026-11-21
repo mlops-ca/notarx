@@ -229,6 +229,10 @@ paths:
     "$ref": "./management/service-accounts.yaml#/service_accounts_serviceAccountId_assertions"
   "/service-accounts/{serviceAccountId}/assertion-audiences":
     "$ref": "./management/service-accounts.yaml#/service_accounts_serviceAccountId_assertion_audiences"
+  "/assertion-subjects":
+    "$ref": "./management/service-accounts.yaml#/assertion_subjects"
+  "/assertion-subjects/{subject}":
+    "$ref": "./management/service-accounts.yaml#/assertion_subjects_subject"
   "/issuer":
     "$ref": "./management/issuer.yaml#/issuer"
   "/issuer/rotation":

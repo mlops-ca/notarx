@@ -72,6 +72,8 @@ func registry() []command {
 		assertionAudienceListCommand(),
 		assertionAudienceAddCommand(),
 		assertionAudienceRemoveCommand(),
+		assertionSubjectListCommand(),
+		assertionSubjectReleaseCommand(),
 		repoListCommand(),
 		repoShowCommand(),
 		repoCreateCommand(),

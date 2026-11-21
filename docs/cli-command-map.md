@@ -220,6 +220,8 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `GET /service-accounts/{serviceAccountId}/assertion-audiences`<br>`listServiceAccountAssertionAudiences` | `service-account assertion-audience list <id>` | #73 | M2 implemented | A | Q |
 | `POST /service-accounts/{serviceAccountId}/assertion-audiences`<br>`putServiceAccountAssertionAudience` | `service-account assertion-audience add <id>` | #73 | M2 implemented | A | W |
 | `DELETE /service-accounts/{serviceAccountId}/assertion-audiences`<br>`deleteServiceAccountAssertionAudience` | `service-account assertion-audience remove <id>` | #73 | M2 implemented | A | W |
+| `GET /assertion-subjects`<br>`listAssertionSubjects` | `service-account assertion-subject list` | #559 | M2 implemented | A | Q |
+| `DELETE /assertion-subjects/{subject}`<br>`releaseAssertionSubject` | `service-account assertion-subject release <subject>` | #559 | M2 implemented | A | W |
 | `GET /issuer`<br>`getIssuerStatus` | `issuer status` | #73 | M2 implemented | A | Q |
 | `POST /issuer/rotation`<br>`rotateIssuerKeys` | `issuer rotate` | #73 | M2 implemented | A | W |
 | `POST /issuer/keys/{kid}/revoke`<br>`revokeIssuerKey` | `issuer revoke <kid>` | #73 | M2 implemented | A | W |
