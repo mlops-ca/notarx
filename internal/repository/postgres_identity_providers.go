@@ -184,5 +184,8 @@ func (s *PostgresStore) SeedIdentityProvider(ctx context.Context, provider ident
 		return false, err
 	}
 	affected, _ := result.RowsAffected()
+	if affected == 1 {
+		s.invalidateLocalScope(CacheScopeIdentityProvider)
+	}
 	return affected == 1, nil
 }

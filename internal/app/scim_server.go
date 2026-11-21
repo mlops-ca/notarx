@@ -101,27 +101,28 @@ func newSCIMServer(options SCIMOptions, store scimStore, audit repository.AuditR
 	return server
 }
 
-// findToken resolves an active token by the digest of its secret, through the cache when there is one.
-func (s *scimServer) findToken(ctx context.Context, hash string) (repository.SCIMToken, error) {
-	load := func(ctx context.Context) (repository.SCIMToken, error) {
-		return s.store.FindActiveSCIMTokenByHash(ctx, hash)
-	}
-	if s.tokens == nil {
+// cachedLookup reads through cache when there is one. A store that cannot send the eviction of a mutation to this
+// process (the memory store of the tests) leaves an entry until the revocation window ends.
+func cachedLookup[K comparable, V any](ctx context.Context, cache *readcache.Cache[K, V], key K, load func(context.Context) (V, error)) (V, error) {
+	if cache == nil {
 		return load(ctx)
 	}
-	return s.tokens.Get(ctx, hash, load)
+	return cache.Get(ctx, key, load)
 }
 
-// findProvider resolves the provider of a token, through the cache when there is one.
+// findToken resolves an active token by the digest of its secret.
+func (s *scimServer) findToken(ctx context.Context, hash string) (repository.SCIMToken, error) {
+	return cachedLookup(ctx, s.tokens, hash, func(ctx context.Context) (repository.SCIMToken, error) {
+		return s.store.FindActiveSCIMTokenByHash(ctx, hash)
+	})
+}
+
+// findProvider resolves the provider of a token.
 func (s *scimServer) findProvider(ctx context.Context, id string) (scimProvider, error) {
-	load := func(ctx context.Context) (scimProvider, error) {
+	return cachedLookup(ctx, s.providers, id, func(ctx context.Context) (scimProvider, error) {
 		provider, err := s.store.GetIdentityProvider(ctx, id)
 		return scimProvider{ID: provider.ID, Slug: provider.Slug, Enabled: provider.Enabled}, err
-	}
-	if s.providers == nil {
-		return load(ctx)
-	}
-	return s.providers.Get(ctx, id, load)
+	})
 }
 
 // scimCaller is the authenticated provider of a request.

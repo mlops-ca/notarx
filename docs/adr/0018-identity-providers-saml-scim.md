@@ -334,7 +334,9 @@ management API (`/api/v2`), with its own generated OpenAPI contract
   operation, resource id, outcome, request id) through the existing audit
   recorder; PATCH bodies are not logged verbatim, only changed attribute names. Every read
   is audited too: a successful `GET` or `HEAD` goes through the tiered writer's batched path
-  (ADR 0023 section 1), while writes and refusals commit synchronously. The token and the
+  (ADR 0023 section 1), with that path's guarantee (a record is dropped, and counted, only when
+  the bounded buffer is full; `NOTARX_AUDIT_READ_MODE=sync` commits every read before the
+  response), while writes and refusals commit synchronously. The token and the
   provider lookups of a request are cached for `NOTARX_AUTHZ_CACHE_TTL` (ADR 0023 section 6)
   and evicted by the cache notifications of migration 000018, so a revoked token, a disabled
   provider or a deleted provider stops authenticating within that revocation window.
