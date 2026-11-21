@@ -179,7 +179,10 @@ export function SubscriptionEditorDialog({
             mode="multiple"
             className="w-full"
             value={form.eventTypes}
-            options={WEBHOOK_EVENT_TYPES.map((value) => ({ value, label: value }))}
+            options={WEBHOOK_EVENT_TYPES.map((value) => ({
+              value,
+              label: value,
+            }))}
             onChange={(eventTypes) =>
               setForm((current) => ({ ...current, eventTypes }))
             }

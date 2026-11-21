@@ -5296,15 +5296,15 @@ func (e WebhookDeliveryState) Valid() bool {
 
 // Defines values for WebhookEventType.
 const (
+	WebhookEventTypeArtifactPromoted            WebhookEventType = "artifact.promoted"
 	WebhookEventTypeArtifactPublished           WebhookEventType = "artifact.published"
-	WebhookEventTypeArtifactScanCompleted       WebhookEventType = "artifact.scan.completed"
 	WebhookEventTypeArtifactQuarantined         WebhookEventType = "artifact.quarantined"
 	WebhookEventTypeArtifactReleased            WebhookEventType = "artifact.released"
-	WebhookEventTypeArtifactPromoted            WebhookEventType = "artifact.promoted"
-	WebhookEventTypePromotionPendingApproval    WebhookEventType = "promotion.pending_approval"
+	WebhookEventTypeArtifactScanCompleted       WebhookEventType = "artifact.scan.completed"
 	WebhookEventTypePromotionApproved           WebhookEventType = "promotion.approved"
-	WebhookEventTypePromotionRejected           WebhookEventType = "promotion.rejected"
 	WebhookEventTypePromotionFailed             WebhookEventType = "promotion.failed"
+	WebhookEventTypePromotionPendingApproval    WebhookEventType = "promotion.pending_approval"
+	WebhookEventTypePromotionRejected           WebhookEventType = "promotion.rejected"
 	WebhookEventTypeReplicationCompleted        WebhookEventType = "replication.completed"
 	WebhookEventTypeReplicationFailed           WebhookEventType = "replication.failed"
 	WebhookEventTypeRepositoryVisibilityChanged WebhookEventType = "repository.visibility_changed"
@@ -5313,23 +5313,23 @@ const (
 // Valid indicates whether the value is a known member of the WebhookEventType enum.
 func (e WebhookEventType) Valid() bool {
 	switch e {
-	case WebhookEventTypeArtifactPublished:
+	case WebhookEventTypeArtifactPromoted:
 		return true
-	case WebhookEventTypeArtifactScanCompleted:
+	case WebhookEventTypeArtifactPublished:
 		return true
 	case WebhookEventTypeArtifactQuarantined:
 		return true
 	case WebhookEventTypeArtifactReleased:
 		return true
-	case WebhookEventTypeArtifactPromoted:
-		return true
-	case WebhookEventTypePromotionPendingApproval:
+	case WebhookEventTypeArtifactScanCompleted:
 		return true
 	case WebhookEventTypePromotionApproved:
 		return true
-	case WebhookEventTypePromotionRejected:
-		return true
 	case WebhookEventTypePromotionFailed:
+		return true
+	case WebhookEventTypePromotionPendingApproval:
+		return true
+	case WebhookEventTypePromotionRejected:
 		return true
 	case WebhookEventTypeReplicationCompleted:
 		return true

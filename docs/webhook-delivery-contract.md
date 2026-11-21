@@ -78,7 +78,7 @@ emission.
 
 `domain_events` is range-partitioned monthly and a partition is dropped once it
 is entirely older than `NOTARX_EVENTS_RETENTION` (default 14 days, 3 on the
-free-tier profile). A delivery is inspectable and replayable while its event is
+free-tier profile). A delivery can be listed and replayed while its event is
 kept, so `webhook_deliveries` rows are pruned on the same schedule, and a pending or
 retrying delivery whose event is gone is parked as `dead` with the error
 `event is no longer retained`; it is no longer listed, and replaying it answers
