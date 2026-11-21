@@ -3888,6 +3888,7 @@
     "remoteInstances.deleteMessage",
     "remoteInstances.deleteRow",
     "remoteInstances.deleteTitle",
+    "remoteInstances.inUse",
     "repository.aRestorableDeletionRecordBytesAreReclaimedAfter",
     "repository.activeAndDeleting",
     "repository.admissionAndQuarantinedReads",
