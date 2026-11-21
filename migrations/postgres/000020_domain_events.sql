@@ -60,22 +60,39 @@ ALTER TABLE public.webhook_deliveries DROP CONSTRAINT webhook_deliveries_event_i
 ALTER TABLE public.webhook_deliveries ADD COLUMN event_occurred_at timestamp with time zone NOT NULL;
 DROP TABLE public.webhook_events;
 
+-- A subscription lists event types of the new catalogue (internal/events). One that still names a Cargo-only type can
+-- never fire, so it is deleted rather than rewritten.
+ALTER TABLE public.webhook_subscriptions DROP CONSTRAINT webhook_subscriptions_event_types_check;
+DELETE FROM public.webhook_subscriptions WHERE NOT (jsonb_typeof(event_types) = 'array' AND event_types <@ '["artifact.published", "artifact.scan.completed", "artifact.quarantined", "artifact.released", "artifact.promoted", "promotion.pending_approval", "promotion.approved", "promotion.rejected", "promotion.failed", "replication.completed", "replication.failed", "repository.visibility_changed"]'::jsonb);
+ALTER TABLE public.webhook_subscriptions ADD CONSTRAINT webhook_subscriptions_event_types_check CHECK (((jsonb_typeof(event_types) = 'array'::text) AND (jsonb_array_length(event_types) > 0) AND (event_types <@ '["artifact.published", "artifact.scan.completed", "artifact.quarantined", "artifact.released", "artifact.promoted", "promotion.pending_approval", "promotion.approved", "promotion.rejected", "promotion.failed", "replication.completed", "replication.failed", "repository.visibility_changed"]'::jsonb)));
+
+-- The event dispatcher elects the one node that reads the log for a consumer through a lease row in scheduled_tasks,
+-- like the partition manager: an internal row that is never due and that the management API does not list.
+ALTER TABLE public.scheduled_tasks
+    DROP CONSTRAINT scheduled_tasks_check,
+    DROP CONSTRAINT scheduled_tasks_kind_check,
+    ADD CONSTRAINT scheduled_tasks_check CHECK ((((kind = 'audit-retention'::text) AND (repository_id IS NULL)) OR ((kind = 'repository-retention'::text) AND (repository_id IS NOT NULL)) OR ((kind = ANY (ARRAY['partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text, 'event-dispatcher'::text])) AND (repository_id IS NULL) AND (NOT enabled)))),
+    ADD CONSTRAINT scheduled_tasks_kind_check CHECK ((kind = ANY (ARRAY['repository-retention'::text, 'audit-retention'::text, 'partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text, 'event-dispatcher'::text])));
+
 -- emit_domain_event is the one implementation of the emission rule, shared by internal/events.Emit and the
 -- database triggers below: in the caller's transaction it inserts the event and one webhook_deliveries row per
 -- matching enabled subscription, and writes nothing when no subscription and no internal consumer wants the
--- type. It returns whether the event was written.
+-- type. A NULL p_occurred_at takes the database clock, which keeps occurred_at on the clock that the dispatcher's settle
+-- delay and cursor use. It returns whether the event was written.
 -- +goose StatementBegin
 CREATE FUNCTION public.emit_domain_event(p_id uuid, p_type text, p_repository_id uuid, p_format text, p_coordinate text, p_digest text, p_payload jsonb, p_dedupe_key text, p_occurred_at timestamp with time zone, p_internal boolean) RETURNS boolean
     LANGUAGE plpgsql
-    AS $$
+    AS $
+DECLARE
+    occurred timestamp with time zone := COALESCE(p_occurred_at, clock_timestamp());
 BEGIN
     IF NOT p_internal AND NOT EXISTS (SELECT 1 FROM public.webhook_subscriptions WHERE enabled AND event_types @> jsonb_build_array(p_type)) THEN
         RETURN false;
     END IF;
     INSERT INTO public.domain_events (id,type,repository_id,format,coordinate,digest,payload,dedupe_key,occurred_at)
-    VALUES (p_id,p_type,p_repository_id,NULLIF(p_format,''),NULLIF(p_coordinate,''),NULLIF(p_digest,''),p_payload,p_dedupe_key,p_occurred_at);
+    VALUES (p_id,p_type,p_repository_id,NULLIF(p_format,''),NULLIF(p_coordinate,''),NULLIF(p_digest,''),p_payload,p_dedupe_key,occurred);
     INSERT INTO public.webhook_deliveries (id,event_id,event_occurred_at,subscription_id,state,next_attempt_at,created_at,updated_at)
-    SELECT gen_random_uuid(),p_id,p_occurred_at,s.id,'pending',clock.now,clock.now,clock.now
+    SELECT gen_random_uuid(),p_id,occurred,s.id,'pending',clock.now,clock.now,clock.now
     FROM public.webhook_subscriptions s CROSS JOIN (SELECT clock_timestamp() AS now) AS clock
     WHERE s.enabled AND s.event_types @> jsonb_build_array(p_type);
     RETURN true;
@@ -95,7 +112,7 @@ CREATE OR REPLACE FUNCTION public.cargo_promotion_state_webhook() RETURNS trigge
     AS $$
 DECLARE
     event_type text;
-    coordinate text := (NEW.payload->>'name') || '@' || (NEW.payload->>'version');
+    coordinate text := COALESCE(NEW.payload->>'name','') || '@' || COALESCE(NEW.payload->>'version','');
 BEGIN
     IF OLD.state='running' AND NEW.state IN ('completed','failed')
        AND NEW.kind='promotion' AND NEW.payload->>'format'='cargo' THEN
@@ -134,7 +151,7 @@ BEGIN
                 'coordinate',NEW.coordinate,'digest',NEW.digest,
                 'state',NEW.state,'attempts',NEW.attempts
             ),
-            event_type||'|'||NEW.target_repository_id||'|'||NEW.coordinate||'|'||COALESCE(NEW.digest,'')||'|'||NEW.id||':'||NEW.attempts,
+            event_type||'|'||NEW.target_repository_id||'|'||COALESCE(NEW.coordinate,'')||'|'||COALESCE(NEW.digest,'')||'|'||NEW.id||':'||NEW.attempts,
             COALESCE(NEW.completed_at,clock_timestamp()),false);
     END IF;
     RETURN NEW;

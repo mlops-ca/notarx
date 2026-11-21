@@ -129,9 +129,6 @@ func (s *PostgresStore) EnqueueWebhookEvent(ctx context.Context, event WebhookEv
 	if event.ID == "" {
 		event.ID = ids.New()
 	}
-	if event.OccurredAt.IsZero() {
-		event.OccurredAt = time.Now().UTC()
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return WebhookEvent{}, err
@@ -336,10 +333,18 @@ const getWebhookDeliveryQuery = `SELECT ` + webhookDeliveryColumns + ` FROM webh
 const claimWebhookDeliveriesQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), exhausted AS (
     UPDATE webhook_deliveries SET state='dead',next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now
     FROM clock WHERE state='delivering' AND lease_expires_at<=clock.now AND attempts>=8
+), orphaned AS (
+    -- The event log keeps events for NOTARX_EVENTS_RETENTION only; a delivery whose event is gone can never be sent.
+    UPDATE webhook_deliveries AS delivery SET state='dead',next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,
+        last_error='event is no longer retained',updated_at=clock.now
+    FROM clock WHERE delivery.state IN ('pending','retrying','delivering') AND COALESCE(delivery.next_attempt_at,delivery.lease_expires_at)<=clock.now
+      AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.id=delivery.event_id AND e.occurred_at=delivery.event_occurred_at)
 ), candidates AS (
     SELECT delivery.id FROM webhook_deliveries AS delivery CROSS JOIN clock
     WHERE ((state IN ('pending','retrying') AND next_attempt_at<=clock.now) OR (state='delivering' AND lease_expires_at<=clock.now))
-      AND attempts<8 ORDER BY COALESCE(next_attempt_at,lease_expires_at),created_at,id FOR UPDATE OF delivery SKIP LOCKED LIMIT $3
+      AND attempts<8
+      AND EXISTS (SELECT 1 FROM domain_events e WHERE e.id=delivery.event_id AND e.occurred_at=delivery.event_occurred_at)
+    ORDER BY COALESCE(next_attempt_at,lease_expires_at),created_at,id FOR UPDATE OF delivery SKIP LOCKED LIMIT $3
 ), claimed AS (
     UPDATE webhook_deliveries AS delivery SET state='delivering',attempts=delivery.attempts+1,next_attempt_at=NULL,
         lease_owner=$1,lease_token=gen_random_uuid(),lease_expires_at=clock.now+$2::interval,updated_at=clock.now

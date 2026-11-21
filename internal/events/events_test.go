@@ -78,7 +78,7 @@ func TestValidateAndPrepare(t *testing.T) {
 		t.Error(err)
 	}
 	prepared := Event{Type: ArtifactReleased}.Prepare()
-	if len(prepared.ID) != 36 || prepared.ID[14] != '7' || prepared.OccurredAt.IsZero() || string(prepared.Payload) != "{}" {
+	if len(prepared.ID) != 36 || prepared.ID[14] != '7' || !prepared.OccurredAt.IsZero() || string(prepared.Payload) != "{}" {
 		t.Errorf("prepared = %+v", prepared)
 	}
 	fixed := time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("x", 3600))
@@ -190,7 +190,7 @@ func TestEmitCallsTheDatabaseFunction(t *testing.T) {
 	if _, err = Emit(context.Background(), db, Event{Type: ArtifactPublished}); err != nil {
 		t.Fatal(err)
 	}
-	if r.args[1][9] != true || string(r.args[1][6].([]byte)) != "{}" {
+	if r.args[1][9] != true || string(r.args[1][6].([]byte)) != "{}" || r.args[1][8] != nil {
 		t.Errorf("published args = %v", r.args[1])
 	}
 }

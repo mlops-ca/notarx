@@ -43,5 +43,5 @@ func scanCompletedEvent(result ScanResult, previous *ScanResult, format Format, 
 	}
 	data, _ := json.Marshal(payload)
 	return WebhookEvent{ID: ids.New(), Type: WebhookEventArtifactScanCompleted, RepositoryID: result.RepositoryID, Format: string(format),
-		Digest: result.ArtifactDigest, Version: result.ID, OccurredAt: time.Now().UTC(), Data: data}
+		Digest: result.ArtifactDigest, Version: result.ID, Data: data}
 }

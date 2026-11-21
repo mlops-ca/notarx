@@ -3808,10 +3808,10 @@ tables:
       scheduled_tasks_due_idx: USING btree (next_run_at) WHERE enabled
       scheduled_tasks_name_idx: unique USING btree (lower(name))
     checks:
-      scheduled_tasks_check: (((kind = 'audit-retention'::text) AND (repository_id IS NULL)) OR ((kind = 'repository-retention'::text) AND (repository_id IS NOT NULL)) OR ((kind = ANY (ARRAY['partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text])) AND (repository_id IS NULL) AND (NOT enabled)))
+      scheduled_tasks_check: (((kind = 'audit-retention'::text) AND (repository_id IS NULL)) OR ((kind = 'repository-retention'::text) AND (repository_id IS NOT NULL)) OR ((kind = ANY (ARRAY['partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text, 'event-dispatcher'::text])) AND (repository_id IS NULL) AND (NOT enabled)))
       scheduled_tasks_description_check: (char_length(description) <= 500)
       scheduled_tasks_interval_seconds_check: ((interval_seconds >= 900) AND (interval_seconds <= 31536000))
-      scheduled_tasks_kind_check: (kind = ANY (ARRAY['repository-retention'::text, 'audit-retention'::text, 'partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text]))
+      scheduled_tasks_kind_check: (kind = ANY (ARRAY['repository-retention'::text, 'audit-retention'::text, 'partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text, 'event-dispatcher'::text]))
       scheduled_tasks_last_run_state_check: (last_run_state = ANY (ARRAY['submitted'::text, 'failed'::text]))
       scheduled_tasks_name_check: ((char_length(name) >= 1) AND (char_length(name) <= 100))
       scheduled_tasks_version_check: (version >= 1)
@@ -4184,7 +4184,7 @@ tables:
       webhook_subscriptions_name_bytes_idx: USING btree (name COLLATE "C")
     checks:
       webhook_subscriptions_endpoint_url_check: ((length(endpoint_url) >= 1) AND (length(endpoint_url) <= 2048))
-      webhook_subscriptions_event_types_check: ((jsonb_typeof(event_types) = 'array'::text) AND (jsonb_array_length(event_types) > 0) AND (event_types <@ '["artifact.quarantined", "artifact.released", "cargo.promotion.completed", "cargo.promotion.failed", "cargo.replication.completed", "cargo.replication.failed"]'::jsonb))
+      webhook_subscriptions_event_types_check: ((jsonb_typeof(event_types) = 'array'::text) AND (jsonb_array_length(event_types) > 0) AND (event_types <@ '["artifact.published", "artifact.scan.completed", "artifact.quarantined", "artifact.released", "artifact.promoted", "promotion.pending_approval", "promotion.approved", "promotion.rejected", "promotion.failed", "replication.completed", "replication.failed", "repository.visibility_changed"]'::jsonb))
       webhook_subscriptions_name_check: ((length(name) >= 1) AND (length(name) <= 128))
       webhook_subscriptions_secret_ciphertext_check: (secret_ciphertext <> ''::text)
       webhook_subscriptions_version_check: (version >= 1)

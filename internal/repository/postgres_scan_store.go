@@ -203,18 +203,16 @@ VALUES ($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12)`, entry.ID, en
 
 // emitScanCompletedPostgres emits artifact.scan.completed in the transaction that swapped the summary.
 func emitScanCompletedPostgres(ctx context.Context, tx sqlRunner, result ScanResult, previous *ScanResult) error {
-	var format Format
-	if err := tx.QueryRowContext(ctx, `SELECT format FROM hosted_repositories WHERE id = $1::uuid`, result.RepositoryID).Scan(&format); err != nil {
-		return err
-	}
 	var previousID any
 	if previous != nil {
 		previousID = previous.ID
 	}
+	var format Format
 	var newFindings int
-	if err := tx.QueryRowContext(ctx, `SELECT count(DISTINCT f.vuln_id) FROM artifact_vulnerability_finding f WHERE f.vulnerability_id = $1::uuid AND f.status <> 'suppressed'
-AND ($2::uuid IS NULL OR NOT EXISTS (SELECT 1 FROM artifact_vulnerability_finding p WHERE p.vulnerability_id = $2::uuid AND p.vuln_id = f.vuln_id AND p.status <> 'suppressed'))`,
-		result.ID, previousID).Scan(&newFindings); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE((SELECT format FROM hosted_repositories WHERE id = $3::uuid), ''),
+  (SELECT count(DISTINCT f.vuln_id) FROM artifact_vulnerability_finding f WHERE f.vulnerability_id = $1::uuid AND f.status <> 'suppressed'
+     AND ($2::uuid IS NULL OR NOT EXISTS (SELECT 1 FROM artifact_vulnerability_finding p WHERE p.vulnerability_id = $2::uuid AND p.vuln_id = f.vuln_id AND p.status <> 'suppressed')))`,
+		result.ID, previousID, result.RepositoryID).Scan(&format, &newFindings); err != nil {
 		return err
 	}
 	return enqueueWebhookEventPostgres(ctx, tx, scanCompletedEvent(result, previous, format, newFindings))

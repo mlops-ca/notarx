@@ -76,7 +76,8 @@ type Event struct {
 	// promotion id for promotion events, empty for artifact.published.
 	Version string
 	// Payload is a JSON object; Emit writes {} when empty.
-	Payload    json.RawMessage
+	Payload json.RawMessage
+	// OccurredAt is the time of the state change; zero takes the database clock.
 	OccurredAt time.Time
 }
 
@@ -104,22 +105,22 @@ type DB interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-// Prepare returns the event with its id, time and payload filled in.
+// Prepare returns the event with its id and payload filled in. A zero OccurredAt stays zero: the database stamps
+// it with its own clock, the one the dispatcher's cursor and settle delay run on.
 func (e Event) Prepare() Event {
 	if e.ID == "" {
 		e.ID = ids.New()
 	}
-	if e.OccurredAt.IsZero() {
-		e.OccurredAt = time.Now().UTC()
+	if !e.OccurredAt.IsZero() {
+		e.OccurredAt = e.OccurredAt.UTC()
 	}
-	e.OccurredAt = e.OccurredAt.UTC()
 	if len(e.Payload) == 0 {
 		e.Payload = json.RawMessage("{}")
 	}
 	return e
 }
 
-const emitStatement = `SELECT emit_domain_event($1::uuid,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7::jsonb,$8,$9,$10)`
+const emitStatement = `SELECT emit_domain_event($1::uuid,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7::jsonb,$8,$9::timestamptz,$10)`
 
 // Emit writes the event in the caller's transaction and reports whether a row was written. A failure must
 // fail the transaction of the state change: a silently missed event would break the chain guarantee.
@@ -128,8 +129,12 @@ func Emit(ctx context.Context, tx DB, event Event) (bool, error) {
 		return false, err
 	}
 	event = event.Prepare()
+	var occurredAt any
+	if !event.OccurredAt.IsZero() {
+		occurredAt = event.OccurredAt
+	}
 	var written bool
 	err := tx.QueryRowContext(ctx, emitStatement, event.ID, string(event.Type), event.RepositoryID, event.Format, event.Coordinate, event.Digest,
-		[]byte(event.Payload), event.DedupeKey(), event.OccurredAt, HasInternalConsumer(event.Type)).Scan(&written)
+		[]byte(event.Payload), event.DedupeKey(), occurredAt, HasInternalConsumer(event.Type)).Scan(&written)
 	return written, err
 }

@@ -145,6 +145,23 @@ func TestPostgresEmitIsTransactionalAndConsumerGated(t *testing.T) {
 	}
 }
 
+// readEventually reads until want events arrive: another open transaction of the shared test database can hold the
+// read horizon back for a moment.
+func readEventually(t *testing.T, store *PostgresStore, consumer string, types []events.Type, limit, want int) []events.Stored {
+	t.Helper()
+	var got []events.Stored
+	var err error
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+		if got, err = store.ReadEvents(context.Background(), consumer, types, 0, limit); err != nil || len(got) >= want {
+			break
+		}
+	}
+	if err != nil || len(got) != want {
+		t.Fatalf("read %d events, want %d (%v)", len(got), want, err)
+	}
+	return got
+}
+
 // An internal consumer reads the log from its cursor, in order, and a consumer without a cursor starts at the present.
 func TestPostgresDomainEventCursor(t *testing.T) {
 	store := domainEventsStore(t)
@@ -180,19 +197,99 @@ func TestPostgresDomainEventCursor(t *testing.T) {
 	if got, err := store.ReadEvents(ctx, consumer, types, time.Hour, 10); err != nil || len(got) != 0 {
 		t.Fatalf("unsettled events read: %v %v", got, err)
 	}
-	got, err := store.ReadEvents(ctx, consumer, types, 0, 2)
-	if err != nil || len(got) != 2 || got[0].Event.Coordinate != "one" || got[1].Event.Coordinate != "two" {
-		t.Fatalf("batch = %+v %v", got, err)
+	got := readEventually(t, store, consumer, types, 2, 2)
+	if got[0].Event.Coordinate != "one" || got[1].Event.Coordinate != "two" {
+		t.Fatalf("batch = %+v", got)
 	}
-	if err = store.AdvanceCursor(ctx, consumer, got[1].Position); err != nil {
+	if err := store.AdvanceCursor(ctx, consumer, got[1].Position); err != nil {
 		t.Fatal(err)
 	}
-	if err = store.AdvanceCursor(ctx, consumer, got[0].Position); err != nil {
+	if err := store.AdvanceCursor(ctx, consumer, got[0].Position); err != nil {
 		t.Fatal(err)
 	}
-	got, err = store.ReadEvents(ctx, consumer, types, 0, 10)
-	if err != nil || len(got) != 1 || got[0].Event.Coordinate != "three" {
-		t.Fatalf("after the cursor = %+v %v", got, err)
+	if got = readEventually(t, store, consumer, types, 10, 1); got[0].Event.Coordinate != "three" {
+		t.Fatalf("after the cursor = %+v", got)
+	}
+}
+
+// An event committed while an older transaction is still open is not read past: the transaction could be about to
+// commit an event with an earlier occurred_at, which the cursor would then skip for good.
+func TestPostgresReadEventsWaitsForOpenTransactions(t *testing.T) {
+	store := domainEventsStore(t)
+	ctx := context.Background()
+	consumer := "horizon-" + ids.New()
+	repoID := uuid.NewString()
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM domain_event_cursors WHERE consumer=$1`, consumer)
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM domain_events WHERE repository_id=$1`, repoID)
+	})
+	types := []events.Type{events.ArtifactPublished}
+	if _, err := store.ReadEvents(ctx, consumer, types, 0, 10); err != nil {
+		t.Fatal(err)
+	}
+	open, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = open.Rollback() }()
+	if _, err = open.ExecContext(ctx, `SELECT 1`); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = events.Emit(ctx, tx, events.Event{Type: events.ArtifactPublished, RepositoryID: repoID, Format: "raw", Coordinate: "late"}); err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if got, readErr := store.ReadEvents(ctx, consumer, types, 0, 10); readErr != nil || len(got) != 0 {
+		t.Fatalf("an event newer than an open transaction was read: %v %v", got, readErr)
+	}
+	if err = open.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if got := readEventually(t, store, consumer, types, 10, 1); got[0].Event.Coordinate != "late" {
+		t.Fatalf("after the transaction closed = %+v", got)
+	}
+}
+
+// A delivery whose event left the retained log is parked dead by the claim instead of being leased forever, and a
+// subscription may list every type of the catalogue.
+func TestPostgresClaimParksDeliveriesWithoutAnEvent(t *testing.T) {
+	store := domainEventsStore(t)
+	ctx := context.Background()
+	subscription, err := store.CreateWebhookSubscription(ctx, WebhookSubscription{ID: uuid.NewString(), Name: "orphan-" + uuid.NewString(), EndpointURL: "https://events.example.test/o",
+		SecretCiphertext: "sealed", EventTypes: events.Types(), Enabled: true})
+	if err != nil {
+		t.Fatalf("a subscription to every catalogue type was refused: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DELETE FROM webhook_subscriptions WHERE id=$1`, subscription.ID)
+	})
+	deliveryID := uuid.NewString()
+	if _, err = store.db.ExecContext(ctx, `INSERT INTO webhook_deliveries (id,event_id,event_occurred_at,subscription_id,state,next_attempt_at)
+VALUES ($1::uuid,gen_random_uuid(),now(),$2::uuid,'pending',now() - interval '1 minute')`, deliveryID, subscription.ID); err != nil {
+		t.Fatal(err)
+	}
+	claims, err := store.ClaimWebhookDeliveries(ctx, "orphan-test", time.Now(), time.Minute, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, claim := range claims {
+		if claim.Delivery.ID == deliveryID {
+			t.Fatal("a delivery without an event was claimed")
+		}
+	}
+	var state, lastError string
+	var attempts int
+	if err = store.db.QueryRowContext(ctx, `SELECT state,last_error,attempts FROM webhook_deliveries WHERE id=$1::uuid`, deliveryID).Scan(&state, &lastError, &attempts); err != nil {
+		t.Fatal(err)
+	}
+	if state != "dead" || attempts != 0 || lastError == "" {
+		t.Fatalf("orphaned delivery state=%q attempts=%d error=%q", state, attempts, lastError)
 	}
 }
 

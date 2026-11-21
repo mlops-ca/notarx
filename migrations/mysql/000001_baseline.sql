@@ -2849,7 +2849,7 @@ CREATE TABLE `scheduled_tasks` (
   UNIQUE KEY `uq_scheduled_tasks_name_idx` (`name_lower`),
   CONSTRAINT `scheduled_tasks_description_check` CHECK ((CHAR_LENGTH(`description`) <= 500)),
   CONSTRAINT `scheduled_tasks_interval_seconds_check` CHECK (((`interval_seconds` >= 900) AND (`interval_seconds` <= 31536000))),
-  CONSTRAINT `scheduled_tasks_kind_check` CHECK ((`kind` IN ('repository-retention', 'audit-retention', 'partition-manager', 'retention-janitor', 'raw-idle-seal'))),
+  CONSTRAINT `scheduled_tasks_kind_check` CHECK ((`kind` IN ('repository-retention', 'audit-retention', 'partition-manager', 'retention-janitor', 'raw-idle-seal', 'event-dispatcher'))),
   CONSTRAINT `scheduled_tasks_last_run_state_check` CHECK ((`last_run_state` IN ('submitted', 'failed'))),
   CONSTRAINT `scheduled_tasks_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 100))),
   CONSTRAINT `scheduled_tasks_version_check` CHECK ((`version` >= 1))
@@ -3129,7 +3129,7 @@ CREATE TABLE `webhook_subscriptions` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_webhook_subscriptions_name` (`name`),
   CONSTRAINT `webhook_subscriptions_endpoint_url_check` CHECK (((CHAR_LENGTH(`endpoint_url`) >= 1) AND (CHAR_LENGTH(`endpoint_url`) <= 2048))),
-  CONSTRAINT `webhook_subscriptions_event_types_check` CHECK ((((JSON_TYPE(`event_types`) = 'ARRAY') AND (JSON_LENGTH(`event_types`) > 0)) AND JSON_CONTAINS(CAST('["artifact.quarantined", "artifact.released", "cargo.promotion.completed", "cargo.promotion.failed", "cargo.replication.completed", "cargo.replication.failed"]' AS JSON), `event_types`))),
+  CONSTRAINT `webhook_subscriptions_event_types_check` CHECK ((((JSON_TYPE(`event_types`) = 'ARRAY') AND (JSON_LENGTH(`event_types`) > 0)) AND JSON_CONTAINS(CAST('["artifact.published", "artifact.scan.completed", "artifact.quarantined", "artifact.released", "artifact.promoted", "promotion.pending_approval", "promotion.approved", "promotion.rejected", "promotion.failed", "replication.completed", "replication.failed", "repository.visibility_changed"]' AS JSON), `event_types`))),
   CONSTRAINT `webhook_subscriptions_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
   CONSTRAINT `webhook_subscriptions_secret_ciphertext_check` CHECK ((`secret_ciphertext` <> '')),
   CONSTRAINT `webhook_subscriptions_version_check` CHECK ((`version` >= 1))

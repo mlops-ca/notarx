@@ -5,9 +5,32 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/tasklease"
 )
 
+type fakeLeases struct {
+	held     bool
+	err      error
+	acquired []string
+	released []string
+}
+
+func (f *fakeLeases) AcquireInternalTaskLease(_ context.Context, task tasklease.Task, owner string, _, _ time.Duration) (bool, error) {
+	f.acquired = append(f.acquired, task.Kind+"|"+task.Name+"|"+owner)
+	return f.held, f.err
+}
+
+func (f *fakeLeases) ReleaseInternalTaskLease(_ context.Context, task tasklease.Task, owner string, completed bool) error {
+	if completed {
+		return errors.New("a dispatcher run must release uncompleted")
+	}
+	f.released = append(f.released, task.ID)
+	return nil
+}
+
 type fakeSource struct {
+	advances int
 	events   []Stored
 	cursors  map[string]Cursor
 	readErr  error
@@ -38,6 +61,7 @@ func (f *fakeSource) AdvanceCursor(_ context.Context, consumer string, cursor Cu
 	if f.cursors == nil {
 		f.cursors = map[string]Cursor{}
 	}
+	f.advances++
 	f.cursors[consumer] = cursor
 	return nil
 }
@@ -64,6 +88,9 @@ func TestDispatcherDeliversInOrderAndAdvances(t *testing.T) {
 	}
 	if len(seen) != 3 || seen[0] != "a" || seen[2] != "c" || source.settle != 5*time.Second {
 		t.Fatalf("seen=%v settle=%v", seen, source.settle)
+	}
+	if source.advances != 2 {
+		t.Fatalf("the cursor moved %d times, want once per non-empty batch", source.advances)
 	}
 }
 
@@ -92,6 +119,59 @@ func TestDispatcherRetriesTransientAndSkipsPermanentErrors(t *testing.T) {
 	}
 	if err := Permanent(errors.New("x")); !errors.Is(err, err) || err.Error() != "x" {
 		t.Error("Permanent must keep the message")
+	}
+}
+
+func TestDispatcherGivesUpAPoisonedEventAfterMaxAttempts(t *testing.T) {
+	source := &fakeSource{events: []Stored{stored(1, "poison"), stored(2, "next")}}
+	var seen []string
+	d := &Dispatcher{Source: source, MaxAttempts: 3, Consumers: []Consumer{{Name: "c1", Handler: HandlerFunc(func(_ context.Context, e Event) error {
+		seen = append(seen, e.ID)
+		if e.ID == "poison" {
+			return errors.New("always failing")
+		}
+		return nil
+	})}}}
+	for pass := 1; pass <= 2; pass++ {
+		if n, err := d.RunOnce(context.Background()); err == nil || n != 0 || source.cursors["c1"].Seq != 0 {
+			t.Fatalf("pass %d: n=%d err=%v cursor=%v", pass, n, err, source.cursors["c1"])
+		}
+	}
+	if n, err := d.RunOnce(context.Background()); err != nil || n != 2 || source.cursors["c1"].Seq != 2 {
+		t.Fatalf("pass 3 must skip the poisoned event: n=%d err=%v cursor=%v", n, err, source.cursors["c1"])
+	}
+	if len(d.failures) != 0 {
+		t.Fatalf("failure counters leaked: %v", d.failures)
+	}
+}
+
+func TestDispatcherServesOnlyUnderTheLease(t *testing.T) {
+	source := &fakeSource{events: []Stored{stored(1, "a")}}
+	leases := &fakeLeases{}
+	var seen int
+	d := &Dispatcher{Source: source, Leases: leases, Owner: "node-1", Consumers: []Consumer{{Name: "scan", Handler: HandlerFunc(func(context.Context, Event) error {
+		seen++
+		return nil
+	})}}}
+	if n, err := d.RunOnce(context.Background()); err != nil || n != 0 || seen != 0 {
+		t.Fatalf("a node without the lease served: n=%d err=%v", n, err)
+	}
+	leases.held = true
+	if n, err := d.RunOnce(context.Background()); err != nil || n != 1 || seen != 1 {
+		t.Fatalf("the lease holder did not serve: n=%d err=%v", n, err)
+	}
+	if len(leases.acquired) != 2 || leases.acquired[0] != "event-dispatcher|internal:event-dispatcher:scan|node-1" || len(leases.released) != 1 {
+		t.Fatalf("acquired=%v released=%v", leases.acquired, leases.released)
+	}
+	if leaseTask("scan").ID != leaseTask("scan").ID || leaseTask("scan").ID == leaseTask("other").ID {
+		t.Error("the lease id must be stable per consumer")
+	}
+	leases.err = errors.New("db down")
+	if _, err := d.RunOnce(context.Background()); err == nil {
+		t.Error("lease failure swallowed")
+	}
+	if (&Dispatcher{}).owner() == "" {
+		t.Error("no default owner")
 	}
 }
 

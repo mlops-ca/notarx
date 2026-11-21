@@ -27,6 +27,9 @@ set of types.
 | `replication.failed` | a replication plan reaches its final failed state |
 | `repository.visibility_changed` | a repository changes visibility; payload `{repositoryId, from, to, groups}` |
 
+Subscriptions may list any type of the catalogue before its emitter ships; such a
+subscription simply receives nothing yet.
+
 The Cargo-specific names (`cargo.promotion.*`, `cargo.replication.*`) no longer
 exist. Today the database emits `artifact.promoted`, `promotion.failed`,
 `replication.completed` and `replication.failed` for Cargo with `format`
@@ -66,14 +69,17 @@ The envelope `occurredAt` field records the time of the state transition.
 An event is written only when something consumes it: an enabled subscription for
 its type, or an internal consumer (the publication scan scheduler reads
 `artifact.published`). Otherwise the state change commits without an event row.
-Internal consumers read the log with a durable cursor, in order and at least once.
+Internal consumers read the log with a durable cursor, in order and at least once, one node
+at a time; an event whose handler fails five times in a row is logged and skipped.
 
 ### Retention
 
 `domain_events` is range-partitioned monthly and a partition is dropped once it
 is entirely older than `NOTARX_EVENTS_RETENTION` (default 14 days, 3 on the
 free-tier profile). A delivery is inspectable and replayable while its event is
-kept, so `webhook_deliveries` rows are pruned on the same schedule. The table
+kept, so `webhook_deliveries` rows are pruned on the same schedule, and a pending or
+retrying delivery whose event is gone is parked as `dead` with the error
+`event is no longer retained`. The table
 that records promotions (`artifact_promotions`) is the long-lived provenance
 record, not the event log.
 

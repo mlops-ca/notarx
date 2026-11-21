@@ -125,7 +125,7 @@ export const operationsFrCA: Record<keyof typeof operationsEnCA, string> = {
     "En production, la livraison rejette les cibles privées, de bouclage et de redirection.",
   "operations.events": "Événements",
   "operations.supportsArtifactQuarantineAndReleasePlusFinalCargo":
-    "Prend en charge les événements de publication, d’analyse, de mise en quarantaine, de libération, de promotion et de réplication.",
+    "Les types d’événements sont livrés dès que la fonctionnalité qui les émet est disponible; les événements de mise en quarantaine, de libération, d’analyse ainsi que de promotion et de réplication Cargo sont émis aujourd’hui.",
   "operations.hMACSigningSecret": "Secret de signature HMAC",
   "operations.leaveBlankToKeepTheCurrentSecretEntering":
     "Laissez vide pour conserver le secret actuel; en saisir un le renouvelle immédiatement.",

@@ -24,7 +24,7 @@ type InternalTaskLeaseStore interface {
 }
 
 // internalScheduledTaskKinds is the SQL list of the kinds that are lease rows, not operator-defined schedules.
-const internalScheduledTaskKinds = "'partition-manager','retention-janitor','raw-idle-seal'"
+const internalScheduledTaskKinds = "'partition-manager','retention-janitor','raw-idle-seal','event-dispatcher'"
 
 type memoryInternalLease struct {
 	owner         string

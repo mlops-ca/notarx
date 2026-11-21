@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -26,15 +28,25 @@ func enqueueWebhookEventPostgres(ctx context.Context, tx sqlRunner, event Webhoo
 }
 
 const readDomainEventsQuery = `SELECT seq,id::text,type,COALESCE(repository_id::text,''),COALESCE(format,''),COALESCE(coordinate,''),COALESCE(digest,''),payload,occurred_at
-FROM domain_events WHERE type = ANY($1::text[]) AND occurred_at >= $2 AND (occurred_at,seq) > ($2,$3) AND occurred_at <= clock_timestamp() - $4::interval
+FROM domain_events WHERE type = ANY($1::text[]) AND occurred_at >= $2 AND (occurred_at,seq) > ($2,$3)
+  AND occurred_at < LEAST(clock_timestamp() - $4::interval, COALESCE((SELECT min(xact_start) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()), 'infinity'::timestamptz))
 ORDER BY occurred_at,seq LIMIT $5`
 
 // ReadEvents implements events.Source. A consumer without a cursor row starts at the present: its cursor is
-// created at the database clock and nothing older is replayed.
+// created at the database clock and nothing older is replayed. occurred_at is the database clock (events.Emit
+// passes no time of its own), so an event not yet committed has an occurred_at at or after the start of its
+// transaction: reading only below the oldest open transaction's start, and below the settle horizon, means an
+// event that commits late is never behind the cursor.
 func (s *PostgresStore) ReadEvents(ctx context.Context, consumer string, types []events.Type, settle time.Duration, limit int) ([]events.Stored, error) {
 	var cursor events.Cursor
-	err := s.db.QueryRowContext(ctx, `INSERT INTO domain_event_cursors (consumer,occurred_at,seq) VALUES ($1,clock_timestamp(),0)
-ON CONFLICT (consumer) DO UPDATE SET consumer=domain_event_cursors.consumer RETURNING occurred_at,seq`, consumer).Scan(&cursor.OccurredAt, &cursor.Seq)
+	err := s.db.QueryRowContext(ctx, `SELECT occurred_at,seq FROM domain_event_cursors WHERE consumer=$1`, consumer).Scan(&cursor.OccurredAt, &cursor.Seq)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = s.db.QueryRowContext(ctx, `INSERT INTO domain_event_cursors (consumer,occurred_at,seq) VALUES ($1,clock_timestamp(),0)
+ON CONFLICT (consumer) DO NOTHING RETURNING occurred_at,seq`, consumer).Scan(&cursor.OccurredAt, &cursor.Seq)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil // another node created it first; read on the next pass
+		}
+	}
 	if err != nil {
 		return nil, err
 	}

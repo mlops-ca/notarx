@@ -181,8 +181,12 @@ the delivery fan-out see one consistent set and a new subscription never misses 
 `internal/readcache` rule set is used by the evaluator slice, where the set is large. The
 Cargo triggers call the same function, so there is one emission rule. Internal consumers
 (`events.Dispatcher`) read the log by `(occurred_at, seq)` from a per-consumer row in
-`domain_event_cursors`, ignore events younger than five seconds so a transaction that commits
-late is not skipped, start at the present when they have no cursor, and are at least once.
+`domain_event_cursors`. `occurred_at` is the database clock, so the dispatcher reads only below
+the start of the oldest open transaction and below a five second settle horizon: an event that
+commits late is never behind the cursor. One node serves a consumer at a time through a lease row of
+`scheduled_tasks` (kind `event-dispatcher`); a consumer without a cursor starts at the present;
+delivery is at least once, and an event whose handler fails five times in a row is logged and skipped
+so one poisoned event cannot block the consumer.
 `webhook_deliveries` carries `event_occurred_at` so its join to `domain_events` is pruned to one
 partition, and its terminal rows are pruned on the event retention (14 d, 3 d free tier) because a
 delivery cannot be shown or replayed once its event is gone. `artifact.scan.completed` carries

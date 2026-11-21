@@ -193,7 +193,7 @@ func (r backgroundRuntime) startWorkers(ctx context.Context, cfg config.Config, 
 	}
 	if cfg.WorkerKindEnabled("scan") && r.scanner != nil {
 		scheduler := app.NewPublicationScanScheduler(r.store, true, r.scannerFormats, r.metrics)
-		dispatcher := &events.Dispatcher{Source: r.store, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default()}
+		dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default()}
 		background.Go(ctx, func() { dispatcher.Run(ctx) })
 	}
 	if cfg.WorkerKindEnabled("webhook") {
