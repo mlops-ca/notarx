@@ -7,6 +7,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	"github.com/mlops-ca/notarx/internal/repository"
 	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
@@ -55,10 +56,10 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 	if closeErr != nil {
 		return a, closeErr
 	}
-	switch in.Kind {
-	case "static_admin", "static_resolver":
+	switch durableactor.ClassOf(in.Kind) {
+	case durableactor.ClassStatic:
 		a.Active = true
-	case "local_session", "oidc":
+	case durableactor.ClassUser:
 		if !strings.HasPrefix(in.Actor, "user:") {
 			return a, domain.ErrAccessDenied
 		}
@@ -88,7 +89,7 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 				a.ValidUntil = repository.RubyGemsEarlierAuthorityExpiry(a.ValidUntil, expiry.Time)
 			}
 		}
-	case repository.WorkloadActorKind:
+	case durableactor.ClassWorkload:
 		w, werr := repository.WorkloadAuthorityTx(ctx, tx, in.Actor, in.CredentialID)
 		if werr != nil {
 			return a, werr
@@ -97,10 +98,10 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 		if !w.ValidUntil.IsZero() {
 			a.ValidUntil = repository.RubyGemsEarlierAuthorityExpiry(a.ValidUntil, w.ValidUntil)
 		}
-	case "api_key", "service_account_credential":
+	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
 		credential := strings.TrimPrefix(in.Actor, "api-key:")
 		account := ""
-		if in.Kind == "service_account_credential" {
+		if durableactor.ClassOf(in.Kind) == durableactor.ClassServiceAccountCredential {
 			if !strings.HasPrefix(in.Actor, "service-account:") || in.CredentialID == "" {
 				return a, domain.ErrAccessDenied
 			}

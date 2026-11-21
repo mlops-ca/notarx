@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/authorization/workloadpolicy"
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	"github.com/mlops-ca/notarx/internal/jose"
 	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -18,7 +19,7 @@ import (
 
 // AuthenticationWorkloadFederation marks a principal derived from a verified workload JWT
 // (ADR 0019, "Authentication flow and integration"). Its CredentialID is the trust policy id.
-const AuthenticationWorkloadFederation AuthenticationKind = "workload_federation"
+const AuthenticationWorkloadFederation AuthenticationKind = durableactor.WorkloadFederation
 
 // WorkloadBasicUsername is the Basic username that runs the workload path without pinning a policy.
 const WorkloadBasicUsername = repository.WorkloadBasicUsernameAlias

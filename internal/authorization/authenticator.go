@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -45,12 +46,12 @@ type AuthenticationKind string
 
 const (
 	UserSessionLifetime                                       = 12 * time.Hour
-	AuthenticationStaticAdmin              AuthenticationKind = "static_admin"
-	AuthenticationStaticResolver           AuthenticationKind = "static_resolver"
-	AuthenticationLocalSession             AuthenticationKind = "local_session"
-	AuthenticationAPIKey                   AuthenticationKind = "api_key"
-	AuthenticationServiceAccountCredential AuthenticationKind = "service_account_credential"
-	AuthenticationOIDC                     AuthenticationKind = "oidc"
+	AuthenticationStaticAdmin              AuthenticationKind = durableactor.StaticAdmin
+	AuthenticationStaticResolver           AuthenticationKind = durableactor.StaticResolver
+	AuthenticationLocalSession             AuthenticationKind = durableactor.LocalSession
+	AuthenticationAPIKey                   AuthenticationKind = durableactor.APIKey
+	AuthenticationServiceAccountCredential AuthenticationKind = durableactor.ServiceAccountCredential
+	AuthenticationOIDC                     AuthenticationKind = durableactor.OIDC
 	// AuthenticationWorkloadFederation is declared with the workload authenticator (workload.go).
 )
 

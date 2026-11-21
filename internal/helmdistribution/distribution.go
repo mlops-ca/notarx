@@ -16,6 +16,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/durableactor"
 )
 
 const MaxItems = 100
@@ -145,16 +146,7 @@ func NewJob(plan Plan, actor, kind, credential, key string) (Job, error) {
 	if err != nil || actor == "" || len(actor) > 512 || strings.ContainsAny(actor, "\x00\r\n") || key == "" || len(key) > 200 || strings.ContainsAny(key, "\x00\r\n") {
 		return Job{}, ErrInvalid
 	}
-	switch kind {
-	case "static_admin", "static_resolver", "local_session", "api_key", "service_account_credential", "oidc", "workload_federation":
-	default:
-		return Job{}, ErrInvalid
-	}
-	if kind == "service_account_credential" || kind == "workload_federation" {
-		if _, err := uuid.Parse(credential); err != nil {
-			return Job{}, ErrInvalid
-		}
-	} else if credential != "" {
+	if !durableactor.ValidCredential(kind, credential) {
 		return Job{}, ErrInvalid
 	}
 	j := Job{ID: uuid.NewSHA1(uuid.NameSpaceURL, []byte("helm-replication\x00"+actor+"\x00"+kind+"\x00"+key)).String(), PlanDigest: d, SourceRepositoryID: p.SourceRepositoryID, TargetRepositoryID: p.TargetRepositoryID, Actor: actor, ActorKind: kind, CredentialID: credential}

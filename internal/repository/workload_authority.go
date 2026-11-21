@@ -8,9 +8,6 @@ import (
 	"time"
 )
 
-// WorkloadActorKind is the durable actor kind of a workload_federation principal in replication jobs.
-const WorkloadActorKind = "workload_federation"
-
 // WorkloadAuthority is the current authority of a durable workload_federation actor (ADR 0019,
 // "Authentication flow and integration"): the actor is the service account, the credential id the trust policy.
 // Active is true only while the policy, its issuer and the service account are all active, the policy names that

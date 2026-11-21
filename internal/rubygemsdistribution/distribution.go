@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	protocol "github.com/mlops-ca/notarx/internal/protocol/rubygems"
 )
 
@@ -160,16 +161,7 @@ func NewJob(plan Plan, subject Subject, key string) (Job, error) {
 	if err != nil || !ValidSubject(subject) || actor == "" || len(actor) > 512 || strings.ContainsAny(actor, "\x00\r\n") || key == "" || len(key) > 200 || strings.ContainsAny(key, "\x00\r\n") {
 		return Job{}, ErrInvalid
 	}
-	switch kind {
-	case "static_admin", "static_resolver", "local_session", "api_key", "service_account_credential", "oidc", "workload_federation":
-	default:
-		return Job{}, ErrInvalid
-	}
-	if kind == "service_account_credential" || kind == "workload_federation" {
-		if _, err := uuid.Parse(credential); err != nil {
-			return Job{}, ErrInvalid
-		}
-	} else if credential != "" {
+	if !durableactor.ValidCredential(kind, credential) {
 		return Job{}, ErrInvalid
 	}
 	j := Job{ID: uuid.NewSHA1(uuid.NameSpaceURL, []byte("rubygems-replication\x00"+actor+"\x00"+kind+"\x00"+key)).String(), PlanDigest: d, SourceRepositoryID: p.SourceRepositoryID, TargetRepositoryID: p.TargetRepositoryID, Actor: actor, ActorKind: kind, CredentialID: credential, UserID: subject.UserID, SessionID: subject.SessionID, SessionVersion: subject.SessionVersion, ValidUntil: subject.ValidUntil}
@@ -245,17 +237,17 @@ func ValidSubject(s Subject) bool {
 	if s.Actor == "" || len(s.Actor) > 256 || strings.ContainsAny(s.Actor, "\x00\r\n") || s.SessionVersion < 0 {
 		return false
 	}
-	switch s.Kind {
-	case "static_admin", "static_resolver":
+	switch durableactor.ClassOf(s.Kind) {
+	case durableactor.ClassStatic:
 		return s.CredentialID == "" && s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0 && s.ValidUntil.IsZero()
-	case "api_key":
+	case durableactor.ClassAPIKey:
 		_, e := uuid.Parse(strings.TrimPrefix(s.Actor, "api-key:"))
 		return strings.HasPrefix(s.Actor, "api-key:") && e == nil && s.CredentialID == "" && s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0
-	case "service_account_credential", "workload_federation":
+	case durableactor.ClassServiceAccountCredential, durableactor.ClassWorkload:
 		_, e := uuid.Parse(strings.TrimPrefix(s.Actor, "service-account:"))
 		_, ce := uuid.Parse(s.CredentialID)
 		return strings.HasPrefix(s.Actor, "service-account:") && e == nil && ce == nil && s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0
-	case "local_session", "oidc":
+	case durableactor.ClassUser:
 		_, e := uuid.Parse(s.UserID)
 		if !strings.HasPrefix(s.Actor, "user:") || e != nil || s.CredentialID != "" || s.ValidUntil.IsZero() {
 			return false
