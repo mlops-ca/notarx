@@ -161,6 +161,7 @@ type MemoryStore struct {
 	eventCursors           map[string]events.Cursor
 	webhookDeliveries      map[string]WebhookDelivery
 	remoteInstances        map[string]RemoteInstance
+	promotionRules         map[string]PromotionRule
 	localInstanceID        string
 }
 

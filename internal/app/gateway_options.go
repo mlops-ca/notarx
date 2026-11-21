@@ -84,6 +84,8 @@ type GatewayOptions struct {
 	// private networks. RemoteDiscoverer replaces the egress-backed instance document client (tests).
 	RemoteAllowPrivateNetworks bool
 	RemoteDiscoverer           remoteinstance.Discoverer
+	// PromotionMaxRulesPerRepository is NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY (ADR 0021); zero means the default of 32.
+	PromotionMaxRulesPerRepository int
 	// SCIM configures the SCIM 2.0 server (NOTARX_SCIM_*, ADR 0018 section 4); the zero value leaves it off and
 	// every /scim/v2/ route answers 404.
 	SCIM SCIMOptions

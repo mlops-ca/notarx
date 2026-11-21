@@ -78,3 +78,6 @@ migrations:
   000025_promotion_batches.sql:
     dialect: postgres
     reason: creates promotion_batches, the insert-only record of an admitted promotion batch; the catalogue carries the table into the MySQL baseline
+  000024_promotion_rules.sql:
+    dialect: postgres
+    reason: creates promotion_rules with a byte-order name index; the catalogue carries the table into the MySQL baseline

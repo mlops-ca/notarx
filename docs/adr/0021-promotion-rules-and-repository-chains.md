@@ -251,6 +251,16 @@ Authorization of rule changes (confused-deputy guard):
 - Every rule edit increments `version`; it is recorded in the audit log
   with `updated_by`.
 
+Slice 3a implementation decisions. The rule's `scope` is a member of `match` (`match.scope`, default `coordinate`),
+so `promotion_rules` keeps exactly the columns above. `match.version` is `{range: "<semver range>"}`. The source repository of
+a rule never changes; an edit replaces everything else. Rules whose source format lacks the `PromotionPublisher`
+capability are refused with `422 unsupported_format`, as are `scope: release` rules for formats without `ReleaseSet`;
+`properties` and `refs` the source cannot satisfy are `422 unsupported_match`. A remote target needs a platform
+administrator, because remote instances are visible to administrators only. The confused-deputy guard compares the
+caller and the run-as service account for every repository operation on the source and a local target, and exempts a
+platform administrator. The dry run reads the artifact search projection (versioned Raw: the sealed versions), examines at
+most 5000 artifacts, and reports `not_evaluated` for what cannot be evaluated yet (a remote target's admission policy).
+
 ### Chains
 
 A chain is the graph induced by rules (dev -> staging -> release), not a

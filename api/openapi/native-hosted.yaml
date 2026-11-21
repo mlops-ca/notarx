@@ -255,6 +255,12 @@ paths:
     "$ref": "./management/remote-instances.yaml#/remote_instances_remoteInstanceId"
   "/remote-instances/{remoteInstanceId}/test":
     "$ref": "./management/remote-instances.yaml#/remote_instances_remoteInstanceId_test"
+  "/promotion-rules":
+    "$ref": "./management/promotion-rules.yaml#/promotion_rules"
+  "/promotion-rules/{ruleId}":
+    "$ref": "./management/promotion-rules.yaml#/promotion_rules_ruleId"
+  "/promotion-rules/{ruleId}/dry-run":
+    "$ref": "./management/promotion-rules.yaml#/promotion_rules_ruleId_dry_run"
   "/webhook-deliveries":
     "$ref": "./management/webhooks.yaml#/webhook_deliveries"
   "/webhook-deliveries/{deliveryId}":

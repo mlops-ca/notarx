@@ -6916,6 +6916,224 @@
         }
       }
     },
+    "/promotion-rules": {
+      "get": {
+        "operationId": "listPromotionRules",
+        "description": "Lists promotion rules by name, paged by keyset on the unique name; continue with the nextPageToken of the previous page. A platform administrator sees every rule; any other caller sees the rules whose source repository it administers. sourceRepositoryId restricts the list to one source repository, which the caller must administer.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "name": "sourceRepositoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PromotionRuleList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createPromotionRule",
+        "description": "Creates a promotion rule. The caller needs repository administration on the source and a local target (a remote target needs a platform administrator), and must hold at least the permissions the run-as service account holds on both repositories unless the caller is a platform administrator; otherwise the answer is 403 confused_deputy. The match and the conditions are compiled and validated against the source format: a malformed document is 400, properties on a repository that is not a versioned generic one and refs on a format without tags are 422 unsupported_match, and scope release on a format without the ReleaseSet capability is 422 unsupported_format. A source repository holds at most NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY rules (409 rule_limit_reached). The mode is copy.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreatePromotionRule"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "$ref": "#/components/responses/PromotionRule"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/promotion-rules/{ruleId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PromotionRuleId"
+        }
+      ],
+      "get": {
+        "operationId": "getPromotionRule",
+        "description": "Returns one rule; the caller must administer its source repository.",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PromotionRule"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updatePromotionRule",
+        "description": "Replaces the rule; the source repository cannot change. The same authorization and validation as create apply. Every edit increments the version and is written to the audit log with the editor, who is also recorded as updatedBy.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IfMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePromotionRule"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PromotionRule"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "412": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deletePromotionRule",
+        "description": "Deletes the rule; the caller must administer its source repository. The deletion is written to the audit log.",
+        "responses": {
+          "204": {
+            "description": "The promotion rule was deleted"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/promotion-rules/{ruleId}/dry-run": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PromotionRuleId"
+        }
+      ],
+      "post": {
+        "operationId": "dryRunPromotionRule",
+        "description": "Evaluates the rule against the current artifacts of its source repository and reports the matched artifacts with a verdict per condition. It never enqueues a promotion and never writes. The caller needs repository administration on the source and a local target. Conditions that cannot be evaluated yet are reported as not_evaluated with a reason. At most 5000 artifacts are examined; truncated says whether the answer is incomplete.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Most matched artifacts returned.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PromotionRuleDryRun"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/webhook-deliveries": {
       "get": {
         "operationId": "listWebhookDeliveries",
@@ -24181,6 +24399,451 @@
           }
         }
       },
+      "PromotionRuleTargetKind": {
+        "type": "string",
+        "enum": [
+          "local",
+          "remote"
+        ]
+      },
+      "PromotionRuleTarget": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PromotionRuleTargetKind"
+          },
+          "repositoryId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Required for a local target; forbidden for a remote one."
+          },
+          "remoteInstanceId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Required for a remote target; the id of a registered remote instance."
+          },
+          "remoteRepository": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "description": "Required for a remote target; the repository name on the remote instance."
+          }
+        }
+      },
+      "PromotionRuleCoordinate": {
+        "type": "object",
+        "description": "Exactly one of glob and regex. A glob matches the whole canonical coordinate; * does not cross a slash and ** does. A regex is Go RE2, anchored to the whole coordinate.",
+        "properties": {
+          "glob": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "regex": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      },
+      "PromotionRuleVersionRange": {
+        "type": "object",
+        "required": [
+          "range"
+        ],
+        "properties": {
+          "range": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "A semantic version range such as \">=1.2.0 <2.0.0\". A version that is not a semantic version never matches."
+          }
+        }
+      },
+      "PromotionRuleMatch": {
+        "type": "object",
+        "required": [
+          "coordinate"
+        ],
+        "properties": {
+          "coordinate": {
+            "$ref": "#/components/schemas/PromotionRuleCoordinate"
+          },
+          "version": {
+            "$ref": "#/components/schemas/PromotionRuleVersionRange"
+          },
+          "refs": {
+            "type": "array",
+            "maxItems": 32,
+            "description": "Globs over the mutable refs (OCI tags, npm dist-tags) that point at the artifact; only for formats with tags.",
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "properties": {
+            "type": "object",
+            "maxProperties": 32,
+            "description": "Property key to a glob over its value; only for a versioned generic repository, where properties are frozen when a version is sealed.",
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "coordinate",
+              "release"
+            ],
+            "default": "coordinate",
+            "description": "release promotes the whole release of a matching coordinate and is available only for formats with the ReleaseSet capability."
+          }
+        }
+      },
+      "PromotionRuleScanCondition": {
+        "type": "object",
+        "required": [
+          "completed"
+        ],
+        "properties": {
+          "completed": {
+            "type": "boolean"
+          },
+          "maxSeverity": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "description": "Highest severity a finding may have; requires completed."
+          }
+        }
+      },
+      "PromotionRuleConditions": {
+        "type": "object",
+        "description": "All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.",
+        "properties": {
+          "securityPolicy": {
+            "type": "string",
+            "enum": [
+              "pass"
+            ],
+            "description": "The target repository's admission policy admits the artifact."
+          },
+          "scan": {
+            "$ref": "#/components/schemas/PromotionRuleScanCondition"
+          },
+          "minAge": {
+            "type": "string",
+            "maxLength": 16,
+            "description": "Minimum time since publication as a duration such as 72h."
+          },
+          "requireSignature": {
+            "type": "boolean"
+          },
+          "requireSbom": {
+            "type": "boolean"
+          },
+          "requireProvenance": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PromotionRuleMode": {
+        "type": "string",
+        "enum": [
+          "copy"
+        ],
+        "description": "Promotion copies; move and overwrite are not offered and the source is never changed."
+      },
+      "PromotionRule": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "sourceRepositoryId",
+          "target",
+          "match",
+          "conditions",
+          "mode",
+          "runAsServiceAccountId",
+          "enabled",
+          "version",
+          "createdBy",
+          "updatedBy",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sourceRepositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PromotionRuleTarget"
+          },
+          "match": {
+            "$ref": "#/components/schemas/PromotionRuleMatch"
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/PromotionRuleConditions"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PromotionRuleMode"
+          },
+          "runAsServiceAccountId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The service account the rule runs as; source read and target write are authorized for it at every evaluation."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string",
+            "description": "Increments on every edit."
+          },
+          "createdBy": {
+            "type": "string"
+          },
+          "updatedBy": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PromotionRulePage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionRule"
+            }
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while more rules follow; pass it as pageToken for the next page."
+          }
+        }
+      },
+      "CreatePromotionRule": {
+        "type": "object",
+        "required": [
+          "name",
+          "sourceRepositoryId",
+          "target",
+          "match",
+          "runAsServiceAccountId"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "sourceRepositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target": {
+            "$ref": "#/components/schemas/PromotionRuleTarget"
+          },
+          "match": {
+            "$ref": "#/components/schemas/PromotionRuleMatch"
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/PromotionRuleConditions"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PromotionRuleMode"
+          },
+          "runAsServiceAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
+      "UpdatePromotionRule": {
+        "type": "object",
+        "required": [
+          "name",
+          "target",
+          "match",
+          "runAsServiceAccountId",
+          "enabled"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "target": {
+            "$ref": "#/components/schemas/PromotionRuleTarget"
+          },
+          "match": {
+            "$ref": "#/components/schemas/PromotionRuleMatch"
+          },
+          "conditions": {
+            "$ref": "#/components/schemas/PromotionRuleConditions"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/PromotionRuleMode"
+          },
+          "runAsServiceAccountId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "enabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PromotionRuleConditionName": {
+        "type": "string",
+        "enum": [
+          "notQuarantined",
+          "securityPolicy",
+          "scan",
+          "minAge",
+          "requireSignature",
+          "requireSbom",
+          "requireProvenance"
+        ]
+      },
+      "PromotionRuleConditionVerdict": {
+        "type": "object",
+        "required": [
+          "condition",
+          "verdict"
+        ],
+        "properties": {
+          "condition": {
+            "$ref": "#/components/schemas/PromotionRuleConditionName"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "not_evaluated"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "A stable code or a short explanation; present for fail and not_evaluated."
+          }
+        }
+      },
+      "PromotionRuleDryRunItem": {
+        "type": "object",
+        "required": [
+          "coordinate",
+          "digest",
+          "outcome",
+          "conditions"
+        ],
+        "properties": {
+          "coordinate": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "eligible",
+              "blocked",
+              "undetermined"
+            ],
+            "description": "blocked when a condition fails, undetermined when none fails but one was not evaluated."
+          },
+          "conditions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionRuleConditionVerdict"
+            }
+          }
+        }
+      },
+      "PromotionRuleDryRun": {
+        "type": "object",
+        "required": [
+          "ruleId",
+          "ruleVersion",
+          "examined",
+          "matched",
+          "truncated",
+          "items"
+        ],
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ruleVersion": {
+            "type": "string"
+          },
+          "examined": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Artifacts of the source repository the evaluation looked at."
+          },
+          "matched": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Examined artifacts that the match selected."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "True when the examination cap or the limit cut the answer short."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionRuleDryRunItem"
+            }
+          }
+        }
+      },
       "WebhookDeliveryState": {
         "type": "string",
         "enum": [
@@ -28849,6 +29512,15 @@
           "format": "uuid"
         }
       },
+      "PromotionRuleId": {
+        "name": "ruleId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      },
       "UserGroupId": {
         "name": "groupId",
         "in": "path",
@@ -29763,6 +30435,44 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/RemoteInstanceTestResult"
+            }
+          }
+        }
+      },
+      "PromotionRuleList": {
+        "description": "Promotion rules",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PromotionRulePage"
+            }
+          }
+        }
+      },
+      "PromotionRule": {
+        "description": "Promotion rule",
+        "headers": {
+          "ETag": {
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PromotionRule"
+            }
+          }
+        }
+      },
+      "PromotionRuleDryRun": {
+        "description": "Matched artifacts with a verdict per condition; nothing was enqueued",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/PromotionRuleDryRun"
             }
           }
         }

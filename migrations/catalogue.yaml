@@ -3338,6 +3338,55 @@ tables:
       created_at: now()
     checks:
       promotion_batches_items_check: ((jsonb_typeof(items) = 'array'::text) AND (jsonb_array_length(items) >= 1) AND (jsonb_array_length(items) <= 100))
+  promotion_rules:
+    columns:
+      approval: json?
+      conditions: json
+      created_at: timestamp
+      created_by: text
+      enabled: bool
+      id: uuid
+      match: json
+      name: text
+      remote_instance_id: uuid?
+      remote_repository: text?
+      run_as_service_account_id: uuid
+      schedule: json?
+      source_repository_id: uuid
+      target_kind: text
+      target_repository_id: uuid?
+      updated_at: timestamp
+      updated_by: text
+      version: int64
+    primaryKey: [id]
+    unique: [[name]]
+    foreignKeys:
+      - remote_instance_id -> remote_instances(id)
+      - run_as_service_account_id -> service_accounts(id)
+      - source_repository_id -> hosted_repositories(id) on delete cascade
+      - target_repository_id -> hosted_repositories(id) on delete cascade
+    defaults:
+      conditions: '''{}'''
+      created_at: now()
+      enabled: "true"
+      updated_at: now()
+      version: "1"
+    indexes:
+      - remote_instance_id
+      - run_as_service_account_id
+      - source_repository_id,enabled
+      - target_repository_id
+    special:
+      promotion_rules_name_bytes_idx: USING btree (name COLLATE "C")
+    checks:
+      promotion_rules_actor_check: ((length(created_by) >= 1) AND (length(created_by) <= 255) AND (length(updated_by) >= 1) AND (length(updated_by) <= 255))
+      promotion_rules_approval_check: ((approval IS NULL) OR (jsonb_typeof(approval) = 'object'::text))
+      promotion_rules_conditions_check: (jsonb_typeof(conditions) = 'object'::text)
+      promotion_rules_match_check: (jsonb_typeof(match) = 'object'::text)
+      promotion_rules_name_check: ((length(name) >= 1) AND (length(name) <= 128))
+      promotion_rules_schedule_check: ((schedule IS NULL) OR (jsonb_typeof(schedule) = 'object'::text))
+      promotion_rules_target_check: (((target_kind = 'local'::text) AND (target_repository_id IS NOT NULL) AND (remote_instance_id IS NULL) AND (remote_repository IS NULL) AND (target_repository_id <> source_repository_id)) OR ((target_kind = 'remote'::text) AND (target_repository_id IS NULL) AND (remote_instance_id IS NOT NULL) AND (remote_repository IS NOT NULL) AND (length(remote_repository) >= 1) AND (length(remote_repository) <= 255)))
+      promotion_rules_version_check: (version >= 1)
   public_access_policy:
     columns:
       enabled: bool

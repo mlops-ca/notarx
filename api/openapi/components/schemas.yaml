@@ -5282,3 +5282,153 @@ RemoteInstanceTestResult:
       items: {type: string, maxLength: 32}
     limits: {"$ref": "#/InstanceLimits"}
     error: {type: string, maxLength: 1024, description: Why the check failed; never contains a credential.}
+PromotionRuleTargetKind:
+  type: string
+  enum: [local, remote]
+PromotionRuleMode:
+  type: string
+  enum: [copy]
+  description: Promotion copies; move and overwrite are not offered and the source is never changed.
+PromotionRuleTarget:
+  type: object
+  required: [kind]
+  properties:
+    kind: {"$ref": "#/PromotionRuleTargetKind"}
+    repositoryId: {type: string, format: uuid, description: Required for a local target; forbidden for a remote one.}
+    remoteInstanceId: {type: string, format: uuid, description: Required for a remote target; the id of a registered remote instance.}
+    remoteRepository: {type: string, minLength: 1, maxLength: 255, description: Required for a remote target; the repository name on the remote instance.}
+PromotionRuleCoordinate:
+  type: object
+  description: Exactly one of glob and regex. A glob matches the whole canonical coordinate; * does not cross a slash and ** does. A regex is Go RE2, anchored to the whole coordinate.
+  properties:
+    glob: {type: string, minLength: 1, maxLength: 512}
+    regex: {type: string, minLength: 1, maxLength: 512}
+PromotionRuleVersionRange:
+  type: object
+  required: [range]
+  properties:
+    range: {type: string, minLength: 1, maxLength: 256, description: A semantic version range such as ">=1.2.0 <2.0.0". A version that is not a semantic version never matches.}
+PromotionRuleMatch:
+  type: object
+  required: [coordinate]
+  properties:
+    coordinate: {"$ref": "#/PromotionRuleCoordinate"}
+    version: {"$ref": "#/PromotionRuleVersionRange"}
+    refs:
+      type: array
+      maxItems: 32
+      description: Globs over the mutable refs (OCI tags, npm dist-tags) that point at the artifact; only for formats with tags.
+      items: {type: string, minLength: 1, maxLength: 512}
+    properties:
+      type: object
+      maxProperties: 32
+      description: Property key to a glob over its value; only for a versioned generic repository, where properties are frozen when a version is sealed.
+      additionalProperties: {type: string, minLength: 1, maxLength: 512}
+    scope:
+      type: string
+      enum: [coordinate, release]
+      default: coordinate
+      description: release promotes the whole release of a matching coordinate and is available only for formats with the ReleaseSet capability.
+PromotionRuleScanCondition:
+  type: object
+  required: [completed]
+  properties:
+    completed: {type: boolean}
+    maxSeverity: {type: string, enum: [none, low, medium, high, critical], description: Highest severity a finding may have; requires completed.}
+PromotionRuleConditions:
+  type: object
+  description: All members that are set must hold. An artifact that is quarantined is never promoted, which needs no member.
+  properties:
+    securityPolicy: {type: string, enum: [pass], description: The target repository's admission policy admits the artifact.}
+    scan: {"$ref": "#/PromotionRuleScanCondition"}
+    minAge: {type: string, maxLength: 16, description: Minimum time since publication as a duration such as 72h.}
+    requireSignature: {type: boolean}
+    requireSbom: {type: boolean}
+    requireProvenance: {type: boolean}
+PromotionRule:
+  type: object
+  required: [id, name, sourceRepositoryId, target, match, conditions, mode, runAsServiceAccountId, enabled, version, createdBy, updatedBy, createdAt, updatedAt]
+  properties:
+    id: {type: string, format: uuid}
+    name: {type: string, minLength: 1, maxLength: 128}
+    sourceRepositoryId: {type: string, format: uuid}
+    target: {"$ref": "#/PromotionRuleTarget"}
+    match: {"$ref": "#/PromotionRuleMatch"}
+    conditions: {"$ref": "#/PromotionRuleConditions"}
+    mode: {"$ref": "#/PromotionRuleMode"}
+    runAsServiceAccountId: {type: string, format: uuid, description: The service account the rule runs as; source read and target write are authorized for it at every evaluation.}
+    enabled: {type: boolean}
+    version: {type: string, description: Increments on every edit.}
+    createdBy: {type: string}
+    updatedBy: {type: string}
+    createdAt: {type: string, format: date-time}
+    updatedAt: {type: string, format: date-time}
+CreatePromotionRule:
+  type: object
+  required: [name, sourceRepositoryId, target, match, runAsServiceAccountId]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    sourceRepositoryId: {type: string, format: uuid}
+    target: {"$ref": "#/PromotionRuleTarget"}
+    match: {"$ref": "#/PromotionRuleMatch"}
+    conditions: {"$ref": "#/PromotionRuleConditions"}
+    mode: {"$ref": "#/PromotionRuleMode"}
+    runAsServiceAccountId: {type: string, format: uuid}
+    enabled: {type: boolean, default: true}
+UpdatePromotionRule:
+  type: object
+  required: [name, target, match, runAsServiceAccountId, enabled]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    target: {"$ref": "#/PromotionRuleTarget"}
+    match: {"$ref": "#/PromotionRuleMatch"}
+    conditions: {"$ref": "#/PromotionRuleConditions"}
+    mode: {"$ref": "#/PromotionRuleMode"}
+    runAsServiceAccountId: {type: string, format: uuid}
+    enabled: {type: boolean}
+PromotionRulePage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/PromotionRule"
+    nextPageToken:
+      type: string
+      description: Present while more rules follow; pass it as pageToken for the next page.
+PromotionRuleConditionName:
+  type: string
+  enum: [notQuarantined, securityPolicy, scan, minAge, requireSignature, requireSbom, requireProvenance]
+PromotionRuleConditionVerdict:
+  type: object
+  required: [condition, verdict]
+  properties:
+    condition: {"$ref": "#/PromotionRuleConditionName"}
+    verdict: {type: string, enum: [pass, fail, not_evaluated]}
+    reason: {type: string, maxLength: 256, description: A stable code or a short explanation; present for fail and not_evaluated.}
+PromotionRuleDryRunItem:
+  type: object
+  required: [coordinate, digest, outcome, conditions]
+  properties:
+    coordinate: {type: string}
+    version: {type: string}
+    digest: {type: string}
+    outcome: {type: string, enum: [eligible, blocked, undetermined], description: "blocked when a condition fails, undetermined when none fails but one was not evaluated."}
+    conditions:
+      type: array
+      items:
+        "$ref": "#/PromotionRuleConditionVerdict"
+PromotionRuleDryRun:
+  type: object
+  required: [ruleId, ruleVersion, examined, matched, truncated, items]
+  properties:
+    ruleId: {type: string, format: uuid}
+    ruleVersion: {type: string}
+    examined: {type: integer, format: int32, description: Artifacts of the source repository the evaluation looked at.}
+    matched: {type: integer, format: int32, description: Examined artifacts that the match selected.}
+    truncated: {type: boolean, description: True when the examination cap or the limit cut the answer short.}
+    items:
+      type: array
+      items:
+        "$ref": "#/PromotionRuleDryRunItem"

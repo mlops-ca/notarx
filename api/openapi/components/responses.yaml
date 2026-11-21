@@ -794,3 +794,22 @@ RemoteInstanceTest:
   content:
     application/json:
       schema: {"$ref": "../components/schemas.yaml#/RemoteInstanceTestResult"}
+PromotionRule:
+  description: Promotion rule
+  headers:
+    ETag:
+      required: true
+      schema: {type: string}
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/PromotionRule"}
+PromotionRuleList:
+  description: Promotion rules
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/PromotionRulePage"}
+PromotionRuleDryRun:
+  description: Matched artifacts with a verdict per condition; nothing was enqueued
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/PromotionRuleDryRun"}
