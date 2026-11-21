@@ -24,6 +24,7 @@ import (
 	nugetformat "github.com/mlops-ca/notarx/internal/format/nuget"
 	rawformat "github.com/mlops-ca/notarx/internal/format/raw"
 	rubygemsformat "github.com/mlops-ca/notarx/internal/format/rubygems"
+	ociprotocol "github.com/mlops-ca/notarx/internal/protocol/oci"
 	"github.com/mlops-ca/notarx/internal/remoteinstance"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
@@ -333,7 +334,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		Audit: store, Anonymous: store, ReadPolicies: store, Quarantine: store, Client: rawClient, Cache: rawCache, Metrics: rawModuleMetrics{metrics},
 		GroupRuntime: rawModuleGroupRuntime{resolver: v2GroupResolver{groups: store, repos: store, audit: store, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}}, policy: store},
 		LegacyStore:  store, LegacyRuntime: rawRuntime{handler: rawLegacy}, RecordFailure: recordRawFailure})
-	modules := []formatmodule.Module{rawModule}
+	modules := []formatmodule.Module{rawModule, ociImportModule{ociprotocol.NativeImporter{Store: store, Objects: options.Storage[repository.FormatOCI]}}}
 	var helmPreview http.Handler
 	if options.HelmPreviewEnabled {
 		client := helmformat.Upstream(UpstreamClient{})

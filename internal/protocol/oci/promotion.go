@@ -148,31 +148,15 @@ func (m NativePromotion) fail(ctx context.Context, job repository.LifecycleJob, 
 	return fmt.Errorf("%s", message)
 }
 
+// manifestBlobDigests lists the blobs of a manifest, which a promotion mounts. The child manifests of an index are not blobs:
+// they are promoted as artifacts of their own (the release set of an index names them).
 func manifestBlobDigests(body []byte) []string {
-	var manifest struct {
-		Config struct {
-			Digest string `json:"digest"`
-		} `json:"config"`
-		Layers []struct {
-			Digest string `json:"digest"`
-		} `json:"layers"`
-		Manifests []struct {
-			Digest string `json:"digest"`
-		} `json:"manifests"`
-	}
-	if json.Unmarshal(body, &manifest) != nil {
+	document, err := decodeManifestDocument(body)
+	if err != nil {
 		return nil
 	}
-	digests := make([]string, 0, 1+len(manifest.Layers)+len(manifest.Manifests))
-	if manifest.Config.Digest != "" {
-		digests = append(digests, manifest.Config.Digest)
-	}
-	for _, item := range manifest.Layers {
-		if item.Digest != "" {
-			digests = append(digests, item.Digest)
-		}
-	}
-	for _, item := range manifest.Manifests {
+	digests := []string{}
+	for _, item := range document.blobDescriptors() {
 		if item.Digest != "" {
 			digests = append(digests, item.Digest)
 		}

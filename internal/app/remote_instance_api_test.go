@@ -337,7 +337,7 @@ func TestWellKnownInstanceDocumentIsAnonymousAndStable(t *testing.T) {
 		t.Fatalf("well-known = %d %s", first.Code, first.Body.String())
 	}
 	local, _ := store.LocalInstanceID(context.Background())
-	if document.InstanceID != local || document.APIVersion != remoteinstance.APIVersion || document.Limits != remoteinstance.DefaultLimits() || len(document.Formats) != 1 || document.Formats[0] != "raw" {
+	if document.InstanceID != local || document.APIVersion != remoteinstance.APIVersion || document.Limits != remoteinstance.DefaultLimits() || len(document.Formats) != 2 || document.Formats[0] != "oci" || document.Formats[1] != "raw" {
 		t.Fatalf("document = %#v local=%s", document, local)
 	}
 	if _, err := document.Validate(); err != nil {

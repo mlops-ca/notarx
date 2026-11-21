@@ -115,6 +115,13 @@ the instance document lists the formats that accept imports.
    `409 import_conflict`) aborts the session, so the sender's retry under the same key opens a new one; a failure of storage
    leaves it committing, where the commit can be sent again.
 
+For an OCI repository the `coordinate` is the image name, `digest` the root manifest digest and the `formatManifest` is
+`{"tags": ["v1"], "referrers": ["sha256:..."]}` (both optional). The blobs of the session are exactly the root manifest, every child manifest, config and
+layer below it, and the referrer manifests with theirs (a referrer's `subject` must be a manifest of the image); the importer verifies every digest and descriptor size and reads the structure from the manifests, so a blob no manifest
+references or one that is missing is `422 import_invalid_unit`, and bytes that differ from a digest or descriptor size are `422 import_mismatch`. A tag is applied only when it is absent or
+already points at the root digest, otherwise the import is `409 import_conflict` and nothing is published; a tag move stays an operator action. A coordinate containing `@` is refused.
+Every blob is uploaded to the session, since blobs cannot be mounted across instances.
+
 For a flat Raw repository the `formatManifest` is `{"path": "dir/file.bin", "contentType": "..."}`, the unit has exactly one
 blob, and its digest is the artifact digest. The importer recomputes the coordinate, size and digest from the bytes it copies;
 a coordinate that is not the manifest path, a digest the bytes do not have or a manifest with other fields is rejected

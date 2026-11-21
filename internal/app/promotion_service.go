@@ -55,7 +55,7 @@ func requirePromotionStores(store GatewayStore) (promotionStores, error) {
 func newPromotionService(h generatedRepositoryAPIAdapter) PromotionService {
 	return PromotionService{
 		store: h.sessions.store, securityPolicies: h.securityPolicies, intelligence: h.intelligence, audit: h.audit, promotions: h.promotions,
-		registry: promotionFormatRegistry(promotionModuleDeps{Store: h.sessions.store}), instance: h.sessions.store, maxHops: promotionMaxHops(h.promotionMaxHops),
+		registry: promotionFormatRegistry(promotionModuleDeps{Store: h.sessions.store, Objects: h.objects[repository.FormatOCI]}), instance: h.sessions.store, maxHops: promotionMaxHops(h.promotionMaxHops),
 		quarantine: func(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest string) *PromotionError {
 			return h.checkQuarantinedDistribution(ctx, principal, source, target, coordinate, digest, "promote")
 		},

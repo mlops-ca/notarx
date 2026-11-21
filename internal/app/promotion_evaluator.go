@@ -71,7 +71,9 @@ type PromotionEvaluatorOptions struct {
 	// Authorizer re-authorizes the run-as service account on the source (read) and the target (write) at every evaluation.
 	Authorizer RepositoryAuthorizer
 	// MaxHops is NOTARX_PROMOTION_MAX_HOPS; zero means the default of 8.
-	MaxHops     int
+	MaxHops int
+	// Objects is the object store the manifests of an OCI release are read from.
+	Objects     ObjectStore
 	Owner       string
 	Interval    time.Duration
 	Concurrency int
@@ -101,7 +103,7 @@ type PromotionEvaluator struct {
 // ones the management API uses, so a rule promotion takes exactly the path of a manual one.
 func NewPromotionEvaluator(options PromotionEvaluatorOptions) *PromotionEvaluator {
 	store := options.Store
-	adapter := generatedRepositoryAPIAdapter{store: store, sessions: nativeMavenHandler{store: store}, securityPolicies: store, intelligence: store, audit: store, quarantine: store, cargo: store, promotions: store, promotionMaxHops: promotionMaxHops(options.MaxHops)}
+	adapter := generatedRepositoryAPIAdapter{objects: ObjectStores{repository.FormatOCI: options.Objects}, store: store, sessions: nativeMavenHandler{store: store}, securityPolicies: store, intelligence: store, audit: store, quarantine: store, cargo: store, promotions: store, promotionMaxHops: promotionMaxHops(options.MaxHops)}
 	service := newPromotionService(adapter)
 	evaluator := &PromotionEvaluator{
 		store: store, service: service, authorizer: options.Authorizer, registry: service.registry,
@@ -575,7 +577,7 @@ func (e *PromotionEvaluator) members(ctx context.Context, run ruleRun, evaluatio
 	if !ok {
 		return nil, errUnsupportedPromotionFormat
 	}
-	released, err := releaseSet.ReleaseMembers(ctx, run.source.ID, evaluation.Coordinate)
+	released, err := releaseSet.ReleaseMembers(ctx, run.source.ID, evaluation.Coordinate, evaluation.Digest)
 	if err != nil {
 		return nil, err
 	}

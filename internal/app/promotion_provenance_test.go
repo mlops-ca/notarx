@@ -236,7 +236,7 @@ func TestRegistryRegistersAllNineFormatsAndDeclaresTheirCapabilities(t *testing.
 		repository.FormatRaw:   "promotion,promotion-publisher,importer,release-set",
 		repository.FormatMaven: "promotion,promotion-publisher,release-set",
 		repository.FormatNPM:   "promotion,promotion-publisher,tagged",
-		repository.FormatOCI:   "promotion,promotion-publisher,tagged",
+		repository.FormatOCI:   "promotion,promotion-publisher,tagged,release-set",
 	} {
 		if got := strings.Join(registry.Capabilities(format), ","); got != want {
 			t.Errorf("%s declares %q, want %q", format, got, want)
@@ -302,7 +302,7 @@ func TestNPMAndMavenModulesDeclareTheirOptionalCapabilities(t *testing.T) {
 	if !ok {
 		t.Fatal("Maven does not declare ReleaseSet")
 	}
-	if _, err = releases.ReleaseMembers(ctx, repositoryID, "com.example:lib:1.0.0"); !errors.Is(err, repository.ErrNotFound) {
+	if _, err = releases.ReleaseMembers(ctx, repositoryID, "com.example:lib:1.0.0", ""); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("unknown release err=%v", err)
 	}
 }

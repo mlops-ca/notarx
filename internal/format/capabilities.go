@@ -128,9 +128,10 @@ type Tagged interface {
 type ReleaseMember struct{ Coordinate, Digest string }
 
 // ReleaseSet returns the members of the release the coordinate identifies; the format package decides what a release
-// is, and nothing is inferred generically.
+// is, and nothing is inferred generically. The digest is the one of the artifact the evaluation is about, for the formats
+// (OCI) whose coordinate names many digests.
 type ReleaseSet interface {
-	ReleaseMembers(ctx context.Context, repositoryID, coordinate string) ([]ReleaseMember, error)
+	ReleaseMembers(ctx context.Context, repositoryID, coordinate, digest string) ([]ReleaseMember, error)
 }
 type Replication interface {
 	ReplicationCheckpoints(context.Context, string, string, string) ([]repository.ReplicationCheckpoint, error)

@@ -120,7 +120,7 @@ func (declaresEverything) TagName(string) (string, bool) { return "", false }
 func (declaresEverything) TagsOfName(context.Context, string, string) (formatmodule.TagLookup, error) {
 	return nil, nil
 }
-func (declaresEverything) ReleaseMembers(context.Context, string, string) ([]formatmodule.ReleaseMember, error) {
+func (declaresEverything) ReleaseMembers(context.Context, string, string, string) ([]formatmodule.ReleaseMember, error) {
 	return nil, nil
 }
 

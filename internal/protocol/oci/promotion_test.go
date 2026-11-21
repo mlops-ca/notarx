@@ -56,3 +56,16 @@ func TestNativePromotionCopiesManifestAndMountsSourceBlob(t *testing.T) {
 		t.Fatalf("mounted blob: %v", err)
 	}
 }
+
+func TestManifestBlobDigestsAreTheConfigAndLayersNotTheChildManifestsOfAnIndex(t *testing.T) {
+	image := newImportImage()
+	if got := manifestBlobDigests(image.files[image.index]); len(got) != 0 {
+		t.Fatalf("an index mounts no blob: %v", got)
+	}
+	if got := manifestBlobDigests(image.files[image.child]); len(got) != 2 || got[0] != image.config || got[1] != image.layer {
+		t.Fatalf("a manifest mounts its config and layers: %v", got)
+	}
+	if got := manifestBlobDigests([]byte("not json")); got != nil {
+		t.Fatalf("got %v", got)
+	}
+}

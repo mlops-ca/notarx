@@ -48,7 +48,7 @@ func newPromotionRuleHandler(scope managementScope, store GatewayStore, legacy g
 	inventory, _ := any(store).(dryRunInventory)
 	return promotionRuleHandler{
 		managementScope: scope, rules: store, remotes: store, accounts: store, grantIndex: grantIndex, maxRules: maxRules,
-		registry: promotionFormatRegistry(promotionModuleDeps{Store: store}),
+		registry: promotionFormatRegistry(promotionModuleDeps{Store: store, Objects: legacy.objects[repository.FormatOCI]}),
 		dryRunPorts: promotionDryRunPorts{
 			securityPolicies: store, intelligence: store, search: search, rawVersions: rawVersions, inventory: inventory, quarantine: store,
 			distributionDigests: legacy.artifactDistributionDigests,

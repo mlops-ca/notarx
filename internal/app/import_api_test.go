@@ -166,6 +166,59 @@ func TestImportPushesVerifiedBytesIntoARawRepositoryAndIsIdempotent(t *testing.T
 	}
 }
 
+func TestImportPushesAnOCIImageIntoAnOCIRepositoryAndRefusesATagMove(t *testing.T) {
+	ctx := context.Background()
+	f := newImportFixture(t)
+	target, err := f.store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "images", Format: repository.FormatOCI})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.target = target
+	const config, layer = "{\"os\":\"linux\"}", "layer"
+	manifest := fmt.Sprintf(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","config":{"mediaType":"application/vnd.oci.image.config.v1+json","digest":"sha256:%s","size":%d},"layers":[{"mediaType":"application/vnd.oci.image.layer.v1.tar+gzip","digest":"sha256:%s","size":%d}]}`, sha(config), len(config), sha(layer), len(layer))
+	claimOf := func(manifestBody, tag, key string) string {
+		return fmt.Sprintf(`{"coordinate":"team/app","digest":"sha256:%s","formatManifest":{"tags":[%q]},"blobs":[{"digest":"sha256:%s","size":%d},{"digest":"sha256:%s","size":%d},{"digest":"sha256:%s","size":%d}],"idempotencyKey":%q}`,
+			sha(manifestBody), tag, sha(manifestBody), len(manifestBody), sha(config), len(config), sha(layer), len(layer), key)
+	}
+	opened, session := f.open(claimOf(manifest, "v1", "oci1"))
+	if opened.Code != http.StatusCreated {
+		t.Fatalf("open = %d %s", opened.Code, opened.Body.String())
+	}
+	id, _ := session["id"].(string)
+	if missing, _ := session["missing"].([]any); len(missing) != 3 {
+		t.Fatalf("every blob must be uploaded: %v", session["missing"])
+	}
+	for content, want := range map[string]int{manifest: http.StatusNoContent, config: http.StatusNoContent, layer: http.StatusNoContent} {
+		if got := f.upload(id, sha(content), content); got.Code != want {
+			t.Fatalf("upload = %d %s", got.Code, got.Body.String())
+		}
+	}
+	if got := f.commit(id); got.Code != http.StatusOK {
+		t.Fatalf("commit = %d %s", got.Code, got.Body.String())
+	}
+	if got, getErr := f.store.GetOCIManifest(ctx, target.ID, "team/app", "v1"); getErr != nil || got.Digest != "sha256:"+sha(manifest) {
+		t.Fatalf("tag = %+v %v", got, getErr)
+	}
+	if _, getErr := f.store.GetOCIBlob(ctx, target.ID, "sha256:"+sha(layer)); getErr != nil {
+		t.Fatal(getErr)
+	}
+	// Another image under the same tag is a conflict that aborts the session and publishes nothing.
+	other := strings.Replace(manifest, "layer.v1.tar+gzip", "layer.v1.tar", 1)
+	_, again := f.open(claimOf(other, "v1", "oci2"))
+	otherID, _ := again["id"].(string)
+	for _, content := range []string{other, config, layer} {
+		if got := f.upload(otherID, sha(content), content); got.Code != http.StatusNoContent {
+			t.Fatalf("upload = %d %s", got.Code, got.Body.String())
+		}
+	}
+	if got := f.commit(otherID); got.Code != http.StatusConflict || f.problemCode(got) != "import_conflict" {
+		t.Fatalf("tag move = %d %s", got.Code, got.Body.String())
+	}
+	if _, getErr := f.store.GetOCIManifest(ctx, target.ID, "team/app", "sha256:"+sha(other)); !errors.Is(getErr, repository.ErrNotFound) {
+		t.Fatalf("the refused image was published: %v", getErr)
+	}
+}
+
 func TestImportRecomputesTheCoordinateAndRefusesWhatTheBytesContradict(t *testing.T) {
 	f := newImportFixture(t, func(o *GatewayOptions) { o.ImportConfig.MaxOpenSessionsPerPrincipal = 20 })
 	const content = "payload"
@@ -441,7 +494,7 @@ func TestImportCommitThatLostTheRaceToAnotherCommitStillSucceeds(t *testing.T) {
 func TestInstanceDocumentListsOnlyFormatsThatImport(t *testing.T) {
 	f := newImportFixture(t)
 	w := f.do(http.MethodGet, "/.well-known/notarx", "", nil)
-	if !strings.Contains(w.Body.String(), `"formats":["raw"]`) {
+	if !strings.Contains(w.Body.String(), `"formats":["oci","raw"]`) {
 		t.Fatalf("document = %s", w.Body.String())
 	}
 	// No format is advertised while the endpoints cannot take a push.

@@ -173,11 +173,11 @@ func TestRawModuleRetentionAndDistributionShareNativeIdentity(t *testing.T) {
 	if err != nil || !replayed || replay.ID != job.ID {
 		t.Fatalf("promotion replay=%#v %v %v", replay, replayed, err)
 	}
-	members, err := module.ReleaseMembers(context.Background(), "downloads", asset.Path)
+	members, err := module.ReleaseMembers(context.Background(), "downloads", asset.Path, asset.Digest)
 	if err != nil || len(members) != 1 || members[0].Coordinate != asset.Path || members[0].Digest != asset.Digest {
 		t.Fatalf("release=%#v %v", members, err)
 	}
-	if _, err = module.ReleaseMembers(context.Background(), "downloads", "missing"); !errors.Is(err, repository.ErrNotFound) {
+	if _, err = module.ReleaseMembers(context.Background(), "downloads", "missing", ""); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("missing release=%v", err)
 	}
 	var _ formatmodule.PromotionPublisher = module
@@ -230,7 +230,7 @@ func TestRawModuleMissingPortsNeverCreateStorage(t *testing.T) {
 	if err := module.RunPromotionJobs(context.Background(), 1); !errors.Is(err, repository.ErrDisabled) {
 		t.Fatalf("invented promotion runner=%v", err)
 	}
-	if _, err := module.ReleaseMembers(context.Background(), "id", "file"); !errors.Is(err, repository.ErrDisabled) {
+	if _, err := module.ReleaseMembers(context.Background(), "id", "file", ""); !errors.Is(err, repository.ErrDisabled) {
 		t.Fatalf("invented release set=%v", err)
 	}
 	// Supplying native publication storage does not implicitly grant query access.
