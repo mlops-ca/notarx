@@ -70,7 +70,8 @@ Requests to remote instances go through `internal/egress`:
 A push from another notarx instance is received through an import session (ADR 0021, Remote targets). The `ImportWrite`
 permission (`repositories:import`) lets a principal create sessions in a repository; it implies no read access. Each
 session records what the sender claims and the blobs it intends to send, under these limits, which the instance document
-advertises:
+advertises. The session store enforces them; the endpoints that create sessions come with the Raw importer (issue 582), so
+until then nothing creates a session:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

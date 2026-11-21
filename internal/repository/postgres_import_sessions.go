@@ -57,13 +57,14 @@ func (s *PostgresStore) CreateImportSession(ctx context.Context, session ImportS
 	existing, err := scanImportSession(tx.QueryRowContext(ctx, `SELECT `+importSessionColumns+` FROM import_sessions WHERE target_repository_id=$1::uuid AND idempotency_key=$2`, session.TargetRepositoryID, session.IdempotencyKey))
 	switch {
 	case err == nil:
-		if !equivalentImportRequest(existing, session) {
-			return ImportSession{}, false, ErrIdempotencyConflict
-		}
 		if !importSessionDead(existing, session.CreatedAt) {
+			if !equivalentImportRequest(existing, session) {
+				return ImportSession{}, false, ErrIdempotencyConflict
+			}
 			return existing, true, nil
 		}
-		// A dead session keeps its row for the reaper but gives its key to the new one.
+		// A dead session keeps its row for the reaper but gives its key to the new one, whatever the new one asks for; a
+		// refused limit rolls the rename back with the rest.
 		if _, err = tx.ExecContext(ctx, `UPDATE import_sessions SET idempotency_key=$2 WHERE id=$1::uuid`, existing.ID, freedImportKey(existing)); err != nil {
 			return ImportSession{}, false, err
 		}
@@ -82,7 +83,7 @@ func (s *PostgresStore) CreateImportSession(ctx context.Context, session ImportS
 	if limits.MaxOpenSessionsPerPrincipal > 0 && open >= limits.MaxOpenSessionsPerPrincipal {
 		return ImportSession{}, false, ErrImportTooManySessions
 	}
-	if limits.StagingQuotaBytes > 0 && staged+total > limits.StagingQuotaBytes {
+	if !withinStagingQuota(limits.StagingQuotaBytes, staged, total) {
 		return ImportSession{}, false, ErrImportStagingQuota
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO import_sessions (id,target_repository_id,principal,format,coordinate,digest,format_manifest,idempotency_key,chain_path,evidence,state,bytes,created_at,updated_at,expires_at)
@@ -217,7 +218,7 @@ func (s *PostgresStore) CompleteImportSession(ctx context.Context, sessionID str
 
 // AbortImportSession implements ImportSessionStore. Aborting an aborted session changes nothing.
 func (s *PostgresStore) AbortImportSession(ctx context.Context, sessionID string, now time.Time) error {
-	err := s.transitionImportSession(ctx, sessionID, now, ImportSessionAborted, ImportSessionOpen, ImportSessionCommitting)
+	err := s.transitionImportSession(ctx, sessionID, now, ImportSessionAborted, ImportSessionOpen)
 	if !errors.Is(err, ErrImportSessionClosed) {
 		return err
 	}
@@ -255,7 +256,7 @@ func (s *PostgresStore) transitionImportSession(ctx context.Context, sessionID s
 const reapCandidateQuery = `SELECT s.id::text FROM import_sessions s
 WHERE ((s.state IN ('open','committing') AND s.expires_at <= $1)
    OR (s.state IN ('committed','aborted','expired') AND EXISTS (SELECT 1 FROM import_blobs b WHERE b.session_id = s.id AND b.staging_key <> '')))
-  AND s.id <> ALL($2::uuid[])
+  AND s.id <> ALL($2::text[]::uuid[])
 ORDER BY s.expires_at,s.id LIMIT 1 FOR UPDATE OF s SKIP LOCKED`
 
 // ReapImportSessions implements ImportSessionStore. Each session is finished in its own transaction, under a row lock that

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"regexp"
 	"slices"
 	"time"
@@ -99,10 +100,10 @@ type ImportSessionStore interface {
 	// CreateImportSession records the session and its claimed blobs under limits, atomically. session needs ID,
 	// TargetRepositoryID, Principal, IdempotencyKey, CreatedAt and ExpiresAt; its state is open and its Bytes the total
 	// of the blobs, which are deduplicated by digest and must be sha256:<64 hex> (ErrImportInvalidBlobClaims otherwise).
-	// A request that repeats the (target, idempotency key) of an existing session with the same principal, format,
-	// coordinate and digest returns that session with replayed=true and checks no limit, unless that session is dead
-	// (aborted, expired, or live past its expiry): its key is then freed for the new session, so a sender can retry. The
-	// same key for anything else is ErrIdempotencyConflict. A refused limit returns its typed error and writes
+	// A request that repeats the (target, idempotency key) of a live or committed session with the same principal,
+	// format, coordinate and digest returns that session with replayed=true and checks no limit; the same key for anything
+	// else is ErrIdempotencyConflict. The key of a dead session (aborted, expired, or live past its expiry) is freed for the
+	// new session whatever it asks for, so a sender can retry, and stays freed only if the new session is created. A refused limit returns its typed error and writes
 	// nothing. Live sessions with an ExpiresAt after session.CreatedAt count against the limits. An empty FormatManifest
 	// is stored as {}.
 	CreateImportSession(ctx context.Context, session ImportSession, blobs []ImportBlob, limits ImportLimits) (stored ImportSession, replayed bool, err error)
@@ -122,8 +123,9 @@ type ImportSessionStore interface {
 	BeginImportCommit(ctx context.Context, sessionID string, now time.Time) error
 	// CompleteImportSession moves a committing session to committed (ErrImportSessionClosed otherwise).
 	CompleteImportSession(ctx context.Context, sessionID string, now time.Time) error
-	// AbortImportSession moves an open or committing session to aborted; an aborted session stays so, a committed or
-	// expired one is ErrImportSessionClosed. Its staging objects are removed by the reaper.
+	// AbortImportSession moves an open session to aborted; an aborted session stays so, any other state is
+	// ErrImportSessionClosed: a committing session is not aborted under its commit, it finishes or expires after
+	// ImportCommitGrace. The staging objects of an aborted session are removed by the reaper.
 	AbortImportSession(ctx context.Context, sessionID string, now time.Time) error
 	// ReapImportSessions finishes up to limit sessions that need it (100 when limit is not positive): a live session past its expiry becomes expired, and
 	// the staging keys of every expired, aborted or committed session are handed to remove, then emptied. Each session is
@@ -147,6 +149,9 @@ func dedupeImportBlobs(blobs []ImportBlob) ([]ImportBlob, int64, error) {
 				return nil, 0, ErrImportInvalidBlobClaims
 			}
 			continue
+		}
+		if blob.Size > math.MaxInt64-total {
+			return nil, 0, ErrImportSessionTooLarge
 		}
 		sizes[blob.Digest] = blob.Size
 		total += blob.Size
@@ -181,6 +186,10 @@ func checkImportLimits(blobs []ImportBlob, total int64, limits ImportLimits) err
 	}
 	return nil
 }
+
+// withinStagingQuota reports whether a session of total bytes fits beside the staged bytes of the live ones, written so
+// that no sum can overflow.
+func withinStagingQuota(quota, staged, total int64) bool { return quota <= 0 || total <= quota-staged }
 
 // equivalentImportRequest reports whether a stored session is the session a request describes: a replay.
 func equivalentImportRequest(stored, request ImportSession) bool {

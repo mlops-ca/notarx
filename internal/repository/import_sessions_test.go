@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -198,6 +199,33 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	if lateRetry, replayed, createErr := late.create("k1", "pkg@1.0", blob(dg("a"), 10)); createErr != nil || replayed || lateRetry.ID == retry.ID {
 		t.Fatalf("a retry after the session lapsed = %+v replayed=%t %v", lateRetry, replayed, createErr)
 	}
+	// The key of a dead session is freed whatever the retry asks for, and only if the retry is created: a retry that a limit
+	// refuses leaves the key where it was.
+	dead := f.session(principal+"-dead", "dead-key", "dead@1.0")
+	if _, _, err = store.CreateImportSession(ctx, dead, nil, f.limits); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.AbortImportSession(ctx, dead.ID, f.now); err != nil {
+		t.Fatal(err)
+	}
+	different := f.session(principal+"-dead", "dead-key", "other@2.0")
+	different.Digest = dg("republished")
+	tight := f.limits
+	tight.MaxBlobBytes = 1
+	if _, _, err = store.CreateImportSession(ctx, different, []ImportBlob{blob(dg("big"), 5)}, tight); !errors.Is(err, ErrImportBlobTooLarge) {
+		t.Fatalf("a refused retry = %v", err)
+	}
+	if again, replayed, createErr := store.CreateImportSession(ctx, f.session(principal+"-dead", "dead-key", "dead@1.0"), nil, f.limits); createErr != nil || replayed || again.ID == dead.ID {
+		t.Fatalf("the dead key after a refused retry: %+v replayed=%t %v", again, replayed, createErr)
+	}
+	if err = store.AbortImportSession(ctx, dead.ID, f.now); err != nil {
+		t.Fatalf("the dead session must stay reachable: %v", err)
+	}
+	// Claims that overflow the total are refused as too large, not wrapped around.
+	huge := f.session(principal+"-huge", "huge", "huge@1.0")
+	if _, _, err = store.CreateImportSession(ctx, huge, []ImportBlob{blob(dg("h1"), math.MaxInt64), blob(dg("h2"), 2)}, ImportLimits{}); !errors.Is(err, ErrImportSessionTooLarge) {
+		t.Fatalf("an overflowing claim = %v", err)
+	}
 	// Aborting twice changes nothing, not even the update time.
 	if err = store.AbortImportSession(ctx, retry.ID, f.now); err != nil {
 		t.Fatal(err)
@@ -259,6 +287,9 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 		if err = store.BeginImportCommit(ctx, live.ID, f.now); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if err = store.AbortImportSession(ctx, live.ID, f.now); !errors.Is(err, ErrImportSessionClosed) {
+		t.Fatalf("aborting a session under its commit = %v", err)
 	}
 	if err = store.RecordImportBlob(ctx, live.ID, dg("y"), 7, f.now); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("a blob while committing = %v", err)

@@ -32,16 +32,18 @@ func (s *MemoryStore) CreateImportSession(_ context.Context, session ImportSessi
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	// A dead session gives its key to the new one, whatever the new one asks for, but only if the new one is created.
+	var freed string
 	for id, existing := range s.importSessions {
 		if existing.TargetRepositoryID == session.TargetRepositoryID && existing.IdempotencyKey == session.IdempotencyKey {
+			if importSessionDead(existing, session.CreatedAt) {
+				freed = id
+				continue
+			}
 			if !equivalentImportRequest(existing, session) {
 				return ImportSession{}, false, ErrIdempotencyConflict
 			}
-			if !importSessionDead(existing, session.CreatedAt) {
-				return cloneImportSession(existing), true, nil
-			}
-			existing.IdempotencyKey = freedImportKey(existing)
-			s.importSessions[id] = existing
+			return cloneImportSession(existing), true, nil
 		}
 	}
 	if err = checkImportLimits(deduped, total, limits); err != nil {
@@ -60,8 +62,13 @@ func (s *MemoryStore) CreateImportSession(_ context.Context, session ImportSessi
 	if limits.MaxOpenSessionsPerPrincipal > 0 && open >= limits.MaxOpenSessionsPerPrincipal {
 		return ImportSession{}, false, ErrImportTooManySessions
 	}
-	if limits.StagingQuotaBytes > 0 && staged+total > limits.StagingQuotaBytes {
+	if !withinStagingQuota(limits.StagingQuotaBytes, staged, total) {
 		return ImportSession{}, false, ErrImportStagingQuota
+	}
+	if freed != "" {
+		dead := s.importSessions[freed]
+		dead.IdempotencyKey = freedImportKey(dead)
+		s.importSessions[freed] = dead
 	}
 	session.State, session.Bytes, session.UpdatedAt = ImportSessionOpen, total, session.CreatedAt
 	if s.importSessions == nil {
@@ -184,7 +191,7 @@ func (s *MemoryStore) AbortImportSession(_ context.Context, sessionID string, no
 	switch {
 	case session.State == ImportSessionAborted:
 		return nil
-	case !session.State.Live():
+	case session.State != ImportSessionOpen:
 		return ErrImportSessionClosed
 	}
 	session.State, session.UpdatedAt = ImportSessionAborted, now
@@ -192,52 +199,85 @@ func (s *MemoryStore) AbortImportSession(_ context.Context, sessionID string, no
 	return nil
 }
 
-// ReapImportSessions implements ImportSessionStore.
+// ReapImportSessions implements ImportSessionStore. A session being reaped is marked, so overlapping passes divide the work
+// as the SKIP LOCKED passes of the PostgreSQL store do, and the store is not locked while the staging objects are deleted.
 func (s *MemoryStore) ReapImportSessions(ctx context.Context, now time.Time, limit int, remove func(ctx context.Context, keys []string) error) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ids := make([]string, 0, len(s.importSessions))
-	for id, session := range s.importSessions {
-		if (session.State.Live() && !session.ExpiresAt.After(now)) || (!session.State.Live() && len(stagingKeysLocked(s.importBlobs[id])) > 0) {
-			ids = append(ids, id)
-		}
-	}
-	sort.Slice(ids, func(i, j int) bool {
-		a, b := s.importSessions[ids[i]], s.importSessions[ids[j]]
-		if !a.ExpiresAt.Equal(b.ExpiresAt) {
-			return a.ExpiresAt.Before(b.ExpiresAt)
-		}
-		return a.ID < b.ID
-	})
 	if limit <= 0 {
 		limit = 100
 	}
 	var failures []error
+	tried := map[string]bool{}
 	finished := 0
-	for _, id := range ids {
-		if finished >= limit {
+	for finished < limit {
+		id, keys, ok := s.claimImportSessionToReap(now, tried)
+		if !ok {
 			break
 		}
-		keys := stagingKeysLocked(s.importBlobs[id])
+		tried[id] = true
 		if len(keys) > 0 {
 			if err := remove(ctx, keys); err != nil {
 				failures = append(failures, err)
+				s.releaseImportSessionReap(id)
 				continue
 			}
-			for digest, blob := range s.importBlobs[id] {
-				blob.StagingKey = ""
-				s.importBlobs[id][digest] = blob
-			}
 		}
-		session := s.importSessions[id]
-		if session.State.Live() {
-			session.State = ImportSessionExpired
-		}
-		session.UpdatedAt = now
-		s.importSessions[id] = session
+		s.finishImportSessionReap(id, now, len(keys) > 0)
 		finished++
 	}
 	return finished, errors.Join(failures...)
+}
+
+// claimImportSessionToReap marks the oldest session that needs reaping and that no pass has tried or holds, and returns its
+// staging keys.
+func (s *MemoryStore) claimImportSessionToReap(now time.Time, tried map[string]bool) (id string, keys []string, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var best *ImportSession
+	for candidate, session := range s.importSessions {
+		if tried[candidate] || s.importReaping[candidate] {
+			continue
+		}
+		if !(session.State.Live() && !session.ExpiresAt.After(now)) && !(!session.State.Live() && len(stagingKeysLocked(s.importBlobs[candidate])) > 0) {
+			continue
+		}
+		if best == nil || session.ExpiresAt.Before(best.ExpiresAt) || (session.ExpiresAt.Equal(best.ExpiresAt) && session.ID < best.ID) {
+			picked := session
+			best = &picked
+		}
+	}
+	if best == nil {
+		return "", nil, false
+	}
+	if s.importReaping == nil {
+		s.importReaping = map[string]bool{}
+	}
+	s.importReaping[best.ID] = true
+	return best.ID, stagingKeysLocked(s.importBlobs[best.ID]), true
+}
+
+func (s *MemoryStore) releaseImportSessionReap(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.importReaping, id)
+}
+
+// finishImportSessionReap empties the staging keys of a reaped session and expires it when it was still live.
+func (s *MemoryStore) finishImportSessionReap(id string, now time.Time, hadKeys bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.importReaping, id)
+	if hadKeys {
+		for digest, blob := range s.importBlobs[id] {
+			blob.StagingKey = ""
+			s.importBlobs[id][digest] = blob
+		}
+	}
+	session := s.importSessions[id]
+	if session.State.Live() {
+		session.State = ImportSessionExpired
+	}
+	session.UpdatedAt = now
+	s.importSessions[id] = session
 }
 
 func stagingKeysLocked(blobs map[string]ImportBlob) []string {

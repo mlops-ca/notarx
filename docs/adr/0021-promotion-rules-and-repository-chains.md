@@ -465,8 +465,8 @@ whose TTL equals `NOTARX_IMPORT_SESSION_TTL`: every node runs it once a minute, 
 staging objects are deleted before their keys are emptied, and the retention janitor then deletes
 the finished rows (the `import_sessions` registry entry). `ImportWrite` is the grant scope `repositories:import`: admin
 includes it, write does not, and it implies no read. A blob digest must be `sha256:<64 hex>` because it is part of the staging key.
-A retry under the idempotency key of a dead session (aborted, expired or past its expiry) gets a new session: the dead one
-keeps its row for the reaper under a renamed key. Starting the commit keeps the session at least an hour (`ImportCommitGrace`)
+A retry under the idempotency key of a dead session (aborted, expired or past its expiry) gets a new session whatever it
+asks for: the dead one keeps its row for the reaper under a renamed key. Only an open session is aborted; a committing one finishes or expires. Starting the commit keeps the session at least an hour (`ImportCommitGrace`)
 so a running commit never loses its staging objects to the reaper. An upload that the store refuses with a closed session
 deletes the object it staged, since the reaper may already have emptied the staging keys.
 
