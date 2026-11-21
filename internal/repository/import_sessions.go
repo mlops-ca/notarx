@@ -208,6 +208,15 @@ func importSessionDead(session ImportSession, now time.Time) bool {
 	return false
 }
 
+// importSessionNeedsReaping reports whether the reaper has work on a session: a live one past its expiry, or a finished one that
+// still names staging objects.
+func importSessionNeedsReaping(session ImportSession, hasStagingKeys bool, now time.Time) bool {
+	if session.State.Live() {
+		return !session.ExpiresAt.After(now)
+	}
+	return hasStagingKeys
+}
+
 // freedImportKey is the idempotency key a dead session is renamed to, so a new session can take its key while the dead one
 // stays for the reaper and the retention janitor.
 func freedImportKey(session ImportSession) string { return session.IdempotencyKey + "#" + session.ID }

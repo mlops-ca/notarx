@@ -237,7 +237,7 @@ func (s *MemoryStore) claimImportSessionToReap(now time.Time, tried map[string]b
 		if tried[candidate] || s.importReaping[candidate] {
 			continue
 		}
-		if !(session.State.Live() && !session.ExpiresAt.After(now)) && !(!session.State.Live() && len(stagingKeysLocked(s.importBlobs[candidate])) > 0) {
+		if !importSessionNeedsReaping(session, len(stagingKeysLocked(s.importBlobs[candidate])) > 0, now) {
 			continue
 		}
 		if best == nil || session.ExpiresAt.Before(best.ExpiresAt) || (session.ExpiresAt.Equal(best.ExpiresAt) && session.ID < best.ID) {
