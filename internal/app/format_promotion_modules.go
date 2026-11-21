@@ -39,7 +39,9 @@ func (m promotionModule) Format() repository.Format { return m.format }
 func (m promotionModule) EnqueuePromotion(ctx context.Context, sourceID, targetID, coordinate, digest, key string, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 	return m.enqueue(ctx, sourceID, targetID, coordinate, digest, key, audit...)
 }
-func (m promotionModule) RunPromotionJobs(ctx context.Context, limit int) error { return m.run(ctx, limit) }
+func (m promotionModule) RunPromotionJobs(ctx context.Context, limit int) error {
+	return m.run(ctx, limit)
+}
 
 // mavenPromotionModule adds the Maven release: the assets of one GAV coordinate.
 type mavenPromotionModule struct {

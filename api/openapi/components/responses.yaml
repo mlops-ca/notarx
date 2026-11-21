@@ -490,6 +490,12 @@ RepositoryLifecycleJobList:
     application/json:
       schema:
         "$ref": "../components/schemas.yaml#/RepositoryLifecycleJobPage"
+ArtifactPromotionList:
+  description: A page of artifact promotions (provenance rows), newest first
+  content:
+    application/json:
+      schema:
+        "$ref": "../components/schemas.yaml#/ArtifactPromotionPage"
 ArtifactTombstoneList:
   description: Tombstoned artifacts for one repository
   content:

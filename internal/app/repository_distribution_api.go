@@ -22,6 +22,11 @@ import (
 
 func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.ResponseWriter, r *http.Request, repositoryID adminopenapi.RepositoryId, params adminopenapi.CreateRepositoryPromotionParams) {
 	h.withRepositoryScope(w, r, repositoryID.String(), RepositoryAdmin, func(principal Principal, source repository.HostedRepository) {
+		service := newPromotionService(h)
+		if !service.SupportsFormat(source.Format) {
+			writeHostedProblem(w, errUnsupportedPromotionFormat.Status, errUnsupportedPromotionFormat.Code, errUnsupportedPromotionFormat.Message)
+			return
+		}
 		if !supportsAPTDistributionPreview(source, h.aptSnapshotPublisher, repository.RepositoryOperationPromote) {
 			writeHostedProblem(w, http.StatusConflict, "unsupported_operation", "promotion is not supported for this repository format")
 			return
@@ -32,12 +37,13 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.Response
 			return
 		}
 		h.withRepositoryScopeForPrincipal(w, r, principal, request.TargetRepositoryId.String(), RepositoryAdmin, func(Principal, repository.HostedRepository) {
-			job, perr := newPromotionService(h).Request(r.Context(), PromotionRequest{Principal: principal, Source: source, TargetID: request.TargetRepositoryId.String(), Coordinate: request.Coordinate, Digest: request.Digest, AptTargetSuite: request.AptTargetSuite, IdempotencyKey: string(params.IdempotencyKey)})
+			result, perr := service.Request(r.Context(), PromotionRequest{Principal: principal, Source: source, TargetID: request.TargetRepositoryId.String(), Coordinate: request.Coordinate, Digest: request.Digest, AptTargetSuite: request.AptTargetSuite, IdempotencyKey: string(params.IdempotencyKey)})
 			if perr != nil {
 				writeHostedProblem(w, perr.Status, perr.Code, perr.Message)
 				return
 			}
-			writeNativeMavenJSON(w, http.StatusAccepted, lifecycleJobResponse(job))
+			w.Header().Set("Notarx-Promotion-Id", result.Promotion.ID)
+			writeNativeMavenJSON(w, http.StatusAccepted, lifecycleJobResponse(result.Job))
 		})
 	})
 }

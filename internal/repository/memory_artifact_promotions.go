@@ -120,7 +120,9 @@ func (s *MemoryStore) PageArtifactPromotions(_ context.Context, query ArtifactPr
 		}
 		items = append(items, cloneArtifactPromotion(promotion))
 	}
-	sort.Slice(items, func(i, j int) bool { return newerFirst(items[i].CreatedAt, items[i].ID, items[j].CreatedAt, items[j].ID) })
+	sort.Slice(items, func(i, j int) bool {
+		return newerFirst(items[i].CreatedAt, items[i].ID, items[j].CreatedAt, items[j].ID)
+	})
 	page := ArtifactPromotionPage{Items: items}
 	if len(items) > limit {
 		page.Items = items[:limit]

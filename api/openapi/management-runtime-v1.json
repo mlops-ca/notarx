@@ -9665,6 +9665,78 @@
         }
       }
     },
+    "/artifact-promotions": {
+      "get": {
+        "operationId": "listArtifactPromotions",
+        "summary": "List artifact promotions (provenance)",
+        "description": "Lists the provenance rows of promotions, one per attempt, newest first, paged by keyset on creation time then id: continue with the nextPageToken of the previous page. A platform administrator sees every target repository; any other caller sees only the promotions into repositories it may read, and a repository it cannot read contributes no rows and is indistinguishable from one that does not exist. Rows are filtered before the page is cut, so every page holds limit rows until the last one.",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "default": 100
+            }
+          },
+          {
+            "$ref": "#/components/parameters/PageToken"
+          },
+          {
+            "name": "targetRepositoryId",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/Format"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactPromotionState"
+            }
+          },
+          {
+            "name": "coordinate",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 1024
+            }
+          },
+          {
+            "name": "digest",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ArtifactPromotionList"
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/repositories/{repositoryId}/promotions": {
       "parameters": [
         {
@@ -9690,7 +9762,16 @@
         },
         "responses": {
           "202": {
-            "description": "Immutable artifact promotion job accepted",
+            "description": "Immutable artifact promotion job accepted. The Notarx-Promotion-Id header names the provenance row of the attempt (see listArtifactPromotions); a replay of the same Idempotency-Key returns the same job and the same row.",
+            "headers": {
+              "Notarx-Promotion-Id": {
+                "description": "Id of the artifact promotion (provenance) row written with the job.",
+                "schema": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -9712,6 +9793,9 @@
             "$ref": "#/components/responses/Problem"
           },
           "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
             "$ref": "#/components/responses/Problem"
           }
         }
@@ -25775,6 +25859,171 @@
           }
         }
       },
+      "ArtifactPromotionState": {
+        "type": "string",
+        "enum": [
+          "pending_approval",
+          "queued",
+          "running",
+          "completed",
+          "failed",
+          "rejected",
+          "expired",
+          "cancelled"
+        ]
+      },
+      "PromotionChainHop": {
+        "type": "object",
+        "required": [
+          "instance",
+          "repository",
+          "ruleId",
+          "at"
+        ],
+        "description": "One step of the path an artifact took to its repository. The list is appended to and never rewritten.",
+        "properties": {
+          "instance": {
+            "type": "string",
+            "description": "The remote instance the artifact came from; empty for this instance."
+          },
+          "repository": {
+            "type": "string",
+            "description": "The repository the artifact was promoted from."
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "The promotion rule that promoted it; empty for a manual promotion."
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PromotionApproval": {
+        "type": "object",
+        "required": [
+          "approver",
+          "at"
+        ],
+        "properties": {
+          "approver": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ArtifactPromotion": {
+        "type": "object",
+        "required": [
+          "id",
+          "targetRepositoryId",
+          "format",
+          "coordinate",
+          "digest",
+          "originRepository",
+          "chainPath",
+          "requestedBy",
+          "state",
+          "attempt",
+          "idempotencyKey",
+          "approvals",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetRepositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "format": {
+            "$ref": "#/components/schemas/Format"
+          },
+          "coordinate": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "originInstanceId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "originRepository": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "ruleVersion": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "chainPath": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionChainHop"
+            }
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ArtifactPromotionState"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "The try of the idempotencyKey this row records."
+          },
+          "idempotencyKey": {
+            "type": "string"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "approvals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionApproval"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ArtifactPromotionPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ArtifactPromotion"
+            }
+          },
+          "nextPageToken": {
+            "type": "string",
+            "description": "Present while older promotions follow; pass it as pageToken for the next page."
+          }
+        }
+      },
       "PromotionRequest": {
         "type": "object",
         "required": [
@@ -28982,6 +29231,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/QuarantineReadPolicy"
+            }
+          }
+        }
+      },
+      "ArtifactPromotionList": {
+        "description": "A page of artifact promotions (provenance rows), newest first",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ArtifactPromotionPage"
             }
           }
         }

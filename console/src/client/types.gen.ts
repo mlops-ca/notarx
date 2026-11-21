@@ -3922,6 +3922,72 @@ export type RetentionDryRunSummary = {
   oldestCandidateAt?: string;
 };
 
+export type ArtifactPromotionState =
+  | "pending_approval"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "rejected"
+  | "expired"
+  | "cancelled";
+
+/**
+ * One step of the path an artifact took to its repository. The list is appended to and never rewritten.
+ */
+export type PromotionChainHop = {
+  /**
+   * The remote instance the artifact came from; empty for this instance.
+   */
+  instance: string;
+  /**
+   * The repository the artifact was promoted from.
+   */
+  repository: string;
+  /**
+   * The promotion rule that promoted it; empty for a manual promotion.
+   */
+  ruleId: string;
+  at: string;
+};
+
+export type PromotionApproval = {
+  approver: string;
+  at: string;
+};
+
+export type ArtifactPromotion = {
+  id: string;
+  targetRepositoryId: string;
+  format: Format;
+  coordinate: string;
+  digest: string;
+  originInstanceId?: string;
+  originRepository: string;
+  ruleId?: string;
+  ruleVersion?: number;
+  chainPath: Array<PromotionChainHop>;
+  requestedBy: string;
+  state: ArtifactPromotionState;
+  /**
+   * The try of the idempotencyKey this row records.
+   */
+  attempt: number;
+  idempotencyKey: string;
+  jobId?: string;
+  approvals: Array<PromotionApproval>;
+  createdAt: string;
+  completedAt?: string;
+};
+
+export type ArtifactPromotionPage = {
+  items: Array<ArtifactPromotion>;
+  /**
+   * Present while older promotions follow; pass it as pageToken for the next page.
+   */
+  nextPageToken?: string;
+};
+
 export type PromotionRequest = {
   targetRepositoryId: string;
   coordinate: string;
@@ -14691,6 +14757,45 @@ export type ExecuteRepositoryRetentionResponses = {
 export type ExecuteRepositoryRetentionResponse =
   ExecuteRepositoryRetentionResponses[keyof ExecuteRepositoryRetentionResponses];
 
+export type ListArtifactPromotionsData = {
+  body?: never;
+  path?: never;
+  query?: {
+    limit?: number;
+    pageToken?: string;
+    targetRepositoryId?: string;
+    format?: Format;
+    state?: ArtifactPromotionState;
+    coordinate?: string;
+    digest?: string;
+  };
+  url: "/artifact-promotions";
+};
+
+export type ListArtifactPromotionsErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+};
+
+export type ListArtifactPromotionsError =
+  ListArtifactPromotionsErrors[keyof ListArtifactPromotionsErrors];
+
+export type ListArtifactPromotionsResponses = {
+  /**
+   * A page of artifact promotions (provenance rows), newest first
+   */
+  200: ArtifactPromotionPage;
+};
+
+export type ListArtifactPromotionsResponse =
+  ListArtifactPromotionsResponses[keyof ListArtifactPromotionsResponses];
+
 export type CreateRepositoryPromotionData = {
   body: PromotionRequest;
   headers: {
@@ -14724,6 +14829,10 @@ export type CreateRepositoryPromotionErrors = {
    * Problem response
    */
   409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
 };
 
 export type CreateRepositoryPromotionError =
@@ -14731,7 +14840,7 @@ export type CreateRepositoryPromotionError =
 
 export type CreateRepositoryPromotionResponses = {
   /**
-   * Immutable artifact promotion job accepted
+   * Immutable artifact promotion job accepted. The Notarx-Promotion-Id header names the provenance row of the attempt (see listArtifactPromotions); a replay of the same Idempotency-Key returns the same job and the same row.
    */
   202: LifecycleJob;
 };

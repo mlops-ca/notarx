@@ -2838,6 +2838,69 @@ PromotionRequest:
       minLength: 1
       maxLength: 128
       description: Required only for APT Hosted operator preview. Appends the immutable pool package to this target suite using the target signer. The pool coordinate preserves its component.
+ArtifactPromotionState:
+  type: string
+  enum: [pending_approval, queued, running, completed, failed, rejected, expired, cancelled]
+PromotionChainHop:
+  type: object
+  required: [instance, repository, ruleId, at]
+  description: One step of the path an artifact took to its repository. The list is appended to and never rewritten.
+  properties:
+    instance:
+      type: string
+      description: The remote instance the artifact came from; empty for this instance.
+    repository:
+      type: string
+      description: The repository the artifact was promoted from.
+    ruleId:
+      type: string
+      description: The promotion rule that promoted it; empty for a manual promotion.
+    at: {type: string, format: date-time}
+PromotionApproval:
+  type: object
+  required: [approver, at]
+  properties:
+    approver: {type: string}
+    at: {type: string, format: date-time}
+ArtifactPromotion:
+  type: object
+  required: [id, targetRepositoryId, format, coordinate, digest, originRepository, chainPath, requestedBy, state, attempt, idempotencyKey, approvals, createdAt]
+  properties:
+    id: {type: string, format: uuid}
+    targetRepositoryId: {type: string, format: uuid}
+    format: {"$ref": "#/Format"}
+    coordinate: {type: string}
+    digest: {type: string}
+    originInstanceId: {type: string, format: uuid}
+    originRepository: {type: string}
+    ruleId: {type: string, format: uuid}
+    ruleVersion: {type: integer, format: int64}
+    chainPath:
+      type: array
+      items: {"$ref": "#/PromotionChainHop"}
+    requestedBy: {type: string}
+    state: {"$ref": "#/ArtifactPromotionState"}
+    attempt:
+      type: integer
+      minimum: 1
+      description: The try of the idempotencyKey this row records.
+    idempotencyKey: {type: string}
+    jobId: {type: string, format: uuid}
+    approvals:
+      type: array
+      items: {"$ref": "#/PromotionApproval"}
+    createdAt: {type: string, format: date-time}
+    completedAt: {type: string, format: date-time}
+ArtifactPromotionPage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items: {"$ref": "#/ArtifactPromotion"}
+    nextPageToken:
+      type: string
+      description: Present while older promotions follow; pass it as pageToken for the next page.
 ReplicationRequest:
   type: object
   required: [targetRepositoryId, coordinate, digest]
