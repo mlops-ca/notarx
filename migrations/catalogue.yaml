@@ -961,6 +961,17 @@ tables:
       installation_repository_presets_repositories_created_check: (repositories_created >= 0)
       installation_repository_presets_singleton_check: singleton
       installation_repository_presets_state_check: (state = ANY (ARRAY['pending'::text, 'applied'::text, 'skipped_existing'::text]))
+  instance_identity:
+    columns:
+      created_at: timestamp
+      instance_id: uuid
+      singleton: bool
+    primaryKey: [singleton]
+    defaults:
+      created_at: now()
+      singleton: "true"
+    checks:
+      instance_identity_singleton_check: singleton
   lifecycle_jobs:
     columns:
       attempts: int32
@@ -3360,6 +3371,40 @@ tables:
       enabled: "true"
     checks:
       raw_groups_cache_quota_bytes_check: (cache_quota_bytes > 0)
+  remote_instances:
+    columns:
+      audience: text
+      auth_kind: text
+      base_url: text
+      created_at: timestamp
+      id: uuid
+      instance_id: uuid
+      last_checked_at: timestamp?
+      name: text
+      state: text
+      token_sealed: text?
+      trust_evidence: bool
+      updated_at: timestamp
+      version: int64
+    primaryKey: [id]
+    unique: [[name]]
+    defaults:
+      audience: ''''''
+      created_at: now()
+      state: '''active'''
+      trust_evidence: "false"
+      updated_at: now()
+      version: "1"
+    special:
+      remote_instances_name_bytes_idx: USING btree (name COLLATE "C")
+    checks:
+      remote_instances_audience_check: ((length(audience) <= 512) AND ((auth_kind <> 'workload_identity'::text) OR (audience <> ''::text)))
+      remote_instances_auth_kind_check: (auth_kind = ANY (ARRAY['workload_identity'::text, 'static_token'::text]))
+      remote_instances_base_url_check: ((length(base_url) >= 1) AND (length(base_url) <= 2048))
+      remote_instances_name_check: ((length(name) >= 1) AND (length(name) <= 128))
+      remote_instances_state_check: (state = ANY (ARRAY['active'::text, 'unreachable'::text, 'disabled'::text]))
+      remote_instances_token_check: (((auth_kind = 'static_token'::text) AND (token_sealed IS NOT NULL) AND (token_sealed <> ''::text)) OR ((auth_kind = 'workload_identity'::text) AND (token_sealed IS NULL)))
+      remote_instances_version_check: (version >= 1)
   replication_checkpoints:
     columns:
       attempts: int32

@@ -3848,6 +3848,45 @@ func (e RawVersionState) Valid() bool {
 	}
 }
 
+// Defines values for RemoteInstanceAuthKind.
+const (
+	StaticToken      RemoteInstanceAuthKind = "static_token"
+	WorkloadIdentity RemoteInstanceAuthKind = "workload_identity"
+)
+
+// Valid indicates whether the value is a known member of the RemoteInstanceAuthKind enum.
+func (e RemoteInstanceAuthKind) Valid() bool {
+	switch e {
+	case StaticToken:
+		return true
+	case WorkloadIdentity:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RemoteInstanceState.
+const (
+	RemoteInstanceStateActive      RemoteInstanceState = "active"
+	RemoteInstanceStateDisabled    RemoteInstanceState = "disabled"
+	RemoteInstanceStateUnreachable RemoteInstanceState = "unreachable"
+)
+
+// Valid indicates whether the value is a known member of the RemoteInstanceState enum.
+func (e RemoteInstanceState) Valid() bool {
+	switch e {
+	case RemoteInstanceStateActive:
+		return true
+	case RemoteInstanceStateDisabled:
+		return true
+	case RemoteInstanceStateUnreachable:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ReplaceIdentityProviderJitDefaultRole.
 const (
 	ReplaceIdentityProviderJitDefaultRoleMember ReplaceIdentityProviderJitDefaultRole = "member"
@@ -6637,6 +6676,19 @@ type CreatePublishSession struct {
 	union json.RawMessage
 }
 
+// CreateRemoteInstance defines model for CreateRemoteInstance.
+type CreateRemoteInstance struct {
+	// Audience Required for workload_identity.
+	Audience *string                `json:"audience,omitempty"`
+	AuthKind RemoteInstanceAuthKind `json:"authKind"`
+	BaseUrl  string                 `json:"baseUrl"`
+	Name     string                 `json:"name"`
+
+	// Token Required for static_token; forbidden for workload_identity.
+	Token         *string `json:"token,omitempty"`
+	TrustEvidence *bool   `json:"trustEvidence,omitempty"`
+}
+
 // CreateRepository defines model for CreateRepository.
 type CreateRepository struct {
 	// AllowedHosts Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
@@ -7983,6 +8035,14 @@ type ImportIdentityProviderMetadata struct {
 	Xml *string `json:"xml,omitempty"`
 }
 
+// InstanceLimits defines model for InstanceLimits.
+type InstanceLimits struct {
+	MaxBlobBytes                int64 `json:"maxBlobBytes"`
+	MaxBlobsPerSession          int32 `json:"maxBlobsPerSession"`
+	MaxOpenSessionsPerPrincipal int32 `json:"maxOpenSessionsPerPrincipal"`
+	MaxSessionBytes             int64 `json:"maxSessionBytes"`
+}
+
 // IssuerKey defines model for IssuerKey.
 type IssuerKey struct {
 	ActivatedAt *time.Time     `json:"activatedAt,omitempty"`
@@ -9261,6 +9321,56 @@ type RawVersionSealFile struct {
 // RawVersionState An open version accepts files and properties; a sealed one is immutable and has a manifest digest. A tombstoned version is not visible through this API.
 type RawVersionState string
 
+// RemoteInstance defines model for RemoteInstance.
+type RemoteInstance struct {
+	// Audience Audience of the workload assertion minted for this remote; empty for a static token.
+	Audience  string                 `json:"audience"`
+	AuthKind  RemoteInstanceAuthKind `json:"authKind"`
+	BaseUrl   string                 `json:"baseUrl"`
+	CreatedAt time.Time              `json:"createdAt"`
+	Id        openapi_types.UUID     `json:"id"`
+
+	// InstanceId The instance id the remote reported when it was registered or last changed.
+	InstanceId    openapi_types.UUID  `json:"instanceId"`
+	LastCheckedAt *time.Time          `json:"lastCheckedAt,omitempty"`
+	Name          string              `json:"name"`
+	State         RemoteInstanceState `json:"state"`
+
+	// TokenConfigured True when a static token is stored. The token itself is never returned.
+	TokenConfigured bool      `json:"tokenConfigured"`
+	TrustEvidence   bool      `json:"trustEvidence"`
+	UpdatedAt       time.Time `json:"updatedAt"`
+	Version         string    `json:"version"`
+}
+
+// RemoteInstanceAuthKind defines model for RemoteInstanceAuthKind.
+type RemoteInstanceAuthKind string
+
+// RemoteInstancePage defines model for RemoteInstancePage.
+type RemoteInstancePage struct {
+	Items []RemoteInstance `json:"items"`
+
+	// NextPageToken Present while more instances follow; pass it as pageToken for the next page.
+	NextPageToken *string `json:"nextPageToken,omitempty"`
+}
+
+// RemoteInstanceState defines model for RemoteInstanceState.
+type RemoteInstanceState string
+
+// RemoteInstanceTestResult defines model for RemoteInstanceTestResult.
+type RemoteInstanceTestResult struct {
+	ApiVersion *string   `json:"apiVersion,omitempty"`
+	CheckedAt  time.Time `json:"checkedAt"`
+
+	// Error Why the check failed; never contains a credential.
+	Error      *string             `json:"error,omitempty"`
+	Formats    []string            `json:"formats"`
+	InstanceId *openapi_types.UUID `json:"instanceId,omitempty"`
+	Limits     *InstanceLimits     `json:"limits,omitempty"`
+	Reachable  bool                `json:"reachable"`
+	State      RemoteInstanceState `json:"state"`
+}
+
 // RenameUserGroup defines model for RenameUserGroup.
 type RenameUserGroup struct {
 	DisplayName string `json:"displayName"`
@@ -10291,6 +10401,19 @@ type TestWorkloadPolicyRequest struct {
 	Token    *string                 `json:"token,omitempty"`
 }
 
+// UpdateRemoteInstance defines model for UpdateRemoteInstance.
+type UpdateRemoteInstance struct {
+	Audience *string                `json:"audience,omitempty"`
+	AuthKind RemoteInstanceAuthKind `json:"authKind"`
+	BaseUrl  string                 `json:"baseUrl"`
+	Enabled  bool                   `json:"enabled"`
+	Name     string                 `json:"name"`
+
+	// Token Replaces the sealed token; omit it to keep the stored one.
+	Token         *string `json:"token,omitempty"`
+	TrustEvidence *bool   `json:"trustEvidence,omitempty"`
+}
+
 // UpdateRepository Editable repository management policy and proxy configuration. Hosted repositories accept visibility updates and Maven Hosted repositories also accept mavenStrictPublication updates; name, format, type, and the layout of a Raw repository are immutable after creation.
 type UpdateRepository struct {
 	// AllowedHosts Hosts the proxy may egress to. Required for raw, conan, and npm proxies. npm tarball redirects are limited to this list.
@@ -10826,6 +10949,9 @@ type RawPackageName = string
 // RawVersionIdentifier defines model for RawVersionIdentifier.
 type RawVersionIdentifier = string
 
+// RemoteInstanceId defines model for RemoteInstanceId.
+type RemoteInstanceId = openapi_types.UUID
+
 // ReplicationPlanId defines model for ReplicationPlanId.
 type ReplicationPlanId = openapi_types.UUID
 
@@ -10882,6 +11008,12 @@ type OCIImageList = OCIImagePage
 
 // OCIManifestSummaryList defines model for OCIManifestSummaryList.
 type OCIManifestSummaryList = OCIManifestSummaryPage
+
+// RemoteInstanceList defines model for RemoteInstanceList.
+type RemoteInstanceList = RemoteInstancePage
+
+// RemoteInstanceTest defines model for RemoteInstanceTest.
+type RemoteInstanceTest = RemoteInstanceTestResult
 
 // RepositoryLifecycleJobList defines model for RepositoryLifecycleJobList.
 type RepositoryLifecycleJobList = RepositoryLifecycleJobPage
@@ -11249,6 +11381,17 @@ type CreateRubyGemsPreviewRepositoryParams struct {
 
 // ReplacePublicAccessPolicyParams defines parameters for ReplacePublicAccessPolicy.
 type ReplacePublicAccessPolicyParams struct {
+	IfMatch IfMatch `json:"If-Match"`
+}
+
+// ListRemoteInstancesParams defines parameters for ListRemoteInstances.
+type ListRemoteInstancesParams struct {
+	Limit     *int       `form:"limit,omitempty" json:"limit,omitempty"`
+	PageToken *PageToken `form:"pageToken,omitempty" json:"pageToken,omitempty"`
+}
+
+// UpdateRemoteInstanceParams defines parameters for UpdateRemoteInstance.
+type UpdateRemoteInstanceParams struct {
 	IfMatch IfMatch `json:"If-Match"`
 }
 
@@ -11943,6 +12086,12 @@ type ReplaceRubyGemsPreviewQuarantineReadPolicyJSONRequestBody = RubyGemsPreview
 
 // ReplacePublicAccessPolicyJSONRequestBody defines body for ReplacePublicAccessPolicy for application/json ContentType.
 type ReplacePublicAccessPolicyJSONRequestBody = PublicAccessPolicy
+
+// CreateRemoteInstanceJSONRequestBody defines body for CreateRemoteInstance for application/json ContentType.
+type CreateRemoteInstanceJSONRequestBody = CreateRemoteInstance
+
+// UpdateRemoteInstanceJSONRequestBody defines body for UpdateRemoteInstance for application/json ContentType.
+type UpdateRemoteInstanceJSONRequestBody = UpdateRemoteInstance
 
 // CreateRepositoryJSONRequestBody defines body for CreateRepository for application/json ContentType.
 type CreateRepositoryJSONRequestBody = CreateRepository
@@ -13344,6 +13493,24 @@ type ServerInterface interface {
 
 	// (POST /publish-sessions/{sessionId}:commit)
 	CommitPublishSession(w http.ResponseWriter, r *http.Request, sessionId SessionId)
+
+	// (GET /remote-instances)
+	ListRemoteInstances(w http.ResponseWriter, r *http.Request, params ListRemoteInstancesParams)
+
+	// (POST /remote-instances)
+	CreateRemoteInstance(w http.ResponseWriter, r *http.Request)
+
+	// (DELETE /remote-instances/{remoteInstanceId})
+	DeleteRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceId RemoteInstanceId)
+
+	// (GET /remote-instances/{remoteInstanceId})
+	GetRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceId RemoteInstanceId)
+
+	// (PUT /remote-instances/{remoteInstanceId})
+	UpdateRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceId RemoteInstanceId, params UpdateRemoteInstanceParams)
+
+	// (POST /remote-instances/{remoteInstanceId}/test)
+	TestRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceId RemoteInstanceId)
 
 	// (GET /repositories)
 	ListRepositories(w http.ResponseWriter, r *http.Request, params ListRepositoriesParams)
@@ -19555,6 +19722,198 @@ func (siw *ServerInterfaceWrapper) CommitPublishSession(w http.ResponseWriter, r
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CommitPublishSession(w, r, sessionId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListRemoteInstances operation middleware
+func (siw *ServerInterfaceWrapper) ListRemoteInstances(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListRemoteInstancesParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		}
+		return
+	}
+
+	// ------------- Optional query parameter "pageToken" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "pageToken", r.URL.Query(), &params.PageToken, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		var requiredError *runtime.RequiredParameterError
+		if errors.As(err, &requiredError) {
+			siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "pageToken"})
+		} else {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "pageToken", Err: err})
+		}
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListRemoteInstances(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateRemoteInstance operation middleware
+func (siw *ServerInterfaceWrapper) CreateRemoteInstance(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateRemoteInstance(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteRemoteInstance operation middleware
+func (siw *ServerInterfaceWrapper) DeleteRemoteInstance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "remoteInstanceId" -------------
+	var remoteInstanceId RemoteInstanceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "remoteInstanceId", r.PathValue("remoteInstanceId"), &remoteInstanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "remoteInstanceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteRemoteInstance(w, r, remoteInstanceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetRemoteInstance operation middleware
+func (siw *ServerInterfaceWrapper) GetRemoteInstance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "remoteInstanceId" -------------
+	var remoteInstanceId RemoteInstanceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "remoteInstanceId", r.PathValue("remoteInstanceId"), &remoteInstanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "remoteInstanceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetRemoteInstance(w, r, remoteInstanceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateRemoteInstance operation middleware
+func (siw *ServerInterfaceWrapper) UpdateRemoteInstance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "remoteInstanceId" -------------
+	var remoteInstanceId RemoteInstanceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "remoteInstanceId", r.PathValue("remoteInstanceId"), &remoteInstanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "remoteInstanceId", Err: err})
+		return
+	}
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params UpdateRemoteInstanceParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "If-Match" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("If-Match")]; found {
+		var IfMatch IfMatch
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "If-Match", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "If-Match", valueList[0], &IfMatch, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "If-Match", Err: err})
+			return
+		}
+
+		params.IfMatch = IfMatch
+
+	} else {
+		err := fmt.Errorf("Header parameter If-Match is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "If-Match", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateRemoteInstance(w, r, remoteInstanceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TestRemoteInstance operation middleware
+func (siw *ServerInterfaceWrapper) TestRemoteInstance(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "remoteInstanceId" -------------
+	var remoteInstanceId RemoteInstanceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "remoteInstanceId", r.PathValue("remoteInstanceId"), &remoteInstanceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "remoteInstanceId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TestRemoteInstance(w, r, remoteInstanceId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -26443,6 +26802,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/webhook-subscriptions", wrapper.CreateWebhookSubscription)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-subscriptions/{subscriptionId}", wrapper.GetWebhookSubscription)
 	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/webhook-subscriptions/{subscriptionId}", wrapper.UpdateWebhookSubscription)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/remote-instances", wrapper.ListRemoteInstances)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/remote-instances", wrapper.CreateRemoteInstance)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/remote-instances/{remoteInstanceId}", wrapper.DeleteRemoteInstance)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/remote-instances/{remoteInstanceId}", wrapper.GetRemoteInstance)
+	m.HandleFunc(http.MethodPut+" "+options.BaseURL+"/remote-instances/{remoteInstanceId}", wrapper.UpdateRemoteInstance)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/remote-instances/{remoteInstanceId}/test", wrapper.TestRemoteInstance)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-deliveries", wrapper.ListWebhookDeliveries)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/webhook-deliveries/{deliveryId}", wrapper.GetWebhookDelivery)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/webhook-deliveries/{deliveryId}:replay", wrapper.ReplayWebhookDelivery)
@@ -26780,6 +27145,19 @@ type RawPackagePageJSONResponse RawPackagePage
 type RawVersionJSONResponse RawVersion
 
 type RawVersionPageJSONResponse RawVersionPage
+
+type RemoteInstanceResponseHeaders struct {
+	ETag string
+}
+type RemoteInstanceJSONResponse struct {
+	Body RemoteInstance
+
+	Headers RemoteInstanceResponseHeaders
+}
+
+type RemoteInstanceListJSONResponse RemoteInstancePage
+
+type RemoteInstanceTestJSONResponse RemoteInstanceTestResult
 
 type RepositoryJSONResponse Repository
 
@@ -39734,6 +40112,555 @@ func (response CommitPublishSession501ApplicationProblemPlusJSONResponse) VisitC
 	return err
 }
 
+type ListRemoteInstancesRequestObject struct {
+	Params ListRemoteInstancesParams
+}
+
+type ListRemoteInstancesResponseObject interface {
+	VisitListRemoteInstancesResponse(w http.ResponseWriter) error
+}
+
+type ListRemoteInstances200JSONResponse struct{ RemoteInstanceListJSONResponse }
+
+func (response ListRemoteInstances200JSONResponse) VisitListRemoteInstancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRemoteInstances400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response ListRemoteInstances400ApplicationProblemPlusJSONResponse) VisitListRemoteInstancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRemoteInstances401ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRemoteInstances401ApplicationProblemPlusJSONResponse) VisitListRemoteInstancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type ListRemoteInstances403ApplicationProblemPlusJSONResponse Problem
+
+func (response ListRemoteInstances403ApplicationProblemPlusJSONResponse) VisitListRemoteInstancesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRemoteInstanceRequestObject struct {
+	Body *CreateRemoteInstanceJSONRequestBody
+}
+
+type CreateRemoteInstanceResponseObject interface {
+	VisitCreateRemoteInstanceResponse(w http.ResponseWriter) error
+}
+
+type CreateRemoteInstance201JSONResponse struct{ RemoteInstanceJSONResponse }
+
+func (response CreateRemoteInstance201JSONResponse) VisitCreateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(201)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRemoteInstance400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreateRemoteInstance400ApplicationProblemPlusJSONResponse) VisitCreateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRemoteInstance401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRemoteInstance401ApplicationProblemPlusJSONResponse) VisitCreateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRemoteInstance403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRemoteInstance403ApplicationProblemPlusJSONResponse) VisitCreateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRemoteInstance409ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRemoteInstance409ApplicationProblemPlusJSONResponse) VisitCreateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRemoteInstance422ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRemoteInstance422ApplicationProblemPlusJSONResponse) VisitCreateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreateRemoteInstance503ApplicationProblemPlusJSONResponse Problem
+
+func (response CreateRemoteInstance503ApplicationProblemPlusJSONResponse) VisitCreateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteRemoteInstanceRequestObject struct {
+	RemoteInstanceId RemoteInstanceId `json:"remoteInstanceId"`
+}
+
+type DeleteRemoteInstanceResponseObject interface {
+	VisitDeleteRemoteInstanceResponse(w http.ResponseWriter) error
+}
+
+type DeleteRemoteInstance204Response struct {
+}
+
+func (response DeleteRemoteInstance204Response) VisitDeleteRemoteInstanceResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type DeleteRemoteInstance400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response DeleteRemoteInstance400ApplicationProblemPlusJSONResponse) VisitDeleteRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteRemoteInstance401ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteRemoteInstance401ApplicationProblemPlusJSONResponse) VisitDeleteRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteRemoteInstance403ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteRemoteInstance403ApplicationProblemPlusJSONResponse) VisitDeleteRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteRemoteInstance404ApplicationProblemPlusJSONResponse Problem
+
+func (response DeleteRemoteInstance404ApplicationProblemPlusJSONResponse) VisitDeleteRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRemoteInstanceRequestObject struct {
+	RemoteInstanceId RemoteInstanceId `json:"remoteInstanceId"`
+}
+
+type GetRemoteInstanceResponseObject interface {
+	VisitGetRemoteInstanceResponse(w http.ResponseWriter) error
+}
+
+type GetRemoteInstance200JSONResponse struct{ RemoteInstanceJSONResponse }
+
+func (response GetRemoteInstance200JSONResponse) VisitGetRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRemoteInstance400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetRemoteInstance400ApplicationProblemPlusJSONResponse) VisitGetRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRemoteInstance401ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRemoteInstance401ApplicationProblemPlusJSONResponse) VisitGetRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRemoteInstance403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRemoteInstance403ApplicationProblemPlusJSONResponse) VisitGetRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetRemoteInstance404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetRemoteInstance404ApplicationProblemPlusJSONResponse) VisitGetRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstanceRequestObject struct {
+	RemoteInstanceId RemoteInstanceId `json:"remoteInstanceId"`
+	Params           UpdateRemoteInstanceParams
+	Body             *UpdateRemoteInstanceJSONRequestBody
+}
+
+type UpdateRemoteInstanceResponseObject interface {
+	VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error
+}
+
+type UpdateRemoteInstance200JSONResponse struct{ RemoteInstanceJSONResponse }
+
+func (response UpdateRemoteInstance200JSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("ETag", fmt.Sprint(response.Headers.ETag))
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstance400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response UpdateRemoteInstance400ApplicationProblemPlusJSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstance401ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateRemoteInstance401ApplicationProblemPlusJSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstance403ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateRemoteInstance403ApplicationProblemPlusJSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstance404ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateRemoteInstance404ApplicationProblemPlusJSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstance409ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateRemoteInstance409ApplicationProblemPlusJSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstance412ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateRemoteInstance412ApplicationProblemPlusJSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(412)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstance422ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateRemoteInstance422ApplicationProblemPlusJSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateRemoteInstance503ApplicationProblemPlusJSONResponse Problem
+
+func (response UpdateRemoteInstance503ApplicationProblemPlusJSONResponse) VisitUpdateRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(503)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestRemoteInstanceRequestObject struct {
+	RemoteInstanceId RemoteInstanceId `json:"remoteInstanceId"`
+}
+
+type TestRemoteInstanceResponseObject interface {
+	VisitTestRemoteInstanceResponse(w http.ResponseWriter) error
+}
+
+type TestRemoteInstance200JSONResponse struct{ RemoteInstanceTestJSONResponse }
+
+func (response TestRemoteInstance200JSONResponse) VisitTestRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestRemoteInstance400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response TestRemoteInstance400ApplicationProblemPlusJSONResponse) VisitTestRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestRemoteInstance401ApplicationProblemPlusJSONResponse Problem
+
+func (response TestRemoteInstance401ApplicationProblemPlusJSONResponse) VisitTestRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestRemoteInstance403ApplicationProblemPlusJSONResponse Problem
+
+func (response TestRemoteInstance403ApplicationProblemPlusJSONResponse) VisitTestRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type TestRemoteInstance404ApplicationProblemPlusJSONResponse Problem
+
+func (response TestRemoteInstance404ApplicationProblemPlusJSONResponse) VisitTestRemoteInstanceResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type ListRepositoriesRequestObject struct {
 	Params ListRepositoriesParams
 }
@@ -52064,6 +52991,24 @@ type StrictServerInterface interface {
 	// (POST /publish-sessions/{sessionId}:commit)
 	CommitPublishSession(ctx context.Context, request CommitPublishSessionRequestObject) (CommitPublishSessionResponseObject, error)
 
+	// (GET /remote-instances)
+	ListRemoteInstances(ctx context.Context, request ListRemoteInstancesRequestObject) (ListRemoteInstancesResponseObject, error)
+
+	// (POST /remote-instances)
+	CreateRemoteInstance(ctx context.Context, request CreateRemoteInstanceRequestObject) (CreateRemoteInstanceResponseObject, error)
+
+	// (DELETE /remote-instances/{remoteInstanceId})
+	DeleteRemoteInstance(ctx context.Context, request DeleteRemoteInstanceRequestObject) (DeleteRemoteInstanceResponseObject, error)
+
+	// (GET /remote-instances/{remoteInstanceId})
+	GetRemoteInstance(ctx context.Context, request GetRemoteInstanceRequestObject) (GetRemoteInstanceResponseObject, error)
+
+	// (PUT /remote-instances/{remoteInstanceId})
+	UpdateRemoteInstance(ctx context.Context, request UpdateRemoteInstanceRequestObject) (UpdateRemoteInstanceResponseObject, error)
+
+	// (POST /remote-instances/{remoteInstanceId}/test)
+	TestRemoteInstance(ctx context.Context, request TestRemoteInstanceRequestObject) (TestRemoteInstanceResponseObject, error)
+
 	// (GET /repositories)
 	ListRepositories(ctx context.Context, request ListRepositoriesRequestObject) (ListRepositoriesResponseObject, error)
 
@@ -57037,6 +57982,175 @@ func (sh *strictHandler) CommitPublishSession(w http.ResponseWriter, r *http.Req
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CommitPublishSessionResponseObject); ok {
 		if err := validResponse.VisitCommitPublishSessionResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListRemoteInstances operation middleware
+func (sh *strictHandler) ListRemoteInstances(w http.ResponseWriter, r *http.Request, params ListRemoteInstancesParams) {
+	var request ListRemoteInstancesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListRemoteInstances(ctx, request.(ListRemoteInstancesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListRemoteInstances")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListRemoteInstancesResponseObject); ok {
+		if err := validResponse.VisitListRemoteInstancesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateRemoteInstance operation middleware
+func (sh *strictHandler) CreateRemoteInstance(w http.ResponseWriter, r *http.Request) {
+	var request CreateRemoteInstanceRequestObject
+
+	var body CreateRemoteInstanceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateRemoteInstance(ctx, request.(CreateRemoteInstanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateRemoteInstance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateRemoteInstanceResponseObject); ok {
+		if err := validResponse.VisitCreateRemoteInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// DeleteRemoteInstance operation middleware
+func (sh *strictHandler) DeleteRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceId RemoteInstanceId) {
+	var request DeleteRemoteInstanceRequestObject
+
+	request.RemoteInstanceId = remoteInstanceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.DeleteRemoteInstance(ctx, request.(DeleteRemoteInstanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "DeleteRemoteInstance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(DeleteRemoteInstanceResponseObject); ok {
+		if err := validResponse.VisitDeleteRemoteInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetRemoteInstance operation middleware
+func (sh *strictHandler) GetRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceId RemoteInstanceId) {
+	var request GetRemoteInstanceRequestObject
+
+	request.RemoteInstanceId = remoteInstanceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetRemoteInstance(ctx, request.(GetRemoteInstanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetRemoteInstance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetRemoteInstanceResponseObject); ok {
+		if err := validResponse.VisitGetRemoteInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UpdateRemoteInstance operation middleware
+func (sh *strictHandler) UpdateRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceId RemoteInstanceId, params UpdateRemoteInstanceParams) {
+	var request UpdateRemoteInstanceRequestObject
+
+	request.RemoteInstanceId = remoteInstanceId
+	request.Params = params
+
+	var body UpdateRemoteInstanceJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UpdateRemoteInstance(ctx, request.(UpdateRemoteInstanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UpdateRemoteInstance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UpdateRemoteInstanceResponseObject); ok {
+		if err := validResponse.VisitUpdateRemoteInstanceResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TestRemoteInstance operation middleware
+func (sh *strictHandler) TestRemoteInstance(w http.ResponseWriter, r *http.Request, remoteInstanceId RemoteInstanceId) {
+	var request TestRemoteInstanceRequestObject
+
+	request.RemoteInstanceId = remoteInstanceId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TestRemoteInstance(ctx, request.(TestRemoteInstanceRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TestRemoteInstance")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TestRemoteInstanceResponseObject); ok {
+		if err := validResponse.VisitTestRemoteInstanceResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

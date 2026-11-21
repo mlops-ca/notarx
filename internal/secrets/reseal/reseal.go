@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mlops-ca/notarx/internal/identity"
+	"github.com/mlops-ca/notarx/internal/remoteinstance"
 	"github.com/mlops-ca/notarx/internal/secrets"
 	"github.com/mlops-ca/notarx/internal/tokenissuer"
 )
@@ -68,6 +69,12 @@ func Targets() []Target {
 			Select:  "SELECT id::text, id::text, secret_ciphertext FROM webhook_subscriptions WHERE secret_ciphertext <> '' ORDER BY webhook_subscriptions.id",
 			Update:  "UPDATE webhook_subscriptions SET secret_ciphertext = $1, version = version + 1 WHERE id = $2::uuid AND secret_ciphertext = $3",
 			Purpose: func(id string) string { return "webhook-subscription:" + id },
+		},
+		{
+			Name:    "remote_instances.token_sealed",
+			Select:  "SELECT id::text, id::text, token_sealed FROM remote_instances WHERE COALESCE(token_sealed, '') <> '' ORDER BY remote_instances.id",
+			Update:  "UPDATE remote_instances SET token_sealed = $1, version = version + 1 WHERE id = $2::uuid AND token_sealed = $3",
+			Purpose: remoteinstance.TokenPurpose,
 		},
 		{
 			Name:    "hosted_repositories.upstream_auth.secret",

@@ -72,3 +72,6 @@ migrations:
   000022_artifact_promotions.sql:
     dialect: postgres
     reason: creates artifact_promotions with a partial index, the chain_path append-only trigger and the promotion job state trigger that replaces the Cargo-only one; the catalogue carries the table into the MySQL baseline with a generated-column index for the pending states, and the MySQL lifecycle store ports the triggers
+  000023_remote_instances.sql:
+    dialect: postgres
+    reason: creates remote_instances and instance_identity with a byte-order name index; the catalogue carries both tables into the MySQL baseline

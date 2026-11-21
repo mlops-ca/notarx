@@ -775,3 +775,22 @@ IssuerRotation:
     application/json:
       schema:
         "$ref": "../components/schemas.yaml#/IssuerRotation"
+RemoteInstance:
+  description: Remote notarx instance with the token redacted
+  headers:
+    ETag:
+      required: true
+      schema: {type: string}
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/RemoteInstance"}
+RemoteInstanceList:
+  description: Remote notarx instances
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/RemoteInstancePage"}
+RemoteInstanceTest:
+  description: Outcome of the well-known check
+  content:
+    application/json:
+      schema: {"$ref": "../components/schemas.yaml#/RemoteInstanceTestResult"}

@@ -5123,3 +5123,92 @@ RawVersionManifest:
   type: object
   additionalProperties: true
   description: The canonical manifest, keys sorted and without insignificant whitespace. `name`, `version`, `files` (`path`, `sha256`, `size`, sorted by path) and `properties`.
+RemoteInstanceAuthKind:
+  type: string
+  enum: [workload_identity, static_token]
+RemoteInstanceState:
+  type: string
+  enum: [active, unreachable, disabled]
+RemoteInstance:
+  type: object
+  required: [id, name, baseUrl, instanceId, authKind, audience, tokenConfigured, trustEvidence, state, version, createdAt, updatedAt]
+  properties:
+    id: {type: string, format: uuid}
+    name: {type: string, minLength: 1, maxLength: 128}
+    baseUrl: {type: string, format: uri, maxLength: 2048}
+    instanceId: {type: string, format: uuid, description: The instance id the remote reported when it was registered or last changed.}
+    authKind: {"$ref": "#/RemoteInstanceAuthKind"}
+    audience: {type: string, maxLength: 512, description: Audience of the workload assertion minted for this remote; empty for a static token.}
+    tokenConfigured: {type: boolean, description: True when a static token is stored. The token itself is never returned.}
+    trustEvidence: {type: boolean}
+    state: {"$ref": "#/RemoteInstanceState"}
+    lastCheckedAt: {type: string, format: date-time}
+    version: {type: string}
+    createdAt: {type: string, format: date-time}
+    updatedAt: {type: string, format: date-time}
+CreateRemoteInstance:
+  type: object
+  required: [name, baseUrl, authKind]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    baseUrl: {type: string, format: uri, maxLength: 2048}
+    authKind: {"$ref": "#/RemoteInstanceAuthKind"}
+    audience: {type: string, maxLength: 512, description: Required for workload_identity.}
+    token: {type: string, minLength: 8, maxLength: 4096, writeOnly: true, description: Required for static_token; forbidden for workload_identity.}
+    trustEvidence: {type: boolean, default: false}
+UpdateRemoteInstance:
+  type: object
+  required: [name, baseUrl, authKind, enabled]
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    baseUrl: {type: string, format: uri, maxLength: 2048}
+    authKind: {"$ref": "#/RemoteInstanceAuthKind"}
+    audience: {type: string, maxLength: 512}
+    token: {type: string, minLength: 8, maxLength: 4096, writeOnly: true, description: Replaces the sealed token; omit it to keep the stored one.}
+    trustEvidence: {type: boolean, default: false}
+    enabled: {type: boolean}
+RemoteInstancePage:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        "$ref": "#/RemoteInstance"
+    nextPageToken:
+      type: string
+      description: Present while more instances follow; pass it as pageToken for the next page.
+InstanceLimits:
+  type: object
+  required: [maxBlobBytes, maxSessionBytes, maxBlobsPerSession, maxOpenSessionsPerPrincipal]
+  properties:
+    maxBlobBytes: {type: integer, format: int64, minimum: 1}
+    maxSessionBytes: {type: integer, format: int64, minimum: 1}
+    maxBlobsPerSession: {type: integer, format: int32, minimum: 1}
+    maxOpenSessionsPerPrincipal: {type: integer, format: int32, minimum: 1}
+InstanceDocument:
+  type: object
+  required: [instanceId, apiVersion, formats, limits]
+  properties:
+    instanceId: {type: string, format: uuid}
+    apiVersion: {type: string, minLength: 1, maxLength: 16, description: Version of the instance protocol; a sender requires "1".}
+    formats:
+      type: array
+      uniqueItems: true
+      description: Artifact formats this instance accepts as import targets.
+      items: {type: string, minLength: 1, maxLength: 32}
+    limits: {"$ref": "#/InstanceLimits"}
+RemoteInstanceTestResult:
+  type: object
+  required: [reachable, state, checkedAt, formats]
+  properties:
+    reachable: {type: boolean}
+    state: {"$ref": "#/RemoteInstanceState"}
+    checkedAt: {type: string, format: date-time}
+    instanceId: {type: string, format: uuid}
+    apiVersion: {type: string, maxLength: 16}
+    formats:
+      type: array
+      items: {type: string, maxLength: 32}
+    limits: {"$ref": "#/InstanceLimits"}
+    error: {type: string, maxLength: 1024, description: Why the check failed; never contains a credential.}
