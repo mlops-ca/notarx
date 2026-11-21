@@ -59,27 +59,36 @@ var classes = map[string]Class{
 	WorkloadFederation:       ClassWorkload,
 }
 
-// Kinds returns every accepted actor kind, sorted.
-func Kinds() []string {
-	kinds := make([]string, 0, len(classes))
+var (
+	kinds        = sortedKinds()
+	classesInUse = sortedClasses()
+)
+
+func sortedKinds() []string {
+	out := make([]string, 0, len(classes))
 	for kind := range classes {
-		kinds = append(kinds, kind)
+		out = append(out, kind)
 	}
-	sort.Strings(kinds)
-	return kinds
+	sort.Strings(out)
+	return out
 }
 
-// Classes lists every class a store authority switch has to handle, in ascending order.
-func Classes() []Class {
+func sortedClasses() []Class {
 	var out []Class
-	for _, kind := range Kinds() {
-		if c := classes[kind]; !slices.Contains(out, c) {
+	for _, c := range classes {
+		if !slices.Contains(out, c) {
 			out = append(out, c)
 		}
 	}
 	slices.Sort(out)
 	return out
 }
+
+// Kinds returns every accepted actor kind, sorted.
+func Kinds() []string { return slices.Clone(kinds) }
+
+// Classes lists every class a store authority switch has to handle, in ascending order.
+func Classes() []Class { return slices.Clone(classesInUse) }
 
 // ClassOf maps an actor kind to its authority class; unknown kinds are ClassNone.
 func ClassOf(kind string) Class { return classes[kind] }
@@ -107,14 +116,15 @@ func ValidCredential(kind, credential string) bool {
 	return credential == ""
 }
 
-// ActorShapeValid reports whether actor has the form the kind produces: the user prefix, the API key or service
+// ActorShapeValid reports whether actor has the form the kind produces: the user prefix and a name, the API key or service
 // account prefix followed by a UUID, or any text without a NUL for the static kinds.
 func ActorShapeValid(kind, actor string) bool {
 	switch ClassOf(kind) {
 	case ClassStatic:
 		return !strings.Contains(actor, "\x00")
 	case ClassUser:
-		return strings.HasPrefix(actor, UserActorPrefix)
+		name, ok := strings.CutPrefix(actor, UserActorPrefix)
+		return ok && name != ""
 	case ClassAPIKey:
 		return prefixedUUID(actor, APIKeyActorPrefix)
 	case ClassServiceAccountCredential, ClassWorkload:

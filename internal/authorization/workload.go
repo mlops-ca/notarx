@@ -269,7 +269,7 @@ func (w *WorkloadAuthenticator) AuthenticateDeferred(ctx context.Context, token,
 		hash := sha256.Sum256([]byte(decision.jti))
 		fresh, recordErr := w.opts.Store.RecordWorkloadJTI(ctx, decision.issuerID, hash[:], decision.tokenExp.Add(w.opts.ClockSkew))
 		claims := decision.principal.WorkloadClaims
-		failure := WorkloadEvent{Issuer: issuer.Issuer, IssuerID: issuer.ID, PolicyID: decision.principal.CredentialID, ServiceAccountID: strings.TrimPrefix(decision.principal.Actor, "service-account:"), JTIHash: claims.JTIHash, Subject: claims.Subject, Pinned: pin != ""}
+		failure := WorkloadEvent{Issuer: issuer.Issuer, IssuerID: issuer.ID, PolicyID: decision.principal.CredentialID, ServiceAccountID: strings.TrimPrefix(decision.principal.Actor, durableactor.ServiceAccountActorPrefix), JTIHash: claims.JTIHash, Subject: claims.Subject, Pinned: pin != ""}
 		switch {
 		case recordErr != nil:
 			failure.Reason, failure.Detail = WorkloadStoreUnavailable, recordErr.Error()
@@ -390,7 +390,7 @@ func (w *WorkloadAuthenticator) decide(ctx context.Context, token, pin string, i
 	w.observe(ctx, event)
 	return workloadDecision{
 		principal: Principal{
-			Actor: "service-account:" + account.ID, AuthenticationKind: AuthenticationWorkloadFederation, CredentialID: matched.ID,
+			Actor: durableactor.ServiceAccountActorPrefix + account.ID, AuthenticationKind: AuthenticationWorkloadFederation, CredentialID: matched.ID,
 			WorkloadClaims: &WorkloadClaims{Issuer: issuer.Issuer, Subject: truncate(subject, 256), PolicyName: matched.Name, JTIHash: jtiHash, Referenced: capClaims(referenced)},
 		},
 		issuerID: issuer.ID, singleUse: record.SingleUse, jti: jti, tokenExp: exp,
@@ -539,7 +539,7 @@ func (w *WorkloadAuthenticator) Revalidate(ctx context.Context, policyID, actor 
 		return false
 	}
 	policy, err := w.opts.Store.GetWorkloadTrustPolicy(ctx, policyID)
-	if err != nil || policy.State != repository.WorkloadActive || "service-account:"+policy.ServiceAccountID != actor {
+	if err != nil || policy.State != repository.WorkloadActive || durableactor.ServiceAccountActorPrefix+policy.ServiceAccountID != actor {
 		return false
 	}
 	if policy.ExpiresAt != nil && !w.opts.Now().Before(*policy.ExpiresAt) {

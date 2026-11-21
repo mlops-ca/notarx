@@ -68,12 +68,15 @@ func (s *MemoryStore) rubyGemsGovernanceAuthorityLocked(ctx context.Context, id 
 	for i := range a.Grants.Grants {
 		a.Grants.Grants[i].Scopes = append([]string(nil), a.Grants.Grants[i].Scopes...)
 	}
+	if !durableactor.ActorValid(in.Kind, in.Actor, in.CredentialID) {
+		return a, ctx.Err()
+	}
 	switch durableactor.ClassOf(in.Kind) {
 	case durableactor.ClassStatic:
 		a.Active = true
 	case durableactor.ClassUser:
 		for _, u := range s.users {
-			if !strings.EqualFold(u.Name, strings.TrimPrefix(in.Actor, "user:")) || in.UserID != "" && in.UserID != u.ID {
+			if !strings.EqualFold(u.Name, strings.TrimPrefix(in.Actor, durableactor.UserActorPrefix)) || in.UserID != "" && in.UserID != u.ID {
 				continue
 			}
 			a.Active = u.State == UserActive && (in.SessionVersion == 0 || in.SessionVersion == u.SessionVersion)
@@ -93,11 +96,11 @@ func (s *MemoryStore) rubyGemsGovernanceAuthorityLocked(ctx context.Context, id 
 			a.ValidUntil = RubyGemsEarlierAuthorityExpiry(a.ValidUntil, w.ValidUntil)
 		}
 	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
-		keyID := strings.TrimPrefix(in.Actor, "api-key:")
+		keyID := strings.TrimPrefix(in.Actor, durableactor.APIKeyActorPrefix)
 		accountID := ""
 		if durableactor.ClassOf(in.Kind) == durableactor.ClassServiceAccountCredential {
 			keyID = in.CredentialID
-			accountID = strings.TrimPrefix(in.Actor, "service-account:")
+			accountID = strings.TrimPrefix(in.Actor, durableactor.ServiceAccountActorPrefix)
 			account, ok := s.serviceAccounts[accountID]
 			if !ok || account.State != ServiceAccountActive {
 				return a, ctx.Err()

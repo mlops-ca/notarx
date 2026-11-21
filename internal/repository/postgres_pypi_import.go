@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
+
+	"github.com/mlops-ca/notarx/internal/durableactor"
 )
 
 // CheckPyPIImportActorTx validates the authenticated kind and current managed
@@ -15,13 +17,13 @@ func CheckPyPIImportActorTx(ctx context.Context, tx *sql.Tx, actor, kind, ownerI
 		return ErrDisabled
 	}
 	switch {
-	case (kind == "local_session" || kind == "oidc") && strings.HasPrefix(actor, "user:"):
-		err := tx.QueryRowContext(ctx, `SELECT role='admin' AND state='active' AND NOT must_change_password FROM users WHERE lower(name)=lower($1) AND id=$2::uuid FOR SHARE`, strings.TrimPrefix(actor, "user:"), ownerID).Scan(&allowed)
+	case (kind == "local_session" || kind == "oidc") && strings.HasPrefix(actor, durableactor.UserActorPrefix):
+		err := tx.QueryRowContext(ctx, `SELECT role='admin' AND state='active' AND NOT must_change_password FROM users WHERE lower(name)=lower($1) AND id=$2::uuid FOR SHARE`, strings.TrimPrefix(actor, durableactor.UserActorPrefix), ownerID).Scan(&allowed)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-	case kind == "api_key" && actor == "api-key:"+ownerID:
-		err := tx.QueryRowContext(ctx, `SELECT roles @> ARRAY['admin']::text[] AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>clock_timestamp()) AND service_account_id IS NULL FROM api_keys WHERE id=$1::uuid FOR SHARE`, strings.TrimPrefix(actor, "api-key:")).Scan(&allowed)
+	case kind == "api_key" && actor == durableactor.APIKeyActorPrefix+ownerID:
+		err := tx.QueryRowContext(ctx, `SELECT roles @> ARRAY['admin']::text[] AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>clock_timestamp()) AND service_account_id IS NULL FROM api_keys WHERE id=$1::uuid FOR SHARE`, strings.TrimPrefix(actor, durableactor.APIKeyActorPrefix)).Scan(&allowed)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}

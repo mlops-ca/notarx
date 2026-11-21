@@ -200,3 +200,14 @@ func TestValidSubjectWorkloadCarriesNoBearerExpiry(t *testing.T) {
 		t.Fatal("workload actor must name a service account id")
 	}
 }
+
+func TestNewJobDropsWorkloadBearerExpiry(t *testing.T) {
+	s := dist.Subject{Actor: "service-account:" + uuid.NewString(), Kind: "workload_federation", CredentialID: uuid.NewString(), ValidUntil: time.Now().Add(5 * time.Minute)}
+	j, err := dist.NewJob(plan(), s, "key")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !j.ValidUntil.IsZero() {
+		t.Fatalf("job carries the bearer expiry %v", j.ValidUntil)
+	}
+}

@@ -20,21 +20,22 @@ func TestDurableActorAuthoritySwitchesCoverEveryClass(t *testing.T) {
 	if len(want) != len(durableactor.Classes()) {
 		t.Fatalf("the test lists %d classes, durableactor has %d", len(want), len(durableactor.Classes()))
 	}
-	for _, file := range []string{
-		"memory_helm_distribution.go", "memory_nuget_distribution.go", "postgres_helm_distribution.go", "postgres_nuget_distribution.go",
-		"rubygems_governance_authority.go", "../rubygemspublication/pgstore/governance_authority.go",
+	for file, switches := range map[string]int{
+		"durable_actor_authority.go":                             2,
+		"rubygems_governance_authority.go":                       1,
+		"../rubygemspublication/pgstore/governance_authority.go": 1,
 	} {
 		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
-		found := false
+		found := 0
 		ast.Inspect(parsed, func(n ast.Node) bool {
 			sw, ok := n.(*ast.SwitchStmt)
 			if !ok || !switchesOnClassOf(sw) {
 				return true
 			}
-			found = true
+			found++
 			var got []string
 			for _, stmt := range sw.Body.List {
 				for _, e := range stmt.(*ast.CaseClause).List {
@@ -57,8 +58,8 @@ func TestDurableActorAuthoritySwitchesCoverEveryClass(t *testing.T) {
 			}
 			return true
 		})
-		if !found {
-			t.Errorf("%s: no switch on durableactor.ClassOf", file)
+		if found != switches {
+			t.Errorf("%s: %d switches on durableactor.ClassOf, want %d", file, found, switches)
 		}
 	}
 }

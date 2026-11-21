@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"sort"
 	"strings"
@@ -79,62 +78,11 @@ func helmReplicationActorTx(ctx context.Context, tx *sql.Tx, j dist.Job, a *dist
 	}
 	a.Actor = j.Actor
 	a.Kind = j.ActorKind
-	switch durableactor.ClassOf(j.ActorKind) {
-	case durableactor.ClassStatic:
-		a.Active = true
-	case durableactor.ClassUser:
-		var state string
-		err := tx.QueryRowContext(ctx, `SELECT role,state,must_change_password FROM users WHERE lower(name)=lower($1) FOR SHARE`, strings.TrimPrefix(j.Actor, "user:")).Scan(&a.Role, &state, &a.MustChangePassword)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		a.Active = state == string(UserActive)
-	case durableactor.ClassWorkload:
-		w, err := WorkloadAuthorityTx(ctx, tx, j.Actor, j.CredentialID)
-		if err != nil {
-			return err
-		}
-		a.Active, a.ValidUntil = w.Active, w.ValidUntil
-	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
-		credential := strings.TrimPrefix(j.Actor, "api-key:")
-		account := ""
-		if durableactor.ClassOf(j.ActorKind) == durableactor.ClassServiceAccountCredential {
-			account = strings.TrimPrefix(j.Actor, "service-account:")
-			credential = j.CredentialID
-			var state string
-			err := tx.QueryRowContext(ctx, `SELECT state FROM service_accounts WHERE id=$1::uuid FOR SHARE`, account).Scan(&state)
-			if errors.Is(err, sql.ErrNoRows) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			if state != string(ServiceAccountActive) {
-				return nil
-			}
-		}
-		var roles []byte
-		var revoked, expires sql.NullTime
-		err := tx.QueryRowContext(ctx, `SELECT array_to_json(roles),revoked_at,expires_at FROM api_keys WHERE id=$1::uuid AND COALESCE(service_account_id::text,'')=$2 FOR SHARE`, credential, account).Scan(&roles, &revoked, &expires)
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		var values []string
-		if err = json.Unmarshal(roles, &values); err != nil {
-			return err
-		}
-		a.Role = helmReplicationKeyRole(values)
-		a.Active = !revoked.Valid && (!expires.Valid || expires.Time.After(time.Now()))
-		if expires.Valid {
-			a.ValidUntil = expires.Time
-		}
+	r, err := durableActorAuthorityTx(ctx, tx, j.ActorKind, j.Actor, j.CredentialID, helmReplicationKeyRole)
+	if err != nil {
+		return err
 	}
+	a.Role, a.MustChangePassword, a.ValidUntil, a.Active = r.Role, r.MustChangePassword, r.ValidUntil, r.Active
 	return nil
 }
 func helmReplicationAuthorityTx(ctx context.Context, tx *sql.Tx, j dist.Job) (dist.Authority, error) {

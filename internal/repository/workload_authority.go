@@ -18,9 +18,6 @@ type WorkloadAuthority struct {
 	ValidUntil time.Time
 }
 
-// WorkloadActorAccount returns the service account id of a workload actor and whether the actor has that shape.
-func WorkloadActorAccount(actor string) (string, bool) { return durableactor.ServiceAccountID(actor) }
-
 func workloadAuthority(policy WorkloadTrustPolicy, issuerState WorkloadState, accountActive bool, now time.Time) WorkloadAuthority {
 	a := WorkloadAuthority{}
 	if policy.ExpiresAt != nil {
@@ -35,7 +32,7 @@ func workloadAuthority(policy WorkloadTrustPolicy, issuerState WorkloadState, ac
 // locking the policy, issuer and account rows so a concurrent disable waits for the commit. An unknown or
 // mismatched policy is inactive, not an error.
 func WorkloadAuthorityTx(ctx context.Context, tx *sql.Tx, actor, policyID string) (WorkloadAuthority, error) {
-	account, ok := WorkloadActorAccount(actor)
+	account, ok := durableactor.ServiceAccountID(actor)
 	if !ok {
 		return WorkloadAuthority{}, nil
 	}
@@ -59,7 +56,7 @@ WHERE p.id=$1::uuid AND p.service_account_id=$2::uuid FOR SHARE OF p,i,a`, polic
 
 // WorkloadAuthorityLocked is WorkloadAuthorityTx for the memory store; the caller holds s.mu.
 func (s *MemoryStore) WorkloadAuthorityLocked(actor, policyID string) WorkloadAuthority {
-	accountID, ok := WorkloadActorAccount(actor)
+	accountID, ok := durableactor.ServiceAccountID(actor)
 	if !ok {
 		return WorkloadAuthority{}
 	}

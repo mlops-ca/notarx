@@ -24,36 +24,8 @@ func (s *MemoryStore) nuGetReplicationAuthorityLocked(j dist.Job) (dist.Authorit
 	if !durableactor.ActorValid(j.ActorKind, j.Actor, j.CredentialID) {
 		return a, dist.ErrAccessDenied
 	}
-	switch durableactor.ClassOf(j.ActorKind) {
-	case durableactor.ClassStatic:
-		a.Active = true
-	case durableactor.ClassUser:
-		for _, u := range s.users {
-			if strings.EqualFold(u.Name, strings.TrimPrefix(j.Actor, "user:")) {
-				a.Active = u.State == UserActive
-				a.Role = u.Role
-				a.MustChangePassword = u.MustChangePassword
-				break
-			}
-		}
-	case durableactor.ClassAPIKey:
-		k, ok := s.apiKeys[strings.TrimPrefix(j.Actor, "api-key:")]
-		a.Active = ok && k.ServiceAccountID == "" && k.RevokedAt == nil && (k.ExpiresAt == nil || k.ExpiresAt.After(time.Now()))
-		a.Role = nuGetReplicationKeyRole(k.Roles)
-		if k.ExpiresAt != nil {
-			a.ValidUntil = *k.ExpiresAt
-		}
-	case durableactor.ClassWorkload:
-		w := s.WorkloadAuthorityLocked(j.Actor, j.CredentialID)
-		a.Active, a.ValidUntil = w.Active, w.ValidUntil
-	case durableactor.ClassServiceAccountCredential:
-		account, ok := s.serviceAccounts[strings.TrimPrefix(j.Actor, "service-account:")]
-		k, found := s.apiKeys[j.CredentialID]
-		a.Active = ok && account.State == ServiceAccountActive && found && k.ServiceAccountID == account.ID && k.RevokedAt == nil && (k.ExpiresAt == nil || k.ExpiresAt.After(time.Now()))
-		if k.ExpiresAt != nil {
-			a.ValidUntil = *k.ExpiresAt
-		}
-	}
+	r := s.durableActorAuthorityLocked(j.ActorKind, j.Actor, j.CredentialID, nuGetReplicationKeyRole)
+	a.Role, a.MustChangePassword, a.ValidUntil, a.Active = r.Role, r.MustChangePassword, r.ValidUntil, r.Active
 	return a, nil
 }
 func (s *MemoryStore) nuGetReplicationSourceLocked(j dist.Job, i int) (NuGetPublication, error) {

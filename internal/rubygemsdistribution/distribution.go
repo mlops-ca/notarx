@@ -156,6 +156,11 @@ func CanonicalPlan(in Plan) (Plan, string, error) {
 	return in, "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 func NewJob(plan Plan, subject Subject, key string) (Job, error) {
+	if durableactor.ClassOf(subject.Kind) == durableactor.ClassWorkload {
+		// A workload job lives as long as its trust policy, re-read at every commit, not as long as the
+		// short-lived bearer that submitted it.
+		subject.ValidUntil = time.Time{}
+	}
 	actor, kind, credential := subject.Actor, subject.Kind, subject.CredentialID
 	p, d, err := CanonicalPlan(plan)
 	if err != nil || !ValidSubject(subject) || actor == "" || len(actor) > 512 || strings.ContainsAny(actor, "\x00\r\n") || key == "" || len(key) > 200 || strings.ContainsAny(key, "\x00\r\n") {
@@ -238,13 +243,11 @@ func ValidSubject(s Subject) bool {
 		return false
 	}
 	switch durableactor.ClassOf(s.Kind) {
-	case durableactor.ClassStatic:
+	case durableactor.ClassStatic, durableactor.ClassWorkload:
+		// A workload job's expiry is its policy's, re-read at every commit, never a bearer's.
 		return s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0 && s.ValidUntil.IsZero()
 	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
 		return s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0
-	case durableactor.ClassWorkload:
-		// The job's expiry is the policy's, re-read at every commit; the short-lived bearer's own expiry is not.
-		return s.UserID == "" && s.SessionID == "" && s.SessionVersion == 0 && s.ValidUntil.IsZero()
 	case durableactor.ClassUser:
 		_, e := uuid.Parse(s.UserID)
 		if e != nil || s.ValidUntil.IsZero() {
