@@ -82,6 +82,10 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 		defer cancel()
 		f.cleanup(t, cleanupCtx)
 	})
+	// The pinned image is pulled in its own step, so a pull problem is reported as one and not as a failed create.
+	if _, err := f.output(ctx, "pull", registryFixtureImage); err != nil {
+		t.Fatalf("OCI fixture registry image pull failed: %v", err)
+	}
 	_, createErr := f.output(ctx, "create", "--name", f.name, "--label", registryFixtureLabel+"="+f.owner,
 		"--network", "host", "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
 		"--tmpfs", "/var/lib/registry:rw,noexec,nosuid,size=256m", "--env", "REGISTRY_HTTP_ADDR="+registryFixtureAddr, registryFixtureImage)
@@ -90,7 +94,7 @@ func integrationOCIRelease(t *testing.T, ctx context.Context, d Docker, release 
 		f.containerID = c.ID
 	}
 	if createErr != nil || f.containerID == "" {
-		t.Fatal("owned OCI fixture registry unavailable")
+		t.Fatalf("owned OCI fixture registry unavailable: create failed with %v (container id %q)", createErr, f.containerID)
 	}
 	if _, err := f.output(ctx, "start", f.containerID); err != nil {
 		t.Fatal("owned OCI fixture registry startup failed")
@@ -161,9 +165,32 @@ func (f *registryFixture) output(ctx context.Context, args ...string) ([]byte, e
 		return nil, fmt.Errorf("OCI fixture credential-helper isolation failed")
 	}
 	if err != nil || len(data) > 8<<20 {
-		return nil, fmt.Errorf("owned OCI fixture Docker operation failed")
+		return nil, fmt.Errorf("owned OCI fixture Docker operation failed: %s", redactedDockerOutput(data, err))
 	}
 	return data, nil
+}
+
+var (
+	dockerURLUserinfo    = regexp.MustCompile(`(://[^/@\s:]*:)[^@\s]*@`)
+	dockerBearerToken    = regexp.MustCompile(`(?i)(bearer\s+)\S+`)
+	dockerCredentialText = regexp.MustCompile(`(?i)((?:password|passwd|secret|token|authorization|auth)["']?\s*[=:]\s*)[^\s,;"']+`)
+)
+
+// redactedDockerOutput is what a failed fixture Docker call said, for the failure message: credentials and bearer
+// tokens are blanked and the text is cut, so a pull or create failure names its cause (a registry rate limit, a
+// port in use, a daemon error) without leaking anything.
+func redactedDockerOutput(data []byte, err error) string {
+	text := strings.TrimSpace(string(data))
+	if text == "" {
+		text = err.Error()
+	}
+	text = dockerURLUserinfo.ReplaceAllString(text, "${1}[redacted]@")
+	text = dockerBearerToken.ReplaceAllString(text, "${1}[redacted]")
+	text = dockerCredentialText.ReplaceAllString(text, "${1}[redacted]")
+	if len(text) > 2048 {
+		text = text[:2048] + "..."
+	}
+	return text
 }
 
 type registryFixtureInspection struct {
