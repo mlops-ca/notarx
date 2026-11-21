@@ -223,6 +223,7 @@ newer record) and the provenance tables `artifact_promotions`,
 | `security_audit_log` (partition drop) | 730 d | 90 d |
 | `domain_events` (partition drop; `NOTARX_EVENTS_RETENTION`) | 14 d | 3 d |
 | `promotion_evaluations` | queued, skipped or failed 7 d; a pending or waiting row due 30 d ago (no evaluator runs) | 1 d; 7 d |
+| `import_sessions` | committed, aborted or expired 7 d, once no staging object is left (the import reaper expires a session after `NOTARX_IMPORT_SESSION_TTL` and deletes its staging objects) | 1 d |
 | `repository_request_rollup` | 400 d | 400 d |
 | `webhook_deliveries` | succeeded 14 d, dead 14 d | 3 d, 3 d |
 | `lifecycle_jobs` | completed or cancelled 7 d, failed 30 d | 1 d, 7 d |

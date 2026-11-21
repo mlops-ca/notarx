@@ -612,6 +612,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			WorkloadAllowPrivateNetwork:    cfg.Workload.AllowPrivateNetwork,
 			WorkloadExchange:               app.WorkloadExchangeOptions{MaxTTL: cfg.Workload.ExchangeMaxTTL, Rate: cfg.Workload.ExchangeRate},
 			RemoteAllowPrivateNetworks:     cfg.Remote.AllowPrivateNetworks,
+			ImportLimits:                   cfg.Import.Advertised(),
 			PromotionMaxRulesPerRepository: cfg.Promotion.MaxRulesPerRepository,
 			SCIM:                           app.SCIMOptions{Enabled: cfg.SCIM.Enabled, MaxPage: cfg.SCIM.MaxPage, PublicURL: publicURL},
 			Adapter:                        app.TestAdapter{},

@@ -36,10 +36,13 @@ Consequently only the administrator level reaches past grants: the global
 `reader` and `writer` roles that used to cover every repository are removed, and
 a `member` holds no repository capability of its own, so per-repository grants
 are what decide for an ordinary account. `repositories:admin`
-includes write, read, and intelligence writes; `repositories:write` includes
+includes write, read, intelligence writes, and import; `repositories:write` includes
 read; `repositories:read` permits only read; and `repositories:intelligence` is
 an independent metadata-writing capability that does not imply any repository
-read, publish, delete, or administration access.
+read, publish, delete, or administration access. `repositories:import` is
+likewise independent: it lets a peer instance push a promotion into the
+repository through an import session and implies no read, so the blobs a peer
+cannot already read are never disclosed to it.
 
 Service Accounts intentionally have no global role and authenticate only
 through explicit Repository Grants, which is the recommended shape for CI,
@@ -90,6 +93,7 @@ deleting policy state.
 | Read | `repositories:read` | Native Maven download, OCI blob/manifest/tag fetch, Raw GET/HEAD, Conan proxy/read-through |
 | Write | `repositories:write` | Native Maven publication, OCI upload/manifest/delete, Raw PUT/DELETE |
 | Intelligence | `repositories:intelligence` | Write signatures, SBOM, provenance, license, and vulnerability summaries for an existing visible artifact without publish/delete/admin access |
+| ImportWrite | `repositories:import` | Create import sessions and stream blobs into the repository on behalf of a promotion from another notarx instance (ADR 0021, Remote targets). Held by the service account that the receiver's trust policy maps a peer to; not implied by write, and it grants no read, publish, or delete access. Also included in admin |
 | Admin | `repositories:admin` | Repository grant replacement and future repository-scoped administrative mutations; also includes intelligence writes |
 
 V2 separates global discovery from known-resource operations. A principal with

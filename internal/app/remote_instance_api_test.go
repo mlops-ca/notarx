@@ -433,3 +433,16 @@ func TestRemoteInstanceAPIDeleteConflictNamesTheBlockingRules(t *testing.T) {
 		t.Fatalf("the refused delete removed the instance: %v", err)
 	}
 }
+
+// The instance document advertises the import limits this instance enforces, so a sender never plans a push that the
+// receiver's own configuration would refuse.
+func TestWellKnownInstanceDocumentAdvertisesTheConfiguredImportLimits(t *testing.T) {
+	limits := remoteinstance.Limits{MaxBlobBytes: 1 << 20, MaxSessionBytes: 8 << 20, MaxBlobsPerSession: 7, MaxOpenSessionsPerPrincipal: 2}
+	handler := newTestGateway(t, GatewayOptions{Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator(), ImportLimits: limits})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/.well-known/notarx", nil))
+	var document remoteinstance.Document
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &document) != nil || document.Limits != limits {
+		t.Fatalf("well-known = %d %s", w.Code, w.Body.String())
+	}
+}

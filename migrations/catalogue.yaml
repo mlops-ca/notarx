@@ -943,6 +943,56 @@ tables:
       identity_providers_settings_check: (jsonb_typeof(settings) = 'object'::text)
       identity_providers_slug_check: (slug ~ '^[a-z0-9][a-z0-9-]{1,62}$'::text)
       identity_providers_version_check: (version > 0)
+  import_blobs:
+    columns:
+      created_at: timestamp
+      digest: text
+      session_id: uuid
+      size: int64
+      staging_key: text
+      verified: bool
+    primaryKey: [session_id, digest]
+    foreignKeys:
+      - session_id -> import_sessions(id) on delete cascade
+    defaults:
+      created_at: now()
+      verified: "false"
+    checks:
+      import_blobs_size_check: (size >= 0)
+  import_sessions:
+    columns:
+      bytes: int64
+      chain_path: json
+      coordinate: text
+      created_at: timestamp
+      digest: text
+      evidence: json?
+      expires_at: timestamp
+      format: text
+      format_manifest: json
+      id: uuid
+      idempotency_key: text
+      principal: text
+      state: text
+      target_repository_id: uuid
+      updated_at: timestamp
+    primaryKey: [id]
+    unique: [[target_repository_id, idempotency_key]]
+    defaults:
+      bytes: "0"
+      chain_path: '''[]'''
+      created_at: now()
+      state: '''open'''
+      updated_at: now()
+    indexes:
+      - principal,state
+      - state,expires_at
+      - updated_at
+    checks:
+      import_sessions_bytes_check: (bytes >= 0)
+      import_sessions_chain_path_check: (jsonb_typeof(chain_path) = 'array'::text)
+      import_sessions_evidence_check: ((evidence IS NULL) OR (jsonb_typeof(evidence) = 'object'::text))
+      import_sessions_state_check: (state = ANY (ARRAY['open'::text, 'committing'::text, 'committed'::text, 'aborted'::text, 'expired'::text]))
   installation_repository_presets:
     columns:
       catalog_version: text

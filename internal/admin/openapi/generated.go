@@ -512,6 +512,7 @@ func (e AuthenticationKind) Valid() bool {
 // Defines values for AuthorizationRoleScopes.
 const (
 	AuthorizationRoleScopesRepositoriesAdmin        AuthorizationRoleScopes = "repositories:admin"
+	AuthorizationRoleScopesRepositoriesImport       AuthorizationRoleScopes = "repositories:import"
 	AuthorizationRoleScopesRepositoriesIntelligence AuthorizationRoleScopes = "repositories:intelligence"
 	AuthorizationRoleScopesRepositoriesRead         AuthorizationRoleScopes = "repositories:read"
 	AuthorizationRoleScopesRepositoriesWrite        AuthorizationRoleScopes = "repositories:write"
@@ -521,6 +522,8 @@ const (
 func (e AuthorizationRoleScopes) Valid() bool {
 	switch e {
 	case AuthorizationRoleScopesRepositoriesAdmin:
+		return true
+	case AuthorizationRoleScopesRepositoriesImport:
 		return true
 	case AuthorizationRoleScopesRepositoriesIntelligence:
 		return true
@@ -536,6 +539,7 @@ func (e AuthorizationRoleScopes) Valid() bool {
 // Defines values for AuthorizationRoleWritableScopes.
 const (
 	AuthorizationRoleWritableScopesRepositoriesAdmin        AuthorizationRoleWritableScopes = "repositories:admin"
+	AuthorizationRoleWritableScopesRepositoriesImport       AuthorizationRoleWritableScopes = "repositories:import"
 	AuthorizationRoleWritableScopesRepositoriesIntelligence AuthorizationRoleWritableScopes = "repositories:intelligence"
 	AuthorizationRoleWritableScopesRepositoriesRead         AuthorizationRoleWritableScopes = "repositories:read"
 	AuthorizationRoleWritableScopesRepositoriesWrite        AuthorizationRoleWritableScopes = "repositories:write"
@@ -545,6 +549,8 @@ const (
 func (e AuthorizationRoleWritableScopes) Valid() bool {
 	switch e {
 	case AuthorizationRoleWritableScopesRepositoriesAdmin:
+		return true
+	case AuthorizationRoleWritableScopesRepositoriesImport:
 		return true
 	case AuthorizationRoleWritableScopesRepositoriesIntelligence:
 		return true
@@ -560,6 +566,7 @@ func (e AuthorizationRoleWritableScopes) Valid() bool {
 // Defines values for AuthorizationTemplateGrantScopes.
 const (
 	AuthorizationTemplateGrantScopesRepositoriesAdmin        AuthorizationTemplateGrantScopes = "repositories:admin"
+	AuthorizationTemplateGrantScopesRepositoriesImport       AuthorizationTemplateGrantScopes = "repositories:import"
 	AuthorizationTemplateGrantScopesRepositoriesIntelligence AuthorizationTemplateGrantScopes = "repositories:intelligence"
 	AuthorizationTemplateGrantScopesRepositoriesRead         AuthorizationTemplateGrantScopes = "repositories:read"
 	AuthorizationTemplateGrantScopesRepositoriesWrite        AuthorizationTemplateGrantScopes = "repositories:write"
@@ -569,6 +576,8 @@ const (
 func (e AuthorizationTemplateGrantScopes) Valid() bool {
 	switch e {
 	case AuthorizationTemplateGrantScopesRepositoriesAdmin:
+		return true
+	case AuthorizationTemplateGrantScopesRepositoriesImport:
 		return true
 	case AuthorizationTemplateGrantScopesRepositoriesIntelligence:
 		return true
@@ -1748,6 +1757,7 @@ func (e GlobalArtifactSearchHitMatchKind) Valid() bool {
 // Defines values for GrantScopes.
 const (
 	GrantScopesRepositoriesAdmin        GrantScopes = "repositories:admin"
+	GrantScopesRepositoriesImport       GrantScopes = "repositories:import"
 	GrantScopesRepositoriesIntelligence GrantScopes = "repositories:intelligence"
 	GrantScopesRepositoriesRead         GrantScopes = "repositories:read"
 	GrantScopesRepositoriesWrite        GrantScopes = "repositories:write"
@@ -1757,6 +1767,8 @@ const (
 func (e GrantScopes) Valid() bool {
 	switch e {
 	case GrantScopesRepositoriesAdmin:
+		return true
+	case GrantScopesRepositoriesImport:
 		return true
 	case GrantScopesRepositoriesIntelligence:
 		return true
@@ -4364,6 +4376,7 @@ func (e RepositoryEffectiveAccessRepositoryType) Valid() bool {
 // Defines values for RepositoryGrantRecordScopes.
 const (
 	RepositoryGrantRecordScopesRepositoriesAdmin        RepositoryGrantRecordScopes = "repositories:admin"
+	RepositoryGrantRecordScopesRepositoriesImport       RepositoryGrantRecordScopes = "repositories:import"
 	RepositoryGrantRecordScopesRepositoriesIntelligence RepositoryGrantRecordScopes = "repositories:intelligence"
 	RepositoryGrantRecordScopesRepositoriesRead         RepositoryGrantRecordScopes = "repositories:read"
 	RepositoryGrantRecordScopesRepositoriesWrite        RepositoryGrantRecordScopes = "repositories:write"
@@ -4373,6 +4386,8 @@ const (
 func (e RepositoryGrantRecordScopes) Valid() bool {
 	switch e {
 	case RepositoryGrantRecordScopesRepositoriesAdmin:
+		return true
+	case RepositoryGrantRecordScopesRepositoriesImport:
 		return true
 	case RepositoryGrantRecordScopesRepositoriesIntelligence:
 		return true
@@ -7374,10 +7389,11 @@ type EffectiveAccessDecision struct {
 
 // EffectiveAccessPermissions defines model for EffectiveAccessPermissions.
 type EffectiveAccessPermissions struct {
-	Admin        EffectiveAccessDecision `json:"admin"`
-	Intelligence EffectiveAccessDecision `json:"intelligence"`
-	Read         EffectiveAccessDecision `json:"read"`
-	Write        EffectiveAccessDecision `json:"write"`
+	Admin        EffectiveAccessDecision  `json:"admin"`
+	ImportWrite  *EffectiveAccessDecision `json:"importWrite,omitempty"`
+	Intelligence EffectiveAccessDecision  `json:"intelligence"`
+	Read         EffectiveAccessDecision  `json:"read"`
+	Write        EffectiveAccessDecision  `json:"write"`
 }
 
 // EgressProxy Per-Proxy-Repository egress network proxy configuration. Only meaningful when the repository type is proxy. `password` is accepted on write (plaintext over TLS) and stored AES-256-GCM encrypted; responses never return it and carry `credentialsConfigured` instead.

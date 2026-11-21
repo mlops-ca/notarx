@@ -53,7 +53,7 @@ func scratchSchema(t *testing.T) *sql.DB {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _, _ = db.ExecContext(context.Background(), "DROP SCHEMA IF EXISTS "+schema+" CASCADE") })
-	tables := map[string]bool{"scheduled_tasks": true, "replication_plans": true, "repository_quota_alert_events": true, "nexus_migration_batches": true}
+	tables := map[string]bool{"scheduled_tasks": true, "replication_plans": true, "repository_quota_alert_events": true, "nexus_migration_batches": true, "import_blobs": true}
 	for _, entry := range DefaultRegistry() {
 		if !entry.PartitionedOnPostgres && !entry.Optional {
 			tables[entry.Table] = true
@@ -363,6 +363,7 @@ const (
 func fixtures() map[string]fixture {
 	return map[string]fixture{
 		"repository_request_rollup":          {},
+		"import_sessions":                    {terminal: map[string]string{"state": "'committed'"}, live: map[string]string{"state": "'open'"}},
 		"promotion_evaluations":              {terminal: map[string]string{"state": "'skipped'"}, live: map[string]string{"state": "'pending'"}},
 		"promotion_evaluations_unclaimed":    {terminal: map[string]string{"state": "'waiting'"}, live: map[string]string{"state": "'queued'"}},
 		"webhook_deliveries_succeeded":       {terminal: map[string]string{"state": "'succeeded'", "delivered_at": "now()"}, live: map[string]string{"state": "'pending'", "delivered_at": "NULL", "next_attempt_at": "now()"}},

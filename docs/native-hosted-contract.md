@@ -148,7 +148,9 @@ visible artifact identity in the target repository; the Gateway rejects orphan
 coordinate/digest pairs before storing metadata. Scope inheritance is `admin -> write -> read`
 for repository operations; `admin` also includes intelligence writes, while
 `writer` and `reader` do not. The standalone `repositories:intelligence` scope
-does not grant repository reads, writes, or administration. Raw/OCI/Maven protocol reads and
+does not grant repository reads, writes, or administration. The `repositories:import` scope (ImportWrite, ADR 0021) is
+equally standalone: it permits only the import-session operations a peer instance uses to push a promotion into the
+repository, and `admin` includes it while `write` does not. Raw/OCI/Maven protocol reads and
 writes use their protocol authentication contracts, but resolve to the same
 principal and Repository authorization policy.
 

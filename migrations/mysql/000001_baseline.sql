@@ -702,6 +702,44 @@ CREATE TABLE `identity_providers` (
   CONSTRAINT `identity_providers_version_check` CHECK ((`version` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `import_blobs` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `digest` VARCHAR(144) NOT NULL,
+  `session_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `size` BIGINT NOT NULL,
+  `staging_key` TEXT NOT NULL,
+  `verified` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`session_id`, `digest`),
+  CONSTRAINT `import_blobs_size_check` CHECK ((`size` >= 0))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `import_sessions` (
+  `bytes` BIGINT NOT NULL DEFAULT 0,
+  `chain_path` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
+  `coordinate` TEXT NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `digest` TEXT NOT NULL,
+  `evidence` JSON NULL,
+  `expires_at` DATETIME(6) NOT NULL,
+  `format` TEXT NOT NULL,
+  `format_manifest` JSON NOT NULL,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `idempotency_key` VARCHAR(255) NOT NULL,
+  `principal` VARCHAR(255) NOT NULL,
+  `state` VARCHAR(255) NOT NULL DEFAULT 'open',
+  `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_import_sessions_target_repository_id_idempotency_key` (`target_repository_id`, `idempotency_key`),
+  KEY `ix_import_sessions_principal_state` (`principal`, `state`),
+  KEY `ix_import_sessions_state_expires_at` (`state`, `expires_at`),
+  KEY `ix_import_sessions_updated_at` (`updated_at`),
+  CONSTRAINT `import_sessions_bytes_check` CHECK ((`bytes` >= 0)),
+  CONSTRAINT `import_sessions_chain_path_check` CHECK ((JSON_TYPE(`chain_path`) = 'ARRAY')),
+  CONSTRAINT `import_sessions_evidence_check` CHECK (((`evidence` IS NULL) OR (JSON_TYPE(`evidence`) = 'OBJECT'))),
+  CONSTRAINT `import_sessions_state_check` CHECK ((`state` IN ('open', 'committing', 'committed', 'aborted', 'expired')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `installation_repository_presets` (
   `catalog_version` TEXT NOT NULL,
   `finished_at` DATETIME(6) NULL,
@@ -3368,6 +3406,7 @@ ALTER TABLE `hosted_group_members` ADD CONSTRAINT `fk_hosted_group_members_group
 ALTER TABLE `hosted_group_members` ADD CONSTRAINT `fk_hosted_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `hosted_repository_idempotency` ADD CONSTRAINT `fk_hosted_repository_idempotency_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `identity_provider_scim_tokens` ADD CONSTRAINT `fk_identity_provider_scim_tokens_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `identity_providers` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `import_blobs` ADD CONSTRAINT `fk_import_blobs_session_id` FOREIGN KEY (`session_id`) REFERENCES `import_sessions` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `lifecycle_jobs` ADD CONSTRAINT `fk_lifecycle_jobs_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `maven_group_members` ADD CONSTRAINT `fk_maven_group_members_group_name` FOREIGN KEY (`group_name`) REFERENCES `maven_groups` (`name`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `maven_group_members` ADD CONSTRAINT `fk_maven_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;

@@ -129,7 +129,7 @@ func (s *PostgresStore) DeleteRemoteInstance(ctx context.Context, id string, aud
 		return err
 	}
 	// The failed statement aborted its transaction, so the blocking rules are read after it, by name in byte order.
-	rows, queryErr := s.db.QueryContext(ctx, `SELECT id::text,name FROM promotion_rules WHERE remote_instance_id=$1::uuid ORDER BY name COLLATE "C",id LIMIT $2`, id, RemoteInstanceInUseRuleLimit)
+	rows, queryErr := s.db.QueryContext(ctx, `SELECT id::text,name FROM promotion_rules WHERE remote_instance_id=$1::uuid ORDER BY name COLLATE "C",promotion_rules.id LIMIT $2`, id, RemoteInstanceInUseRuleLimit)
 	if queryErr != nil {
 		return errors.Join(err, queryErr)
 	}

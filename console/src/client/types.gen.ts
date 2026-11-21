@@ -778,6 +778,7 @@ export type Grant = {
     | "repositories:write"
     | "repositories:admin"
     | "repositories:intelligence"
+    | "repositories:import"
   >;
   /**
    * Optional canonical resource prefix. Empty or omitted grants repository-wide access.
@@ -4041,6 +4042,7 @@ export type RepositoryGrantRecord = {
     | "repositories:write"
     | "repositories:admin"
     | "repositories:intelligence"
+    | "repositories:import"
   >;
   resourcePrefix?: string;
 };
@@ -4054,6 +4056,7 @@ export type AuthorizationTemplateGrant = {
     | "repositories:write"
     | "repositories:admin"
     | "repositories:intelligence"
+    | "repositories:import"
   >;
   resourcePrefix?: string;
 };
@@ -4085,6 +4088,7 @@ export type AuthorizationRoleWritable = {
     | "repositories:write"
     | "repositories:admin"
     | "repositories:intelligence"
+    | "repositories:import"
   >;
 };
 
@@ -4492,6 +4496,7 @@ export type EffectiveAccessPermissions = {
   write: EffectiveAccessDecision;
   admin: EffectiveAccessDecision;
   intelligence: EffectiveAccessDecision;
+  importWrite?: EffectiveAccessDecision;
 };
 
 export type RepositoryEffectiveAccess = {

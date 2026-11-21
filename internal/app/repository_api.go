@@ -273,7 +273,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("GET /livez", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	mux.HandleFunc("GET /readyz", dependencies.ready)
 	registerIssuerRoutes(mux, options.Issuer)
-	registerInstanceRoutes(mux, newInstanceDocumentHandler(store))
+	registerInstanceRoutes(mux, newInstanceDocumentHandler(store, options.ImportLimits))
 	if metrics == nil {
 		metrics = &Metrics{}
 	}

@@ -16205,7 +16205,8 @@
                 "repositories:read",
                 "repositories:write",
                 "repositories:admin",
-                "repositories:intelligence"
+                "repositories:intelligence",
+                "repositories:import"
               ]
             }
           },
@@ -26653,7 +26654,8 @@
                 "repositories:read",
                 "repositories:write",
                 "repositories:admin",
-                "repositories:intelligence"
+                "repositories:intelligence",
+                "repositories:import"
               ]
             }
           },
@@ -26692,7 +26694,8 @@
                 "repositories:read",
                 "repositories:write",
                 "repositories:admin",
-                "repositories:intelligence"
+                "repositories:intelligence",
+                "repositories:import"
               ]
             }
           },
@@ -26807,7 +26810,8 @@
                 "repositories:read",
                 "repositories:write",
                 "repositories:admin",
-                "repositories:intelligence"
+                "repositories:intelligence",
+                "repositories:import"
               ]
             }
           }
@@ -27879,6 +27883,9 @@
             "$ref": "#/components/schemas/EffectiveAccessDecision"
           },
           "intelligence": {
+            "$ref": "#/components/schemas/EffectiveAccessDecision"
+          },
+          "importWrite": {
             "$ref": "#/components/schemas/EffectiveAccessDecision"
           }
         }

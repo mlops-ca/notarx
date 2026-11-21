@@ -90,3 +90,6 @@ migrations:
   000028_promotion_retry_attempts.sql:
     dialect: postgres
     reason: replaces the promotion_job_state_change function so a retried failed or cancelled promotion job records a new attempt row; the MySQL baseline carries tables only
+  000029_import_sessions.sql:
+    dialect: postgres
+    reason: creates import_sessions and import_blobs with the (state, expires_at) reaper index, the per-principal count index and the retention age index; the catalogue carries both tables into the MySQL baseline

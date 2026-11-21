@@ -455,8 +455,15 @@ rejects the import.
 
 Limits (all configurable, defaults in Configuration): max blob size, max
 session bytes, max blobs per session, max open sessions per principal, and
-a staging quota. Abandoned sessions and staging keys are removed by a reaper
-whose TTL equals `NOTARX_IMPORT_SESSION_TTL`.
+a staging quota (`NOTARX_IMPORT_STAGING_QUOTA_BYTES`, default 100 GiB: the bytes claimed by every live session of the
+instance together). A request over a limit is refused with a typed error and writes nothing; a replay of an
+idempotency key checks no limit. `import_sessions` records the claims as received (coordinate, digest, format manifest,
+chain path and evidence stay unverified until the bytes are) and `import_blobs` the blobs with their staging keys,
+assigned when the session is created. Abandoned sessions and staging keys are removed by a reaper
+whose TTL equals `NOTARX_IMPORT_SESSION_TTL`: every node runs it once a minute, the sessions are taken with
+`FOR UPDATE SKIP LOCKED`, staging objects are deleted before their keys are emptied, and the retention janitor then deletes
+the finished rows (the `import_sessions` registry entry). `ImportWrite` is the grant scope `repositories:import`: admin
+includes it, write does not, and it implies no read.
 
 OCI: the unit is the manifest digest plus all child manifests/blobs plus
 referrers (signatures, SBOMs as referrer manifests) by digest. Blob sharing
@@ -546,7 +553,8 @@ matched artifacts with a per-condition verdict and never enqueues.
 (24h), `NOTARX_IMPORT_MAX_BLOB_BYTES` (10 GiB),
 `NOTARX_IMPORT_MAX_SESSION_BYTES` (50 GiB),
 `NOTARX_IMPORT_MAX_BLOBS_PER_SESSION` (2000),
-`NOTARX_IMPORT_MAX_OPEN_SESSIONS_PER_PRINCIPAL` (4).
+`NOTARX_IMPORT_MAX_OPEN_SESSIONS_PER_PRINCIPAL` (4),
+`NOTARX_IMPORT_STAGING_QUOTA_BYTES` (100 GiB).
 
 ## Security considerations
 
