@@ -136,6 +136,48 @@ func TestPromotionBatchAdmissionIsAllOrNothing(t *testing.T) {
 	}
 }
 
+// countingPromotionStore counts the target repository and security policy reads a batch makes.
+type countingPromotionStore struct {
+	*repository.MemoryStore
+	targetReads, policyReads int
+}
+
+func (s *countingPromotionStore) GetHostedRepository(ctx context.Context, id string) (repository.HostedRepository, error) {
+	s.targetReads++
+	return s.MemoryStore.GetHostedRepository(ctx, id)
+}
+
+func (s *countingPromotionStore) GetRepositorySecurityPolicy(ctx context.Context, id string) (repository.RepositorySecurityPolicy, error) {
+	s.policyReads++
+	return s.MemoryStore.GetRepositorySecurityPolicy(ctx, id)
+}
+
+func TestPromotionBatchLoadsTargetAndPolicyOncePerStage(t *testing.T) {
+	f := newProvenanceFixture(t)
+	counting := &countingPromotionStore{MemoryStore: f.store}
+	service := PromotionBatchService{
+		PromotionService: PromotionService{
+			store: counting, securityPolicies: counting, intelligence: f.store, promotions: f.store,
+			registry:   promotionFormatRegistry(promotionModuleDeps{Store: f.store}),
+			quarantine: func(context.Context, Principal, repository.HostedRepository, repository.HostedRepository, string, string) *PromotionError { return nil },
+		},
+		batches: f.store,
+	}
+	items := make([]repository.PromotionBatchItem, 0, 20)
+	for i := 0; i < 20; i++ {
+		asset := f.addRawAsset(t, fmt.Sprintf("releases/bulk-%d.txt", i))
+		items = append(items, repository.PromotionBatchItem{Coordinate: asset.Path, Digest: asset.Digest})
+	}
+	view, perr := service.Create(context.Background(), PromotionBatchRequest{Principal: Principal{Actor: "promoter", Admin: true}, Source: f.source, TargetID: f.target.ID, Items: items, IdempotencyKey: "bulk"})
+	if perr != nil || len(view.Items) != len(items) {
+		t.Fatalf("batch=%+v err=%+v", view, perr)
+	}
+	// One read for admission of the whole batch and one for queueing it, however many items it holds.
+	if counting.targetReads != 2 || counting.policyReads != 2 {
+		t.Fatalf("target reads=%d policy reads=%d for %d items, want 2 and 2", counting.targetReads, counting.policyReads, len(items))
+	}
+}
+
 func TestPromotionBatchRejectsMoreThanOneHundredItems(t *testing.T) {
 	f := newProvenanceFixture(t)
 	items := make([]string, repository.MaxPromotionBatchItems+1)

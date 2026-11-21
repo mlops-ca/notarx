@@ -315,6 +315,7 @@ func TestPyPISearchExplicitMatchIsLiteralAndOmissionPreservesNormalization(t *te
 
 type searchDeadlineStore struct {
 	GatewayStore
+	promotionStores
 	deadlines []time.Time
 }
 
@@ -332,7 +333,7 @@ func (s *searchDeadlineStore) FindActiveAPIKeyByHash(ctx context.Context, hash s
 
 func TestContainsSearchBudgetPrecedesRepositoryAndAnonymousReads(t *testing.T) {
 	fixture := repository.NewMemoryStore()
-	store := &searchDeadlineStore{GatewayStore: fixture}
+	store := &searchDeadlineStore{GatewayStore: fixture, promotionStores: fixture}
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, NPMMetadata: fixture, NPMRestore: fixture, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
 	for _, anonymous := range []bool{false, true} {
 		for _, match := range []string{"prefix", "contains"} {
@@ -359,7 +360,7 @@ func TestContainsSearchBudgetPrecedesRepositoryAndAnonymousReads(t *testing.T) {
 
 func TestContainsSearchBudgetIncludesCredentialReads(t *testing.T) {
 	fixture := repository.NewMemoryStore()
-	store := &searchDeadlineStore{GatewayStore: fixture}
+	store := &searchDeadlineStore{GatewayStore: fixture, promotionStores: fixture}
 	auth := testAuthenticator()
 	auth.APIKeys = store
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{}, Store: store, NPMMetadata: fixture, NPMRestore: fixture, Adapter: TestAdapter{}, Authenticator: auth})

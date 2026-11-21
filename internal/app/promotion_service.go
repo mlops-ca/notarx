@@ -27,10 +27,17 @@ type PromotionService struct {
 	quarantine func(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest string) *PromotionError
 }
 
+// promotionStores are the provenance and batch ports of the gateway store. NewGatewayHandler refuses a store that lacks
+// them, so a promotion never meets a store without provenance after its job is queued.
+type promotionStores interface {
+	repository.ArtifactPromotionStore
+	repository.PromotionBatchStore
+}
+
 // newPromotionService wires the service from the management adapter's stores.
 func newPromotionService(h generatedRepositoryAPIAdapter) PromotionService {
 	return PromotionService{
-		store: h.sessions.store, securityPolicies: h.securityPolicies, intelligence: h.intelligence, audit: h.audit, promotions: promotionStore(h.sessions.store),
+		store: h.sessions.store, securityPolicies: h.securityPolicies, intelligence: h.intelligence, audit: h.audit, promotions: h.sessions.store.(promotionStores),
 		registry: promotionFormatRegistry(promotionModuleDeps{Store: h.sessions.store}),
 		quarantine: func(ctx context.Context, principal Principal, source, target repository.HostedRepository, coordinate, digest string) *PromotionError {
 			return h.checkQuarantinedDistribution(ctx, principal, source, target, coordinate, digest, "promote")
@@ -78,6 +85,31 @@ func promotionError(status int, code, message string) *PromotionError {
 	return &PromotionError{Status: status, Code: code, Message: message}
 }
 
+// promotionTarget is the target repository of a promotion with its security policy, resolved once so a batch does not
+// re-read them per item. A refusal of the target or its policy is carried in err and applies to every item.
+type promotionTarget struct {
+	repo   repository.HostedRepository
+	policy repository.RepositorySecurityPolicy
+	err    *PromotionError
+}
+
+// resolveTarget loads the target repository and its security policy and checks that the target is an active Hosted
+// repository of the source's format other than the source.
+func (s PromotionService) resolveTarget(ctx context.Context, source repository.HostedRepository, targetID string) *promotionTarget {
+	target, err := s.store.GetHostedRepository(ctx, targetID)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return &promotionTarget{err: promotionError(http.StatusInternalServerError, "internal_error", "get target repository failed")}
+	}
+	if err != nil || target.ID == source.ID || target.Format != source.Format || target.Type != repository.RepositoryTypeHosted || target.State != repository.RepositoryActive {
+		return &promotionTarget{err: promotionError(http.StatusConflict, "invalid_target", "target must be an active Hosted repository with the same format")}
+	}
+	policy, err := s.securityPolicies.GetRepositorySecurityPolicy(ctx, target.ID)
+	if err != nil {
+		return &promotionTarget{repo: target, err: promotionError(http.StatusInternalServerError, "internal_error", "get security policy failed")}
+	}
+	return &promotionTarget{repo: target, policy: policy}
+}
+
 // promotionAdmission is what a passed admission check resolved: the target repository and the format publisher.
 type promotionAdmission struct {
 	target    repository.HostedRepository
@@ -87,32 +119,30 @@ type promotionAdmission struct {
 // Admit runs the admission checks of a promotion (format capability, target, quarantine recheck, admission policy)
 // without queueing anything; a batch admits every item before it queues any.
 func (s PromotionService) Admit(ctx context.Context, in PromotionRequest) *PromotionError {
-	_, perr := s.admit(ctx, in)
+	_, perr := s.admit(ctx, in, s.resolveTarget(ctx, in.Source, in.TargetID))
 	return perr
 }
 
-func (s PromotionService) admit(ctx context.Context, in PromotionRequest) (promotionAdmission, *PromotionError) {
+// admit runs the per-item checks against a target resolved by resolveTarget. The worker evaluates the target policy
+// again when it claims the job, so a policy read earlier in the same batch does not weaken execution.
+func (s PromotionService) admit(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (promotionAdmission, *PromotionError) {
 	source := in.Source
 	publisher, ok := formatmodule.Capability[formatmodule.PromotionPublisher](s.registry, source.Format)
 	if !ok {
 		return promotionAdmission{}, errUnsupportedPromotionFormat
 	}
-	target, err := s.store.GetHostedRepository(ctx, in.TargetID)
-	if err != nil && !errors.Is(err, repository.ErrNotFound) {
-		return promotionAdmission{}, promotionError(http.StatusInternalServerError, "internal_error", "get target repository failed")
+	if resolved.err != nil && resolved.repo.ID == "" {
+		return promotionAdmission{}, resolved.err
 	}
-	if err != nil || target.ID == source.ID || target.Format != source.Format || target.Type != repository.RepositoryTypeHosted || target.State != repository.RepositoryActive {
-		return promotionAdmission{}, promotionError(http.StatusConflict, "invalid_target", "target must be an active Hosted repository with the same format")
-	}
+	target := resolved.repo
 	if source.Format == repository.FormatAPT && in.AptTargetSuite == nil {
 		return promotionAdmission{}, promotionError(http.StatusBadRequest, "invalid_request", "aptTargetSuite is required for APT promotion")
 	}
 	if rejection := s.quarantine(ctx, in.Principal, source, target, in.Coordinate, in.Digest); rejection != nil {
 		return promotionAdmission{}, rejection
 	}
-	policy, policyErr := s.securityPolicies.GetRepositorySecurityPolicy(ctx, target.ID)
-	if policyErr != nil {
-		return promotionAdmission{}, promotionError(http.StatusInternalServerError, "internal_error", "get security policy failed")
+	if resolved.err != nil {
+		return promotionAdmission{}, resolved.err
 	}
 	var intelligence *repository.ArtifactIntelligence
 	if value, intelligenceErr := s.intelligence.GetArtifactIntelligence(ctx, source.ID, source.Format, in.Coordinate, in.Digest); intelligenceErr == nil {
@@ -120,7 +150,7 @@ func (s PromotionService) admit(ctx context.Context, in PromotionRequest) (promo
 	} else if !errors.Is(intelligenceErr, repository.ErrNotFound) {
 		return promotionAdmission{}, promotionError(http.StatusInternalServerError, "internal_error", "get artifact intelligence failed")
 	}
-	evaluation := repository.EvaluateRepositorySecurityPolicy(policy, intelligence)
+	evaluation := repository.EvaluateRepositorySecurityPolicy(resolved.policy, intelligence)
 	if !evaluation.Allowed {
 		if s.audit != nil {
 			_ = s.audit.RecordAudit(ctx, repository.AuditRecord{GroupName: target.Name, Repository: target.Name, Actor: in.Principal.Actor, Outcome: repository.AuditAccessDenied, OccurredAt: time.Now().UTC(), Format: "management", Resource: in.Coordinate, Representation: in.Digest, Operation: "promote.security_policy", Status: http.StatusForbidden, AuthorizationReason: strings.Join(evaluation.Reasons, ",")})
@@ -132,7 +162,11 @@ func (s PromotionService) admit(ctx context.Context, in PromotionRequest) (promo
 
 // Request runs the admission checks and enqueues the promotion job.
 func (s PromotionService) Request(ctx context.Context, in PromotionRequest) (PromotionResult, *PromotionError) {
-	admission, perr := s.admit(ctx, in)
+	return s.request(ctx, in, s.resolveTarget(ctx, in.Source, in.TargetID))
+}
+
+func (s PromotionService) request(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (PromotionResult, *PromotionError) {
+	admission, perr := s.admit(ctx, in, resolved)
 	if perr != nil {
 		return PromotionResult{}, perr
 	}
@@ -152,9 +186,6 @@ func (s PromotionService) Request(ctx context.Context, in PromotionRequest) (Pro
 	if err != nil {
 		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "enqueue promotion job failed")
 	}
-	if s.promotions == nil {
-		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "promotion provenance is unavailable")
-	}
 	row, err := s.promotions.GetArtifactPromotionByJob(ctx, job.ID)
 	if err != nil {
 		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
@@ -172,11 +203,4 @@ func (s PromotionService) auditFor(record repository.AuditRecord) []repository.A
 		return nil
 	}
 	return []repository.AuditRecord{managementAudit(record)}
-}
-
-// promotionStore returns the provenance port of the gateway store. The durable and in-memory stores implement it; a
-// store that does not leaves the service without provenance, which Request reports as an internal error.
-func promotionStore(store any) repository.ArtifactPromotionStore {
-	promotions, _ := store.(repository.ArtifactPromotionStore)
-	return promotions
 }
