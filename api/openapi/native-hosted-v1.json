@@ -21291,7 +21291,7 @@
           },
           "members": {
             "type": "array",
-            "description": "Omitted when excludedAttributes=members is sent. Each member carries value, display, type and a $ref link to its User. A group read returns at most 10000 members; the groups of one list page share a budget of 1000.\n",
+            "description": "Omitted when excludedAttributes=members is sent. Each member carries value, display, type and a $ref link to its User. A group read returns at most 10000 members; the groups of one list page share a budget of 1000, and a group that does not fit its share is listed without its members.\n",
             "items": {
               "type": "object",
               "properties": {

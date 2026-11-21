@@ -88,28 +88,25 @@ func (s *scimServer) listUsers(w http.ResponseWriter, r *http.Request, caller sc
 		query.ExternalID = filter.Value
 	}
 	startIndex := parameters.startIndex
-	query.Cursor = parameters.cursor
-	if query.Cursor == "" && startIndex > 1 {
-		hop := query
-		hop.SkipTotal = true
-		cursor, ok, failure, err := scimCursorHop(startIndex, func(cursor string, limit int) (int, string, error) {
-			hop.Cursor, hop.Limit = cursor, limit
-			page, err := s.store.ListSCIMUsers(r.Context(), hop)
-			return len(page.Items), page.NextCursor, err
+	hop := query
+	hop.SkipTotal, hop.KeysOnly = true, true
+	cursor, pastEnd, failure, err := resolveStart(parameters, func(cursor string, limit int) (int, string, error) {
+		hop.Cursor, hop.Limit = cursor, limit
+		page, err := s.store.ListSCIMUsers(r.Context(), hop)
+		return len(page.Items), page.NextCursor, err
+	})
+	switch {
+	case failure != nil:
+		return s.respond(w, r, caller, "scim.user.list", failure)
+	case err != nil:
+		return s.respond(w, r, caller, "scim.user.list", s.storeFailure(err, "User"))
+	case pastEnd:
+		return s.emptyList(w, r, caller, "scim.user.list", "/Users", startIndex, func() (int64, error) {
+			page, err := s.store.ListSCIMUsers(r.Context(), repository.SCIMUserQuery{ProviderID: caller.ProviderID, UserName: query.UserName, ExternalID: query.ExternalID, Limit: 1})
+			return page.Total.Value, err
 		})
-		switch {
-		case failure != nil:
-			return s.respond(w, r, caller, "scim.user.list", failure)
-		case err != nil:
-			return s.respond(w, r, caller, "scim.user.list", s.storeFailure(err, "User"))
-		case !ok:
-			return s.emptyList(w, r, caller, "scim.user.list", "/Users", startIndex, func() (int64, error) {
-				page, err := s.store.ListSCIMUsers(r.Context(), repository.SCIMUserQuery{ProviderID: caller.ProviderID, UserName: query.UserName, ExternalID: query.ExternalID, Limit: 1})
-				return page.Total.Value, err
-			})
-		}
-		query.Cursor = cursor
 	}
+	query.Cursor = cursor
 	page, err := s.store.ListSCIMUsers(r.Context(), query)
 	if err != nil {
 		return s.respond(w, r, caller, "scim.user.list", s.storeFailure(err, "User"))
@@ -135,7 +132,7 @@ func (s *scimServer) emptyList(w http.ResponseWriter, r *http.Request, caller sc
 	return s.writeJSON(w, r, caller, operation, resource, http.StatusOK, scim.ListResponse{TotalResults: value, StartIndex: startIndex}, nil, true)
 }
 
-// validateUserInput applies the limits the account fields have.
+// validateScimUser applies the limits the account fields have and refuses the externalId prefixes the store reserves.
 func validateScimUser(userName, displayName, email string, externalID *string) *scim.Error {
 	switch {
 	case externalID != nil && repository.ReservedSCIMExternalID(*externalID):
@@ -175,7 +172,7 @@ func (s *scimServer) createUser(w http.ResponseWriter, r *http.Request, caller s
 	return s.writeUser(w, r, caller, "scim.user.create", http.StatusCreated, user, false)
 }
 
-// userChange converts a replace body to the change the store applies: displayName and the email are replaced
+// userReplaceChange converts a replace body to the change the store applies: displayName and the email are replaced
 // (an absent one is cleared), externalId and active only when sent.
 func userReplaceChange(input scim.UserInput) repository.SCIMUserChange {
 	return repository.SCIMUserChange{UserName: &input.UserName, DisplayName: &input.DisplayName, Email: &input.Email, ExternalID: input.ExternalID, Active: input.Active}

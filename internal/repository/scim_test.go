@@ -151,3 +151,38 @@ func TestSCIMUserExternalIDHidesTheGeneratedKey(t *testing.T) {
 		t.Fatalf("external ids = %q, %q", generated.ExternalID(), set.ExternalID())
 	}
 }
+
+func TestMemorySCIMCreateAuditNamesTheAccountAndWhetherItWasTakenOver(t *testing.T) {
+	store := NewMemoryStore()
+	provider := newMemorySCIMProvider(store)(t)
+	ctx := context.Background()
+	audit := ManagementAudit("scim:test", "scim.user.create", "scim/Users", 201)
+	created, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: "fresh", Active: true}, audit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	linked, err := store.CreateUser(ctx, User{ID: ids.New(), Name: "linked", Role: "none"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.LinkProviderIdentity(ctx, ProviderIdentityLink{ProviderID: provider, UserID: linked.ID, Subject: "s", Issuer: "https://idp.example.test", Kind: UserIdentityOIDC}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: "linked", Active: true}, audit); err != nil {
+		t.Fatal(err)
+	}
+	group, err := store.CreateSCIMGroup(ctx, SCIMGroupCreate{ProviderID: provider, DisplayName: "g"}, ManagementAudit("scim:test", "scim.group.create", "scim/Groups", 201))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]string{}
+	for _, record := range store.Audits {
+		seen[record.Resource] = record.Evidence["result"]
+	}
+	if seen["scim/Users/"+created.User.ID] != "created" || seen["scim/Users/"+linked.ID] != "taken_over" {
+		t.Fatalf("audit = %v", seen)
+	}
+	if _, ok := seen["scim/Groups/"+group.ID]; !ok {
+		t.Fatalf("the group create was not audited with its id: %v", seen)
+	}
+}

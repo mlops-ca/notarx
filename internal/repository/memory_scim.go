@@ -130,14 +130,15 @@ func (s *MemoryStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, aud
 		if !linked || scimOwned(identity) || !scimClaimable(existing) {
 			return SCIMUser{}, ErrNameExists
 		}
-		return s.claimSCIMUserLocked(ctx, existing, identity, in, audit)
+		return s.claimSCIMUserLocked(ctx, existing, identity, in, scimAuditTarget(audit, "scim/Users/"+existing.ID, map[string]string{"result": "taken_over"}))
 	}
-	if err := s.commitAuditLocked(ctx, audit); err != nil {
+	userID := ids.New()
+	if err := s.commitAuditLocked(ctx, scimAuditTarget(audit, "scim/Users/"+userID, map[string]string{"result": "created"})); err != nil {
 		return SCIMUser{}, err
 	}
 	now := time.Now().UTC()
 	user := User{
-		ID: ids.New(), Name: in.UserName, DisplayName: in.DisplayName, Email: in.Email, Role: "none", State: UserActive,
+		ID: userID, Name: in.UserName, DisplayName: in.DisplayName, Email: in.Email, Role: "none", State: UserActive,
 		SessionVersion: 1, CreatedAt: now, UpdatedAt: now, Version: "1",
 	}
 	if !in.Active {
@@ -343,6 +344,8 @@ func (s *MemoryStore) DeleteSCIMUser(ctx context.Context, providerID, userID str
 		if group.Source == UserGroupSourceSCIM && group.ProviderID == providerID {
 			if member, ok := s.userGroupsLocked().members[groupID][user.ID]; ok && member.Source == UserGroupSourceSCIM {
 				delete(s.userGroupsLocked().members[groupID], user.ID)
+				group.Version, group.UpdatedAt = nextHostedGroupVersion(group.Version), now
+				s.userGroupsLocked().groups[groupID] = group
 			}
 		}
 	}
@@ -420,11 +423,12 @@ func (s *MemoryStore) CreateSCIMGroup(ctx context.Context, in SCIMGroupCreate, a
 			return UserGroup{}, ErrSCIMInvalid
 		}
 	}
-	if err := s.commitAuditLocked(ctx, audit); err != nil {
+	groupID := ids.New()
+	if err := s.commitAuditLocked(ctx, scimAuditTarget(audit, "scim/Groups/"+groupID, nil)); err != nil {
 		return UserGroup{}, err
 	}
 	now := time.Now().UTC()
-	group.ID, group.Version, group.CreatedAt, group.UpdatedAt = ids.New(), "1", now, now
+	group.ID, group.Version, group.CreatedAt, group.UpdatedAt = groupID, "1", now, now
 	state.groups[group.ID] = group
 	for _, memberID := range in.MemberIDs {
 		s.addSCIMMemberLocked(state, group.ID, memberID, now)
@@ -436,7 +440,13 @@ func (s *MemoryStore) addSCIMMemberLocked(state *memoryUserGroupState, groupID, 
 	if state.members[groupID] == nil {
 		state.members[groupID] = map[string]UserGroupMember{}
 	}
-	if _, exists := state.members[groupID][userID]; exists {
+	if existing, exists := state.members[groupID][userID]; exists {
+		// The identity provider names the account, so the membership is SCIM-managed from now on: a membership an
+		// administrator added for the same account is taken over instead of staying invisible to the provider.
+		if existing.Source == UserGroupSourceLocal {
+			existing.Source = UserGroupSourceSCIM
+			state.members[groupID][userID] = existing
+		}
 		return
 	}
 	state.members[groupID][userID] = UserGroupMember{GroupID: groupID, UserID: userID, UserName: s.users[userID].Name, Source: UserGroupSourceSCIM, CreatedAt: now}

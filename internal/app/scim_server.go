@@ -311,6 +311,16 @@ func (s *scimServer) listParameters(r *http.Request) (scimListParameters, *scim.
 	return parameters, nil
 }
 
+// resolveStart returns the cursor a list starts from: the one the client sent, or the one startIndex hops to. pastEnd
+// is true when startIndex is beyond the last row. The hop pages read only the keyset keys of the rows they skip.
+func resolveStart(parameters scimListParameters, hop func(cursor string, limit int) (count int, next string, err error)) (cursor string, pastEnd bool, failure *scim.Error, err error) {
+	if parameters.cursor != "" || parameters.startIndex <= 1 {
+		return parameters.cursor, false, nil, nil
+	}
+	cursor, ok, failure, err := scimCursorHop(parameters.startIndex, hop)
+	return cursor, !ok && failure == nil && err == nil, failure, err
+}
+
 // scimCursorHop reads the keyset cursor that precedes startIndex without OFFSET: it hops pages of the same keyset
 // query, discarding the rows, so the cost is bounded by repository.ListTotalCap rows. A client that needs to page
 // further uses the cursor of the response (RFC 9865). ok is false when startIndex is past the last row.
@@ -391,7 +401,7 @@ func (s *scimServer) preconditionFailed() *scim.Error {
 	return scim.NewError(http.StatusPreconditionFailed, scim.TypeInvalidVers, "If-Match does not match the current version of the resource")
 }
 
-// audit writes the record of a call outside the transaction of a change (reads and refusals). Failures of the
+// record writes the audit record of a call outside the transaction of a change (reads and refusals). Failures of the
 // audit of a read are not surfaced; a write carries its audit into the store transaction instead.
 func (s *scimServer) record(r *http.Request, caller scimCaller, operation, resource string, status int, evidence map[string]string) {
 	if s.audit == nil {

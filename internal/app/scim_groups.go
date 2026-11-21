@@ -87,7 +87,13 @@ func (s *scimServer) writeGroup(w http.ResponseWriter, r *http.Request, caller s
 	if withMembers {
 		var err error
 		if members, err = s.readMembers(r, caller, group); err != nil {
-			return s.respond(w, r, caller, operation, s.storeFailure(err, "Group"))
+			if audit {
+				return s.respond(w, r, caller, operation, s.storeFailure(err, "Group"))
+			}
+			// The change is committed and audited: answer with the group without its members rather than a 500 for a
+			// write that happened, which would make the identity provider retry into a conflict.
+			slog.Error("read the members of a SCIM group after a committed change failed", "provider", caller.Slug, "group", group.ID, "error", err)
+			withMembers = false
 		}
 	}
 	headers := map[string]string{"ETag": scim.ETag(group.Version)}
@@ -122,27 +128,25 @@ func (s *scimServer) listGroups(w http.ResponseWriter, r *http.Request, caller s
 		query.ExternalID = filter.Value
 	}
 	startIndex := parameters.startIndex
-	if query.Cursor == "" && startIndex > 1 {
-		hop := query
-		hop.SkipTotal = true
-		cursor, ok, failure, err := scimCursorHop(startIndex, func(cursor string, limit int) (int, string, error) {
-			hop.Cursor, hop.Limit = cursor, limit
-			page, err := s.store.ListSCIMGroups(r.Context(), hop)
-			return len(page.Items), page.NextCursor, err
+	hop := query
+	hop.SkipTotal, hop.KeysOnly = true, true
+	cursor, pastEnd, failure, err := resolveStart(parameters, func(cursor string, limit int) (int, string, error) {
+		hop.Cursor, hop.Limit = cursor, limit
+		page, err := s.store.ListSCIMGroups(r.Context(), hop)
+		return len(page.Items), page.NextCursor, err
+	})
+	switch {
+	case failure != nil:
+		return s.respond(w, r, caller, "scim.group.list", failure)
+	case err != nil:
+		return s.respond(w, r, caller, "scim.group.list", s.storeFailure(err, "Group"))
+	case pastEnd:
+		return s.emptyList(w, r, caller, "scim.group.list", "/Groups", startIndex, func() (int64, error) {
+			page, err := s.store.ListSCIMGroups(r.Context(), repository.SCIMGroupQuery{ProviderID: caller.ProviderID, DisplayName: query.DisplayName, ExternalID: query.ExternalID, Limit: 1})
+			return page.Total.Value, err
 		})
-		switch {
-		case failure != nil:
-			return s.respond(w, r, caller, "scim.group.list", failure)
-		case err != nil:
-			return s.respond(w, r, caller, "scim.group.list", s.storeFailure(err, "Group"))
-		case !ok:
-			return s.emptyList(w, r, caller, "scim.group.list", "/Groups", startIndex, func() (int64, error) {
-				page, err := s.store.ListSCIMGroups(r.Context(), repository.SCIMGroupQuery{ProviderID: caller.ProviderID, DisplayName: query.DisplayName, ExternalID: query.ExternalID, Limit: 1})
-				return page.Total.Value, err
-			})
-		}
-		query.Cursor = cursor
 	}
+	query.Cursor = cursor
 	page, err := s.store.ListSCIMGroups(r.Context(), query)
 	if err != nil {
 		return s.respond(w, r, caller, "scim.group.list", s.storeFailure(err, "Group"))
@@ -162,15 +166,20 @@ func (s *scimServer) listGroups(w http.ResponseWriter, r *http.Request, caller s
 				groupIDs = append(groupIDs, group.ID)
 			}
 			var err error
-			if members, err = s.store.ListSCIMGroupsMembers(r.Context(), caller.ProviderID, groupIDs, perGroup); err != nil {
+			if members, err = s.store.ListSCIMGroupsMembers(r.Context(), caller.ProviderID, groupIDs, perGroup+1); err != nil {
 				return s.respond(w, r, caller, "scim.group.list", s.storeFailure(err, "Group"))
 			}
 		}
 		for _, group := range page.Items {
-			if perGroup > 0 && len(members[group.ID]) >= perGroup {
-				slog.Warn("a SCIM group list may have truncated the members of a group", "provider", caller.Slug, "group", group.ID, "limit", perGroup)
+			// A group whose members do not fit its share of the budget is returned without them, never with a
+			// partial list a client would reconcile against: the client reads the group for its members.
+			listed := members[group.ID]
+			includeMembers := withMembers
+			if perGroup > 0 && len(listed) > perGroup {
+				slog.Info("a SCIM group list left out the members of a group that exceeds its share", "provider", caller.Slug, "group", group.ID, "limit", perGroup)
+				listed, includeMembers = nil, false
 			}
-			response.Resources = append(response.Resources, s.groupDocument(r, group, members[group.ID], withMembers))
+			response.Resources = append(response.Resources, s.groupDocument(r, group, listed, includeMembers))
 		}
 	} else {
 		response.NextCursor = ""

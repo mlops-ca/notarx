@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -183,9 +184,7 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		roles = append(roles, resource.Roles...)
 	}
 	if v.config.ExternalIDClaim != "" {
-		if value, ok := verified.Claims[v.config.ExternalIDClaim].(string); ok {
-			identity.ExternalID = strings.TrimSpace(value)
-		}
+		identity.ExternalID = externalIDClaim(verified.Claims[v.config.ExternalIDClaim])
 	}
 	identity.Groups, identity.GroupsOverage, identity.GroupsPresent = claimGroupsPresent(verified.Claims, v.config.GroupsClaim)
 	identity.RoleMappings = matchedOIDCRoleMappings(roles, v.config.Roles)
@@ -196,6 +195,20 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 		identity.Role = RoleMember
 	}
 	return identity, true
+}
+
+// externalIDClaim reads the claim that carries the IdP's externalId of the user. An IdP may emit an employee number as
+// a JSON number, so a number is read as its integer or decimal text; any other shape yields no externalId.
+func externalIDClaim(value any) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case json.Number:
+		return typed.String()
+	case float64:
+		return strconv.FormatFloat(typed, 'f', -1, 64)
+	}
+	return ""
 }
 
 // claimGroups reads the group values of a verified token. Microsoft Entra ID replaces the groups claim with

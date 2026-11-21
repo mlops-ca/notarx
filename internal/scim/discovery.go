@@ -78,7 +78,7 @@ func Schemas(base string) []map[string]any {
 	members["multiValued"] = true
 	return []map[string]any{
 		{"schemas": []string{SchemaSchemaResource}, "id": SchemaUser, "name": "User", "description": "User account provisioned by an identity provider", "attributes": []map[string]any{
-			attribute("userName", "string", "The account name; unique case-insensitively across the instance.", true, "server", "readWrite"),
+			attribute("userName", "string", "The account name; unique case-insensitively across the instance. It is set at creation and cannot be changed through SCIM.", true, "server", "immutable"),
 			attribute("externalId", "string", "The identifier of the user at the identity provider.", false, "none", "readWrite"),
 			attribute("displayName", "string", "The name shown for the user.", false, "none", "readWrite"),
 			attribute("name", "complex", "Only the formatted name is stored, as the display name.", false, "none", "readWrite",

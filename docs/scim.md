@@ -81,7 +81,8 @@ without a database read.
 - SCIM can never modify or deactivate a platform administrator: every write answers `403`.
 - Groups are created with source `scim` and global role `none`; a request cannot name a role, and SCIM changes never
   touch an administrator's flag. Memberships SCIM writes are authoritative for the SCIM-managed ones; an
-  administrator's own membership of the group stays (SCIM does not show or change it), and logins never alter either.
+  administrator's own membership of the group stays (SCIM does not show or change it) until the provider names the same account,
+  which makes it SCIM-managed so the provider can see and remove it, and logins never alter either.
 
 ## What the server implements
 
@@ -90,12 +91,12 @@ without a database read.
 | Resources | `/Users`, `/Groups`, `/ServiceProviderConfig`, `/Schemas`, `/ResourceTypes` |
 | Media types | Answers `application/scim+json`; accepts that and `application/json` |
 | Filter | Only `eq` on `userName` and `externalId` (Users) and `displayName` and `externalId` (Groups); anything else is `400 invalidFilter` |
-| Paging | Keyset on creation time and id. `count` is capped at `NOTARX_SCIM_MAX_PAGE`; `startIndex` up to 10001 is mapped onto a cursor by hopping keyset pages, and every list response carries an RFC 9865 `nextCursor` for anything further. `totalResults` is exact up to 10000 rows and a lower bound beyond |
+| Paging | Keyset on creation time and id. `count` is capped at `NOTARX_SCIM_MAX_PAGE`; `startIndex` up to 10001 is mapped onto a cursor by hopping keyset pages that read only the keys of the rows they skip, and every list response carries an RFC 9865 `nextCursor` for anything further. `totalResults` is exact up to 10000 rows and a lower bound beyond |
 | PATCH | Any letter case for `op`; `active` as a boolean or `"True"`/`"False"`; simple paths, `attr[type eq "x"].sub`, `members[value eq "id"]`, member arrays and pathless replace objects (Okta) |
 | Unsupported attributes | Logged and ignored with `200`; only `userName`, `externalId`, `active` and `id` answer `400 invalidPath` |
 | ETag | Weak ETags on resources; `If-Match` on PUT, PATCH and DELETE is compared under the row lock, `412` on a mismatch |
 | Bulk, sort, change password | Not supported |
-| Groups | `excludedAttributes=members` is honoured; a group read returns at most 10000 members, and the groups of one list page share a budget of 1000 members (use `excludedAttributes=members`, as Entra ID does, or read the group) |
+| Groups | `excludedAttributes=members` is honoured; a group read returns at most 10000 members, and the groups of one list page share a budget of 1000 members; a group whose members do not fit its share is listed without them, never with a partial list (use `excludedAttributes=members`, as Entra ID does, or read the group) |
 | Locations | `meta.location`, `Location` and member `$ref` are absolute from `NOTARX_PUBLIC_URL`; without it they are paths only, never built from the request's Host header |
 
 The account stores one display name and one email: `name.formatted` and `emails` map to them, the other name

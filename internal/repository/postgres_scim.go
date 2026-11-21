@@ -133,51 +133,69 @@ func (s *PostgresStore) CreateSCIMUser(ctx context.Context, in SCIMUserCreate, a
 	if !isUUID(in.ProviderID) {
 		return SCIMUser{}, ErrNotFound
 	}
-	created, err := runTransactional(ctx, s, audit, func(q sqlRunner) (SCIMUser, error) {
-		var kind, slug string
-		err := q.QueryRowContext(ctx, `SELECT kind, slug FROM identity_providers WHERE id=$1::uuid FOR SHARE`, in.ProviderID).Scan(&kind, &slug)
-		if errors.Is(err, sql.ErrNoRows) {
-			return SCIMUser{}, ErrNotFound
-		}
+	created, err := runTransactional(ctx, s, nil, func(q sqlRunner) (SCIMUser, error) {
+		result, taken, err := createSCIMUserOn(ctx, q, in)
 		if err != nil {
 			return SCIMUser{}, err
 		}
-		state, reason := UserActive, ""
-		if !in.Active {
-			state, reason = UserDisabled, DisabledBySCIM
+		// The audit names the account the call created or took over, which only this transaction knows.
+		kindOfResult := "created"
+		if taken {
+			kindOfResult = "taken_over"
 		}
-		if claimed, found, err := claimSCIMUser(ctx, q, in, state, reason); err != nil || found {
-			return claimed, err
-		}
-		userID := ids.New()
-		var user User
-		err = scanUser(q.QueryRowContext(ctx, `INSERT INTO users (id,name,display_name,email,description,secret_hash,role,state,disabled_reason,session_version) VALUES ($1::uuid,$2,$3,$4,'','','none',$5,NULLIF($6,''),1) RETURNING `+userColumns,
-			userID, in.UserName, in.DisplayName, in.Email, state, reason), &user)
-		if isUnique(err) {
-			return SCIMUser{}, ErrNameExists
-		}
-		if err != nil {
+		if err := insertAudits(ctx, q, scimAuditTarget(audit, "scim/Users/"+result.User.ID, map[string]string{"result": kindOfResult})); err != nil {
 			return SCIMUser{}, err
 		}
-		externalID := in.ExternalID
-		if externalID == "" {
-			externalID = SCIMGeneratedExternalIDPrefix + userID
-		}
-		var identity UserIdentity
-		err = scanUserIdentity(q.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,provider_id,issuer,subject,scim_external_id,email,display_name) VALUES ($1::uuid,$2::uuid,$3,$4::uuid,$5,NULL,$6,$7,$8) RETURNING `+userIdentityColumns,
-			ids.New(), userID, kind, in.ProviderID, "scim:"+slug, externalID, in.Email, in.DisplayName), &identity)
-		if isUnique(err) {
-			return SCIMUser{}, ErrIdentityExists
-		}
-		if err != nil {
-			return SCIMUser{}, err
-		}
-		return SCIMUser{User: user, Identity: identity}, nil
+		return result, nil
 	})
 	if err == nil {
 		s.invalidateLocal(CacheScopeUser, created.User.ID)
 	}
 	return created, err
+}
+
+// createSCIMUserOn creates the account and its identity row, or takes over an account the provider is linked to; taken
+// reports the latter.
+func createSCIMUserOn(ctx context.Context, q sqlRunner, in SCIMUserCreate) (SCIMUser, bool, error) {
+	var kind, slug string
+	err := q.QueryRowContext(ctx, `SELECT kind, slug FROM identity_providers WHERE id=$1::uuid FOR SHARE`, in.ProviderID).Scan(&kind, &slug)
+	if errors.Is(err, sql.ErrNoRows) {
+		return SCIMUser{}, false, ErrNotFound
+	}
+	if err != nil {
+		return SCIMUser{}, false, err
+	}
+	state, reason := UserActive, ""
+	if !in.Active {
+		state, reason = UserDisabled, DisabledBySCIM
+	}
+	if claimed, found, err := claimSCIMUser(ctx, q, in, state, reason); err != nil || found {
+		return claimed, found, err
+	}
+	userID := ids.New()
+	var user User
+	err = scanUser(q.QueryRowContext(ctx, `INSERT INTO users (id,name,display_name,email,description,secret_hash,role,state,disabled_reason,session_version) VALUES ($1::uuid,$2,$3,$4,'','','none',$5,NULLIF($6,''),1) RETURNING `+userColumns,
+		userID, in.UserName, in.DisplayName, in.Email, state, reason), &user)
+	if isUnique(err) {
+		return SCIMUser{}, false, ErrNameExists
+	}
+	if err != nil {
+		return SCIMUser{}, false, err
+	}
+	externalID := in.ExternalID
+	if externalID == "" {
+		externalID = SCIMGeneratedExternalIDPrefix + userID
+	}
+	var identity UserIdentity
+	err = scanUserIdentity(q.QueryRowContext(ctx, `INSERT INTO user_identities (id,user_id,kind,provider_id,issuer,subject,scim_external_id,email,display_name) VALUES ($1::uuid,$2::uuid,$3,$4::uuid,$5,NULL,$6,$7,$8) RETURNING `+userIdentityColumns,
+		ids.New(), userID, kind, in.ProviderID, "scim:"+slug, externalID, in.Email, in.DisplayName), &identity)
+	if isUnique(err) {
+		return SCIMUser{}, false, ErrIdentityExists
+	}
+	if err != nil {
+		return SCIMUser{}, false, err
+	}
+	return SCIMUser{User: user, Identity: identity}, false, nil
 }
 
 // claimSCIMUser takes over an account the provider is linked to but SCIM does not own: one it deleted earlier (its link
@@ -266,7 +284,11 @@ func scimUserFilterSQL(query SCIMUserQuery) (string, []any) {
 // whether the page continues a cursor, whose two key placeholders follow the filter's.
 func scimUserPageSQL(query SCIMUserQuery, after bool, limit int) (string, []any) {
 	filter, args := scimUserFilterSQL(query)
-	statement := "SELECT " + scimUserColumns + " FROM " + filter
+	columns := scimUserColumns
+	if query.KeysOnly {
+		columns = "i.created_at, i.id::text"
+	}
+	statement := "SELECT " + columns + " FROM " + filter
 	if after {
 		statement += " AND (i.created_at,i.id)>($" + strconv.Itoa(len(args)+1) + "::timestamptz,$" + strconv.Itoa(len(args)+2) + "::uuid)"
 	}
@@ -300,7 +322,13 @@ func (s *PostgresStore) ListSCIMUsers(ctx context.Context, query SCIMUserQuery) 
 	defer func() { _ = rows.Close() }()
 	items := make([]SCIMUser, 0, limit)
 	for rows.Next() {
-		user, err := scanSCIMUser(rows)
+		var user SCIMUser
+		var err error
+		if query.KeysOnly {
+			err = rows.Scan(&user.Identity.CreatedAt, &user.Identity.ID)
+		} else {
+			user, err = scanSCIMUser(rows)
+		}
 		if err != nil {
 			return SCIMUserPage{}, err
 		}
@@ -401,7 +429,9 @@ func (s *PostgresStore) DeleteSCIMUser(ctx context.Context, providerID, userID s
 		}
 		// The memberships SCIM wrote go with the link: a revived account must not come back with access the provider
 		// has since withdrawn.
-		if _, err = q.ExecContext(ctx, `DELETE FROM user_group_members m USING user_groups g WHERE m.user_id=$1::uuid AND m.source='scim' AND g.id=m.group_id AND g.provider_id=$2::uuid AND g.source='scim'`, userID, providerID); err != nil {
+		// The groups that lose a member change version, so their ETags move.
+		if _, err = q.ExecContext(ctx, `WITH removed AS (DELETE FROM user_group_members m USING user_groups g WHERE m.user_id=$1::uuid AND m.source='scim' AND g.id=m.group_id AND g.provider_id=$2::uuid AND g.source='scim' RETURNING m.group_id)
+			UPDATE user_groups SET version=version+1, updated_at=now() WHERE id IN (SELECT group_id FROM removed)`, userID, providerID); err != nil {
 			return struct{}{}, err
 		}
 		if _, err = q.ExecContext(ctx, `UPDATE users SET state='disabled', disabled_reason=CASE WHEN state='disabled' THEN disabled_reason ELSE 'scim' END, session_version=session_version+1, version=version+1, updated_at=now() WHERE id=$1::uuid`, userID); err != nil {
@@ -429,9 +459,26 @@ func scimMembersLinked(ctx context.Context, q sqlRunner, providerID string, memb
 			return false, nil
 		}
 	}
-	var linked int
-	err := q.QueryRowContext(ctx, `SELECT count(*) FROM user_identities WHERE provider_id=$1::uuid AND `+scimVisibleBare+` AND user_id IN (SELECT m::uuid FROM unnest($2::text[]) AS m)`, providerID, memberIDs).Scan(&linked)
-	return linked == len(memberIDs), err
+	// The rows are share-locked: a concurrent DELETE /Users locks the same identity row to tombstone it, so an account
+	// deleted between this check and the insert of its membership is seen as deleted, never left in the group.
+	rows, err := q.QueryContext(ctx, `SELECT user_id::text FROM user_identities WHERE provider_id=$1::uuid AND `+scimVisibleBare+` AND user_id IN (SELECT m::uuid FROM unnest($2::text[]) AS m) FOR SHARE`, providerID, memberIDs)
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = rows.Close() }()
+	linked := 0
+	for rows.Next() {
+		linked++
+	}
+	return linked == len(memberIDs), rows.Err()
+}
+
+// adoptLocalMemberships makes the memberships an administrator added for accounts the identity provider now names
+// SCIM-managed, so the provider sees them and can remove them; an INSERT ... ON CONFLICT DO NOTHING alone would leave
+// them local and invisible to it.
+func adoptLocalMemberships(ctx context.Context, q sqlRunner, groupID string, userIDs []string) error {
+	_, err := q.ExecContext(ctx, `UPDATE user_group_members SET source='scim' WHERE group_id=$1::uuid AND source='local' AND user_id IN (SELECT m::uuid FROM unnest($2::text[]) AS m)`, groupID, userIDs)
+	return err
 }
 
 func uniqueStrings(values []string) []string {
@@ -455,7 +502,7 @@ func (s *PostgresStore) CreateSCIMGroup(ctx context.Context, in SCIMGroupCreate,
 		return UserGroup{}, ErrUserGroupProviderNotFound
 	}
 	group.ID = ids.New()
-	created, err := runTransactional(ctx, s, audit, func(q sqlRunner) (UserGroup, error) {
+	created, err := runTransactional(ctx, s, scimAuditTarget(audit, "scim/Groups/"+group.ID, nil), func(q sqlRunner) (UserGroup, error) {
 		if linked, err := scimMembersLinked(ctx, q, in.ProviderID, in.MemberIDs); err != nil {
 			return UserGroup{}, err
 		} else if !linked {
@@ -471,6 +518,9 @@ func (s *PostgresStore) CreateSCIMGroup(ctx context.Context, in SCIMGroupCreate,
 			return UserGroup{}, err
 		}
 		if members := uniqueStrings(in.MemberIDs); len(members) > 0 {
+			if err = adoptLocalMemberships(ctx, q, created.ID, members); err != nil {
+				return UserGroup{}, err
+			}
 			if _, err = q.ExecContext(ctx, `INSERT INTO user_group_members (group_id,user_id,source) SELECT $1::uuid, m::uuid, 'scim' FROM unnest($2::text[]) AS m ON CONFLICT DO NOTHING`, created.ID, members); err != nil {
 				return UserGroup{}, err
 			}
@@ -534,7 +584,11 @@ func (s *PostgresStore) ListSCIMGroups(ctx context.Context, query SCIMGroupQuery
 			return SCIMGroupPage{}, err
 		}
 	}
-	statement := "SELECT " + userGroupColumns + " FROM " + filter
+	columns := userGroupColumns
+	if query.KeysOnly {
+		columns = "user_groups.id::text, user_groups.created_at"
+	}
+	statement := "SELECT " + columns + " FROM " + filter
 	if after {
 		statement += " AND (user_groups.created_at,user_groups.id)>($" + strconv.Itoa(len(args)+1) + "::timestamptz,$" + strconv.Itoa(len(args)+2) + "::uuid)"
 		args = append(args, afterAt, afterID)
@@ -546,7 +600,13 @@ func (s *PostgresStore) ListSCIMGroups(ctx context.Context, query SCIMGroupQuery
 	defer func() { _ = rows.Close() }()
 	items := make([]UserGroup, 0, limit)
 	for rows.Next() {
-		group, err := scanUserGroup(rows)
+		var group UserGroup
+		var err error
+		if query.KeysOnly {
+			err = rows.Scan(&group.ID, &group.CreatedAt)
+		} else {
+			group, err = scanUserGroup(rows)
+		}
 		if err != nil {
 			return SCIMGroupPage{}, err
 		}
@@ -601,6 +661,9 @@ func (s *PostgresStore) UpdateSCIMGroup(ctx context.Context, providerID, groupID
 			}
 		}
 		if members := uniqueStrings(added); len(members) > 0 {
+			if err = adoptLocalMemberships(ctx, q, group.ID, members); err != nil {
+				return UserGroup{}, err
+			}
 			if _, err = q.ExecContext(ctx, `INSERT INTO user_group_members (group_id,user_id,source) SELECT $1::uuid, m::uuid, 'scim' FROM unnest($2::text[]) AS m ON CONFLICT DO NOTHING`, group.ID, members); err != nil {
 				return UserGroup{}, err
 			}

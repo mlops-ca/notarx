@@ -385,6 +385,9 @@ func TestSCIMDiscoveryMatchesTheAdvertisedCapabilities(t *testing.T) {
 	if one := h.scim(http.MethodGet, "/ResourceTypes/User", ""); one.Code != http.StatusOK || decodeSCIM(t, one)["endpoint"] != "/Users" {
 		t.Errorf("resource type = %d %s", one.Code, one.Body.String())
 	}
+	if user := h.scim(http.MethodGet, "/Schemas/urn:ietf:params:scim:schemas:core:2.0:User", ""); !strings.Contains(user.Body.String(), `"mutability":"immutable"`) {
+		t.Errorf("userName is not advertised as immutable: %s", user.Body.String())
+	}
 	schemas := decodeSCIM(t, h.scim(http.MethodGet, "/Schemas", ""))
 	if schemas["totalResults"] != float64(2) {
 		t.Errorf("schemas = %v", schemas)

@@ -171,6 +171,9 @@ type SCIMUserQuery struct {
 	Cursor     string
 	// SkipTotal leaves the count out of the page (Total is zero), for the pages that are only read to find a cursor.
 	SkipTotal bool
+	// KeysOnly returns items that carry only the keyset key of the link (Identity.CreatedAt and Identity.ID), for the
+	// pages a startIndex hop reads and throws away.
+	KeysOnly bool
 }
 
 // filterKey binds a cursor to the query that produced it.
@@ -213,6 +216,8 @@ type SCIMGroupQuery struct {
 	Limit       int
 	Cursor      string
 	SkipTotal   bool
+	// KeysOnly returns items that carry only ID and CreatedAt, for the pages a startIndex hop reads and throws away.
+	KeysOnly bool
 }
 
 func (q SCIMGroupQuery) filterKey() string {
@@ -280,8 +285,22 @@ type ProviderIdentityLink struct {
 	Kind string
 }
 
-// NormalizeSCIMName trims a SCIM userName or displayName and bounds it.
-func NormalizeSCIMName(value string, limit int) (string, bool) {
-	value = strings.TrimSpace(value)
-	return value, len(value) >= 1 && len(value) <= limit
+// scimAuditTarget returns the audit records of a create with the resource and evidence only the store knows: the id of
+// the account or group the call created or took over, and which of the two it was. The records the caller built are
+// not modified.
+func scimAuditTarget(audit []AuditRecord, resource string, evidence map[string]string) []AuditRecord {
+	targeted := make([]AuditRecord, len(audit))
+	for index, record := range audit {
+		record.Resource = resource
+		merged := make(map[string]string, len(record.Evidence)+len(evidence))
+		for key, value := range record.Evidence {
+			merged[key] = value
+		}
+		for key, value := range evidence {
+			merged[key] = value
+		}
+		record.Evidence = merged
+		targeted[index] = record
+	}
+	return targeted
 }

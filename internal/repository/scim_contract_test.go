@@ -253,6 +253,9 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if memberships, _ := store.ListUserGroupMemberships(ctx, user.User.ID); len(memberships) != 0 {
 			t.Errorf("a deleted account kept %d group memberships", len(memberships))
 		}
+		if after, err := store.GetSCIMGroup(ctx, provider, memberOf.ID); err != nil || after.Version == memberOf.Version {
+			t.Errorf("a group that lost a member kept its version %s: %+v, %v", memberOf.Version, after, err)
+		}
 		active = true
 		if _, err := store.UpdateSCIMUser(ctx, provider, user.User.ID, SCIMUserChange{Active: &active}); !errors.Is(err, ErrNotFound) {
 			t.Errorf("a PATCH active=true brought a deleted account back: %v", err)
@@ -421,11 +424,33 @@ func scimContract(t *testing.T, store scimContractStore, newProvider func(t *tes
 		if all, _, err := store.ListUserGroupMembers(ctx, group.ID, 50, ""); err != nil || len(all) != 2 {
 			t.Fatalf("the group itself has %+v, %v", all, err)
 		}
+		// An account an administrator already added to the group, which the provider then names, becomes SCIM-managed:
+		// it is shown to the provider and the provider can remove it.
+		localAdded, err := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: name("local-first"), Active: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := store.AddUserGroupMember(ctx, group.ID, localAdded.User.ID, UserGroupSourceLocal); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.UpdateSCIMGroup(ctx, provider, group.ID, SCIMGroupChange{AddMembers: []string{localAdded.User.ID}}); err != nil {
+			t.Fatal(err)
+		}
+		if shown, _ := store.ListSCIMGroupMembers(ctx, provider, group.ID, 50); !slices.ContainsFunc(shown, func(m UserGroupMember) bool { return m.UserID == localAdded.User.ID && m.Source == UserGroupSourceSCIM }) {
+			t.Errorf("a membership the provider named stayed invisible to it: %+v", shown)
+		}
+		if _, err := store.UpdateSCIMGroup(ctx, provider, group.ID, SCIMGroupChange{RemoveMembers: []string{localAdded.User.ID}}); err != nil {
+			t.Fatal(err)
+		}
+		if shown, _ := store.ListSCIMGroupMembers(ctx, provider, group.ID, 50); slices.ContainsFunc(shown, func(m UserGroupMember) bool { return m.UserID == localAdded.User.ID }) {
+			t.Errorf("the provider could not remove the membership it adopted: %+v", shown)
+		}
+
 		// Replace: only the SCIM-sourced memberships are authoritative; the administrator's stays.
 		second, _ := store.CreateSCIMUser(ctx, SCIMUserCreate{ProviderID: provider, UserName: name("heidi"), Active: true})
 		replacement := []string{second.User.ID}
 		renamed, err := store.UpdateSCIMGroup(ctx, provider, group.ID, SCIMGroupChange{DisplayName: ptr("Platform engineers"), ReplaceMembers: &replacement})
-		if err != nil || renamed.DisplayName != "Platform engineers" || renamed.Version != "2" || renamed.GlobalRole != UserGroupRoleNone {
+		if err != nil || renamed.DisplayName != "Platform engineers" || renamed.Version == group.Version || renamed.GlobalRole != UserGroupRoleNone {
 			t.Fatalf("update = %+v, %v", renamed, err)
 		}
 		members, _ = store.ListSCIMGroupMembers(ctx, provider, group.ID, 50)

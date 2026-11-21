@@ -635,7 +635,7 @@ func TestSCIMIfMatchHeaderParsing(t *testing.T) {
 type countingSCIMStore struct {
 	scimStore
 	singleMemberReads, batchMemberReads int
-	userPages                           []bool
+	userPages, keysOnly                 []bool
 }
 
 func (c *countingSCIMStore) ListSCIMGroupMembers(ctx context.Context, providerID, groupID string, limit int) ([]repository.UserGroupMember, error) {
@@ -650,6 +650,7 @@ func (c *countingSCIMStore) ListSCIMGroupsMembers(ctx context.Context, providerI
 
 func (c *countingSCIMStore) ListSCIMUsers(ctx context.Context, query repository.SCIMUserQuery) (repository.SCIMUserPage, error) {
 	c.userPages = append(c.userPages, query.SkipTotal)
+	c.keysOnly = append(c.keysOnly, query.KeysOnly)
 	return c.scimStore.ListSCIMUsers(ctx, query)
 }
 
@@ -686,9 +687,9 @@ func TestSCIMListsReadMembersInOnePassAndSkipTheCountWhileHopping(t *testing.T) 
 		t.Fatalf("a single group read %d member queries", counting.singleMemberReads)
 	}
 	call("/Users?startIndex=7")
-	// Hops skip the total; the page that is served carries it.
-	if len(counting.userPages) < 2 || !counting.userPages[0] || counting.userPages[len(counting.userPages)-1] {
-		t.Fatalf("user pages read with SkipTotal = %v", counting.userPages)
+	// Hops skip the total and read only the keys; the page that is served carries both.
+	if len(counting.userPages) < 2 || !counting.userPages[0] || counting.userPages[len(counting.userPages)-1] || !counting.keysOnly[0] || counting.keysOnly[len(counting.keysOnly)-1] {
+		t.Fatalf("user pages read with SkipTotal = %v and KeysOnly = %v", counting.userPages, counting.keysOnly)
 	}
 }
 
@@ -854,8 +855,9 @@ func TestSCIMGroupListSharesOneMemberBudgetAmongItsGroups(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer "+h.token)
 	recorder := httptest.NewRecorder()
 	server.ServeHTTP(recorder, request)
-	if recorder.Code != http.StatusOK || counting.perGroup != scimMaxListedMembers/4 {
-		t.Fatalf("list = %d with a per-group cap of %d, want %d", recorder.Code, counting.perGroup, scimMaxListedMembers/4)
+	// One more than the share is read, to tell a group that fits from one that does not.
+	if recorder.Code != http.StatusOK || counting.perGroup != scimMaxListedMembers/4+1 {
+		t.Fatalf("list = %d with a per-group read of %d, want %d", recorder.Code, counting.perGroup, scimMaxListedMembers/4+1)
 	}
 }
 
@@ -867,4 +869,72 @@ type budgetSCIMStore struct {
 func (b *budgetSCIMStore) ListSCIMGroupsMembers(ctx context.Context, providerID string, groupIDs []string, perGroup int) (map[string][]repository.UserGroupMember, error) {
 	b.perGroup = perGroup
 	return b.scimStore.ListSCIMGroupsMembers(ctx, providerID, groupIDs, perGroup)
+}
+
+func TestSCIMGroupListLeavesOutTheMembersOfAGroupThatExceedsItsShare(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true, MaxPage: 200})
+	small := h.createUser("small@example.com", "")
+	big := make([]string, 0, 3)
+	for index := 0; index < 3; index++ {
+		big = append(big, h.createUser("big"+strconv.Itoa(index)+"@example.com", ""))
+	}
+	h.createGroup("Small", "g-small", small)
+	bigID := h.createGroup("Big", "g-big", big...)
+	// Fill the page with groups so that each one's share of the budget is one member: the group of three exceeds it.
+	for index := 0; index < scimMaxListedMembers-2; index++ {
+		h.store.CreateSCIMGroup(t.Context(), repository.SCIMGroupCreate{ProviderID: h.provider.ID, DisplayName: "Filler " + strconv.Itoa(index)})
+	}
+	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: scimMaxListedMembers}, h.store, nil)
+	request := httptest.NewRequest(http.MethodGet, "/scim/v2/Groups?count="+strconv.Itoa(scimMaxListedMembers), nil)
+	request.Header.Set("Authorization", "Bearer "+h.token)
+	recorder := httptest.NewRecorder()
+	server.ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("list = %d %s", recorder.Code, recorder.Body.String())
+	}
+	for _, resource := range decodeSCIM(t, recorder)["Resources"].([]any) {
+		group := resource.(map[string]any)
+		switch group["displayName"] {
+		case "Big":
+			if group["members"] != nil {
+				t.Fatalf("a partial member list was returned for a group that exceeds its share: %v", group["members"])
+			}
+		case "Small":
+			if len(group["members"].([]any)) != 1 {
+				t.Fatalf("a group that fits lost its members: %v", group)
+			}
+		}
+	}
+	// The group read still returns all of its members.
+	if got := decodeSCIM(t, h.scim(http.MethodGet, "/Groups/"+bigID, "")); len(got["members"].([]any)) != 3 {
+		t.Fatalf("group read = %v", got)
+	}
+}
+
+func TestSCIMTakeoverAndCreateAreAuditedWithTheirAccount(t *testing.T) {
+	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
+	created := h.createUser("fresh@example.com", "")
+	linked, err := h.store.CreateUser(t.Context(), repository.User{ID: uuid.NewString(), Name: "linked@example.com", Role: "none"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.store.LinkProviderIdentity(t.Context(), repository.ProviderIdentityLink{ProviderID: h.provider.ID, UserID: linked.ID, Subject: "linked-sub", Issuer: "https://login.example.test", Kind: repository.UserIdentityOIDC}); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.scim(http.MethodPost, "/Users", `{"userName":"linked@example.com"}`); got.Code != http.StatusCreated {
+		t.Fatalf("take over = %d %s", got.Code, got.Body.String())
+	}
+	group := h.createGroup("Audited", "g-audited")
+	results := map[string]string{}
+	for _, record := range h.store.Audits {
+		if record.Operation == "scim.user.create" {
+			results[record.Resource] = record.Evidence["result"]
+		}
+		if record.Operation == "scim.group.create" && record.Resource != "scim/Groups/"+group {
+			t.Errorf("the group create was audited as %q", record.Resource)
+		}
+	}
+	if results["scim/Users/"+created] != "created" || results["scim/Users/"+linked.ID] != "taken_over" {
+		t.Fatalf("create audits = %v", results)
+	}
 }
