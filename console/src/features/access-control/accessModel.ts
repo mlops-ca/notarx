@@ -105,7 +105,7 @@ export function scopeLabel(
   scopes: string[],
   t: (key: AccessMessageKey) => string,
 ): {
-  key: "read" | "write" | "admin" | "intelligence" | "unknown";
+  key: "read" | "write" | "admin" | "intelligence" | "import" | "unknown";
   label: string;
   tone: BadgeTone;
 } {
@@ -132,6 +132,12 @@ export function scopeLabel(
       key: "read",
       label: t("access.scopeRead"),
       tone: "visualization-4",
+    };
+  if (scopes.includes("repositories:import"))
+    return {
+      key: "import",
+      label: t("access.scopeImport"),
+      tone: "visualization-2",
     };
   return {
     key: "unknown",

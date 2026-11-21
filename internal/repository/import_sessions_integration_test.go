@@ -41,7 +41,7 @@ func TestPostgresImportSessionCreationRacesHonourTheLimits(t *testing.T) {
 	results := make(chan error, attempts)
 	for i := range attempts {
 		go func() {
-			_, _, err := f.create("slot-"+uuid.NewString(), "race@1.0", blob("sha256:r", int64(i)))
+			_, _, err := f.create("slot-"+uuid.NewString(), "race@1.0", blob(dg("r"), int64(i)))
 			results <- err
 		}()
 	}

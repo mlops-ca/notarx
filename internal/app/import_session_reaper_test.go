@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"testing"
@@ -10,6 +12,11 @@ import (
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
+
+func importTestDigest(label string) string {
+	sum := sha256.Sum256([]byte(label))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
 
 type failingDeleteObjects struct {
 	ObjectStore
@@ -46,14 +53,14 @@ func TestImportSessionReaperRemovesStagingObjectsOfFinishedSessionsOnly(t *testi
 		}
 		return session
 	}
-	expired := create("00000000-0000-7000-8000-0000000000e1", "expired", -time.Minute, "sha256:e1", "sha256:gone")
-	aborted := create("00000000-0000-7000-8000-0000000000a1", "aborted", time.Hour, "sha256:a1")
-	live := create("00000000-0000-7000-8000-0000000000b1", "live", time.Hour, "sha256:l1")
+	expired := create("00000000-0000-7000-8000-0000000000e1", "expired", -time.Minute, importTestDigest("e1"), importTestDigest("gone"))
+	aborted := create("00000000-0000-7000-8000-0000000000a1", "aborted", time.Hour, importTestDigest("a1"))
+	live := create("00000000-0000-7000-8000-0000000000b1", "live", time.Hour, importTestDigest("l1"))
 	if err := store.AbortImportSession(ctx, aborted.ID, now); err != nil {
 		t.Fatal(err)
 	}
 	// One object of the expired session was never uploaded: deleting it is not an error.
-	if err := objects.Delete(ctx, repository.ImportStagingKey(expired.ID, "sha256:gone")); err != nil {
+	if err := objects.Delete(ctx, repository.ImportStagingKey(expired.ID, importTestDigest("gone"))); err != nil {
 		t.Fatal(err)
 	}
 	has := func(id, digest string) bool {
@@ -61,13 +68,13 @@ func TestImportSessionReaperRemovesStagingObjectsOfFinishedSessionsOnly(t *testi
 		return err == nil
 	}
 
-	broken := failingDeleteObjects{ObjectStore: objects, fail: map[string]bool{repository.ImportStagingKey(expired.ID, "sha256:e1"): true}}
+	broken := failingDeleteObjects{ObjectStore: objects, fail: map[string]bool{repository.ImportStagingKey(expired.ID, importTestDigest("e1")): true}}
 	reaper := ImportSessionReaper{Store: store, Objects: broken, Now: func() time.Time { return now }}
 	reaped, err := reaper.Run(ctx)
 	if err == nil {
 		t.Fatal("a failed delete was not reported")
 	}
-	if reaped != 1 || has(aborted.ID, "sha256:a1") {
+	if reaped != 1 || has(aborted.ID, importTestDigest("a1")) {
 		t.Fatalf("the aborted session was not reaped: reaped=%d", reaped)
 	}
 	if got, _ := store.GetImportSession(ctx, expired.ID); got.State != repository.ImportSessionOpen {
@@ -78,13 +85,13 @@ func TestImportSessionReaperRemovesStagingObjectsOfFinishedSessionsOnly(t *testi
 	if reaped, err = reaper.Run(ctx); err != nil || reaped != 1 {
 		t.Fatalf("second pass reaped %d, %v", reaped, err)
 	}
-	if has(expired.ID, "sha256:e1") {
+	if has(expired.ID, importTestDigest("e1")) {
 		t.Fatal("the expired session's staging object survived")
 	}
 	if got, _ := store.GetImportSession(ctx, expired.ID); got.State != repository.ImportSessionExpired {
 		t.Fatalf("expired session = %s", got.State)
 	}
-	if !has(live.ID, "sha256:l1") {
+	if !has(live.ID, importTestDigest("l1")) {
 		t.Fatal("a live session's staging object was deleted")
 	}
 	if got, _ := store.GetImportSession(ctx, live.ID); got.State != repository.ImportSessionOpen {
@@ -92,7 +99,7 @@ func TestImportSessionReaperRemovesStagingObjectsOfFinishedSessionsOnly(t *testi
 	}
 	// Once the live session expires too it goes the same way; nothing is left to do after that.
 	reaper.Now = func() time.Time { return now.Add(2 * time.Hour) }
-	if reaped, err = reaper.Run(ctx); err != nil || reaped != 1 || has(live.ID, "sha256:l1") {
+	if reaped, err = reaper.Run(ctx); err != nil || reaped != 1 || has(live.ID, importTestDigest("l1")) {
 		t.Fatalf("late pass reaped %d, %v", reaped, err)
 	}
 	if reaped, err = reaper.Run(ctx); err != nil || reaped != 0 {

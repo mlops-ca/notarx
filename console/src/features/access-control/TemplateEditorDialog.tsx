@@ -268,6 +268,10 @@ export function TemplateEditorDialog({
                           value: "repositories:intelligence",
                           label: t("access.artifactIntelligence"),
                         },
+                        {
+                          value: "repositories:import",
+                          label: t("access.scopeImport"),
+                        },
                       ]}
                       onChange={(value) =>
                         setDraftGrants((current) =>

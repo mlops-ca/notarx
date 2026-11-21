@@ -14,7 +14,7 @@ import {
   isActiveUserPrincipal,
 } from "../../lib/accessPrincipals";
 
-export type GrantLevel = "read" | "write" | "admin" | "intelligence";
+export type GrantLevel = "read" | "write" | "admin" | "intelligence" | "import";
 
 export const CUSTOM_PRINCIPAL = "__custom__";
 export const BUILTIN_PERMISSION_PREFIX = "builtin:";
@@ -60,6 +60,7 @@ export function principalEditorKind(principal: string): PrincipalKind | "" {
 
 export function grantTone(level: GrantLevel): BadgeTone {
   if (level === "intelligence") return "visualization-1";
+  if (level === "import") return "visualization-2";
   if (level === "admin") return "visualization-3";
   if (level === "write") return "visualization-5";
   return "visualization-4";
@@ -69,6 +70,11 @@ export function grantLevel(scopes: Grant["scopes"]): GrantLevel {
   if (scopes.includes("repositories:intelligence")) return "intelligence";
   if (scopes.includes("repositories:admin")) return "admin";
   if (scopes.includes("repositories:write")) return "write";
+  if (
+    scopes.includes("repositories:import") &&
+    !scopes.includes("repositories:read")
+  )
+    return "import";
   return "read";
 }
 
@@ -126,6 +132,8 @@ export function grantedCapabilitiesLabel(
       : [];
   if (scopes.includes("repositories:intelligence"))
     capabilities.push(t("access.scopeIntelligence"));
+  if (scopes.includes("repositories:import"))
+    capabilities.push(t("access.scopeImport"));
   return capabilities.join(" + ");
 }
 

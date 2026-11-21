@@ -42,7 +42,7 @@ Every notarx instance answers `GET /.well-known/notarx` at the server root, anon
   "instanceId": "0197c0de-0000-7000-8000-000000000001",
   "apiVersion": "1",
   "formats": [],
-  "limits": {"maxBlobBytes": 10737418240, "maxSessionBytes": 53687709120, "maxBlobsPerSession": 2000, "maxOpenSessionsPerPrincipal": 4}
+  "limits": {"maxBlobBytes": 10737418240, "maxSessionBytes": 53687091200, "maxBlobsPerSession": 2000, "maxOpenSessionsPerPrincipal": 4}
 }
 ```
 
@@ -76,7 +76,7 @@ advertises:
 | --- | --- | --- |
 | `NOTARX_IMPORT_SESSION_TTL` | `24h` | Lifetime of a session; the reaper then expires it and deletes its staging objects (at least 1 minute) |
 | `NOTARX_IMPORT_MAX_BLOB_BYTES` | `10737418240` | Largest blob of a session |
-| `NOTARX_IMPORT_MAX_SESSION_BYTES` | `53687709120` | Most bytes one session claims |
+| `NOTARX_IMPORT_MAX_SESSION_BYTES` | `53687091200` | Most bytes one session claims |
 | `NOTARX_IMPORT_MAX_BLOBS_PER_SESSION` | `2000` | Most blobs one session lists |
 | `NOTARX_IMPORT_MAX_OPEN_SESSIONS_PER_PRINCIPAL` | `4` | Live sessions one principal holds at once |
 | `NOTARX_IMPORT_STAGING_QUOTA_BYTES` | `107374182400` | Bytes claimed by every live session of the instance together |

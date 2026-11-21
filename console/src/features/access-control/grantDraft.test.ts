@@ -45,6 +45,7 @@ const builtinLevels: Array<[GrantLevel, DraftGrant["scopes"]]> = [
   ["write", ["repositories:write"]],
   ["admin", ["repositories:admin"]],
   ["intelligence", ["repositories:intelligence"]],
+  ["import", ["repositories:import"]],
 ];
 
 describe("grant draft scope mapping", () => {
@@ -67,6 +68,16 @@ describe("grant draft scope mapping", () => {
       grantLevel(["repositories:write", "repositories:intelligence"]),
     ).toBe("intelligence");
     expect(grantLevel([])).toBe("read");
+  });
+
+  it("never shows an import-only grant as a read grant", () => {
+    expect(grantLevel(["repositories:import"])).toBe("import");
+    expect(grantLevel(["repositories:read", "repositories:import"])).toBe(
+      "read",
+    );
+    expect(
+      permissionSelection(draft({ scopes: ["repositories:import"] }), []),
+    ).toBe("builtin:import");
   });
 
   it("copies the scopes of a custom authorization role", () => {
@@ -130,14 +141,14 @@ describe("permissionSelection", () => {
 describe("grantedCapabilitiesLabel", () => {
   it("names every capability granted by admin", () => {
     expect(grantedCapabilitiesLabel(["repositories:admin"], text)).toBe(
-      "Read + write + admin + intelligence",
+      "Read + write + admin + intelligence + import",
     );
     expect(
       grantedCapabilitiesLabel(
         ["repositories:admin"],
         createTranslator("en-CA"),
       ),
-    ).toBe("Read + write + admin + intelligence");
+    ).toBe("Read + write + admin + intelligence + import");
   });
 
   it("combines read/write with the independent intelligence scope", () => {

@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -54,6 +56,12 @@ func (f importFixture) session(principal, key, coordinate string) ImportSession 
 
 func blob(digest string, size int64) ImportBlob { return ImportBlob{Digest: digest, Size: size} }
 
+// dg is a well-formed digest named by a short label.
+func dg(label string) string {
+	sum := sha256.Sum256([]byte(label))
+	return "sha256:" + hex.EncodeToString(sum[:])
+}
+
 // exerciseImportSessionStore is the contract of ImportSessionStore, run against the in-memory and PostgreSQL stores.
 // stagedNow reports the claimed bytes of every live session of the store, the ones of other tests included (a shared test
 // database), so the staging quota can be set relative to them.
@@ -76,7 +84,7 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	}
 
 	// A session records the claims as received, the deduplicated blobs in digest order and their total.
-	session, replayed, err := f.create("k1", "pkg@1.0", blob("sha256:b", 40), blob("sha256:a", 10), blob("sha256:b", 40))
+	session, replayed, err := f.create("k1", "pkg@1.0", blob(dg("b"), 40), blob(dg("a"), 10), blob(dg("b"), 40))
 	if err != nil || replayed {
 		t.Fatalf("create = %v replayed=%t", err, replayed)
 	}
@@ -90,7 +98,7 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	if _, getErr := store.GetImportSession(ctx, uuid.NewString()); !errors.Is(getErr, ErrNotFound) {
 		t.Fatalf("unknown session = %v", getErr)
 	}
-	if got := missingDigests(session.ID); len(got) != 2 || got[0] != "sha256:a" || got[1] != "sha256:b" {
+	if got := missingDigests(session.ID); len(got) != 2 || got[0] != min(dg("a"), dg("b")) || got[1] != max(dg("a"), dg("b")) {
 		t.Fatalf("missing = %v", got)
 	}
 	if _, missErr := store.MissingImportBlobs(ctx, uuid.NewString()); !errors.Is(missErr, ErrNotFound) {
@@ -98,11 +106,11 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	}
 
 	// The idempotency key: the same request finds its session, any other request under the key conflicts.
-	again, replayed, err := f.create("k1", "pkg@1.0", blob("sha256:a", 10))
+	again, replayed, err := f.create("k1", "pkg@1.0", blob(dg("a"), 10))
 	if err != nil || !replayed || again.ID != session.ID {
 		t.Fatalf("replay = %+v replayed=%t %v", again, replayed, err)
 	}
-	if _, _, err = f.create("k1", "other@1.0", blob("sha256:a", 10)); !errors.Is(err, ErrIdempotencyConflict) {
+	if _, _, err = f.create("k1", "other@1.0", blob(dg("a"), 10)); !errors.Is(err, ErrIdempotencyConflict) {
 		t.Fatalf("a different request under the key = %v", err)
 	}
 	if _, _, err = f.createAs(principal+"-other", "k1", "pkg@1.0"); err != nil {
@@ -117,9 +125,12 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 
 	// Invalid claims.
 	for name, claims := range map[string][]ImportBlob{
-		"empty digest":  {blob("", 1)},
-		"negative size": {blob("sha256:z", -1)},
-		"conflicting":   {blob("sha256:z", 1), blob("sha256:z", 2)},
+		"empty digest":   {blob("", 1)},
+		"short digest":   {blob("sha256:b", 1)},
+		"path traversal": {blob("sha256:../../../blobs/sha256/"+strings.Repeat("a", 64), 1)},
+		"upper case":     {blob("sha256:"+strings.Repeat("A", 64), 1)},
+		"negative size":  {blob(dg("z"), -1)},
+		"conflicting":    {blob(dg("z"), 1), blob(dg("z"), 2)},
 	} {
 		if _, _, err = f.create("invalid-"+name, "pkg@1.0", claims...); err == nil {
 			t.Fatalf("%s was accepted", name)
@@ -137,24 +148,24 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 			t.Fatalf("%s left a session behind: %v", key, getErr)
 		}
 	}
-	refused("big-blob", ErrImportBlobTooLarge, blob("sha256:big", 101))
-	refused("big-session", ErrImportSessionTooLarge, blob("sha256:1", 100), blob("sha256:2", 100), blob("sha256:3", 51))
-	refused("many-blobs", ErrImportTooManyBlobs, blob("sha256:1", 1), blob("sha256:2", 1), blob("sha256:3", 1), blob("sha256:4", 1))
+	refused("big-blob", ErrImportBlobTooLarge, blob(dg("big"), 101))
+	refused("big-session", ErrImportSessionTooLarge, blob(dg("1"), 100), blob(dg("2"), 100), blob(dg("3"), 51))
+	refused("many-blobs", ErrImportTooManyBlobs, blob(dg("1"), 1), blob(dg("2"), 1), blob(dg("3"), 1), blob(dg("4"), 1))
 	// The principal holds one live session (k1) and two more fit; the fourth is refused, another principal is not.
 	for _, key := range []string{"open-2", "open-3"} {
-		if _, _, err = f.create(key, "open@1.0", blob("sha256:o", 1)); err != nil {
+		if _, _, err = f.create(key, "open@1.0", blob(dg("o"), 1)); err != nil {
 			t.Fatalf("%s: %v", key, err)
 		}
 	}
-	refused("open-4", ErrImportTooManySessions, blob("sha256:o", 1))
-	if _, _, err = f.createAs(principal+"-second", "open-4", "open@1.0", blob("sha256:o", 1)); err != nil {
+	refused("open-4", ErrImportTooManySessions, blob(dg("o"), 1))
+	if _, _, err = f.createAs(principal+"-second", "open-4", "open@1.0", blob(dg("o"), 1)); err != nil {
 		t.Fatalf("another principal is refused: %v", err)
 	}
 	// An aborted session frees its slot.
 	if err = store.AbortImportSession(ctx, session.ID, f.now); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = f.create("open-4", "open@1.0", blob("sha256:o", 1)); err != nil {
+	if _, _, err = f.create("open-4", "open@1.0", blob(dg("o"), 1)); err != nil {
 		t.Fatalf("a slot freed by an abort was refused: %v", err)
 	}
 
@@ -162,42 +173,78 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	quota := f
 	quota.limits = ImportLimits{StagingQuotaBytes: stagedNow() + 40}
 	quota.principal = principal + "-quota"
-	if _, _, err = quota.create("q1", "quota@1.0", blob("sha256:q", 40)); err != nil {
+	if _, _, err = quota.create("q1", "quota@1.0", blob(dg("q"), 40)); err != nil {
 		t.Fatalf("a session that fits the quota: %v", err)
 	}
-	if _, _, err = quota.createAs(principal+"-quota2", "q2", "quota@1.0", blob("sha256:q", 1)); !errors.Is(err, ErrImportStagingQuota) {
+	if _, _, err = quota.createAs(principal+"-quota2", "q2", "quota@1.0", blob(dg("q"), 1)); !errors.Is(err, ErrImportStagingQuota) {
 		t.Fatalf("a session over the quota = %v", err)
 	}
 
+	// A dead session gives its key to the retry: a sender whose push stalled or was aborted starts again under the same key.
+	unlimited := f
+	unlimited.limits = ImportLimits{}
+	retry, replayed, err := unlimited.create("k1", "pkg@1.0", blob(dg("a"), 10))
+	if err != nil || replayed || retry.ID == session.ID {
+		t.Fatalf("a retry after the abort = %+v replayed=%t %v", retry, replayed, err)
+	}
+	if old, getErr := store.GetImportSession(ctx, session.ID); getErr != nil || old.State != ImportSessionAborted {
+		t.Fatalf("the aborted session must stay for the reaper: %+v %v", old, getErr)
+	}
+	if again, replayed, createErr := unlimited.create("k1", "pkg@1.0"); createErr != nil || !replayed || again.ID != retry.ID {
+		t.Fatalf("the retry is itself replayable: %+v replayed=%t %v", again, replayed, createErr)
+	}
+	late := unlimited
+	late.now = f.now.Add(2 * time.Hour)
+	if lateRetry, replayed, createErr := late.create("k1", "pkg@1.0", blob(dg("a"), 10)); createErr != nil || replayed || lateRetry.ID == retry.ID {
+		t.Fatalf("a retry after the session lapsed = %+v replayed=%t %v", lateRetry, replayed, createErr)
+	}
+	// Aborting twice changes nothing, not even the update time.
+	if err = store.AbortImportSession(ctx, retry.ID, f.now); err != nil {
+		t.Fatal(err)
+	}
+	first, _ := store.GetImportSession(ctx, retry.ID)
+	if err = store.AbortImportSession(ctx, retry.ID, f.now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if second, _ := store.GetImportSession(ctx, retry.ID); !second.UpdatedAt.Equal(first.UpdatedAt) || second.State != ImportSessionAborted {
+		t.Fatalf("a second abort changed the session: %+v -> %+v", first, second)
+	}
+	// An omitted manifest is stored as an empty object.
+	bare := f.session(principal+"-bare", "bare", "bare@1.0")
+	bare.FormatManifest = nil
+	if stored, _, createErr := store.CreateImportSession(ctx, bare, nil, f.limits); createErr != nil || string(stored.FormatManifest) != "{}" {
+		t.Fatalf("a session without a manifest = %+v %v", stored, createErr)
+	}
+
 	// Blobs: the size must match the claim, an unclaimed digest is unknown, recording twice changes nothing.
-	live, _, err := f.createAs(principal+"-blobs", "blobs", "blobs@1.0", blob("sha256:x", 5), blob("sha256:y", 7))
+	live, _, err := f.createAs(principal+"-blobs", "blobs", "blobs@1.0", blob(dg("x"), 5), blob(dg("y"), 7))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = store.RecordImportBlob(ctx, live.ID, "sha256:x", 6, f.now); !errors.Is(err, ErrImportBlobSizeMismatch) {
+	if err = store.RecordImportBlob(ctx, live.ID, dg("x"), 6, f.now); !errors.Is(err, ErrImportBlobSizeMismatch) {
 		t.Fatalf("a wrong size = %v", err)
 	}
-	if err = store.RecordImportBlob(ctx, live.ID, "sha256:nope", 5, f.now); !errors.Is(err, ErrNotFound) {
+	if err = store.RecordImportBlob(ctx, live.ID, dg("nope"), 5, f.now); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("an unclaimed blob = %v", err)
 	}
-	if err = store.RecordImportBlob(ctx, uuid.NewString(), "sha256:x", 5, f.now); !errors.Is(err, ErrNotFound) {
+	if err = store.RecordImportBlob(ctx, uuid.NewString(), dg("x"), 5, f.now); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("an unknown session = %v", err)
 	}
 	if err = store.BeginImportCommit(ctx, live.ID, f.now); !errors.Is(err, ErrImportBlobsMissing) {
 		t.Fatalf("commit with blobs missing = %v", err)
 	}
 	for range 2 {
-		if err = store.RecordImportBlob(ctx, live.ID, "sha256:x", 5, f.now); err != nil {
+		if err = store.RecordImportBlob(ctx, live.ID, dg("x"), 5, f.now); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if got := missingDigests(live.ID); len(got) != 1 || got[0] != "sha256:y" {
+	if got := missingDigests(live.ID); len(got) != 1 || got[0] != dg("y") {
 		t.Fatalf("missing after one blob = %v", got)
 	}
-	if err = store.RecordImportBlob(ctx, live.ID, "sha256:y", 7, f.now.Add(2*time.Hour)); !errors.Is(err, ErrImportSessionClosed) {
+	if err = store.RecordImportBlob(ctx, live.ID, dg("y"), 7, f.now.Add(2*time.Hour)); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("a blob after the expiry = %v", err)
 	}
-	if err = store.RecordImportBlob(ctx, live.ID, "sha256:y", 7, f.now); err != nil {
+	if err = store.RecordImportBlob(ctx, live.ID, dg("y"), 7, f.now); err != nil {
 		t.Fatal(err)
 	}
 	if got := missingDigests(live.ID); len(got) != 0 {
@@ -213,7 +260,7 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 			t.Fatal(err)
 		}
 	}
-	if err = store.RecordImportBlob(ctx, live.ID, "sha256:y", 7, f.now); !errors.Is(err, ErrImportSessionClosed) {
+	if err = store.RecordImportBlob(ctx, live.ID, dg("y"), 7, f.now); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("a blob while committing = %v", err)
 	}
 	if err = store.CompleteImportSession(ctx, live.ID, f.now); err != nil {
@@ -249,14 +296,14 @@ func exerciseImportReaper(t *testing.T, f importFixture) {
 		}
 		return session
 	}
-	expired := mk("expired", blob("sha256:e1", 1), blob("sha256:e2", 2))
-	aborted := mk("aborted", blob("sha256:a1", 1))
-	live := mk("live", blob("sha256:l1", 1))
-	committed := mk("committed", blob("sha256:c1", 1))
+	expired := mk("expired", blob(dg("e1"), 1), blob(dg("e2"), 2))
+	aborted := mk("aborted", blob(dg("a1"), 1))
+	live := mk("live", blob(dg("l1"), 1))
+	committed := mk("committed", blob(dg("c1"), 1))
 	if err := store.AbortImportSession(ctx, aborted.ID, f.now); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RecordImportBlob(ctx, committed.ID, "sha256:c1", 1, f.now); err != nil {
+	if err := store.RecordImportBlob(ctx, committed.ID, dg("c1"), 1, f.now); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.BeginImportCommit(ctx, committed.ID, f.now); err != nil {
@@ -269,7 +316,7 @@ func exerciseImportReaper(t *testing.T, f importFixture) {
 	// and the live one is kept by giving it a later expiry.
 	late := ImportSession{ID: uuid.NewString(), TargetRepositoryID: uuid.NewString(), Principal: f.principal, Format: FormatRaw, Coordinate: "late@1.0", Digest: "sha256:" + strings.Repeat("b", 64),
 		FormatManifest: json.RawMessage(`{}`), IdempotencyKey: "late", CreatedAt: f.now, ExpiresAt: f.now.Add(48 * time.Hour)}
-	if _, _, err := store.CreateImportSession(ctx, late, []ImportBlob{blob("sha256:late", 1)}, ImportLimits{}); err != nil {
+	if _, _, err := store.CreateImportSession(ctx, late, []ImportBlob{blob(dg("late"), 1)}, ImportLimits{}); err != nil {
 		t.Fatal(err)
 	}
 	_ = live
@@ -304,8 +351,8 @@ func exerciseImportReaper(t *testing.T, f importFixture) {
 		t.Fatalf("reap finished %d, %v", finished, err)
 	}
 	keys := mine(removed)
-	want := map[string]bool{ImportStagingKey(expired.ID, "sha256:e1"): true, ImportStagingKey(expired.ID, "sha256:e2"): true, ImportStagingKey(aborted.ID, "sha256:a1"): true,
-		ImportStagingKey(live.ID, "sha256:l1"): true, ImportStagingKey(committed.ID, "sha256:c1"): true}
+	want := map[string]bool{ImportStagingKey(expired.ID, dg("e1")): true, ImportStagingKey(expired.ID, dg("e2")): true, ImportStagingKey(aborted.ID, dg("a1")): true,
+		ImportStagingKey(live.ID, dg("l1")): true, ImportStagingKey(committed.ID, dg("c1")): true}
 	if len(keys) != len(want) {
 		t.Fatalf("staging keys removed = %v", keys)
 	}
@@ -324,7 +371,7 @@ func exerciseImportReaper(t *testing.T, f importFixture) {
 	if _, err = store.ReapImportSessions(ctx, reapAt, 10000, remove); err != nil || len(mine(removed)) != 0 {
 		t.Fatalf("second reap removed %v, %v", mine(removed), err)
 	}
-	if err = store.RecordImportBlob(ctx, expired.ID, "sha256:e1", 1, f.now); !errors.Is(err, ErrImportSessionClosed) {
+	if err = store.RecordImportBlob(ctx, expired.ID, dg("e1"), 1, f.now); !errors.Is(err, ErrImportSessionClosed) {
 		t.Fatalf("a blob of an expired session = %v", err)
 	}
 	// Once the later session expires too it is reaped like the others.
@@ -334,5 +381,55 @@ func exerciseImportReaper(t *testing.T, f importFixture) {
 	}
 	if got, _ := store.GetImportSession(ctx, late.ID); got.State != ImportSessionExpired {
 		t.Fatalf("late session = %s", got.State)
+	}
+
+	// A commit that is still running keeps its staging objects: BeginImportCommit pushes the expiry out by the grace.
+	soon := f.session(f.principal+"-commit", "commit", "commit@1.0")
+	soon.ExpiresAt = f.now.Add(5 * time.Minute)
+	if _, _, err = store.CreateImportSession(ctx, soon, []ImportBlob{blob(dg("m1"), 4)}, ImportLimits{}); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.RecordImportBlob(ctx, soon.ID, dg("m1"), 4, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.BeginImportCommit(ctx, soon.ID, f.now); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.GetImportSession(ctx, soon.ID); got.ExpiresAt.Before(f.now.Add(ImportCommitGrace)) {
+		t.Fatalf("a committing session expires at %v, before the grace %v", got.ExpiresAt, f.now.Add(ImportCommitGrace))
+	}
+	removed = nil
+	if _, err = store.ReapImportSessions(ctx, f.now.Add(10*time.Minute), 10000, remove); err != nil || strings.Contains(strings.Join(removed, " "), soon.ID) {
+		t.Fatalf("a committing session was reaped inside its grace: %v %v", removed, err)
+	}
+	if got, _ := store.GetImportSession(ctx, soon.ID); got.State != ImportSessionCommitting {
+		t.Fatalf("state = %s", got.State)
+	}
+	if _, err = store.ReapImportSessions(ctx, f.now.Add(2*time.Hour), 10000, remove); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := store.GetImportSession(ctx, soon.ID); got.State != ImportSessionExpired {
+		t.Fatalf("a commit stuck past its grace = %s", got.State)
+	}
+
+	// A session whose objects cannot be deleted does not hold up the others of the pass.
+	stuck, healthy := mk("stuck", blob(dg("s1"), 1)), mk("healthy", blob(dg("h1"), 1))
+	selective := func(_ context.Context, keys []string) error {
+		for _, key := range keys {
+			if strings.Contains(key, stuck.ID) {
+				return errors.New("object store refuses " + key)
+			}
+		}
+		return nil
+	}
+	finished, err = store.ReapImportSessions(ctx, f.now.Add(72*time.Hour), 10000, selective)
+	if err == nil || finished < 1 {
+		t.Fatalf("finished %d, %v; want the healthy session finished and the failure reported", finished, err)
+	}
+	if got, _ := store.GetImportSession(ctx, healthy.ID); got.State != ImportSessionExpired {
+		t.Fatalf("a healthy session behind a stuck one = %s", got.State)
+	}
+	if got, _ := store.GetImportSession(ctx, stuck.ID); got.State != ImportSessionOpen {
+		t.Fatalf("the stuck session = %s", got.State)
 	}
 }

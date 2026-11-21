@@ -33,11 +33,12 @@ func (s *PostgresStore) CreateImportSession(ctx context.Context, session ImportS
 	if session.ID == "" || session.TargetRepositoryID == "" || session.IdempotencyKey == "" || session.ExpiresAt.IsZero() {
 		return ImportSession{}, false, errors.New("import session needs an id, a target repository, an idempotency key and an expiry")
 	}
+	session = normalizeImportSession(session)
 	deduped, total, err := dedupeImportBlobs(blobs)
 	if err != nil {
 		return ImportSession{}, false, err
 	}
-	chain, err := json.Marshal(append([]PromotionChainHop{}, session.ChainPath...))
+	chain, err := json.Marshal(session.ChainPath)
 	if err != nil {
 		return ImportSession{}, false, err
 	}
@@ -59,7 +60,13 @@ func (s *PostgresStore) CreateImportSession(ctx context.Context, session ImportS
 		if !equivalentImportRequest(existing, session) {
 			return ImportSession{}, false, ErrIdempotencyConflict
 		}
-		return existing, true, nil
+		if !importSessionDead(existing, session.CreatedAt) {
+			return existing, true, nil
+		}
+		// A dead session keeps its row for the reaper but gives its key to the new one.
+		if _, err = tx.ExecContext(ctx, `UPDATE import_sessions SET idempotency_key=$2 WHERE id=$1::uuid`, existing.ID, freedImportKey(existing)); err != nil {
+			return ImportSession{}, false, err
+		}
 	case !errors.Is(err, sql.ErrNoRows):
 		return ImportSession{}, false, err
 	}
@@ -197,7 +204,7 @@ func (s *PostgresStore) BeginImportCommit(ctx context.Context, sessionID string,
 	if unverified {
 		return ErrImportBlobsMissing
 	}
-	if _, err = tx.ExecContext(ctx, `UPDATE import_sessions SET state='committing',updated_at=$2 WHERE id=$1::uuid`, sessionID, now); err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE import_sessions SET state='committing',updated_at=$2,expires_at=GREATEST(expires_at,$3) WHERE id=$1::uuid`, sessionID, now, now.Add(ImportCommitGrace)); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -208,9 +215,17 @@ func (s *PostgresStore) CompleteImportSession(ctx context.Context, sessionID str
 	return s.transitionImportSession(ctx, sessionID, now, ImportSessionCommitted, ImportSessionCommitting)
 }
 
-// AbortImportSession implements ImportSessionStore.
+// AbortImportSession implements ImportSessionStore. Aborting an aborted session changes nothing.
 func (s *PostgresStore) AbortImportSession(ctx context.Context, sessionID string, now time.Time) error {
-	return s.transitionImportSession(ctx, sessionID, now, ImportSessionAborted, ImportSessionOpen, ImportSessionCommitting, ImportSessionAborted)
+	err := s.transitionImportSession(ctx, sessionID, now, ImportSessionAborted, ImportSessionOpen, ImportSessionCommitting)
+	if !errors.Is(err, ErrImportSessionClosed) {
+		return err
+	}
+	session, getErr := s.GetImportSession(ctx, sessionID)
+	if getErr == nil && session.State == ImportSessionAborted {
+		return nil
+	}
+	return err
 }
 
 func (s *PostgresStore) transitionImportSession(ctx context.Context, sessionID string, now time.Time, to ImportSessionState, from ...ImportSessionState) error {
@@ -235,64 +250,75 @@ func (s *PostgresStore) transitionImportSession(ctx context.Context, sessionID s
 	return ErrImportSessionClosed
 }
 
-// ReapImportSessions implements ImportSessionStore. Candidates are locked with SKIP LOCKED, so the passes of several
-// nodes take different sessions; the staging objects are deleted before the keys are emptied, so a crash leaves keys
-// that the next pass deletes again (deleting a missing object is not an error).
+// reapCandidate selects the next session that needs reaping, not already tried in this pass, under a row lock that other nodes
+// skip.
+const reapCandidateQuery = `SELECT s.id::text FROM import_sessions s
+WHERE ((s.state IN ('open','committing') AND s.expires_at <= $1)
+   OR (s.state IN ('committed','aborted','expired') AND EXISTS (SELECT 1 FROM import_blobs b WHERE b.session_id = s.id AND b.staging_key <> '')))
+  AND s.id <> ALL($2::uuid[])
+ORDER BY s.expires_at,s.id LIMIT 1 FOR UPDATE OF s SKIP LOCKED`
+
+// ReapImportSessions implements ImportSessionStore. Each session is finished in its own transaction, under a row lock that
+// the passes of other nodes skip, so a slow object store holds one session and not the batch. The staging objects are
+// deleted before their keys are emptied, so a crash leaves keys that the next pass deletes again (deleting a missing
+// object is not an error). A session whose objects cannot be deleted is skipped for the rest of the pass.
 func (s *PostgresStore) ReapImportSessions(ctx context.Context, now time.Time, limit int, remove func(ctx context.Context, keys []string) error) (int, error) {
 	if limit <= 0 {
 		limit = 100
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	rows, err := tx.QueryContext(ctx, `SELECT s.id::text FROM import_sessions s
-WHERE (s.state IN ('open','committing') AND s.expires_at <= $1)
-   OR (s.state IN ('committed','aborted','expired') AND EXISTS (SELECT 1 FROM import_blobs b WHERE b.session_id = s.id AND b.staging_key <> ''))
-ORDER BY s.expires_at,s.id LIMIT $2 FOR UPDATE OF s SKIP LOCKED`, now, limit)
-	if err != nil {
-		return 0, err
-	}
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err = rows.Scan(&id); err != nil {
-			_ = rows.Close()
-			return 0, err
-		}
-		ids = append(ids, id)
-	}
-	if err = rows.Err(); err != nil {
-		_ = rows.Close()
-		return 0, err
-	}
-	_ = rows.Close()
 	var failures []error
+	tried := []string{}
 	finished := 0
-	for _, id := range ids {
-		keys, keyErr := importStagingKeys(ctx, tx, id)
-		if keyErr != nil {
-			return finished, errors.Join(append(failures, keyErr)...)
+	for finished < limit {
+		done, id, err := s.reapOne(ctx, now, tried, remove)
+		if err != nil {
+			failures = append(failures, err)
 		}
-		if len(keys) > 0 {
-			if removeErr := remove(ctx, keys); removeErr != nil {
-				failures = append(failures, removeErr)
-				continue
-			}
-			if _, err = tx.ExecContext(ctx, `UPDATE import_blobs SET staging_key='' WHERE session_id=$1::uuid AND staging_key <> ''`, id); err != nil {
-				return finished, errors.Join(append(failures, err)...)
-			}
+		if id == "" {
+			break
 		}
-		if _, err = tx.ExecContext(ctx, `UPDATE import_sessions SET state=CASE WHEN state IN ('open','committing') THEN 'expired' ELSE state END,updated_at=$2 WHERE id=$1::uuid`, id, now); err != nil {
-			return finished, errors.Join(append(failures, err)...)
+		tried = append(tried, id)
+		if done {
+			finished++
 		}
-		finished++
-	}
-	if err = tx.Commit(); err != nil {
-		return 0, errors.Join(append(failures, err)...)
+		if err != nil && ctx.Err() != nil {
+			break
+		}
 	}
 	return finished, errors.Join(failures...)
+}
+
+// reapOne takes the next candidate in a transaction of its own. id is empty when none is left; done reports whether the
+// session was finished.
+func (s *PostgresStore) reapOne(ctx context.Context, now time.Time, tried []string, remove func(ctx context.Context, keys []string) error) (done bool, id string, err error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, "", err
+	}
+	defer func() { _ = tx.Rollback() }()
+	err = tx.QueryRowContext(ctx, reapCandidateQuery, now, tried).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, "", nil
+	}
+	if err != nil {
+		return false, "", err
+	}
+	keys, err := importStagingKeys(ctx, tx, id)
+	if err != nil {
+		return false, id, err
+	}
+	if len(keys) > 0 {
+		if err = remove(ctx, keys); err != nil {
+			return false, id, err
+		}
+		if _, err = tx.ExecContext(ctx, `UPDATE import_blobs SET staging_key='' WHERE session_id=$1::uuid AND staging_key <> ''`, id); err != nil {
+			return false, id, err
+		}
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE import_sessions SET state=CASE WHEN state IN ('open','committing') THEN 'expired' ELSE state END,updated_at=$2 WHERE id=$1::uuid`, id, now); err != nil {
+		return false, id, err
+	}
+	return true, id, tx.Commit()
 }
 
 func importStagingKeys(ctx context.Context, tx *sql.Tx, sessionID string) ([]string, error) {

@@ -461,9 +461,14 @@ idempotency key checks no limit. `import_sessions` records the claims as receive
 chain path and evidence stay unverified until the bytes are) and `import_blobs` the blobs with their staging keys,
 assigned when the session is created. Abandoned sessions and staging keys are removed by a reaper
 whose TTL equals `NOTARX_IMPORT_SESSION_TTL`: every node runs it once a minute, the sessions are taken with
-`FOR UPDATE SKIP LOCKED`, staging objects are deleted before their keys are emptied, and the retention janitor then deletes
+`FOR UPDATE SKIP LOCKED` one session per transaction (a session whose objects cannot be deleted is skipped for the rest of the pass),
+staging objects are deleted before their keys are emptied, and the retention janitor then deletes
 the finished rows (the `import_sessions` registry entry). `ImportWrite` is the grant scope `repositories:import`: admin
-includes it, write does not, and it implies no read.
+includes it, write does not, and it implies no read. A blob digest must be `sha256:<64 hex>` because it is part of the staging key.
+A retry under the idempotency key of a dead session (aborted, expired or past its expiry) gets a new session: the dead one
+keeps its row for the reaper under a renamed key. Starting the commit keeps the session at least an hour (`ImportCommitGrace`)
+so a running commit never loses its staging objects to the reaper. An upload that the store refuses with a closed session
+deletes the object it staged, since the reaper may already have emptied the staging keys.
 
 OCI: the unit is the manifest digest plus all child manifests/blobs plus
 referrers (signatures, SBOMs as referrer manifests) by digest. Blob sharing

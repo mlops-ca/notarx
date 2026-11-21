@@ -25,19 +25,24 @@ func (s *MemoryStore) CreateImportSession(_ context.Context, session ImportSessi
 	if session.ID == "" || session.TargetRepositoryID == "" || session.IdempotencyKey == "" || session.ExpiresAt.IsZero() {
 		return ImportSession{}, false, errors.New("import session needs an id, a target repository, an idempotency key and an expiry")
 	}
+	session = normalizeImportSession(session)
+	deduped, total, err := dedupeImportBlobs(blobs)
+	if err != nil {
+		return ImportSession{}, false, err
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, existing := range s.importSessions {
+	for id, existing := range s.importSessions {
 		if existing.TargetRepositoryID == session.TargetRepositoryID && existing.IdempotencyKey == session.IdempotencyKey {
 			if !equivalentImportRequest(existing, session) {
 				return ImportSession{}, false, ErrIdempotencyConflict
 			}
-			return cloneImportSession(existing), true, nil
+			if !importSessionDead(existing, session.CreatedAt) {
+				return cloneImportSession(existing), true, nil
+			}
+			existing.IdempotencyKey = freedImportKey(existing)
+			s.importSessions[id] = existing
 		}
-	}
-	deduped, total, err := dedupeImportBlobs(blobs)
-	if err != nil {
-		return ImportSession{}, false, err
 	}
 	if err = checkImportLimits(deduped, total, limits); err != nil {
 		return ImportSession{}, false, err
@@ -59,9 +64,6 @@ func (s *MemoryStore) CreateImportSession(_ context.Context, session ImportSessi
 		return ImportSession{}, false, ErrImportStagingQuota
 	}
 	session.State, session.Bytes, session.UpdatedAt = ImportSessionOpen, total, session.CreatedAt
-	if session.ChainPath == nil {
-		session.ChainPath = []PromotionChainHop{}
-	}
 	if s.importSessions == nil {
 		s.importSessions, s.importBlobs = map[string]ImportSession{}, map[string]map[string]ImportBlob{}
 	}
@@ -148,6 +150,9 @@ func (s *MemoryStore) BeginImportCommit(_ context.Context, sessionID string, now
 		return ErrImportBlobsMissing
 	}
 	session.State, session.UpdatedAt = ImportSessionCommitting, now
+	if grace := now.Add(ImportCommitGrace); grace.After(session.ExpiresAt) {
+		session.ExpiresAt = grace
+	}
 	s.importSessions[sessionID] = session
 	return nil
 }
@@ -204,12 +209,15 @@ func (s *MemoryStore) ReapImportSessions(ctx context.Context, now time.Time, lim
 		}
 		return a.ID < b.ID
 	})
-	if limit > 0 && len(ids) > limit {
-		ids = ids[:limit]
+	if limit <= 0 {
+		limit = 100
 	}
 	var failures []error
 	finished := 0
 	for _, id := range ids {
+		if finished >= limit {
+			break
+		}
 		keys := stagingKeysLocked(s.importBlobs[id])
 		if len(keys) > 0 {
 			if err := remove(ctx, keys); err != nil {
