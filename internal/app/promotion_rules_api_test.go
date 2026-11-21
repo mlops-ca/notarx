@@ -557,8 +557,7 @@ func TestPromotionRuleDryRunNeverEnqueuesAndReportsVerdicts(t *testing.T) {
 
 	// A rule with only the implied condition is eligible once the artifact is not quarantined; an early minAge keeps it back.
 	plain := decodeRule(t, f.create(f.promoter, f.ruleBody("plain", f.source.ID, f.target.ID, `{"coordinate":{"regex":"releases/app-1\\.1\\.0\\.tgz"}}`, `"conditions":{"minAge":"72h"}`)))
-	var young adminopenapi.PromotionRuleDryRun
-	young = decodeDryRun(t, f.do(http.MethodPost, rulesPath+"/"+plain.Id.String()+"/dry-run", f.promoter, ""))
+	young := decodeDryRun(t, f.do(http.MethodPost, rulesPath+"/"+plain.Id.String()+"/dry-run", f.promoter, ""))
 	if len(young.Items) != 1 || young.Items[0].Outcome != "blocked" || verdicts(young.Items[0])["minAge"] != "fail:younger_than_min_age" {
 		t.Fatalf("young = %+v", young)
 	}

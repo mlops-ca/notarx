@@ -191,7 +191,7 @@ func TestPostgresConanSessionCommitEmitsWithTheCommitActor(t *testing.T) {
 	fixture.stageAll(t)
 	fixture.commit(t, "package-committer")
 	var actor sql.NullString
-	if err := store.db.QueryRow(`SELECT payload->>'actor' FROM domain_events WHERE type='artifact.published' AND repository_id=$1::uuid AND coordinate LIKE '%/%'`, fixture.repo.ID).Scan(&actor); err != nil || actor.String != "package-committer" {
+	if err := store.db.QueryRow(`SELECT payload->>'actor' FROM domain_events WHERE type='artifact.published' AND repository_id=$1::uuid AND coordinate LIKE '%#%/%#%'`, fixture.repo.ID).Scan(&actor); err != nil || actor.String != "package-committer" {
 		t.Fatalf("package event actor = %q (%v)", actor.String, err)
 	}
 }
@@ -208,7 +208,7 @@ func TestPostgresReconcilePublishedEventsCoversTheNativeFormats(t *testing.T) {
 	conanRepo := counterTestRepository(t, store, FormatConan)
 	aptRepo := counterTestRepository(t, store, FormatAPT)
 	npm := npmFixture(npmRepo, "widget", "1.0.0", 10)
-	if _, err := store.PublishNPMVersion(ctx, npm, nil); err != nil {
+	if _, err := store.PublishNPMVersion(ctx, npm, map[string]string{"latest": npm.Version}); err != nil {
 		t.Fatal(err)
 	}
 	pypi := pypiFixture(pypiRepo, "widget", "1.0", "widget-1.0-py3-none-any.whl", 10)

@@ -366,10 +366,10 @@ func TestRemoteInstanceRegistrationOverTheInstanceProtocol(t *testing.T) {
 			RemoteDiscoverer: remoteinstance.NewDiscoverer(remoteinstance.Options{AllowPrivateNetworks: allowPrivate, RootCAs: roots})}), store
 	}
 	peerGateway, _ := gateway(true)
-	var ph http.Handler = peerGateway
+	ph := http.Handler(peerGateway)
 	peerHandler.Store(&ph)
 	selfGateway, _ := gateway(true)
-	var sh http.Handler = selfGateway
+	sh := http.Handler(selfGateway)
 	selfHandler.Store(&sh)
 
 	register := func(handler http.Handler, base string) *httptest.ResponseRecorder {

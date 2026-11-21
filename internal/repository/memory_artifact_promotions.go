@@ -134,7 +134,7 @@ func (s *MemoryStore) PageArtifactPromotions(_ context.Context, query ArtifactPr
 
 // refuseClaimedPromotionsLocked is refuseClaimedPromotions for the in-memory store; the caller holds s.mu. A refused job
 // fails as FailLifecycleJob does.
-func (s *MemoryStore) refuseClaimedPromotionsLocked(ctx context.Context, claimed []LifecycleJob) []LifecycleJob {
+func (s *MemoryStore) refuseClaimedPromotionsLocked(ctx context.Context, claimed []LifecycleJob) ([]LifecycleJob, error) {
 	kept := claimed[:0:0]
 	for _, job := range claimed {
 		promotion, ok := s.latestArtifactPromotionLocked(job.ID)
@@ -150,9 +150,11 @@ func (s *MemoryStore) refuseClaimedPromotionsLocked(ctx context.Context, claimed
 			kept = append(kept, job)
 			continue
 		}
-		s.failLifecycleJobLocked(job.ID, job.LeaseToken, reason)
+		if failErr := s.failLifecycleJobLocked(job.ID, job.LeaseToken, reason); failErr != nil {
+			return nil, failErr
+		}
 	}
-	return kept
+	return kept, nil
 }
 
 // memoryPolicyReader reads policy and intelligence while the store lock is already held.

@@ -202,7 +202,7 @@ func (s *MemoryStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJobK
 		runningByRepository[job.RepositoryID]++
 		jobs = append(jobs, cloneLifecycleJob(job))
 	}
-	return s.refuseClaimedPromotionsLocked(ctx, jobs), nil
+	return s.refuseClaimedPromotionsLocked(ctx, jobs)
 }
 
 func (s *MemoryStore) RecoverExpiredLifecycleJobs(_ context.Context, before time.Time) (int, error) {
