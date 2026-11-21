@@ -80,7 +80,6 @@ func TestOIDCBearerIdentityUsesBoundLocalAccountRoleAndState(t *testing.T) {
 		OIDC: NewOIDCValidator(OIDCConfig{
 			ProviderID: "provider-1",
 			Issuer:     "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL,
-			Roles: OIDCRoleMapping{Admin: []string{"provider-admin-role"}},
 		}),
 		Users: store, UserIdentities: store,
 	}
@@ -139,7 +138,7 @@ func TestOIDCAuthenticatorRejectsInvalidClaimsAndSignatures(t *testing.T) {
 	}
 }
 
-func TestOIDCAuthenticatorMapsRealmRolesByHighestPrivilege(t *testing.T) {
+func TestOIDCAuthenticatorIgnoresRoleClaims(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatal(err)
@@ -151,25 +150,20 @@ func TestOIDCAuthenticatorMapsRealmRolesByHighestPrivilege(t *testing.T) {
 	defer server.Close()
 	authenticator := Authenticator{OIDC: NewOIDCValidator(OIDCConfig{
 		Issuer: "https://issuer.example.test", Audience: "notarx", JWKSURL: server.URL,
-		Roles: OIDCRoleMapping{Member: []string{" gateway-member "}, Admin: []string{"gateway-admin"}},
 	})}
 
 	for _, tc := range []struct {
-		name    string
-		roles   []string
-		want    Role
-		admin   bool
-		matches int
+		name  string
+		roles []string
 	}{
-		{name: "member", roles: []string{"gateway-member"}, want: RoleMember, matches: 1},
-		{name: "admin wins member", roles: []string{"gateway-member", "gateway-admin"}, want: RoleAdmin, admin: true, matches: 2},
-		{name: "removed legacy value is unmapped", roles: []string{"gateway-reader", "gateway-writer"}},
+		{name: "member value", roles: []string{"gateway-member"}},
+		{name: "admin value wins nothing", roles: []string{"gateway-member", "gateway-admin"}},
 		{name: "unmapped", roles: []string{"other"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			token := signedOIDCTokenWithRoles(t, privateKey, keyID, "https://issuer.example.test", "notarx", "ci-user", time.Now().Add(time.Minute), tc.roles)
 			principal, ok := authenticator.Authenticate("Bearer " + token)
-			if !ok || principal.AuthenticationKind != "oidc" || principal.Role != tc.want || principal.Admin != tc.admin || len(principal.OIDCRoleMappings) != tc.matches {
+			if !ok || principal.AuthenticationKind != "oidc" || principal.Role != "" || principal.Admin {
 				t.Fatalf("principal=%#v authenticated=%t", principal, ok)
 			}
 		})

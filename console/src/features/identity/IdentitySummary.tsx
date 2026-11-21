@@ -84,35 +84,15 @@ export function IdentitySummary({ identity }: { identity: CurrentIdentity }) {
           },
         ]}
       />
-      {identity.oidc && (
+      {identity.oidc?.adminSubject && (
         <div className="mt-3 flex min-w-0 items-start gap-4 border-t border-line pt-3 text-xs">
           <span className="shrink-0 text-fg-tertiary">
             {t("identity.oIDCMapping")}
           </span>
           <div className="flex min-w-0 flex-wrap gap-2">
-            {identity.oidc.adminSubject && (
-              <Badge tone="danger">
-                {t("identity.administratorSubjectListAdmin")}
-              </Badge>
-            )}
-            {identity.oidc.roleMappings.map((mapping) => (
-              <Badge
-                key={`${mapping.externalRole}-${mapping.gatewayRole}`}
-                tone={
-                  mapping.gatewayRole === "admin"
-                    ? "visualization-3"
-                    : "visualization-1"
-                }
-              >
-                {mapping.externalRole} → {mapping.gatewayRole}
-              </Badge>
-            ))}
-            {!identity.oidc.adminSubject &&
-              identity.oidc.roleMappings.length === 0 && (
-                <span className="text-fg-tertiary">
-                  {t("identity.noConfiguredRoleMappingMatched")}
-                </span>
-              )}
+            <Badge tone="danger">
+              {t("identity.administratorSubjectListAdmin")}
+            </Badge>
           </div>
         </div>
       )}

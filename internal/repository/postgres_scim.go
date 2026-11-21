@@ -30,7 +30,7 @@ func (s *PostgresStore) CreateSCIMToken(ctx context.Context, token SCIMToken, au
 	if token.ID == "" {
 		token.ID = ids.New()
 	}
-	return runAudited(ctx, s, audit, func(q sqlRunner) (SCIMToken, error) {
+	saved, err := runAudited(ctx, s, audit, func(q sqlRunner) (SCIMToken, error) {
 		created, err := scanSCIMToken(q.QueryRowContext(ctx, `INSERT INTO identity_provider_scim_tokens (id,provider_id,name,secret_hash,expires_at) VALUES ($1::uuid,$2::uuid,$3,$4,$5) RETURNING `+scimTokenColumns,
 			token.ID, token.ProviderID, token.Name, token.SecretHash, token.ExpiresAt))
 		switch {
@@ -41,6 +41,10 @@ func (s *PostgresStore) CreateSCIMToken(ctx context.Context, token SCIMToken, au
 		}
 		return created, err
 	})
+	if err == nil {
+		s.invalidateLocalScope(CacheScopeSCIMToken)
+	}
+	return saved, err
 }
 
 func (s *PostgresStore) ListSCIMTokens(ctx context.Context, providerID string) ([]SCIMToken, error) {
@@ -67,13 +71,17 @@ func (s *PostgresStore) RevokeSCIMToken(ctx context.Context, providerID, tokenID
 	if !isUUID(providerID) || !isUUID(tokenID) {
 		return SCIMToken{}, ErrNotFound
 	}
-	return runAudited(ctx, s, audit, func(q sqlRunner) (SCIMToken, error) {
+	saved, err := runAudited(ctx, s, audit, func(q sqlRunner) (SCIMToken, error) {
 		token, err := scanSCIMToken(q.QueryRowContext(ctx, `UPDATE identity_provider_scim_tokens SET revoked_at=COALESCE(revoked_at,now()) WHERE id=$1::uuid AND provider_id=$2::uuid RETURNING `+scimTokenColumns, tokenID, providerID))
 		if errors.Is(err, sql.ErrNoRows) {
 			return SCIMToken{}, ErrNotFound
 		}
 		return token, err
 	})
+	if err == nil {
+		s.invalidateLocalScope(CacheScopeSCIMToken)
+	}
+	return saved, err
 }
 
 func (s *PostgresStore) FindActiveSCIMTokenByHash(ctx context.Context, hash string) (SCIMToken, error) {

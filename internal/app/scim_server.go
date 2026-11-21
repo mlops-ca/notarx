@@ -20,6 +20,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/authorization"
 	"github.com/mlops-ca/notarx/internal/config"
 	"github.com/mlops-ca/notarx/internal/identity"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/scim"
 )
@@ -66,13 +67,62 @@ type scimServer struct {
 	// guessing tokens cannot lock the identity provider out, even behind a proxy that gives every client one address.
 	failures *samlRateLimiter
 	started  time.Time
+	// tokens and providers hold the two lookups every request authenticates with for NOTARX_AUTHZ_CACHE_TTL, the
+	// revocation window of ADR 0023 section 6. A token revocation, an expiry, a provider change or a provider deletion
+	// evicts them on this node at once and on the others on the cache notification (migration 000018). Both are nil
+	// without a registry, and every request reads the store.
+	tokens    *readcache.Cache[string, repository.SCIMToken]
+	providers *readcache.Cache[string, scimProvider]
 }
 
-func newSCIMServer(options SCIMOptions, store scimStore, audit repository.AuditRecorder) *scimServer {
+// scimProvider is the part of an identity provider the SCIM server authenticates against.
+type scimProvider struct {
+	ID      string
+	Slug    string
+	Enabled bool
+}
+
+func newSCIMServer(options SCIMOptions, store scimStore, audit repository.AuditRecorder, registry *readcache.Registry) *scimServer {
 	if options.MaxPage <= 0 {
 		options.MaxPage = config.DefaultSCIMMaxPage
 	}
-	return &scimServer{options: options, store: store, audit: audit, failures: &samlRateLimiter{}, started: time.Now().UTC()}
+	server := &scimServer{options: options, store: store, audit: audit, failures: &samlRateLimiter{}, started: time.Now().UTC()}
+	if registry != nil {
+		notFound := func(err error) bool { return errors.Is(err, repository.ErrNotFound) }
+		server.tokens = readcache.New[string, repository.SCIMToken](registry, readcache.Options[repository.SCIMToken]{
+			Name: "scim_tokens_by_hash", Scope: repository.CacheScopeSCIMToken, IsNegative: notFound, InvalidateNegatives: true,
+			// A token that expired or was revoked since it was cached never authenticates, whatever its entry says.
+			Valid: func(token repository.SCIMToken, now time.Time) bool { return token.Active(now) },
+		})
+		server.providers = readcache.New[string, scimProvider](registry, readcache.Options[scimProvider]{
+			Name: "scim_providers_by_id", Scope: repository.CacheScopeIdentityProvider, IsNegative: notFound, InvalidateNegatives: true,
+		})
+	}
+	return server
+}
+
+// cachedLookup reads through cache when there is one. A store that cannot send the eviction of a mutation to this
+// process (the memory store of the tests) leaves an entry until the revocation window ends.
+func cachedLookup[K comparable, V any](ctx context.Context, cache *readcache.Cache[K, V], key K, load func(context.Context) (V, error)) (V, error) {
+	if cache == nil {
+		return load(ctx)
+	}
+	return cache.Get(ctx, key, load)
+}
+
+// findToken resolves an active token by the digest of its secret.
+func (s *scimServer) findToken(ctx context.Context, hash string) (repository.SCIMToken, error) {
+	return cachedLookup(ctx, s.tokens, hash, func(ctx context.Context) (repository.SCIMToken, error) {
+		return s.store.FindActiveSCIMTokenByHash(ctx, hash)
+	})
+}
+
+// findProvider resolves the provider of a token.
+func (s *scimServer) findProvider(ctx context.Context, id string) (scimProvider, error) {
+	return cachedLookup(ctx, s.providers, id, func(ctx context.Context) (scimProvider, error) {
+		provider, err := s.store.GetIdentityProvider(ctx, id)
+		return scimProvider{ID: provider.ID, Slug: provider.Slug, Enabled: provider.Enabled}, err
+	})
 }
 
 // scimCaller is the authenticated provider of a request.
@@ -128,7 +178,7 @@ func (s *scimServer) authenticate(r *http.Request) (scimCaller, *scim.Error) {
 	}
 	hash := authorization.HashAPIKey(token)
 	unavailable := scim.NewError(http.StatusServiceUnavailable, "", "the SCIM server is temporarily unavailable")
-	stored, err := s.store.FindActiveSCIMTokenByHash(r.Context(), hash)
+	stored, err := s.findToken(r.Context(), hash)
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
 		return scimCaller{}, unauthorized
@@ -139,7 +189,7 @@ func (s *scimServer) authenticate(r *http.Request) (scimCaller, *scim.Error) {
 	if subtle.ConstantTimeCompare([]byte(stored.SecretHash), []byte(hash)) != 1 {
 		return scimCaller{}, unauthorized
 	}
-	provider, err := s.store.GetIdentityProvider(r.Context(), stored.ProviderID)
+	provider, err := s.findProvider(r.Context(), stored.ProviderID)
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
 		return scimCaller{}, unauthorized
@@ -412,6 +462,16 @@ func (s *scimServer) record(r *http.Request, caller scimCaller, operation, resou
 	_ = s.audit.RecordAudit(r.Context(), s.auditRecord(r, caller.actor(), operation, resource, status, evidence))
 }
 
+// scimAuditClass is the durability class of the audit of a call: a successful GET or HEAD is a pure read, which Entra ID
+// and Okta repeat for every resource of a full sync, so it goes to the tiered writer's batched path (ADR 0023 section
+// 1) instead of one synchronous insert per request. Every other call, and every refusal, stays synchronous.
+func scimAuditClass(r *http.Request, status int) repository.AuditClass {
+	if (r.Method == http.MethodGet || r.Method == http.MethodHead) && status < http.StatusBadRequest {
+		return repository.AuditClassAsync
+	}
+	return repository.AuditClassSync
+}
+
 func (s *scimServer) recordFailure(r *http.Request, actor string, failure *scim.Error) {
 	if s.audit == nil {
 		return
@@ -436,7 +496,7 @@ func (s *scimServer) auditRecord(r *http.Request, actor, operation, resource str
 		outcome = repository.AuditStorageError
 	}
 	return repository.AuditRecord{
-		Class: repository.AuditClassSync, Actor: actor, Outcome: outcome, OccurredAt: time.Now().UTC(), Format: "management",
+		Class: scimAuditClass(r, status), Actor: actor, Outcome: outcome, OccurredAt: time.Now().UTC(), Format: "management",
 		Resource: boundedString("scim"+resourcePath(resource), scimMaxAuditResource), Operation: operation, Status: status, CacheDisposition: "bypass",
 		AuthorizationSource: "scim", RequestID: r.Header.Get("X-Request-Id"), Evidence: evidence,
 	}

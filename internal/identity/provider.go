@@ -116,8 +116,6 @@ type OIDCSettings struct {
 	RedirectURL   string   `json:"redirectUrl"`
 	Scopes        []string `json:"scopes"`
 	AdminSubjects []string `json:"adminSubjects"`
-	MemberRoles   []string `json:"memberRoles"`
-	AdminRoles    []string `json:"adminRoles"`
 	// Algorithms is the allow-list of ID token signature algorithms. The default
 	// is RS256; ES256 and EdDSA are selectable.
 	Algorithms []string `json:"algorithms"`
@@ -220,8 +218,6 @@ func (s OIDCSettings) normalizeAndValidate(enabled bool) (OIDCSettings, error) {
 	s.RedirectURL = strings.TrimSpace(s.RedirectURL)
 	s.Scopes = NormalizeStrings(append([]string{"openid"}, s.Scopes...))
 	s.AdminSubjects = NormalizeStrings(s.AdminSubjects)
-	s.MemberRoles = NormalizeStrings(s.MemberRoles)
-	s.AdminRoles = NormalizeStrings(s.AdminRoles)
 	algorithms := NormalizeStrings(s.Algorithms)
 	if len(algorithms) == 0 {
 		algorithms = DefaultAlgorithms()

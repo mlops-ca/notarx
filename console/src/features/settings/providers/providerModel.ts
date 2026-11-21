@@ -39,10 +39,7 @@ export interface ProviderDraft {
   clearSecret: boolean;
   redirectUrl: string;
   scopes: string[];
-  // Role mapping of the provider, replaced by user groups (ADR 0018).
   adminSubjects: string[];
-  memberRoles: string[];
-  adminRoles: string[];
   // SAML
   metadataUrl: string;
   metadataXml: string;
@@ -103,8 +100,6 @@ export function newDraft(
     redirectUrl: redirectUrlFor("", origin),
     scopes: [...OIDC_SCOPES[template]],
     adminSubjects: [],
-    memberRoles: [],
-    adminRoles: [],
     metadataUrl: "",
     metadataXml: "",
     signRequests: false,
@@ -133,8 +128,6 @@ export function draftFromProvider(provider: IdentityProvider): ProviderDraft {
     redirectUrl: oidc?.redirectUrl ?? "",
     scopes: oidc?.scopes ?? [],
     adminSubjects: oidc?.adminSubjects ?? [],
-    memberRoles: oidc?.memberRoles ?? [],
-    adminRoles: oidc?.adminRoles ?? [],
     metadataUrl: saml?.metadataUrl ?? "",
     metadataXml: "",
     signRequests: saml?.signRequests ?? false,
@@ -185,8 +178,6 @@ function oidcBody(
     redirectUrl: draft.redirectUrl.trim(),
     scopes: draft.scopes,
     adminSubjects: draft.adminSubjects,
-    memberRoles: draft.memberRoles,
-    adminRoles: draft.adminRoles,
   };
   if (current?.oidc?.algorithms) body.algorithms = current.oidc.algorithms;
   if (draft.jwksUrl.trim()) body.jwksUrl = draft.jwksUrl.trim();

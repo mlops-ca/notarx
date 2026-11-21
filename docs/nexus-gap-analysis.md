@@ -69,7 +69,7 @@ external role mapping.
 notarx supports break-glass static tokens, local users, API keys,
 and a runtime PostgreSQL-backed OIDC configuration. The OIDC authorization-code
 flow uses HttpOnly sessions, encrypted client secrets, discovery/JWKS
-validation, and member/administrator role mapping. Local users and API keys hold
+validation, and group claims that match user groups. Local users and API keys hold
 one of three account levels, with expiry/revocation where applicable and
 last-used tracking; repository reach comes from per-repository grants rather
 than from the level.
@@ -203,7 +203,7 @@ operator tooling rather than basic navigation.
 
 The Console `/login` route supports local credentials, bearer tokens, and a
 dynamically configured OIDC authorization-code flow. OIDC settings, encrypted
-client-secret replacement, discovery testing, callback handling, role mapping,
+client-secret replacement, discovery testing, callback handling, group claims,
 and logout are administered without restarting the Gateway. Manually entered
 bearer tokens remain localStorage-based; production deployments should use
 HTTPS and prefer the HttpOnly OIDC session path.

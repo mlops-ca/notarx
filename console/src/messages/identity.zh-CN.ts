@@ -310,7 +310,6 @@ export const identityZhCN = {
   "identity.administrator2": "管理员身份",
   "identity.oIDCMapping": "OIDC 映射",
   "identity.administratorSubjectListAdmin": "subject 管理员名单 → admin",
-  "identity.noConfiguredRoleMappingMatched": "未命中已配置的角色映射",
   "identity.failedToCreateUser": "创建用户失败",
   "identity.userCreated": "用户已创建",
   "identity.createLocalUser": "新建本地用户",

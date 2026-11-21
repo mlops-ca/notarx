@@ -272,7 +272,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 		Enabled: cfg.OIDCIssuer != "" && cfg.OIDCAudience != "", Issuer: cfg.OIDCIssuer,
 		Audience: cfg.OIDCAudience, JWKSURL: cfg.OIDCJWKSURL, ClientID: cfg.OIDCClientID,
 		ClientSecret: cfg.OIDCClientSecret, RedirectURL: cfg.OIDCRedirectURL, Scopes: cfg.OIDCScopes,
-		AdminSubjects: cfg.OIDCAdminSubjects, Roles: cfg.OIDCRoles,
+		AdminSubjects: cfg.OIDCAdminSubjects,
 	}); err != nil {
 		// A seed that cannot be applied (for example no encryption key for the client
 		// secret) must not stop the Gateway: providers can still be added through the API.

@@ -329,8 +329,6 @@ export const identityFrCA: Record<keyof typeof identityEnCA, string> = {
   "identity.oIDCMapping": "Correspondance OIDC",
   "identity.administratorSubjectListAdmin":
     "Liste des sujets administrateurs → admin",
-  "identity.noConfiguredRoleMappingMatched":
-    "Aucune correspondance de rôle configurée",
   "identity.failedToCreateUser": "Échec de la création de l’utilisateur",
   "identity.userCreated": "Utilisateur créé",
   "identity.createLocalUser": "Créer un utilisateur local",

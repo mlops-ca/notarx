@@ -1964,24 +1964,12 @@ EffectiveAccessPermissions:
 AuthenticationKind:
   type: string
   enum: [static_admin, static_resolver, local_session, api_key, service_account_credential, oidc, workload_federation]
-OIDCRoleMappingMatch:
-  type: object
-  required: [externalRole, gatewayRole]
-  additionalProperties: false
-  properties:
-    externalRole: {type: string, minLength: 1}
-    gatewayRole:
-      type: string
-      enum: [member, admin]
 OIDCIdentityDetails:
   type: object
-  required: [adminSubject, roleMappings]
+  required: [adminSubject]
   additionalProperties: false
   properties:
     adminSubject: {type: boolean}
-    roleMappings:
-      type: array
-      items: {"$ref": "#/OIDCRoleMappingMatch"}
 CurrentIdentity:
   type: object
   required: [actor, kind, administrator]
@@ -2488,7 +2476,7 @@ IdentityProviderAttributeMapping:
     externalId: {type: string, maxLength: 200}
 IdentityProviderOIDCSettings:
   type: object
-  required: [issuer, audience, clientId, clientSecretConfigured, redirectUrl, scopes, adminSubjects, memberRoles, adminRoles, algorithms]
+  required: [issuer, audience, clientId, clientSecretConfigured, redirectUrl, scopes, adminSubjects, algorithms]
   additionalProperties: false
   properties:
     issuer: {type: string}
@@ -2501,12 +2489,6 @@ IdentityProviderOIDCSettings:
       type: array
       items: {type: string}
     adminSubjects:
-      type: array
-      items: {type: string}
-    memberRoles:
-      type: array
-      items: {type: string}
-    adminRoles:
       type: array
       items: {type: string}
     algorithms:
@@ -2601,7 +2583,7 @@ ImportIdentityProviderMetadata:
       description: Pasted IdP metadata XML.
 IdentityProviderOIDCInput:
   type: object
-  required: [issuer, audience, clientId, redirectUrl, scopes, adminSubjects, memberRoles, adminRoles]
+  required: [issuer, audience, clientId, redirectUrl, scopes, adminSubjects]
   additionalProperties: false
   properties:
     issuer: {type: string}
@@ -2617,12 +2599,6 @@ IdentityProviderOIDCInput:
       type: array
       items: {type: string}
     adminSubjects:
-      type: array
-      items: {type: string}
-    memberRoles:
-      type: array
-      items: {type: string}
-    adminRoles:
       type: array
       items: {type: string}
     algorithms:

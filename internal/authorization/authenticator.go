@@ -25,7 +25,6 @@ type Principal struct {
 	RepositoryPatterns []string
 	AuthenticationKind AuthenticationKind
 	OIDCAdminSubject   bool
-	OIDCRoleMappings   []OIDCRoleMappingMatch
 	MustChangePassword bool
 	UserID             string
 	SessionID          string
@@ -54,14 +53,6 @@ const (
 	AuthenticationOIDC                     AuthenticationKind = "oidc"
 	// AuthenticationWorkloadFederation is declared with the workload authenticator (workload.go).
 )
-
-// OIDCRoleMappingMatch records only configured realm-role mappings that were
-// present in a validated token. Unmapped provider roles are deliberately not
-// retained.
-type OIDCRoleMappingMatch struct {
-	ExternalRole string `json:"externalRole"`
-	GatewayRole  Role   `json:"gatewayRole"`
-}
 
 // OIDCValidatorSource supplies one validator per enabled identity provider
 // that accepts API bearer tokens (ADR 0018).
@@ -264,7 +255,7 @@ func (a Authenticator) oidcPrincipal(ctx context.Context, identity OIDCIdentity)
 			return Principal{
 				Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role,
 				RepositoryPatterns: a.RepositoryReaders["user:"+user.Name], AuthenticationKind: AuthenticationOIDC,
-				OIDCAdminSubject: identity.AdminSubject, OIDCRoleMappings: identity.RoleMappings, UserID: user.ID,
+				OIDCAdminSubject: identity.AdminSubject, UserID: user.ID,
 			}, true
 		}
 		if !errors.Is(err, repository.ErrNotFound) {
@@ -276,7 +267,6 @@ func (a Authenticator) oidcPrincipal(ctx context.Context, identity OIDCIdentity)
 	principal.Role = identity.Role
 	principal.AuthenticationKind = AuthenticationOIDC
 	principal.OIDCAdminSubject = identity.AdminSubject
-	principal.OIDCRoleMappings = identity.RoleMappings
 	return principal, true
 }
 
@@ -514,17 +504,16 @@ func (a Authenticator) IssuePrincipalTokenFor(principal Principal, lifetime time
 		policyID = principal.CredentialID
 	}
 	claims, _ := json.Marshal(struct {
-		Actor            string                 `json:"a"`
-		Role             Role                   `json:"r,omitempty"`
-		Admin            bool                   `json:"d,omitempty"`
-		Authentication   AuthenticationKind     `json:"k,omitempty"`
-		OIDCAdminSubject bool                   `json:"s,omitempty"`
-		OIDCRoleMappings []OIDCRoleMappingMatch `json:"m,omitempty"`
-		PolicyID         string                 `json:"p,omitempty"`
+		Actor            string             `json:"a"`
+		Role             Role               `json:"r,omitempty"`
+		Admin            bool               `json:"d,omitempty"`
+		Authentication   AuthenticationKind `json:"k,omitempty"`
+		OIDCAdminSubject bool               `json:"s,omitempty"`
+		PolicyID         string             `json:"p,omitempty"`
 	}{
 		Actor: principal.Actor, Role: principal.Role, Admin: principal.Admin,
 		Authentication: principal.AuthenticationKind, OIDCAdminSubject: principal.OIDCAdminSubject,
-		OIDCRoleMappings: principal.OIDCRoleMappings, PolicyID: policyID,
+		PolicyID: policyID,
 	})
 	payload := "v2." + base64.RawURLEncoding.EncodeToString(claims) + "." + strconv.FormatInt(expiresAt, 10)
 	mac := hmac.New(sha256.New, []byte(a.ResolverToken))
@@ -586,18 +575,17 @@ func (a Authenticator) issueWebSession(principal Principal, sessionID string, se
 		sessionVersion = sessionVersions[0]
 	}
 	claims, _ := json.Marshal(struct {
-		Actor            string                 `json:"a"`
-		Role             Role                   `json:"r,omitempty"`
-		Admin            bool                   `json:"d,omitempty"`
-		Authentication   AuthenticationKind     `json:"k"`
-		OIDCAdminSubject bool                   `json:"s,omitempty"`
-		OIDCRoleMappings []OIDCRoleMappingMatch `json:"m,omitempty"`
-		SessionVersion   int64                  `json:"v,omitempty"`
-		SessionID        string                 `json:"i,omitempty"`
+		Actor            string             `json:"a"`
+		Role             Role               `json:"r,omitempty"`
+		Admin            bool               `json:"d,omitempty"`
+		Authentication   AuthenticationKind `json:"k"`
+		OIDCAdminSubject bool               `json:"s,omitempty"`
+		SessionVersion   int64              `json:"v,omitempty"`
+		SessionID        string             `json:"i,omitempty"`
 	}{
 		Actor: principal.Actor, Role: principal.Role, Admin: principal.Admin,
 		Authentication: principal.AuthenticationKind, OIDCAdminSubject: principal.OIDCAdminSubject,
-		OIDCRoleMappings: principal.OIDCRoleMappings, SessionVersion: sessionVersion, SessionID: sessionID,
+		SessionVersion: sessionVersion, SessionID: sessionID,
 	})
 	payload := "ws." + base64.RawURLEncoding.EncodeToString(claims) + "." + strconv.FormatInt(expiresAt, 10)
 	mac := hmac.New(sha256.New, []byte(a.AdminToken))
@@ -628,16 +616,15 @@ func (a Authenticator) webSessionPrincipal(ctx context.Context, token string) (P
 		return Principal{}, false
 	}
 	var claims struct {
-		Actor            string                 `json:"a"`
-		Role             Role                   `json:"r"`
-		Admin            bool                   `json:"d"`
-		Authentication   AuthenticationKind     `json:"k"`
-		OIDCAdminSubject bool                   `json:"s"`
-		OIDCRoleMappings []OIDCRoleMappingMatch `json:"m"`
-		SessionVersion   int64                  `json:"v"`
-		SessionID        string                 `json:"i"`
+		Actor            string             `json:"a"`
+		Role             Role               `json:"r"`
+		Admin            bool               `json:"d"`
+		Authentication   AuthenticationKind `json:"k"`
+		OIDCAdminSubject bool               `json:"s"`
+		SessionVersion   int64              `json:"v"`
+		SessionID        string             `json:"i"`
 	}
-	if json.Unmarshal(raw, &claims) != nil || claims.Actor == "" || claims.Authentication != AuthenticationOIDC || claims.Role != "" && !validGatewayRole(claims.Role) || !validOIDCMetadata(claims.Authentication, claims.OIDCAdminSubject, claims.OIDCRoleMappings) {
+	if json.Unmarshal(raw, &claims) != nil || claims.Actor == "" || claims.Authentication != AuthenticationOIDC || claims.Role != "" && !validGatewayRole(claims.Role) || !validOIDCMetadata(claims.Authentication, claims.OIDCAdminSubject) {
 		return Principal{}, false
 	}
 	if strings.HasPrefix(claims.Actor, "user:") {
@@ -659,8 +646,8 @@ func (a Authenticator) webSessionPrincipal(ctx context.Context, token string) (P
 		return Principal{
 			Actor: claims.Actor, Admin: role == RoleAdmin, Role: role,
 			RepositoryPatterns: a.RepositoryReaders[claims.Actor], AuthenticationKind: AuthenticationOIDC,
-			OIDCAdminSubject: claims.OIDCAdminSubject, OIDCRoleMappings: claims.OIDCRoleMappings,
-			UserID: user.ID, SessionID: claims.SessionID,
+			OIDCAdminSubject: claims.OIDCAdminSubject,
+			UserID:           user.ID, SessionID: claims.SessionID,
 		}, true
 	}
 	return Principal{
@@ -670,7 +657,6 @@ func (a Authenticator) webSessionPrincipal(ctx context.Context, token string) (P
 		RepositoryPatterns: a.RepositoryReaders[claims.Actor],
 		AuthenticationKind: claims.Authentication,
 		OIDCAdminSubject:   claims.OIDCAdminSubject,
-		OIDCRoleMappings:   claims.OIDCRoleMappings,
 	}, true
 }
 
@@ -766,13 +752,12 @@ func (a Authenticator) principalToken(ctx context.Context, token string) (Princi
 		return Principal{}, false
 	}
 	var claims struct {
-		Actor            string                 `json:"a"`
-		Role             Role                   `json:"r"`
-		Admin            bool                   `json:"d"`
-		Authentication   AuthenticationKind     `json:"k"`
-		OIDCAdminSubject bool                   `json:"s"`
-		OIDCRoleMappings []OIDCRoleMappingMatch `json:"m"`
-		PolicyID         string                 `json:"p"`
+		Actor            string             `json:"a"`
+		Role             Role               `json:"r"`
+		Admin            bool               `json:"d"`
+		Authentication   AuthenticationKind `json:"k"`
+		OIDCAdminSubject bool               `json:"s"`
+		PolicyID         string             `json:"p"`
 	}
 	if json.Unmarshal(raw, &claims) != nil || claims.Actor == "" {
 		return Principal{}, false
@@ -786,7 +771,7 @@ func (a Authenticator) principalToken(ctx context.Context, token string) (Princi
 	if claims.Authentication == "" {
 		claims.Authentication = AuthenticationStaticResolver
 	}
-	if !validAuthenticationKind(claims.Authentication) || !validOIDCMetadata(claims.Authentication, claims.OIDCAdminSubject, claims.OIDCRoleMappings) {
+	if !validAuthenticationKind(claims.Authentication) || !validOIDCMetadata(claims.Authentication, claims.OIDCAdminSubject) {
 		return Principal{}, false
 	}
 	if claims.Authentication == AuthenticationServiceAccountCredential {
@@ -817,7 +802,6 @@ func (a Authenticator) principalToken(ctx context.Context, token string) (Princi
 		RepositoryPatterns: a.RepositoryReaders[claims.Actor],
 		AuthenticationKind: claims.Authentication,
 		OIDCAdminSubject:   claims.OIDCAdminSubject,
-		OIDCRoleMappings:   claims.OIDCRoleMappings,
 		CredentialID:       credentialID,
 	}, true
 }
@@ -844,19 +828,8 @@ func validAuthenticationKind(kind AuthenticationKind) bool {
 	}
 }
 
-func validOIDCMetadata(kind AuthenticationKind, adminSubject bool, mappings []OIDCRoleMappingMatch) bool {
-	if kind != AuthenticationOIDC && (adminSubject || len(mappings) != 0) {
-		return false
-	}
-	for _, mapping := range mappings {
-		// Only the two assignable levels can be a mapping target. A mapping to
-		// a removed legacy role is refused, so it can never be replayed into a
-		// global capability it no longer has.
-		if mapping.ExternalRole == "" || mapping.GatewayRole != RoleMember && mapping.GatewayRole != RoleAdmin {
-			return false
-		}
-	}
-	return true
+func validOIDCMetadata(kind AuthenticationKind, adminSubject bool) bool {
+	return kind == AuthenticationOIDC || !adminSubject
 }
 
 func tokenMatches(value, expected string) bool {
@@ -868,13 +841,4 @@ func tokenMatches(value, expected string) bool {
 func HashAPIKey(token string) string {
 	digest := sha256.Sum256([]byte(token))
 	return base64.RawURLEncoding.EncodeToString(digest[:])
-}
-
-func containsRole(roles []string, expected string) bool {
-	for _, role := range roles {
-		if role == expected {
-			return true
-		}
-	}
-	return false
 }

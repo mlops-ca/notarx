@@ -191,7 +191,6 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 			principal.Role = authorization.Role(user.Role)
 			principal.AuthenticationKind = authorization.AuthenticationOIDC
 			principal.OIDCAdminSubject = verified.AdminSubject
-			principal.OIDCRoleMappings = verified.RoleMappings
 			sessionID := newUserSessionID()
 			if h.sessions != nil {
 				if _, err := h.sessions.CreateUserSession(ctx, repository.UserSession{
@@ -233,7 +232,6 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 	principal.Role = verified.Role
 	principal.AuthenticationKind = authorization.AuthenticationOIDC
 	principal.OIDCAdminSubject = verified.AdminSubject
-	principal.OIDCRoleMappings = verified.RoleMappings
 	session := h.authenticator.IssueWebSession(principal)
 	h.setWebSessionCookie(w, client, session)
 	values := url.Values{"oidc": {"success"}, "redirect": {safeConsoleRedirect(flow.Redirect)}}

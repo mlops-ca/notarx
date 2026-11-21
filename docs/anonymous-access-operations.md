@@ -36,7 +36,7 @@ endpoint cannot be used to discover identifiers.
 
 Use `GET /api/v2/identity` to confirm which authenticated identity, credential
 source, and global role the Gateway is evaluating. OIDC diagnostics expose only
-configured role mappings that matched the validated token, never arbitrary
+whether the validated token matched an administrator subject, never arbitrary
 provider claims or token material.
 
 Anonymous successful and denied requests record `actor=anonymous` and an

@@ -750,14 +750,12 @@ func TestLoadConfiguresOIDCWithHTTPSIssuerAndDiscoveryDefault(t *testing.T) {
 	t.Setenv("NOTARX_OIDC_AUDIENCE", "notarx")
 	t.Setenv("NOTARX_OIDC_JWKS_URL", "")
 	t.Setenv("NOTARX_OIDC_ADMIN_SUBJECTS", "ops-admin, release-admin ")
-	t.Setenv("NOTARX_OIDC_MEMBER_ROLES", "artifact-member")
-	t.Setenv("NOTARX_OIDC_ADMIN_ROLES", "artifact-admin")
 
 	cfg, err := Load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.OIDCIssuer != "https://login.example.test" || cfg.OIDCJWKSURL != "" || strings.Join(cfg.OIDCAdminSubjects, ",") != "ops-admin,release-admin" || strings.Join(cfg.OIDCRoles.Member, ",") != "artifact-member" || strings.Join(cfg.OIDCRoles.Admin, ",") != "artifact-admin" {
+	if cfg.OIDCIssuer != "https://login.example.test" || cfg.OIDCJWKSURL != "" || strings.Join(cfg.OIDCAdminSubjects, ",") != "ops-admin,release-admin" {
 		t.Fatalf("OIDC config = %#v", cfg)
 	}
 }

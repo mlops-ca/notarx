@@ -33,6 +33,11 @@ const (
 	// announces the user id; a change to a group row announces the whole scope. Both come from the statement
 	// triggers of migration 000015.
 	CacheScopeUserGroup = "user_group"
+	// CacheScopeSCIMToken and CacheScopeIdentityProvider are the SCIM server's authentication inputs: the bearer token
+	// rows and the provider row whose enabled flag gates them (ADR 0018 section 4). Both tables hold few rows, so the
+	// statement triggers of migration 000018 announce the whole scope.
+	CacheScopeSCIMToken        = "scim_token"
+	CacheScopeIdentityProvider = "identity_provider"
 )
 
 // CacheInvalidator evicts the cached entries of one entity in this process.

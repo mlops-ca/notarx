@@ -23,7 +23,7 @@ describe("IdentitySummary", () => {
     expect(screen.getByText("Awaiting approval")).toBeInTheDocument();
   });
 
-  it("explains an OIDC role mapping without exposing unrelated claims", () => {
+  it("flags an administrator subject without exposing unrelated claims", () => {
     renderWithPreferences(
       <IdentitySummary
         identity={{
@@ -32,11 +32,7 @@ describe("IdentitySummary", () => {
           role: "member",
           administrator: false,
           oidc: {
-            adminSubject: false,
-            roleMappings: [
-              { externalRole: "gateway-member", gatewayRole: "member" },
-              { externalRole: "gateway-admin", gatewayRole: "admin" },
-            ],
+            adminSubject: true,
           },
         }}
       />,
@@ -45,8 +41,7 @@ describe("IdentitySummary", () => {
     expect(screen.getByText("ci-user")).toBeInTheDocument();
     expect(screen.getByText("OIDC")).toBeInTheDocument();
     expect(screen.getByText("Member")).toBeInTheDocument();
-    expect(screen.getByText("gateway-member → member")).toBeInTheDocument();
-    expect(screen.getByText("gateway-admin → admin")).toBeInTheDocument();
+    expect(screen.getByText(/administrator subject/i)).toBeInTheDocument();
   });
 
   it("makes the absence of a global role explicit", () => {

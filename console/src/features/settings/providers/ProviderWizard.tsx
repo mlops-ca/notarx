@@ -328,29 +328,17 @@ export function ProviderWizard({
                   />
                 </Field>
                 <Field
-                  label={t("providers.roleMapping")}
-                  hint={t("providers.roleMappingHint")}
+                  label={t("providers.adminSubjects")}
+                  hint={t("providers.adminSubjectsHint")}
                 >
-                  <div className="space-y-2">
-                    {(
-                      [
-                        ["memberRoles", "providers.memberRoles"],
-                        ["adminRoles", "providers.adminRoles"],
-                        ["adminSubjects", "providers.adminSubjects"],
-                      ] as const
-                    ).map(([field, label]) => (
-                      <Select<string[]>
-                        key={field}
-                        mode="tags"
-                        className="w-full"
-                        aria-label={t(label)}
-                        placeholder={t(label)}
-                        value={draft[field]}
-                        onChange={(values) => change({ [field]: values })}
-                        tokenSeparators={[","]}
-                      />
-                    ))}
-                  </div>
+                  <Select<string[]>
+                    mode="tags"
+                    className="w-full"
+                    aria-label={t("providers.adminSubjects")}
+                    value={draft.adminSubjects}
+                    onChange={(adminSubjects) => change({ adminSubjects })}
+                    tokenSeparators={[","]}
+                  />
                 </Field>
                 <Field
                   label={t("providers.jwksUrl")}

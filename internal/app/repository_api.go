@@ -577,7 +577,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.HandleFunc("POST /auth/saml/{slug}/acs", samlLogin.acs)
 	mux.HandleFunc("GET /auth/saml/{slug}/metadata", samlLogin.metadata)
 	// The SCIM server owns its subtree; it answers 404 for every route while NOTARX_SCIM_ENABLED is false.
-	scimServer := newSCIMServer(options.SCIM, store, store)
+	scimServer := newSCIMServer(options.SCIM, store, store, options.ReadCache)
 	mux.Handle(scimBasePath, scimServer)
 	mux.Handle(scimBasePath+"/", scimServer)
 	mux.HandleFunc("GET /auth/session", oidcLogin.session)

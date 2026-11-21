@@ -96,7 +96,7 @@ func TestIdentityProviderLifecycleOverManagementAPI(t *testing.T) {
 		t.Fatalf("empty list=%d %s", empty.Code, empty.Body.String())
 	}
 
-	body := `{"slug":"corp","kind":"oidc","displayName":"Corp","enabled":true,"oidc":{"issuer":"` + provider.URL + `","audience":"notarx-api","clientId":"notarx-console","clientSecret":"runtime-secret","redirectUrl":"http://localhost:4173/auth/oidc/corp/callback","scopes":["openid","profile"],"adminSubjects":[],"memberRoles":["artifact-member"],"adminRoles":["artifact-admin"],"algorithms":["RS256","ES256"]},"attributeMapping":{"subject":"tid:oid"},"provisioningMode":"jit","jitDefaultRole":"none"}`
+	body := `{"slug":"corp","kind":"oidc","displayName":"Corp","enabled":true,"oidc":{"issuer":"` + provider.URL + `","audience":"notarx-api","clientId":"notarx-console","clientSecret":"runtime-secret","redirectUrl":"http://localhost:4173/auth/oidc/corp/callback","scopes":["openid","profile"],"adminSubjects":[],"algorithms":["RS256","ES256"]},"attributeMapping":{"subject":"tid:oid"},"provisioningMode":"jit","jitDefaultRole":"none"}`
 	created := call(http.MethodPost, "/authentication/providers", body, "")
 	if created.Code != http.StatusCreated || created.Header().Get("ETag") != `"1"` || !strings.Contains(created.Body.String(), `"clientSecretConfigured":true`) || strings.Contains(created.Body.String(), "runtime-secret") {
 		t.Fatalf("create=%d etag=%q body=%s", created.Code, created.Header().Get("ETag"), created.Body.String())
@@ -144,7 +144,7 @@ func TestIdentityProviderLifecycleOverManagementAPI(t *testing.T) {
 		t.Fatalf("missing=%d", missing.Code)
 	}
 
-	replaceBody := `{"displayName":"Corp SSO","enabled":true,"oidc":{"issuer":"` + provider.URL + `","audience":"notarx-api","clientId":"notarx-console","redirectUrl":"http://localhost:4173/auth/oidc/corp/callback","scopes":["openid"],"adminSubjects":[],"memberRoles":[],"adminRoles":[]},"attributeMapping":{},"provisioningMode":"jit","emailLinkingEnabled":false,"jitDefaultRole":"member"}`
+	replaceBody := `{"displayName":"Corp SSO","enabled":true,"oidc":{"issuer":"` + provider.URL + `","audience":"notarx-api","clientId":"notarx-console","redirectUrl":"http://localhost:4173/auth/oidc/corp/callback","scopes":["openid"],"adminSubjects":[]},"attributeMapping":{},"provisioningMode":"jit","emailLinkingEnabled":false,"jitDefaultRole":"member"}`
 	replaced := call(http.MethodPut, "/authentication/providers/"+view.ID, replaceBody, `"1"`)
 	if replaced.Code != http.StatusOK || replaced.Header().Get("ETag") != `"2"` || !strings.Contains(replaced.Body.String(), `"displayName":"Corp SSO"`) || !strings.Contains(replaced.Body.String(), `"clientSecretConfigured":true`) || !strings.Contains(replaced.Body.String(), `"slug":"corp"`) {
 		t.Fatalf("replace=%d body=%s", replaced.Code, replaced.Body.String())

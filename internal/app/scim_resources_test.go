@@ -664,7 +664,7 @@ func TestSCIMListsReadMembersInOnePassAndSkipTheCountWhileHopping(t *testing.T) 
 		h.createUser("u"+strconv.Itoa(index)+"@example.com", "")
 	}
 	counting := &countingSCIMStore{scimStore: h.store}
-	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: 3}, counting, nil)
+	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: 3}, counting, nil, nil)
 	call := func(path string) map[string]any {
 		request := httptest.NewRequest(http.MethodGet, "https://notarx.example.test/scim/v2"+path, nil)
 		request.Header.Set("Authorization", "Bearer "+h.token)
@@ -812,7 +812,7 @@ func TestSCIMTokenShapeIsCheckedBeforeAnyLookup(t *testing.T) {
 	// A token of the issued shape that is unknown is looked up and refused; anything else never reaches the store.
 	h := newSCIMHarness(t, SCIMOptions{Enabled: true})
 	counting := &countingSCIMStore{scimStore: h.store}
-	server := newSCIMServer(SCIMOptions{Enabled: true}, counting, nil)
+	server := newSCIMServer(SCIMOptions{Enabled: true}, counting, nil, nil)
 	for _, token := range []string{"garbage", scimTokenPrefix + "short"} {
 		request := httptest.NewRequest(http.MethodGet, "/scim/v2/Users", nil)
 		request.Header.Set("Authorization", "Bearer "+token)
@@ -850,7 +850,7 @@ func TestSCIMGroupListSharesOneMemberBudgetAmongItsGroups(t *testing.T) {
 		h.createGroup("Budget "+strconv.Itoa(index), "b-"+strconv.Itoa(index), members...)
 	}
 	counting := &budgetSCIMStore{scimStore: h.store}
-	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: 4}, counting, nil)
+	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: 4}, counting, nil, nil)
 	request := httptest.NewRequest(http.MethodGet, "/scim/v2/Groups", nil)
 	request.Header.Set("Authorization", "Bearer "+h.token)
 	recorder := httptest.NewRecorder()
@@ -886,7 +886,7 @@ func TestSCIMGroupListLeavesOutTheMembersOfAGroupThatExceedsItsShare(t *testing.
 			t.Fatal(err)
 		}
 	}
-	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: scimMaxListedMembers}, h.store, nil)
+	server := newSCIMServer(SCIMOptions{Enabled: true, MaxPage: scimMaxListedMembers}, h.store, nil, nil)
 	request := httptest.NewRequest(http.MethodGet, "/scim/v2/Groups?count="+strconv.Itoa(scimMaxListedMembers), nil)
 	request.Header.Set("Authorization", "Bearer "+h.token)
 	recorder := httptest.NewRecorder()

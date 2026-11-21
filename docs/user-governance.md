@@ -120,6 +120,20 @@ re-activated by `active=true`; an administrator's disable (`admin`) stays until 
 never modifies, deactivates or deletes a platform administrator, and `DELETE` removes only the SCIM link and
 disables the account.
 
+An account moves between three states, and the SCIM `active` attribute only moves it between the last two:
+
+| State | How it is reached | Access |
+| --- | --- | --- |
+| `pending` | A SCIM create, or a first login at provisioning mode `jit` with default role `none`. The account has level `none`. | None until an administrator, or a group's global role, lifts it. |
+| `active` | The default; `active=true` re-activates an account SCIM disabled. | The account's level, or the highest global role of its groups. |
+| `disabled` | `active=false` (`disabled_reason=scim`) or an administrator's disable (`admin`). | None; sessions, API keys and personal tokens are revoked and `session_version` is bumped in the same transaction. |
+
+`DELETE /Users/{id}` is not deletion: it removes the SCIM link and disables the account, which an administrator may
+delete in the console. SCIM groups never carry the `admin` global role (a request cannot name a role), and a platform
+administrator is untouchable: every SCIM write to one answers `403`. The setup of each identity provider, the
+`NOTARX_SCIM_*` keys and the token rotation are described in [SCIM 2.0 provisioning](scim.md) and the
+[identity provider setup guides](identity-provider-guides.md#scim-provisioning).
+
 ## Lockout Policy
 
 `NOTARX_LOCAL_AUTH_MAX_FAILED_ATTEMPTS` controls consecutive failures before a

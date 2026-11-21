@@ -153,13 +153,6 @@ func currentIdentityResponse(principal Principal) adminopenapi.CurrentIdentity {
 	if principal.AuthenticationKind == authorization.AuthenticationOIDC {
 		details := adminopenapi.OIDCIdentityDetails{
 			AdminSubject: principal.OIDCAdminSubject,
-			RoleMappings: make([]adminopenapi.OIDCRoleMappingMatch, 0, len(principal.OIDCRoleMappings)),
-		}
-		for _, mapping := range principal.OIDCRoleMappings {
-			details.RoleMappings = append(details.RoleMappings, adminopenapi.OIDCRoleMappingMatch{
-				ExternalRole: mapping.ExternalRole,
-				GatewayRole:  adminopenapi.OIDCRoleMappingMatchGatewayRole(mapping.GatewayRole),
-			})
 		}
 		response.Oidc = &details
 	}

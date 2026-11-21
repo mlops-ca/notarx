@@ -5,6 +5,8 @@ package repository
 import (
 	"context"
 	"errors"
+	"os"
+	"slices"
 	"testing"
 	"time"
 
@@ -181,5 +183,45 @@ func TestPostgresSCIMExpiredTokenDoesNotAuthenticate(t *testing.T) {
 	var remaining int
 	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM identity_provider_scim_tokens WHERE provider_id=$1::uuid`, provider).Scan(&remaining); err != nil || remaining != 0 {
 		t.Fatalf("the provider's tokens survived its deletion: %d (%v)", remaining, err)
+	}
+}
+
+// The SCIM server caches its token and provider lookups for the revocation window; the statement triggers of
+// migration 000018 shorten it to the notification latency on every node.
+func TestPostgresSCIMAuthenticationInputsAnnounceCacheInvalidations(t *testing.T) {
+	store := userGroupTestStore(t)
+	ctx := context.Background()
+	provider := scimTestProvider(t, store)
+	listener := listenCacheChannel(t, os.Getenv("TEST_DATABASE_URL"))
+	listener.drain(500 * time.Millisecond)
+	exec := func(query string, args ...any) {
+		t.Helper()
+		if _, err := store.db.ExecContext(ctx, query, args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tokenID := uuid.NewString()
+	for _, step := range []struct {
+		name, scope, query string
+		args               []any
+	}{
+		{"insert token", CacheScopeSCIMToken, `INSERT INTO identity_provider_scim_tokens (id,provider_id,name,secret_hash,expires_at) VALUES ($1::uuid,$2::uuid,'cached',$3, now() + interval '1 day')`, []any{tokenID, provider, "cache-" + uuid.NewString()}},
+		{"revoke token", CacheScopeSCIMToken, `UPDATE identity_provider_scim_tokens SET revoked_at=now() WHERE id=$1::uuid`, []any{tokenID}},
+		{"disable provider", CacheScopeIdentityProvider, `UPDATE identity_providers SET enabled=false WHERE id=$1::uuid`, []any{provider}},
+		{"delete token", CacheScopeSCIMToken, `DELETE FROM identity_provider_scim_tokens WHERE id=$1::uuid`, []any{tokenID}},
+	} {
+		exec(step.query, step.args...)
+		if got := listener.drain(500 * time.Millisecond); !slices.Contains(got, step.scope+":") {
+			t.Fatalf("%s announced %v, want %q", step.name, got, step.scope+":")
+		}
+	}
+	// Deleting a provider announces it and, through the cascade, its tokens.
+	exec(`INSERT INTO identity_provider_scim_tokens (id,provider_id,name,secret_hash,expires_at) VALUES ($1::uuid,$2::uuid,'cascade',$3, now() + interval '1 day')`, uuid.NewString(), provider, "cache-"+uuid.NewString())
+	listener.drain(500 * time.Millisecond)
+	exec(`DELETE FROM user_groups WHERE provider_id=$1::uuid`, provider)
+	listener.drain(500 * time.Millisecond)
+	exec(`DELETE FROM identity_providers WHERE id=$1::uuid`, provider)
+	if got := listener.drain(500 * time.Millisecond); !slices.Contains(got, CacheScopeIdentityProvider+":") {
+		t.Fatalf("deleting a provider announced %v", got)
 	}
 }

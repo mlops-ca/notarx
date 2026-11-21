@@ -1875,8 +1875,6 @@ export type IdentityProviderOidcSettings = {
   redirectUrl: string;
   scopes: Array<string>;
   adminSubjects: Array<string>;
-  memberRoles: Array<string>;
-  adminRoles: Array<string>;
   /**
    * Allow-list of ID token signature algorithms. The default is RS256.
    */
@@ -1892,8 +1890,6 @@ export type IdentityProviderOidcInput = {
   redirectUrl: string;
   scopes: Array<string>;
   adminSubjects: Array<string>;
-  memberRoles: Array<string>;
-  adminRoles: Array<string>;
   algorithms?: Array<"RS256" | "ES256" | "EdDSA">;
 };
 
@@ -2651,14 +2647,8 @@ export type AuthenticationKind =
   | "oidc"
   | "workload_federation";
 
-export type OidcRoleMappingMatch = {
-  externalRole: string;
-  gatewayRole: "member" | "admin";
-};
-
 export type OidcIdentityDetails = {
   adminSubject: boolean;
-  roleMappings: Array<OidcRoleMappingMatch>;
 };
 
 export type ArtifactIntelligenceSummary = {
@@ -4629,8 +4619,6 @@ export type IdentityProviderOidcInputWritable = {
   redirectUrl: string;
   scopes: Array<string>;
   adminSubjects: Array<string>;
-  memberRoles: Array<string>;
-  adminRoles: Array<string>;
   algorithms?: Array<"RS256" | "ES256" | "EdDSA">;
 };
 

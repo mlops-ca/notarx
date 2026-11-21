@@ -22048,8 +22048,6 @@
           "redirectUrl",
           "scopes",
           "adminSubjects",
-          "memberRoles",
-          "adminRoles",
           "algorithms"
         ],
         "additionalProperties": false,
@@ -22079,18 +22077,6 @@
             }
           },
           "adminSubjects": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "memberRoles": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "adminRoles": {
             "type": "array",
             "items": {
               "type": "string"
@@ -22363,9 +22349,7 @@
           "clientId",
           "redirectUrl",
           "scopes",
-          "adminSubjects",
-          "memberRoles",
-          "adminRoles"
+          "adminSubjects"
         ],
         "additionalProperties": false,
         "properties": {
@@ -22399,18 +22383,6 @@
             }
           },
           "adminSubjects": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "memberRoles": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "adminRoles": {
             "type": "array",
             "items": {
               "type": "string"
@@ -23828,43 +23800,15 @@
           "workload_federation"
         ]
       },
-      "OIDCRoleMappingMatch": {
-        "type": "object",
-        "required": [
-          "externalRole",
-          "gatewayRole"
-        ],
-        "additionalProperties": false,
-        "properties": {
-          "externalRole": {
-            "type": "string",
-            "minLength": 1
-          },
-          "gatewayRole": {
-            "type": "string",
-            "enum": [
-              "member",
-              "admin"
-            ]
-          }
-        }
-      },
       "OIDCIdentityDetails": {
         "type": "object",
         "required": [
-          "adminSubject",
-          "roleMappings"
+          "adminSubject"
         ],
         "additionalProperties": false,
         "properties": {
           "adminSubject": {
             "type": "boolean"
-          },
-          "roleMappings": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OIDCRoleMappingMatch"
-            }
           }
         }
       },
