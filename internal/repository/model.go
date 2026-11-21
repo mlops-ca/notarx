@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/mlops-ca/notarx/internal/events"
 )
 
 type Format string
@@ -1644,16 +1646,19 @@ type AuditCleanupJob struct {
 	LastError      string
 }
 
-// WebhookEventType is a stable consumer-facing operational event name.
-type WebhookEventType string
+// WebhookEventType is a stable consumer-facing operational event name; the catalogue lives in internal/events.
+type WebhookEventType = events.Type
 
 const (
-	WebhookEventArtifactQuarantined       WebhookEventType = "artifact.quarantined"
-	WebhookEventArtifactReleased          WebhookEventType = "artifact.released"
-	WebhookEventCargoPromotionCompleted   WebhookEventType = "cargo.promotion.completed"
-	WebhookEventCargoPromotionFailed      WebhookEventType = "cargo.promotion.failed"
-	WebhookEventCargoReplicationCompleted WebhookEventType = "cargo.replication.completed"
-	WebhookEventCargoReplicationFailed    WebhookEventType = "cargo.replication.failed"
+	WebhookEventArtifactPublished           = events.ArtifactPublished
+	WebhookEventArtifactScanCompleted       = events.ArtifactScanCompleted
+	WebhookEventArtifactQuarantined         = events.ArtifactQuarantined
+	WebhookEventArtifactReleased            = events.ArtifactReleased
+	WebhookEventArtifactPromoted            = events.ArtifactPromoted
+	WebhookEventPromotionFailed             = events.PromotionFailed
+	WebhookEventReplicationCompleted        = events.ReplicationCompleted
+	WebhookEventReplicationFailed           = events.ReplicationFailed
+	WebhookEventRepositoryVisibilityChanged = events.RepositoryVisibilityChanged
 )
 
 type WebhookSubscription struct {
@@ -1668,11 +1673,20 @@ type WebhookSubscription struct {
 	UpdatedAt        time.Time
 }
 
+// WebhookEvent is a domain event as the delivery pipeline sees it. Version is the type-specific part of the
+// dedupe key (events.Event).
 type WebhookEvent struct {
-	ID         string
-	Type       WebhookEventType
-	OccurredAt time.Time
-	Data       []byte
+	ID                                       string
+	Type                                     WebhookEventType
+	RepositoryID, Format, Coordinate, Digest string
+	Version                                  string
+	OccurredAt                               time.Time
+	Data                                     []byte
+}
+
+func (e WebhookEvent) domainEvent() events.Event {
+	return events.Event{ID: e.ID, Type: e.Type, RepositoryID: e.RepositoryID, Format: e.Format, Coordinate: e.Coordinate, Digest: e.Digest,
+		Version: e.Version, Payload: e.Data, OccurredAt: e.OccurredAt}
 }
 
 type WebhookDeliveryState string

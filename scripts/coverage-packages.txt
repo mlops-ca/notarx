@@ -26,3 +26,4 @@
 ./tools/mysqlbaseline 80.0
 ./internal/schemaparity 90.0
 ./internal/readcache 80.0
+./internal/events 90.0

@@ -179,7 +179,7 @@ func TestSeedWritesConsistentWebhookRows(t *testing.T) {
 
 func TestSeedErrors(t *testing.T) {
 	good := Profile{Name: "unit", Versions: 10, AuditRows: 10, Repositories: 2, AuditWindow: time.Hour, WebhookSubscriptions: 2, WebhookDeliveries: 10}
-	for _, table := range []string{"hosted_repositories", "native_npm_packages", "native_npm_versions", "resolver_audit_log", "webhook_subscriptions", "webhook_events", "webhook_deliveries"} {
+	for _, table := range []string{"hosted_repositories", "native_npm_packages", "native_npm_versions", "resolver_audit_log", "webhook_subscriptions", "domain_events", "webhook_deliveries"} {
 		if _, err := Seed(context.Background(), &fakeCopier{fail: table}, good, 1, time.Now()); err == nil {
 			t.Errorf("failure of %s not reported", table)
 		}

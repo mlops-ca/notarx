@@ -499,6 +499,38 @@ tables:
       console_theme_packages_id_valid: (id ~ '^[a-z0-9][a-z0-9-]{1,63}$'::text)
       console_theme_packages_payload_object: (jsonb_typeof(payload) = 'object'::text)
       console_theme_packages_version_check: (version > 0)
+  domain_event_cursors:
+    columns:
+      consumer: text
+      occurred_at: timestamp
+      seq: int64
+      updated_at: timestamp
+    primaryKey: [consumer]
+    defaults:
+      updated_at: now()
+  domain_events:
+    columns:
+      coordinate: text?
+      dedupe_key: text
+      digest: text?
+      format: text?
+      id: uuid
+      occurred_at: timestamp
+      payload: json
+      repository_id: uuid?
+      seq: int64
+      type: text
+    primaryKey: [occurred_at, seq]
+    partitioned: true
+    defaults:
+      occurred_at: now()
+      payload: '''{}'''
+      seq: identity
+    indexes:
+      - dedupe_key,occurred_at
+      - id,occurred_at
+    checks:
+      domain_events_payload_check: (jsonb_typeof(payload) = 'object'::text)
   email_targets:
     columns:
       created_at: timestamp
@@ -3776,10 +3808,10 @@ tables:
       scheduled_tasks_due_idx: USING btree (next_run_at) WHERE enabled
       scheduled_tasks_name_idx: unique USING btree (lower(name))
     checks:
-      scheduled_tasks_check: (((kind = 'audit-retention'::text) AND (repository_id IS NULL)) OR ((kind = 'repository-retention'::text) AND (repository_id IS NOT NULL)) OR ((kind = ANY (ARRAY['partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text])) AND (repository_id IS NULL) AND (NOT enabled)))
+      scheduled_tasks_check: (((kind = 'audit-retention'::text) AND (repository_id IS NULL)) OR ((kind = 'repository-retention'::text) AND (repository_id IS NOT NULL)) OR ((kind = ANY (ARRAY['partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text, 'event-dispatcher'::text])) AND (repository_id IS NULL) AND (NOT enabled)))
       scheduled_tasks_description_check: (char_length(description) <= 500)
       scheduled_tasks_interval_seconds_check: ((interval_seconds >= 900) AND (interval_seconds <= 31536000))
-      scheduled_tasks_kind_check: (kind = ANY (ARRAY['repository-retention'::text, 'audit-retention'::text, 'partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text]))
+      scheduled_tasks_kind_check: (kind = ANY (ARRAY['repository-retention'::text, 'audit-retention'::text, 'partition-manager'::text, 'retention-janitor'::text, 'raw-idle-seal'::text, 'event-dispatcher'::text]))
       scheduled_tasks_last_run_state_check: (last_run_state = ANY (ARRAY['submitted'::text, 'failed'::text]))
       scheduled_tasks_name_check: ((char_length(name) >= 1) AND (char_length(name) <= 100))
       scheduled_tasks_version_check: (version >= 1)
@@ -4095,6 +4127,7 @@ tables:
       created_at: timestamp
       delivered_at: timestamp?
       event_id: uuid
+      event_occurred_at: timestamp
       id: uuid
       last_error: text
       last_status: int32?
@@ -4108,7 +4141,6 @@ tables:
     primaryKey: [id]
     unique: [[event_id, subscription_id]]
     foreignKeys:
-      - event_id -> webhook_events(id) on delete cascade
       - subscription_id -> webhook_subscriptions(id) on delete cascade
     defaults:
       attempts: "0"
@@ -4130,19 +4162,6 @@ tables:
       webhook_deliveries_last_error_check: (length(last_error) <= 1024)
       webhook_deliveries_last_status_check: ((last_status IS NULL) OR ((last_status >= 100) AND (last_status <= 599)))
       webhook_deliveries_state_check: (state = ANY (ARRAY['pending'::text, 'delivering'::text, 'retrying'::text, 'succeeded'::text, 'dead'::text]))
-  webhook_events:
-    columns:
-      created_at: timestamp
-      event_type: text
-      id: uuid
-      occurred_at: timestamp
-      payload: json
-    primaryKey: [id]
-    defaults:
-      created_at: now()
-    checks:
-      webhook_events_event_type_check: (event_type = ANY (ARRAY['artifact.quarantined'::text, 'artifact.released'::text, 'cargo.promotion.completed'::text, 'cargo.promotion.failed'::text, 'cargo.replication.completed'::text, 'cargo.replication.failed'::text]))
-      webhook_events_payload_check: (jsonb_typeof(payload) = 'object'::text)
   webhook_subscriptions:
     columns:
       created_at: timestamp
@@ -4165,7 +4184,7 @@ tables:
       webhook_subscriptions_name_bytes_idx: USING btree (name COLLATE "C")
     checks:
       webhook_subscriptions_endpoint_url_check: ((length(endpoint_url) >= 1) AND (length(endpoint_url) <= 2048))
-      webhook_subscriptions_event_types_check: ((jsonb_typeof(event_types) = 'array'::text) AND (jsonb_array_length(event_types) > 0) AND (event_types <@ '["artifact.quarantined", "artifact.released", "cargo.promotion.completed", "cargo.promotion.failed", "cargo.replication.completed", "cargo.replication.failed"]'::jsonb))
+      webhook_subscriptions_event_types_check: ((jsonb_typeof(event_types) = 'array'::text) AND (jsonb_array_length(event_types) > 0) AND (event_types <@ '["artifact.published", "artifact.scan.completed", "artifact.quarantined", "artifact.released", "artifact.promoted", "promotion.pending_approval", "promotion.approved", "promotion.rejected", "promotion.failed", "replication.completed", "replication.failed", "repository.visibility_changed"]'::jsonb))
       webhook_subscriptions_name_check: ((length(name) >= 1) AND (length(name) <= 128))
       webhook_subscriptions_secret_ciphertext_check: (secret_ciphertext <> ''::text)
       webhook_subscriptions_version_check: (version >= 1)

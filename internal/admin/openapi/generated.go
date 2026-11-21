@@ -5296,28 +5296,46 @@ func (e WebhookDeliveryState) Valid() bool {
 
 // Defines values for WebhookEventType.
 const (
-	WebhookEventTypeArtifactQuarantined       WebhookEventType = "artifact.quarantined"
-	WebhookEventTypeArtifactReleased          WebhookEventType = "artifact.released"
-	WebhookEventTypeCargoPromotionCompleted   WebhookEventType = "cargo.promotion.completed"
-	WebhookEventTypeCargoPromotionFailed      WebhookEventType = "cargo.promotion.failed"
-	WebhookEventTypeCargoReplicationCompleted WebhookEventType = "cargo.replication.completed"
-	WebhookEventTypeCargoReplicationFailed    WebhookEventType = "cargo.replication.failed"
+	WebhookEventTypeArtifactPromoted            WebhookEventType = "artifact.promoted"
+	WebhookEventTypeArtifactPublished           WebhookEventType = "artifact.published"
+	WebhookEventTypeArtifactQuarantined         WebhookEventType = "artifact.quarantined"
+	WebhookEventTypeArtifactReleased            WebhookEventType = "artifact.released"
+	WebhookEventTypeArtifactScanCompleted       WebhookEventType = "artifact.scan.completed"
+	WebhookEventTypePromotionApproved           WebhookEventType = "promotion.approved"
+	WebhookEventTypePromotionFailed             WebhookEventType = "promotion.failed"
+	WebhookEventTypePromotionPendingApproval    WebhookEventType = "promotion.pending_approval"
+	WebhookEventTypePromotionRejected           WebhookEventType = "promotion.rejected"
+	WebhookEventTypeReplicationCompleted        WebhookEventType = "replication.completed"
+	WebhookEventTypeReplicationFailed           WebhookEventType = "replication.failed"
+	WebhookEventTypeRepositoryVisibilityChanged WebhookEventType = "repository.visibility_changed"
 )
 
 // Valid indicates whether the value is a known member of the WebhookEventType enum.
 func (e WebhookEventType) Valid() bool {
 	switch e {
+	case WebhookEventTypeArtifactPromoted:
+		return true
+	case WebhookEventTypeArtifactPublished:
+		return true
 	case WebhookEventTypeArtifactQuarantined:
 		return true
 	case WebhookEventTypeArtifactReleased:
 		return true
-	case WebhookEventTypeCargoPromotionCompleted:
+	case WebhookEventTypeArtifactScanCompleted:
 		return true
-	case WebhookEventTypeCargoPromotionFailed:
+	case WebhookEventTypePromotionApproved:
 		return true
-	case WebhookEventTypeCargoReplicationCompleted:
+	case WebhookEventTypePromotionFailed:
 		return true
-	case WebhookEventTypeCargoReplicationFailed:
+	case WebhookEventTypePromotionPendingApproval:
+		return true
+	case WebhookEventTypePromotionRejected:
+		return true
+	case WebhookEventTypeReplicationCompleted:
+		return true
+	case WebhookEventTypeReplicationFailed:
+		return true
+	case WebhookEventTypeRepositoryVisibilityChanged:
 		return true
 	default:
 		return false

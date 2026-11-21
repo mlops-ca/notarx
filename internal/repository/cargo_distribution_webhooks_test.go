@@ -18,8 +18,8 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 		ID: uuid.NewString(), Name: "cargo-distribution", EndpointURL: "https://events.example.test/cargo",
 		SecretCiphertext: "encrypted-secret", Enabled: true,
 		EventTypes: []WebhookEventType{
-			WebhookEventCargoPromotionCompleted, WebhookEventCargoPromotionFailed,
-			WebhookEventCargoReplicationCompleted, WebhookEventCargoReplicationFailed,
+			WebhookEventArtifactPromoted, WebhookEventPromotionFailed,
+			WebhookEventReplicationCompleted, WebhookEventReplicationFailed,
 		},
 	})
 	if err != nil {
@@ -45,7 +45,7 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 	if err := store.CompleteLifecycleJob(ctx, job.ID, claimed[0].LeaseToken); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("stale completion=%v", err)
 	}
-	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventCargoPromotionCompleted, job.ID, "completed", 1, 1)
+	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventArtifactPromoted, job.ID, "completed", 1, 1)
 
 	failedJob, _, err := store.EnqueueLifecycleJob(ctx, LifecycleJob{
 		ID: uuid.NewString(), RepositoryID: targetID, Kind: LifecycleJobPromotion,
@@ -61,7 +61,7 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 	if err := store.FailLifecycleJob(ctx, failedJob.ID, claimed[0].LeaseToken, "temporary dependency error"); err != nil {
 		t.Fatal(err)
 	}
-	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventCargoPromotionCompleted, job.ID, "completed", 1, 1)
+	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventArtifactPromoted, job.ID, "completed", 1, 1)
 	if _, err := store.RunLifecycleJobNow(ctx, targetID, failedJob.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 	if err := store.FailLifecycleJob(ctx, failedJob.ID, claimed[0].LeaseToken, "final dependency error"); err != nil {
 		t.Fatal(err)
 	}
-	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventCargoPromotionFailed, failedJob.ID, "failed", 2, 2)
+	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventPromotionFailed, failedJob.ID, "failed", 2, 2)
 
 	newPlan := func(key string, maxAttempts int) ReplicationPlan {
 		plan, _, createErr := store.CreateReplicationPlan(ctx, ReplicationPlan{
@@ -93,7 +93,7 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 	if err := store.CompleteReplicationPlanWithLease(ctx, completedPlan.ID, plans[0].LeaseToken); err != nil {
 		t.Fatal(err)
 	}
-	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventCargoReplicationCompleted, completedPlan.ID, "completed", 1, 3)
+	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventReplicationCompleted, completedPlan.ID, "completed", 1, 3)
 
 	failedPlan := newPlan("replication-failure", 2)
 	plans, err = store.ClaimReplicationPlansByFormat(ctx, FormatCargo, 1)
@@ -103,7 +103,7 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 	if err := store.FailReplicationPlanWithLease(ctx, failedPlan.ID, "temporary copy error", plans[0].LeaseToken); err != nil {
 		t.Fatal(err)
 	}
-	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventCargoReplicationCompleted, completedPlan.ID, "completed", 1, 3)
+	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventReplicationCompleted, completedPlan.ID, "completed", 1, 3)
 	plans, err = store.ClaimReplicationPlansByFormat(ctx, FormatCargo, 1)
 	if err != nil || len(plans) != 1 || plans[0].ID != failedPlan.ID || plans[0].Attempts != 2 {
 		t.Fatalf("final failure claim=%+v err=%v", plans, err)
@@ -111,7 +111,7 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 	if err := store.FailReplicationPlanWithLease(ctx, failedPlan.ID, "final copy error", plans[0].LeaseToken); err != nil {
 		t.Fatal(err)
 	}
-	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventCargoReplicationFailed, failedPlan.ID, "failed", 2, 4)
+	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventReplicationFailed, failedPlan.ID, "failed", 2, 4)
 }
 
 func assertCargoWebhookDelivery(t *testing.T, store *MemoryStore, subscriptionID string, eventType WebhookEventType, operationID, state string, attempts, expectedTotal int) {
@@ -141,7 +141,7 @@ func assertCargoWebhookDelivery(t *testing.T, store *MemoryStore, subscriptionID
 func TestMemoryCargoPromotionLeaseExpiryEmitsOnlyFinalFailure(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()
-	_, err := store.CreateWebhookSubscription(ctx, WebhookSubscription{ID: uuid.NewString(), Name: "expiry", EndpointURL: "https://events.example.test/cargo", SecretCiphertext: "encrypted-secret", Enabled: true, EventTypes: []WebhookEventType{WebhookEventCargoPromotionFailed}})
+	_, err := store.CreateWebhookSubscription(ctx, WebhookSubscription{ID: uuid.NewString(), Name: "expiry", EndpointURL: "https://events.example.test/cargo", SecretCiphertext: "encrypted-secret", Enabled: true, EventTypes: []WebhookEventType{WebhookEventPromotionFailed}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestMemoryCargoPromotionLeaseExpiryEmitsOnlyFinalFailure(t *testing.T) {
 	}
 	deliveriesPage, err := store.PageWebhookDeliveries(ctx, WebhookDeliveryQuery{Limit: 10})
 	deliveries := deliveriesPage.Items
-	if err != nil || len(deliveries) != 1 || deliveries[0].EventType != WebhookEventCargoPromotionFailed {
+	if err != nil || len(deliveries) != 1 || deliveries[0].EventType != WebhookEventPromotionFailed {
 		t.Fatalf("expiry deliveries=%+v err=%v", deliveries, err)
 	}
 }

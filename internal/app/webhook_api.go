@@ -78,9 +78,7 @@ func validateWebhookSubscriptionInput(name, endpoint, secret string, eventTypes 
 	seen := make(map[repository.WebhookEventType]bool, len(eventTypes))
 	for _, raw := range eventTypes {
 		value := repository.WebhookEventType(raw)
-		if value != repository.WebhookEventArtifactQuarantined && value != repository.WebhookEventArtifactReleased &&
-			value != repository.WebhookEventCargoPromotionCompleted && value != repository.WebhookEventCargoPromotionFailed &&
-			value != repository.WebhookEventCargoReplicationCompleted && value != repository.WebhookEventCargoReplicationFailed || seen[value] {
+		if !value.Valid() || seen[value] {
 			return nil, errors.New("webhook event types are invalid")
 		}
 		seen[value] = true
@@ -305,6 +303,10 @@ func (h generatedRepositoryAPIAdapter) ReplayWebhookDelivery(w http.ResponseWrit
 	value, err := h.webhooks.ReplayWebhookDelivery(r.Context(), deliveryID.String(), time.Now().UTC(), h.auditFor(repository.AuditRecord{Actor: principal.Actor, Resource: deliveryID.String(), Operation: "webhook.delivery.replay", Status: http.StatusOK})...)
 	if errors.Is(err, repository.ErrNotFound) {
 		writeHostedProblem(w, http.StatusNotFound, "not_found", "webhook delivery not found")
+		return
+	}
+	if errors.Is(err, repository.ErrWebhookEventNotRetained) {
+		writeHostedProblem(w, http.StatusConflict, "event_not_retained", "the event of this webhook delivery is no longer retained")
 		return
 	}
 	if errors.Is(err, repository.ErrInvalidWebhookDeliveryState) {

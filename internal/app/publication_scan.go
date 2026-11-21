@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -57,6 +60,34 @@ func (s publicationScanScheduler) Schedule(ctx context.Context, repo repository.
 	}
 	_ = s.store.RecordAudit(ctx, publicationScanAudit(repo, coordinate, digest, actor, repository.AuditResolved, http.StatusAccepted, ""))
 	return nil
+}
+
+// PublicationScanConsumer is the name of the scheduler's cursor in the event log.
+const PublicationScanConsumer = "publication-scan"
+
+// Consumer returns the scheduler as an internal consumer of artifact.published events (ADR 0021): a
+// publication schedules its scan when the repository's autoScanOnPublish is on. The scan job key is
+// idempotent, so the at-least-once delivery of the dispatcher and the remaining post-commit call sites
+// of formats that do not emit natively yet cannot enqueue a scan twice.
+func (s publicationScanScheduler) Consumer() events.Consumer {
+	return events.Consumer{Name: PublicationScanConsumer, Types: []events.Type{events.ArtifactPublished}, Handler: s}
+}
+
+// HandleEvent schedules the scan of a published artifact. An event of a repository that no longer exists is
+// skipped; every other failure is retried.
+func (s publicationScanScheduler) HandleEvent(ctx context.Context, event events.Event) error {
+	if event.Type != events.ArtifactPublished {
+		return nil
+	}
+	var payload struct {
+		Actor string `json:"actor"`
+	}
+	_ = json.Unmarshal(event.Payload, &payload)
+	err := s.ScheduleRepository(ctx, event.RepositoryID, repository.Format(event.Format), event.Coordinate, event.Digest, payload.Actor)
+	if errors.Is(err, repository.ErrNotFound) {
+		return events.Permanent(err)
+	}
+	return err
 }
 
 func publicationScanIdempotencyKey(repositoryID string, format repository.Format, coordinate, digest string) string {

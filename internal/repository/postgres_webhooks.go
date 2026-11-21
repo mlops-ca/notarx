@@ -11,7 +11,7 @@ import (
 )
 
 const webhookSubscriptionColumns = `id::text,name,endpoint_url,secret_ciphertext,event_types,enabled,version::text,created_at,updated_at`
-const webhookDeliveryColumns = `d.id::text,d.event_id::text,e.event_type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at`
+const webhookDeliveryColumns = `d.id::text,d.event_id::text,e.type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at`
 
 func encodeWebhookEventTypes(values []WebhookEventType) ([]byte, error) {
 	if values == nil {
@@ -129,32 +129,25 @@ func (s *PostgresStore) EnqueueWebhookEvent(ctx context.Context, event WebhookEv
 	if event.ID == "" {
 		event.ID = ids.New()
 	}
-	if event.OccurredAt.IsZero() {
-		event.OccurredAt = time.Now().UTC()
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return WebhookEvent{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err = enqueueWebhookEventPostgres(ctx, tx, event); err != nil {
+	result, err := enqueueWebhookEventPostgres(ctx, tx, event)
+	if err != nil {
 		return WebhookEvent{}, err
 	}
 	if err = tx.Commit(); err != nil {
 		return WebhookEvent{}, err
 	}
-	return event, nil
-}
-
-func enqueueWebhookEventPostgres(ctx context.Context, tx *sql.Tx, event WebhookEvent) error {
-	if _, err := tx.ExecContext(ctx, `INSERT INTO webhook_events (id,event_type,occurred_at,payload) VALUES ($1,$2,$3,$4::jsonb)`, event.ID, event.Type, event.OccurredAt, event.Data); err != nil {
-		return err
+	if len(event.Data) == 0 {
+		event.Data = []byte("{}")
 	}
-	_, err := tx.ExecContext(ctx, `INSERT INTO webhook_deliveries (id,event_id,subscription_id,state,next_attempt_at,created_at,updated_at)
-SELECT gen_random_uuid(),$1,id,'pending',clock.now,clock.now,clock.now FROM webhook_subscriptions
-CROSS JOIN (SELECT clock_timestamp() AS now) AS clock
-WHERE enabled=true AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(event_types) AS configured(value) WHERE configured.value=$2)`, event.ID, event.Type)
-	return err
+	if result.Written {
+		event.OccurredAt = result.OccurredAt
+	}
+	return event, nil
 }
 
 func scanWebhookDelivery(scanner interface{ Scan(...any) error }) (WebhookDelivery, error) {
@@ -197,7 +190,7 @@ func (s *PostgresStore) PageWebhookDeliveries(ctx context.Context, query Webhook
 	if err != nil {
 		return WebhookDeliveryPage{}, err
 	}
-	const base = `SELECT ` + webhookDeliveryColumns + `,s.name FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id JOIN webhook_subscriptions s ON s.id=d.subscription_id
+	const base = `SELECT ` + webhookDeliveryColumns + `,s.name FROM webhook_deliveries d JOIN domain_events e ON e.id=d.event_id AND e.occurred_at=d.event_occurred_at JOIN webhook_subscriptions s ON s.id=d.subscription_id
 WHERE ($1='' OR d.subscription_id=$1::uuid) AND ($2='' OR d.state=$2)`
 	statement, args := base+` ORDER BY d.created_at DESC,d.id DESC LIMIT $3`, []any{query.SubscriptionID, query.State, limit + 1}
 	if after {
@@ -259,7 +252,7 @@ func (s *PostgresStore) ClaimWebhookDeliveries(ctx context.Context, owner string
 		var lastStatus sql.NullInt64
 		if err = rows.Scan(
 			&delivery.ID, &delivery.EventID, &delivery.EventType, &delivery.SubscriptionID, &delivery.State, &delivery.Attempts, &nextAttemptAt, &leaseOwner, &delivery.LeaseToken, &leaseExpiresAt, &lastStatus, &delivery.LastError, &delivery.CreatedAt, &delivery.UpdatedAt, &deliveredAt,
-			&event.ID, &event.Type, &event.OccurredAt, &eventData,
+			&event.ID, &event.Type, &event.RepositoryID, &event.Format, &event.Coordinate, &event.Digest, &event.OccurredAt, &eventData,
 			&subscription.ID, &subscription.Name, &subscription.EndpointURL, &subscription.SecretCiphertext, &eventTypes, &subscription.Enabled, &subscription.Version, &subscription.CreatedAt, &subscription.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -321,17 +314,22 @@ func (s *PostgresStore) ReplayWebhookDelivery(ctx context.Context, id string, _ 
 func replayWebhookDelivery(ctx context.Context, q sqlRunner, id string) (WebhookDelivery, error) {
 	value, err := scanWebhookDelivery(q.QueryRowContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), replayed AS (
 UPDATE webhook_deliveries SET state='pending',attempts=0,next_attempt_at=clock.now,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,last_status=NULL,last_error='',delivered_at=NULL,updated_at=clock.now
-FROM clock WHERE id=$1::uuid AND state='dead' RETURNING webhook_deliveries.*)
-SELECT d.id::text,d.event_id::text,e.event_type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at
-FROM replayed d JOIN webhook_events e ON e.id=d.event_id`, id))
+FROM clock WHERE id=$1::uuid AND state='dead'
+  AND EXISTS (SELECT 1 FROM domain_events e WHERE e.id=webhook_deliveries.event_id AND e.occurred_at=webhook_deliveries.event_occurred_at) RETURNING webhook_deliveries.*)
+SELECT d.id::text,d.event_id::text,e.type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at
+FROM replayed d JOIN domain_events e ON e.id=d.event_id AND e.occurred_at=d.event_occurred_at`, id))
 	if !errors.Is(err, sql.ErrNoRows) {
 		return value, err
 	}
-	var exists bool
-	if queryErr := q.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM webhook_deliveries WHERE id=$1::uuid)`, id).Scan(&exists); queryErr != nil {
+	var exists, dead, retained bool
+	if queryErr := q.QueryRowContext(ctx, `SELECT true, d.state='dead', EXISTS (SELECT 1 FROM domain_events e WHERE e.id=d.event_id AND e.occurred_at=d.event_occurred_at)
+FROM webhook_deliveries d WHERE d.id=$1::uuid`, id).Scan(&exists, &dead, &retained); queryErr != nil && !errors.Is(queryErr, sql.ErrNoRows) {
 		return WebhookDelivery{}, queryErr
 	}
-	if exists {
+	switch {
+	case exists && dead && !retained:
+		return WebhookDelivery{}, ErrWebhookEventNotRetained
+	case exists:
 		return WebhookDelivery{}, ErrInvalidWebhookDeliveryState
 	}
 	return WebhookDelivery{}, ErrNotFound
@@ -341,25 +339,33 @@ var _ WebhookStore = (*PostgresStore)(nil)
 var _ WebhookStore = (*MemoryStore)(nil)
 
 // getWebhookDeliveryQuery loads one delivery with its event.
-const getWebhookDeliveryQuery = `SELECT ` + webhookDeliveryColumns + ` FROM webhook_deliveries d JOIN webhook_events e ON e.id=d.event_id WHERE d.id=$1::uuid`
+const getWebhookDeliveryQuery = `SELECT ` + webhookDeliveryColumns + ` FROM webhook_deliveries d JOIN domain_events e ON e.id=d.event_id AND e.occurred_at=d.event_occurred_at WHERE d.id=$1::uuid`
 
 // claimWebhookDeliveriesQuery takes due deliveries (owner, lease interval, limit); the hot-query registry plans it.
 const claimWebhookDeliveriesQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), exhausted AS (
     UPDATE webhook_deliveries SET state='dead',next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now
     FROM clock WHERE state='delivering' AND lease_expires_at<=clock.now AND attempts>=8
+), orphaned AS (
+    -- The event log keeps events for NOTARX_EVENTS_RETENTION only; a delivery whose event is gone can never be sent.
+    UPDATE webhook_deliveries AS delivery SET state='dead',next_attempt_at=NULL,lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,
+        last_error='event is no longer retained',updated_at=clock.now
+    FROM clock WHERE delivery.state IN ('pending','retrying','delivering') AND COALESCE(delivery.next_attempt_at,delivery.lease_expires_at)<=clock.now
+      AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.id=delivery.event_id AND e.occurred_at=delivery.event_occurred_at)
 ), candidates AS (
     SELECT delivery.id FROM webhook_deliveries AS delivery CROSS JOIN clock
     WHERE ((state IN ('pending','retrying') AND next_attempt_at<=clock.now) OR (state='delivering' AND lease_expires_at<=clock.now))
-      AND attempts<8 ORDER BY COALESCE(next_attempt_at,lease_expires_at),created_at,id FOR UPDATE OF delivery SKIP LOCKED LIMIT $3
+      AND attempts<8
+      AND EXISTS (SELECT 1 FROM domain_events e WHERE e.id=delivery.event_id AND e.occurred_at=delivery.event_occurred_at)
+    ORDER BY COALESCE(next_attempt_at,lease_expires_at),created_at,id FOR UPDATE OF delivery SKIP LOCKED LIMIT $3
 ), claimed AS (
     UPDATE webhook_deliveries AS delivery SET state='delivering',attempts=delivery.attempts+1,next_attempt_at=NULL,
         lease_owner=$1,lease_token=gen_random_uuid(),lease_expires_at=clock.now+$2::interval,updated_at=clock.now
     FROM candidates,clock WHERE delivery.id=candidates.id RETURNING delivery.*
 )
-SELECT d.id::text,d.event_id::text,e.event_type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at,
-       e.id::text,e.event_type,e.occurred_at,e.payload,
+SELECT d.id::text,d.event_id::text,e.type,d.subscription_id::text,d.state,d.attempts,d.next_attempt_at,d.lease_owner,d.lease_token::text,d.lease_expires_at,d.last_status,d.last_error,d.created_at,d.updated_at,d.delivered_at,
+       e.id::text,e.type,COALESCE(e.repository_id::text,''),COALESCE(e.format,''),COALESCE(e.coordinate,''),COALESCE(e.digest,''),e.occurred_at,e.payload,
        s.id::text,s.name,s.endpoint_url,s.secret_ciphertext,s.event_types,s.enabled,s.version::text,s.created_at,s.updated_at
-FROM claimed d JOIN webhook_events e ON e.id=d.event_id JOIN webhook_subscriptions s ON s.id=d.subscription_id
+FROM claimed d JOIN domain_events e ON e.id=d.event_id AND e.occurred_at=d.event_occurred_at JOIN webhook_subscriptions s ON s.id=d.subscription_id
 ORDER BY d.created_at,d.id`
 
 // extraColumns scans the shared columns of a row into the destinations of a scan function and the columns a

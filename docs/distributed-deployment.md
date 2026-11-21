@@ -218,8 +218,9 @@ newer record) and the provenance tables `artifact_promotions`,
 | --- | --- | --- |
 | `resolver_audit_log` (partition drop) | 90 d | 7 d |
 | `security_audit_log` (partition drop) | 730 d | 90 d |
+| `domain_events` (partition drop; `NOTARX_EVENTS_RETENTION`) | 14 d | 3 d |
 | `repository_request_rollup` | 400 d | 400 d |
-| `webhook_deliveries` | succeeded 14 d, dead 90 d | 3 d, 30 d |
+| `webhook_deliveries` | succeeded 14 d, dead 14 d | 3 d, 3 d |
 | `lifecycle_jobs` | completed or cancelled 7 d, failed 30 d | 1 d, 7 d |
 | `replication_plans` | terminal 30 d | 7 d |
 | `replication_checkpoints` | removed 1 h after the plan completed | same |
@@ -237,6 +238,7 @@ NOTARX_RETENTION_PROFILE=standard        # or freetier (the ADR 0017 reference s
 NOTARX_RETENTION_RUN_BUDGET=60s
 NOTARX_RETENTION_LIFECYCLE_JOBS=720h     # a table override: Go duration, 30d, or off
 NOTARX_RETENTION_SECURITY_AUDIT_LOG=1095d
+NOTARX_EVENTS_RETENTION=14d             # domain_events (ADR 0021); NOTARX_RETENTION_DOMAIN_EVENTS wins when both are set
 NOTARX_SCAN_HISTORY_RETENTION=180d      # artifact_scan_history (ADR 0030); NOTARX_RETENTION_ARTIFACT_SCAN_HISTORY wins when both are set
 ```
 

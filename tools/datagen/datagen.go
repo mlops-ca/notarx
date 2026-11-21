@@ -323,7 +323,7 @@ func seedWebhooks(ctx context.Context, db Copier, p Profile, rng *rand.Rand, now
 	eventIDs := make([]uuid.UUID, eventCount)
 	eventAt := make([]time.Time, eventCount)
 	event := 0
-	if counts.WebhookEvents, err = db.CopyFrom(ctx, pgx.Identifier{"webhook_events"}, []string{"id", "event_type", "occurred_at", "payload"},
+	if counts.WebhookEvents, err = db.CopyFrom(ctx, pgx.Identifier{"domain_events"}, []string{"id", "type", "occurred_at", "payload", "dedupe_key"},
 		pgx.CopyFromFunc(func() ([]any, error) {
 			if event == eventCount {
 				return nil, nil
@@ -334,18 +334,18 @@ func seedWebhooks(ctx context.Context, db Copier, p Profile, rng *rand.Rand, now
 			if rng.Intn(10) == 0 {
 				eventType = "artifact.quarantined"
 			}
-			row := []any{uuidOf(eventIDs[event]), eventType, eventAt[event], fmt.Sprintf(`{"repository":%q,"sequence":%d}`, repositoryName(event%p.Repositories), event)}
+			row := []any{uuidOf(eventIDs[event]), eventType, eventAt[event], fmt.Sprintf(`{"repository":%q,"sequence":%d}`, repositoryName(event%p.Repositories), event), fmt.Sprintf("%s|%s", eventType, uuidOf(eventIDs[event]))}
 			event++
 			return row, nil
 		})); err != nil {
-		return fmt.Errorf("datagen: copy webhook events: %w", err)
+		return fmt.Errorf("datagen: copy domain events: %w", err)
 	}
 
 	subscriptionPop := NewPopularity(rng, p.WebhookSubscriptions)
 	emitted := 0
 	chosen := make([]int, 0, fanout)
 	if counts.WebhookDeliveries, err = db.CopyFrom(ctx, pgx.Identifier{"webhook_deliveries"},
-		[]string{"id", "event_id", "subscription_id", "state", "attempts", "next_attempt_at", "lease_owner", "lease_token", "lease_expires_at", "last_status", "last_error", "delivered_at", "created_at", "updated_at"},
+		[]string{"id", "event_id", "subscription_id", "state", "attempts", "next_attempt_at", "lease_owner", "lease_token", "lease_expires_at", "last_status", "last_error", "delivered_at", "created_at", "updated_at", "event_occurred_at"},
 		pgx.CopyFromFunc(func() ([]any, error) {
 			if emitted == p.WebhookDeliveries {
 				return nil, nil
@@ -396,5 +396,5 @@ func webhookDeliveryRow(rng *rand.Rand, id, eventID, subscriptionID uuid.UUID, c
 		leaseOwner, leaseToken, leaseExpires = "perf-node", uuidOf(newID(rng, now)), now.Add(30*time.Second)
 	}
 	return []any{uuidOf(id), uuidOf(eventID), uuidOf(subscriptionID), state, int32(attempts), nextAttempt, leaseOwner, leaseToken, leaseExpires,
-		lastStatus, lastError, deliveredAt, created, updated}
+		lastStatus, lastError, deliveredAt, created, updated, created}
 }

@@ -1,11 +1,12 @@
 package repository
 
 import (
-	"github.com/mlops-ca/notarx/internal/identity"
 	"sync"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/events"
 	helmdist "github.com/mlops-ca/notarx/internal/helmdistribution"
+	"github.com/mlops-ca/notarx/internal/identity"
 	dist "github.com/mlops-ca/notarx/internal/nugetdistribution"
 
 	"github.com/mlops-ca/notarx/internal/ocidiscovery"
@@ -153,6 +154,9 @@ type MemoryStore struct {
 	scheduledTaskRuns      map[string]ScheduledTaskRun
 	webhookSubscriptions   map[string]WebhookSubscription
 	webhookEvents          map[string]WebhookEvent
+	eventSeq               int64
+	eventSeqs              map[string]int64
+	eventCursors           map[string]events.Cursor
 	webhookDeliveries      map[string]WebhookDelivery
 }
 

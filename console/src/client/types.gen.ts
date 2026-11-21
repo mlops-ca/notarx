@@ -3069,12 +3069,18 @@ export type UserIdentity = {
 };
 
 export type WebhookEventType =
+  | "artifact.published"
+  | "artifact.scan.completed"
   | "artifact.quarantined"
   | "artifact.released"
-  | "cargo.promotion.completed"
-  | "cargo.promotion.failed"
-  | "cargo.replication.completed"
-  | "cargo.replication.failed";
+  | "artifact.promoted"
+  | "promotion.pending_approval"
+  | "promotion.approved"
+  | "promotion.rejected"
+  | "promotion.failed"
+  | "replication.completed"
+  | "replication.failed"
+  | "repository.visibility_changed";
 
 export type WebhookSubscription = {
   id: string;

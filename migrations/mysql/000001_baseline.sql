@@ -368,6 +368,32 @@ CREATE TABLE `console_theme_packages` (
   CONSTRAINT `console_theme_packages_version_check` CHECK ((`version` > 0))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `domain_event_cursors` (
+  `consumer` VARCHAR(255) NOT NULL,
+  `occurred_at` DATETIME(6) NOT NULL,
+  `seq` BIGINT NOT NULL,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  PRIMARY KEY (`consumer`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
+CREATE TABLE `domain_events` (
+  `coordinate` TEXT NULL,
+  `dedupe_key` VARCHAR(255) NOT NULL,
+  `digest` TEXT NULL,
+  `format` TEXT NULL,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `occurred_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `payload` JSON NOT NULL DEFAULT (CAST('{}' AS JSON)),
+  `repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `seq` BIGINT NOT NULL AUTO_INCREMENT,
+  `type` TEXT NOT NULL,
+  PRIMARY KEY (`occurred_at`, `seq`),
+  KEY `ix_domain_events_dedupe_key_occurred_at` (`dedupe_key`, `occurred_at`),
+  KEY `ix_domain_events_id_occurred_at` (`id`, `occurred_at`),
+  KEY `ix_domain_events_seq` (`seq`),
+  CONSTRAINT `domain_events_payload_check` CHECK ((JSON_TYPE(`payload`) = 'OBJECT'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `email_targets` (
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `enabled` TINYINT(1) NOT NULL DEFAULT 0,
@@ -2823,7 +2849,7 @@ CREATE TABLE `scheduled_tasks` (
   UNIQUE KEY `uq_scheduled_tasks_name_idx` (`name_lower`),
   CONSTRAINT `scheduled_tasks_description_check` CHECK ((CHAR_LENGTH(`description`) <= 500)),
   CONSTRAINT `scheduled_tasks_interval_seconds_check` CHECK (((`interval_seconds` >= 900) AND (`interval_seconds` <= 31536000))),
-  CONSTRAINT `scheduled_tasks_kind_check` CHECK ((`kind` IN ('repository-retention', 'audit-retention', 'partition-manager', 'retention-janitor', 'raw-idle-seal'))),
+  CONSTRAINT `scheduled_tasks_kind_check` CHECK ((`kind` IN ('repository-retention', 'audit-retention', 'partition-manager', 'retention-janitor', 'raw-idle-seal', 'event-dispatcher'))),
   CONSTRAINT `scheduled_tasks_last_run_state_check` CHECK ((`last_run_state` IN ('submitted', 'failed'))),
   CONSTRAINT `scheduled_tasks_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 100))),
   CONSTRAINT `scheduled_tasks_version_check` CHECK ((`version` >= 1))
@@ -3063,6 +3089,7 @@ CREATE TABLE `webhook_deliveries` (
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `delivered_at` DATETIME(6) NULL,
   `event_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `event_occurred_at` DATETIME(6) NOT NULL,
   `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `last_error` TEXT NOT NULL DEFAULT (''),
   `last_status` INT NULL,
@@ -3089,17 +3116,6 @@ CREATE TABLE `webhook_deliveries` (
   CONSTRAINT `webhook_deliveries_state_check` CHECK ((`state` IN ('pending', 'delivering', 'retrying', 'succeeded', 'dead')))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
-CREATE TABLE `webhook_events` (
-  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
-  `event_type` TEXT NOT NULL,
-  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
-  `occurred_at` DATETIME(6) NOT NULL,
-  `payload` JSON NOT NULL,
-  PRIMARY KEY (`id`),
-  CONSTRAINT `webhook_events_event_type_check` CHECK ((`event_type` IN ('artifact.quarantined', 'artifact.released', 'cargo.promotion.completed', 'cargo.promotion.failed', 'cargo.replication.completed', 'cargo.replication.failed'))),
-  CONSTRAINT `webhook_events_payload_check` CHECK ((JSON_TYPE(`payload`) = 'OBJECT'))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
-
 CREATE TABLE `webhook_subscriptions` (
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   `enabled` TINYINT(1) NOT NULL DEFAULT 1,
@@ -3113,7 +3129,7 @@ CREATE TABLE `webhook_subscriptions` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_webhook_subscriptions_name` (`name`),
   CONSTRAINT `webhook_subscriptions_endpoint_url_check` CHECK (((CHAR_LENGTH(`endpoint_url`) >= 1) AND (CHAR_LENGTH(`endpoint_url`) <= 2048))),
-  CONSTRAINT `webhook_subscriptions_event_types_check` CHECK ((((JSON_TYPE(`event_types`) = 'ARRAY') AND (JSON_LENGTH(`event_types`) > 0)) AND JSON_CONTAINS(CAST('["artifact.quarantined", "artifact.released", "cargo.promotion.completed", "cargo.promotion.failed", "cargo.replication.completed", "cargo.replication.failed"]' AS JSON), `event_types`))),
+  CONSTRAINT `webhook_subscriptions_event_types_check` CHECK ((((JSON_TYPE(`event_types`) = 'ARRAY') AND (JSON_LENGTH(`event_types`) > 0)) AND JSON_CONTAINS(CAST('["artifact.published", "artifact.scan.completed", "artifact.quarantined", "artifact.released", "artifact.promoted", "promotion.pending_approval", "promotion.approved", "promotion.rejected", "promotion.failed", "replication.completed", "replication.failed", "repository.visibility_changed"]' AS JSON), `event_types`))),
   CONSTRAINT `webhook_subscriptions_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
   CONSTRAINT `webhook_subscriptions_secret_ciphertext_check` CHECK ((`secret_ciphertext` <> '')),
   CONSTRAINT `webhook_subscriptions_version_check` CHECK ((`version` >= 1))
@@ -3333,7 +3349,6 @@ ALTER TABLE `user_groups` ADD CONSTRAINT `fk_user_groups_provider_id` FOREIGN KE
 ALTER TABLE `user_identities` ADD CONSTRAINT `fk_user_identities_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `identity_providers` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `user_identities` ADD CONSTRAINT `fk_user_identities_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `user_sessions` ADD CONSTRAINT `fk_user_sessions_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
-ALTER TABLE `webhook_deliveries` ADD CONSTRAINT `fk_webhook_deliveries_event_id` FOREIGN KEY (`event_id`) REFERENCES `webhook_events` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `webhook_deliveries` ADD CONSTRAINT `fk_webhook_deliveries_subscription_id` FOREIGN KEY (`subscription_id`) REFERENCES `webhook_subscriptions` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `workload_trust_policies` ADD CONSTRAINT `fk_workload_trust_policies_issuer_id` FOREIGN KEY (`issuer_id`) REFERENCES `workload_issuers` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `workload_trust_policies` ADD CONSTRAINT `fk_workload_trust_policies_service_account_id` FOREIGN KEY (`service_account_id`) REFERENCES `service_accounts` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;

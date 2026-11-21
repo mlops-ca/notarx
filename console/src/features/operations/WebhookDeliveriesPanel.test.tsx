@@ -234,7 +234,7 @@ describe("WebhookDeliveriesPanel", () => {
       "webhook-signing-secret-at-least-32-characters",
     );
     await user.click(within(screen.getByRole("dialog")).getByRole("combobox"));
-    await user.click(await screen.findByText("cargo.promotion.completed"));
+    await user.click(await screen.findByText("artifact.promoted"));
     await user.click(screen.getByRole("button", { name: "Create" }));
 
     expect(mockCreate).toHaveBeenCalledWith({
@@ -245,7 +245,7 @@ describe("WebhookDeliveriesPanel", () => {
         eventTypes: [
           "artifact.quarantined",
           "artifact.released",
-          "cargo.promotion.completed",
+          "artifact.promoted",
         ],
         enabled: true,
       },

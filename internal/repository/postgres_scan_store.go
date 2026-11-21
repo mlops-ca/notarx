@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/ids"
 )
 
@@ -165,21 +166,23 @@ VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6::uuid,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16
 		return ScanSwap{}, err
 	}
 	swap := ScanSwap{}
+	var previous *ScanResult
 	if n, err := inserted.RowsAffected(); err != nil {
 		return ScanSwap{}, err
 	} else if n == 1 {
 		swap.HistoryAppended = true
 	} else {
-		var previous ScanResult
+		var replaced ScanResult
+		previous = &replaced
 		if err := tx.QueryRowContext(ctx, `SELECT id::text, status, critical, high, medium, low, unknown, scanned_at FROM artifact_vulnerability WHERE repository_id = $1::uuid AND artifact_digest = $2 FOR UPDATE`,
-			result.RepositoryID, result.ArtifactDigest).Scan(&previous.ID, &previous.Status, &previous.Critical, &previous.High, &previous.Medium, &previous.Low, &previous.Unknown, &previous.ScannedAt); err != nil {
+			result.RepositoryID, result.ArtifactDigest).Scan(&replaced.ID, &replaced.Status, &replaced.Critical, &replaced.High, &replaced.Medium, &replaced.Low, &replaced.Unknown, &replaced.ScannedAt); err != nil {
 			return ScanSwap{}, err
 		}
-		if previous.ScannedAt.After(result.ScannedAt) {
+		if replaced.ScannedAt.After(result.ScannedAt) {
 			return ScanSwap{Superseded: true}, nil
 		}
-		swap.PreviousID = previous.ID
-		swap.HistoryAppended = scanCountsChanged(previous, result)
+		swap.PreviousID = replaced.ID
+		swap.HistoryAppended = scanCountsChanged(replaced, result)
 		if _, err := tx.ExecContext(ctx, `UPDATE artifact_vulnerability SET id = $1::uuid, scanner = $4, scanner_version = $5, db_generation_id = $6::uuid, status = $7, critical = $8, high = $9, medium = $10, low = $11, unknown = $12,
   suppressed_count = $13, findings_total = $14, truncated = $15, not_scanned_reason = $16, scanned_at = $17 WHERE repository_id = $2::uuid AND artifact_digest = $3`, args...); err != nil {
 			return ScanSwap{}, err
@@ -193,7 +196,38 @@ VALUES ($1::uuid,$2::uuid,$3,$4,$5::uuid,$6,$7,$8,$9,$10,$11,$12)`, entry.ID, en
 			return ScanSwap{}, err
 		}
 	}
+	if err := emitScanCompletedPostgres(ctx, tx, result, previous); err != nil {
+		return ScanSwap{}, err
+	}
 	return swap, tx.Commit()
+}
+
+// emitScanCompletedPostgres emits artifact.scan.completed in the transaction that swapped the summary. Nothing is
+// emitted when the swap changed nothing (the result id is the one already stored), and the findings are only
+// compared when a subscription wants the event.
+func emitScanCompletedPostgres(ctx context.Context, tx sqlRunner, result ScanResult, previous *ScanResult) error {
+	if previous != nil && previous.ID == result.ID {
+		return nil
+	}
+	var previousID any
+	if previous != nil {
+		previousID = previous.ID
+	}
+	var format Format
+	var wanted bool
+	var newFindings int
+	if err := tx.QueryRowContext(ctx, `WITH wanted AS (SELECT EXISTS (SELECT 1 FROM webhook_subscriptions WHERE enabled AND event_types @> jsonb_build_array($4::text)) AS value)
+SELECT COALESCE((SELECT format FROM hosted_repositories WHERE id = $3::uuid), ''), wanted.value,
+  CASE WHEN wanted.value THEN (SELECT count(DISTINCT f.vuln_id) FROM artifact_vulnerability_finding f WHERE f.vulnerability_id = $1::uuid AND f.status <> 'suppressed'
+     AND ($2::uuid IS NULL OR NOT EXISTS (SELECT 1 FROM artifact_vulnerability_finding p WHERE p.vulnerability_id = $2::uuid AND p.vuln_id = f.vuln_id AND p.status <> 'suppressed'))) ELSE 0 END
+FROM wanted`, result.ID, previousID, result.RepositoryID, string(WebhookEventArtifactScanCompleted)).Scan(&format, &wanted, &newFindings); err != nil {
+		return err
+	}
+	if !wanted && !events.HasInternalConsumer(WebhookEventArtifactScanCompleted) {
+		return nil
+	}
+	_, err := enqueueWebhookEventPostgres(ctx, tx, scanCompletedEvent(result, previous, format, newFindings))
+	return err
 }
 
 func (s *PostgresStore) GetScanResult(ctx context.Context, repositoryID, artifactDigest string) (ScanResult, error) {

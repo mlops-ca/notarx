@@ -63,3 +63,6 @@ migrations:
   000019_workload_replication_actor.sql:
     dialect: postgres
     reason: rewrites the actor_kind checks of the Helm, NuGet and RubyGems replication jobs; the catalogue carries the checks into the MySQL baseline
+  000020_domain_events.sql:
+    dialect: postgres
+    reason: creates the range-partitioned domain_events table and its partition manager registration, the emit_domain_event function and the Cargo trigger bodies, and drops webhook_events; the catalogue carries domain_events into the MySQL baseline as a plain table pruned by the retention janitor

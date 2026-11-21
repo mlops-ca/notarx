@@ -96,10 +96,10 @@ func TestPostgresSettingsMutationsRollBackWithTheirAudit(t *testing.T) {
 			t.Fatal(err)
 		}
 		eventID, webhookDeliveryID, emailID := uuid.NewString(), uuid.NewString(), uuid.NewString()
-		if _, err = db.ExecContext(ctx, `INSERT INTO webhook_events (id, event_type, occurred_at, payload) VALUES ($1::uuid, 'artifact.quarantined', now(), '{}'::jsonb)`, eventID); err != nil {
+		if _, err = db.ExecContext(ctx, `INSERT INTO domain_events (id, type, occurred_at, payload, dedupe_key) VALUES ($1::uuid, 'artifact.quarantined', now(), '{}'::jsonb, 'artifact.quarantined|test')`, eventID); err != nil {
 			t.Fatal(err)
 		}
-		if _, err = db.ExecContext(ctx, `INSERT INTO webhook_deliveries (id, event_id, subscription_id, state, attempts, last_status, last_error) VALUES ($1::uuid, $2::uuid, $3::uuid, 'dead', 8, 503, 'HTTP 503')`, webhookDeliveryID, eventID, subscription.ID); err != nil {
+		if _, err = db.ExecContext(ctx, `INSERT INTO webhook_deliveries (id, event_id, event_occurred_at, subscription_id, state, attempts, last_status, last_error) SELECT $1::uuid, id, occurred_at, $3::uuid, 'dead', 8, 503, 'HTTP 503' FROM domain_events WHERE id=$2::uuid`, webhookDeliveryID, eventID, subscription.ID); err != nil {
 			t.Fatal(err)
 		}
 		if _, err = db.ExecContext(ctx, `INSERT INTO email_test_deliveries (id, event_id, request_key, target_id, target_version, scenario, locale, template_version, recipient_ciphertext, from_address, console_origin, state, attempts, error_code)
@@ -112,7 +112,7 @@ func TestPostgresSettingsMutationsRollBackWithTheirAudit(t *testing.T) {
 		}
 		t.Cleanup(func() {
 			_, _ = db.Exec(`DELETE FROM webhook_deliveries WHERE id=$1::uuid`, webhookDeliveryID)
-			_, _ = db.Exec(`DELETE FROM webhook_events WHERE id=$1::uuid`, eventID)
+			_, _ = db.Exec(`DELETE FROM domain_events WHERE id=$1::uuid`, eventID)
 			_, _ = db.Exec(`DELETE FROM email_test_deliveries WHERE id=$1::uuid`, emailID)
 		})
 		return subscription, webhookDeliveryID, dead
