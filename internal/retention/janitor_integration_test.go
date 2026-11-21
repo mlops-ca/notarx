@@ -364,6 +364,7 @@ func fixtures() map[string]fixture {
 	return map[string]fixture{
 		"repository_request_rollup":          {},
 		"promotion_evaluations":              {terminal: map[string]string{"state": "'skipped'"}, live: map[string]string{"state": "'pending'"}},
+		"promotion_evaluations_unclaimed":    {terminal: map[string]string{"state": "'pending'"}, live: map[string]string{"state": "'waiting'"}},
 		"webhook_deliveries_succeeded":       {terminal: map[string]string{"state": "'succeeded'", "delivered_at": "now()"}, live: map[string]string{"state": "'pending'", "delivered_at": "NULL", "next_attempt_at": "now()"}},
 		"webhook_deliveries_dead":            {terminal: map[string]string{"state": "'dead'"}, live: map[string]string{"state": "'retrying'", "next_attempt_at": "now()"}},
 		"lifecycle_jobs_done":                {terminal: map[string]string{"state": "'completed'", "kind": "'scan'", "idempotency_key": "md5(random()::text)"}, live: map[string]string{"state": "'running'"}},
@@ -571,6 +572,8 @@ func TestBatchSelectionsAreServedByAnIndex(t *testing.T) {
 	db := openDB(t)
 	existing := map[string]string{
 		"user_sessions": "user_sessions_expiry_idx",
+		// Unclaimed evaluations are read by due time, which the claim index serves.
+		"promotion_evaluations_unclaimed": "promotion_evaluations_claim_idx",
 		// The planner may drive this entry from the completed plans or scan the checkpoints
 		// by age; either is index-served, so only "some index" is asserted.
 		"replication_checkpoints":            "",
@@ -586,7 +589,10 @@ func TestBatchSelectionsAreServedByAnIndex(t *testing.T) {
 			continue
 		}
 		t.Run(entry.Name(), func(t *testing.T) {
-			want, ok := existing[entry.Table]
+			want, ok := existing[entry.Name()]
+			if !ok {
+				want, ok = existing[entry.Table]
+			}
 			if !ok {
 				want = entry.Table + "_retention_idx"
 			}

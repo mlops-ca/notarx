@@ -47,6 +47,9 @@ func (s PromotionEvaluationState) Terminal() bool {
 	return s == PromotionEvaluationQueued || s == PromotionEvaluationSkipped || s == PromotionEvaluationFailed
 }
 
+// promotionReasonMax is the bound of a recorded reason, in characters: the length of last_reason and state_reason.
+const promotionReasonMax = 1024
+
 // PromotionEvaluationMaxAttempts is how many claims an evaluation gets before a transient failure becomes final. A claim
 // counts every time the row is taken, so an evaluator that keeps dying on one row also exhausts it: the claim fails such a
 // row with PromotionEvaluationExhausted.

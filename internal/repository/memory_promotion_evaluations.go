@@ -112,7 +112,7 @@ func (s *MemoryStore) FinishPromotionEvaluation(_ context.Context, id, leaseToke
 	if !ok || evaluation.LeaseToken == "" || evaluation.LeaseToken != leaseToken || !evaluation.LeaseExpiresAt.After(now) {
 		return ErrPromotionEvaluationLeaseLost
 	}
-	evaluation.State, evaluation.LastReason, evaluation.UpdatedAt = outcome.State, truncateReason(outcome.Reason), now
+	evaluation.State, evaluation.LastReason, evaluation.UpdatedAt = outcome.State, truncateRunes(outcome.Reason, promotionReasonMax), now
 	if outcome.State == PromotionEvaluationPending || outcome.State == PromotionEvaluationWaiting {
 		evaluation.NextAttemptAt = now
 		if !outcome.NextAttemptAt.IsZero() {
@@ -158,7 +158,7 @@ func (s *MemoryStore) ParkPromotionRule(ctx context.Context, ruleID, expectedVer
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return false, err
 	}
-	rule.State, rule.StateReason, rule.UpdatedAt = state, truncateReason(reason), time.Now().UTC()
+	rule.State, rule.StateReason, rule.UpdatedAt = state, truncateRunes(reason, promotionReasonMax), time.Now().UTC()
 	s.promotionRules[ruleID] = rule
 	s.enqueueWebhookEventLocked(WebhookEvent{Type: event.Type, RepositoryID: event.RepositoryID, Format: event.Format, Coordinate: event.Coordinate, Digest: event.Digest, Version: event.Version, Data: event.Payload})
 	return true, nil

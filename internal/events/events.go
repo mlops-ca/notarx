@@ -143,7 +143,7 @@ func SetRuleFanout(f RuleFanout) {
 // came from a cache that may be a notification behind, so the join to promotion_rules drops a rule that was deleted,
 // disabled or parked since, and ON CONFLICT makes a second emission of the same event insert nothing.
 const fanOutStatement = `INSERT INTO promotion_evaluations (id,event_seq,event_occurred_at,rule_id,repository_id,coordinate,digest,state,next_attempt_at,created_at,updated_at)
-SELECT gen_random_uuid(),e.seq,e.occurred_at,pr.id,e.repository_id,e.coordinate,e.digest,'pending',clock_timestamp(),clock_timestamp(),clock_timestamp()
+SELECT gen_random_uuid(),e.seq,e.occurred_at,pr.id,e.repository_id,COALESCE(e.coordinate,''),COALESCE(e.digest,''),'pending',clock_timestamp(),clock_timestamp(),clock_timestamp()
 FROM domain_events e JOIN promotion_rules pr ON pr.source_repository_id=e.repository_id AND pr.enabled AND pr.state='active' AND pr.id::text=ANY($3::text[])
 WHERE e.id=$1::uuid AND e.occurred_at=$2
 ON CONFLICT (event_seq,rule_id) DO NOTHING`

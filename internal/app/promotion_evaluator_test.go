@@ -353,9 +353,9 @@ func TestRevokedServiceAccountParksTheRuleAndAnnouncesPromotionFailed(t *testing
 		t.Fatal(err)
 	}
 	f.runOnce()
-	failedRows := f.evaluations(repository.PromotionEvaluationFailed)
-	if len(failedRows) != 1 || failedRows[0].LastReason != reasonAuthorizationLost+":service_account_disabled" {
-		t.Fatalf("evaluations = %+v", f.evaluations())
+	waitingRows := f.evaluations(repository.PromotionEvaluationWaiting)
+	if len(waitingRows) != 1 || waitingRows[0].LastReason != reasonAuthorizationLost+":service_account_disabled" {
+		t.Fatalf("the evaluation that found the authority lost must wait for the rule: %+v", f.evaluations())
 	}
 	rule, err := f.store.GetPromotionRule(ctx, f.rule.ID)
 	if err != nil || rule.State != repository.PromotionRuleAuthorizationLost || rule.StateReason != "service_account_disabled" || rule.Version != f.rule.Version {
@@ -416,7 +416,7 @@ func TestEvaluationReauthorizesSourceReadAndTargetWriteEveryTime(t *testing.T) {
 			f.publishRaw(f.source, "releases/widget.txt", "widget")
 			tc.revoke(f)
 			f.runOnce()
-			if got := f.evaluations(repository.PromotionEvaluationFailed); len(got) != 1 || got[0].LastReason != reasonAuthorizationLost+":"+tc.reason {
+			if got := f.evaluations(repository.PromotionEvaluationWaiting); len(got) != 1 || got[0].LastReason != reasonAuthorizationLost+":"+tc.reason {
 				t.Fatalf("evaluations = %+v", f.evaluations())
 			}
 			if rule, err := f.store.GetPromotionRule(ctx, f.rule.ID); err != nil || rule.State != repository.PromotionRuleAuthorizationLost {
@@ -817,11 +817,16 @@ func TestEvaluationsOfAParkedRuleWaitAndPromoteOnceTheRuleIsEdited(t *testing.T)
 		t.Fatal(err)
 	}
 	f.runOnce()
-	// One evaluation parked the rule and failed; the other found the rule parked and waits for it to come back.
-	if failedRows, waiting := f.evaluations(repository.PromotionEvaluationFailed), f.evaluations(repository.PromotionEvaluationWaiting); len(failedRows) != 1 || len(waiting) != 1 || waiting[0].LastReason != reasonRuleParkedPrefix+repository.PromotionRuleAuthorizationLost {
+	// One evaluation parked the rule, the other found it parked; both wait for it to come back.
+	waitingRows := f.evaluations(repository.PromotionEvaluationWaiting)
+	if len(waitingRows) != 2 {
 		t.Fatalf("evaluations = %+v", f.evaluations())
 	}
-	waiting := f.evaluations(repository.PromotionEvaluationWaiting)[0]
+	reasons := map[string]bool{waitingRows[0].LastReason: true, waitingRows[1].LastReason: true}
+	if !reasons[reasonAuthorizationLost+":service_account_disabled"] || !reasons[reasonRuleParkedPrefix+repository.PromotionRuleAuthorizationLost] {
+		t.Fatalf("reasons = %v", reasons)
+	}
+	waiting := waitingRows[0]
 	active := repository.ServiceAccountActive
 	account, err := f.store.GetServiceAccount(ctx, f.account.ID)
 	if err != nil {
@@ -913,5 +918,23 @@ func TestTargetThatHoldsOtherBytesIsAConflict(t *testing.T) {
 	outcome, err := f.evaluator.evaluate(ctx, other)
 	if err != nil || outcome.State != repository.PromotionEvaluationFailed || !strings.HasPrefix(outcome.Reason, reasonConflict+":"+asset.Path+" holds "+asset.Digest) {
 		t.Fatalf("conflict: %+v, %v", outcome, err)
+	}
+}
+
+func TestReleaseEdgeCasesAreDecidedWithAReasonNotRetried(t *testing.T) {
+	ctx := context.Background()
+	// A release rule on a format without ReleaseSet cannot even be created through the API, so the stored rule is built here.
+	f := newEvaluatorFixture(t, repository.FormatNPM, promotionrules.Match{Coordinate: promotionrules.Coordinate{Glob: "**"}, Scope: promotionrules.ScopeRelease}, nil)
+	unsupported := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: "app@1.0.0", Digest: "sha256:" + strings.Repeat("c", 64), EventOccurredAt: f.now}
+	if outcome, err := f.evaluator.evaluate(ctx, unsupported); err != nil || outcome.State != repository.PromotionEvaluationFailed || outcome.Reason != reasonUnsupportedFormat {
+		t.Fatalf("unsupported format: %+v, %v", outcome, err)
+	}
+	// An unversioned Raw release is the one file; a release larger than the bound fails with its reason.
+	raw := newEvaluatorFixture(t, repository.FormatRaw, promotionrules.Match{Coordinate: promotionrules.Coordinate{Glob: "**"}, Scope: promotionrules.ScopeRelease}, nil)
+	asset := raw.publishRaw(raw.source, "releases/widget.txt", "widget")
+	raw.evaluator.releaseMax = 0
+	evaluation := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: raw.rule.ID, RepositoryID: raw.source.ID, Coordinate: asset.Path, Digest: asset.Digest, EventOccurredAt: raw.now}
+	if outcome, err := raw.evaluator.evaluate(ctx, evaluation); err != nil || outcome.State != repository.PromotionEvaluationFailed || outcome.Reason != reasonReleaseTooLarge {
+		t.Fatalf("too large: %+v, %v", outcome, err)
 	}
 }

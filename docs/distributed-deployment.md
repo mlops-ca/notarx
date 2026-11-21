@@ -222,7 +222,7 @@ newer record) and the provenance tables `artifact_promotions`,
 | `resolver_audit_log` (partition drop) | 90 d | 7 d |
 | `security_audit_log` (partition drop) | 730 d | 90 d |
 | `domain_events` (partition drop; `NOTARX_EVENTS_RETENTION`) | 14 d | 3 d |
-| `promotion_evaluations` | queued, skipped or failed 7 d (pending and waiting rows are never pruned) | 1 d |
+| `promotion_evaluations` | queued, skipped or failed 7 d; a pending row due 30 d ago (no evaluator runs) | 1 d; 7 d |
 | `repository_request_rollup` | 400 d | 400 d |
 | `webhook_deliveries` | succeeded 14 d, dead 14 d | 3 d, 3 d |
 | `lifecycle_jobs` | completed or cancelled 7 d, failed 30 d | 1 d, 7 d |

@@ -40,6 +40,8 @@ func TestCandidateOfDerivesTheVersionTheWayAPromotionAddressesIt(t *testing.T) {
 		{repository.FormatGo, "example.com/mod@v1.2.3", "v1.2.3", true},
 		{repository.FormatConan, "zlib/1.3/user/stable#abc", "1.3", false},
 		{repository.FormatMaven, "org.example:widget:1.0.0", "1.0.0", false},
+		{repository.FormatMaven, "org.example:widget:1.0.0:sources:jar", "1.0.0", false},
+		{repository.FormatMaven, "org.example:widget", "", false},
 		{repository.FormatRaw, "tool@1.0.0", "", false},
 		{repository.FormatRaw, "releases/app@2x.png", "", false},
 		{repository.FormatRaw, "docs/readme.txt", "", false},

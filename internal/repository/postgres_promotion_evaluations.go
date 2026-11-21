@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
-	"unicode/utf8"
 
 	"github.com/mlops-ca/notarx/internal/events"
 )
@@ -110,7 +109,7 @@ UPDATE promotion_evaluations e SET state=$3,last_reason=$4,
     attempts=CASE WHEN $3='waiting' THEN 0 ELSE e.attempts END,promotion_id=COALESCE($6::uuid,e.promotion_id),
     lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now
 FROM clock WHERE e.id=$1::uuid AND e.lease_token=$2::uuid AND e.lease_expires_at>clock.now`,
-		id, leaseToken, string(outcome.State), truncateReason(outcome.Reason), next, nullableText(outcome.PromotionID))
+		id, leaseToken, string(outcome.State), truncateRunes(outcome.Reason, promotionReasonMax), next, nullableText(outcome.PromotionID))
 	if err != nil {
 		return err
 	}
@@ -118,19 +117,6 @@ FROM clock WHERE e.id=$1::uuid AND e.lease_token=$2::uuid AND e.lease_expires_at
 		return ErrPromotionEvaluationLeaseLost
 	}
 	return nil
-}
-
-// truncateReason keeps a recorded reason inside the column's bound of 1024 characters, cutting at a character boundary
-// (a byte cut inside a multi-byte character is invalid UTF-8, which the database refuses).
-func truncateReason(reason string) string {
-	if len(reason) <= 1024 {
-		return reason
-	}
-	cut := 1024
-	for cut > 0 && !utf8.RuneStart(reason[cut]) {
-		cut--
-	}
-	return reason[:cut]
 }
 
 // ListPromotionEvaluations implements PromotionEvaluationStore.
@@ -155,16 +141,18 @@ WHERE e.rule_id=$1::uuid AND ($2='' OR e.state=$2) ORDER BY e.created_at DESC,e.
 // ParkPromotionRule implements PromotionEvaluationStore. The state change, the promotion.failed event and the audit
 // records commit together, so a parked rule is always announced.
 func (s *PostgresStore) ParkPromotionRule(ctx context.Context, ruleID, expectedVersion, state, reason string, event events.Event, audit ...AuditRecord) (bool, error) {
-	parked, err := runTransactional(ctx, s, audit, func(q sqlRunner) (bool, error) {
-		result, execErr := q.ExecContext(ctx, `UPDATE promotion_rules SET state=$2,state_reason=$3,updated_at=now() WHERE id=$1::uuid AND state='active' AND version=$4::text::bigint`, ruleID, state, truncateReason(reason), expectedVersion)
+	parked, err := runTransactional(ctx, s, nil, func(q sqlRunner) (bool, error) {
+		result, execErr := q.ExecContext(ctx, `UPDATE promotion_rules SET state=$2,state_reason=$3,updated_at=now() WHERE id=$1::uuid AND state='active' AND version=$4::text::bigint`, ruleID, state, truncateRunes(reason, promotionReasonMax), expectedVersion)
 		if execErr != nil {
 			return false, execErr
 		}
 		if n, _ := result.RowsAffected(); n != 1 {
-			return false, nil
+			return false, nil // not parked: nothing is announced or audited
 		}
-		_, emitErr := events.Emit(ctx, q, event)
-		return true, emitErr
+		if _, emitErr := events.Emit(ctx, q, event); emitErr != nil {
+			return false, emitErr
+		}
+		return true, insertAudits(ctx, q, audit)
 	})
 	if err == nil && parked {
 		s.invalidateLocalScope(CacheScopePromotionRule)

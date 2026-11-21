@@ -21,7 +21,7 @@ type CoordinateValidator func(format repository.Format) func(coordinate string) 
 
 // CandidateOf is the match candidate of a published artifact, derived from its format and canonical coordinate the way a
 // promotion addresses it: name@version for npm, PyPI, Go (the version keeps its leading "v") and Cargo,
-// reference#revision for Conan (the version is the second segment of the reference), group:artifact:version for Maven. A
+// reference#revision for Conan (the version is the second segment of the reference), group:artifact:version[:classifier[:extension]] for Maven. A
 // Raw path has no version here: a flat repository has no version concept, and the version of a versioned repository is
 // read from the repository (CandidatesOf, and the evaluator). The tags that point at the artifact and the properties frozen
 // at seal are not known at publication; the evaluator reads them when it reloads the artifact.
@@ -42,8 +42,9 @@ func CandidateOf(format repository.Format, coordinate string) promotionrules.Can
 			candidate.Version = parts[1]
 		}
 	case repository.FormatMaven:
-		if colon := strings.LastIndex(coordinate, ":"); colon > 0 {
-			candidate.Version = coordinate[colon+1:]
+		// group:artifact:version, optionally followed by a classifier and an extension.
+		if parts := strings.Split(coordinate, ":"); len(parts) >= 3 && len(parts) <= 5 {
+			candidate.Version = parts[2]
 		}
 	}
 	return candidate

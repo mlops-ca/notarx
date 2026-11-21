@@ -6,22 +6,14 @@ import (
 	"unicode/utf8"
 )
 
-func TestTruncateReasonCutsAtACharacterBoundary(t *testing.T) {
-	if got := truncateReason("short"); got != "short" {
+func TestRecordedReasonsAreCutAtACharacterBoundary(t *testing.T) {
+	if got := truncateRunes("short", promotionReasonMax); got != "short" {
 		t.Fatalf("short reason = %q", got)
 	}
-	exact := strings.Repeat("a", 1024)
-	if got := truncateReason(exact); got != exact {
-		t.Fatal("a reason of exactly 1024 bytes must be kept")
-	}
-	// 1023 ASCII bytes then a three-byte character straddling the bound: the cut must not split it.
-	long := strings.Repeat("a", 1023) + "€€"
-	got := truncateReason(long)
-	if !utf8.ValidString(got) || len(got) > 1024 || got != strings.Repeat("a", 1023) {
-		t.Fatalf("truncated to %d bytes, valid=%v", len(got), utf8.ValidString(got))
-	}
-	if got = truncateReason(strings.Repeat("é", 700)); !utf8.ValidString(got) || len(got) > 1024 || len(got) < 1022 {
-		t.Fatalf("two-byte characters: %d bytes, valid=%v", len(got), utf8.ValidString(got))
+	long := strings.Repeat("é", 2000)
+	got := truncateRunes(long, promotionReasonMax)
+	if !utf8.ValidString(got) || utf8.RuneCountInString(got) != promotionReasonMax {
+		t.Fatalf("cut to %d characters, valid=%v", utf8.RuneCountInString(got), utf8.ValidString(got))
 	}
 }
 

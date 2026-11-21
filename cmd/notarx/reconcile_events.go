@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/mlops-ca/notarx/internal/app"
+	"github.com/mlops-ca/notarx/internal/events"
+	"github.com/mlops-ca/notarx/internal/readcache"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/retention"
 )
@@ -54,6 +56,12 @@ func runReconcileEvents(ctx context.Context, args []string, getenv func(string) 
 		return 1
 	}
 	defer func() { _ = store.Close() }()
+	if promotionEnabled(getenv) {
+		// A repaired event is as good as one a publication wrote: it starts the evaluations of the rules that match it. The
+		// process has no long-lived cache to keep fresh, so the rule set is read through the transaction every time.
+		events.SetRuleFanout(app.NewPromotionRuleFanout(readcache.NewRegistry(0)))
+		defer events.SetRuleFanout(nil)
+	}
 	written, err := app.PublishedEventReconciler{Store: store, Retention: keep}.RunOnce(ctx)
 	_, _ = fmt.Fprintf(stdout, "published events written: %d\n", written)
 	if err != nil {
@@ -61,4 +69,9 @@ func runReconcileEvents(ctx context.Context, args []string, getenv func(string) 
 		return 1
 	}
 	return 0
+}
+
+// promotionEnabled reports whether rules are evaluated: NOTARX_PROMOTION_ENABLED is true unless set to false.
+func promotionEnabled(getenv func(string) string) bool {
+	return strings.TrimSpace(getenv("NOTARX_PROMOTION_ENABLED")) != "false"
 }

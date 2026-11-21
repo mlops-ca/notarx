@@ -24,6 +24,10 @@ import (
 // and one enqueue, so the lease is generous; a worker that dies leaves the row to become due again when it ends.
 const promotionEvaluationLease = 2 * time.Minute
 
+// promotionReleaseMaxMembers bounds the members of one release an evaluation expands, so its per-member reads fit in the
+// evaluation timeout; a larger release fails with release_too_large instead of timing out again and again.
+const promotionReleaseMaxMembers = 1000
+
 // promotionEvaluationTimeout bounds one evaluation below its lease, so a stuck read or a large release cannot outlive the claim
 // and be evaluated twice; promotionFinishTimeout bounds the write of its outcome, which must outlive a shutdown.
 const (
@@ -48,6 +52,9 @@ const (
 	reasonEvaluationError   = "evaluation_error"
 	reasonVersionNotSealed  = "version_not_sealed"
 	reasonEvaluationPanic   = "evaluation_panic"
+	reasonUnsupportedFormat = "unsupported_format"
+	reasonEmptyRelease      = "release_has_no_members"
+	reasonReleaseTooLarge   = "release_too_large"
 	reasonRuleChanged       = "rule_changed"
 )
 
@@ -83,7 +90,9 @@ type PromotionEvaluator struct {
 	owner       string
 	interval    time.Duration
 	concurrency int
-	now         func() time.Time
+	// releaseMax is the most members of one release an evaluation expands (promotionReleaseMaxMembers; tests lower it).
+	releaseMax int
+	now        func() time.Time
 }
 
 // NewPromotionEvaluator builds the evaluator on the gateway store. The promotion service and the condition ports are the
@@ -94,7 +103,7 @@ func NewPromotionEvaluator(options PromotionEvaluatorOptions) *PromotionEvaluato
 	evaluator := &PromotionEvaluator{
 		store: store, service: newPromotionService(adapter), authorizer: options.Authorizer, registry: promotionFormatRegistry(promotionModuleDeps{Store: store}),
 		ports: promotionDryRunPorts{securityPolicies: store, intelligence: store, quarantine: store, distributionDigests: adapter.artifactDistributionDigests},
-		owner: options.Owner, interval: options.Interval, concurrency: options.Concurrency, now: options.Now,
+		owner: options.Owner, interval: options.Interval, concurrency: options.Concurrency, releaseMax: promotionReleaseMaxMembers, now: options.Now,
 	}
 	if evaluator.owner == "" {
 		evaluator.owner = "promotion-evaluator"
@@ -255,11 +264,17 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 		return outcome, err
 	}
 	members, err := e.members(ctx, run, evaluation)
-	if errors.Is(err, repository.ErrNotFound) {
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
 		return skipped(reasonSourceUnavailable)
-	}
-	if err != nil {
+	case errors.Is(err, errUnsupportedPromotionFormat):
+		return failed(reasonUnsupportedFormat)
+	case err != nil:
 		return repository.PromotionEvaluationOutcome{}, err
+	case len(members) == 0:
+		return skipped(reasonEmptyRelease)
+	case len(members) > e.releaseMax:
+		return failed(reasonReleaseTooLarge)
 	}
 	// The conditions hold for every artifact the rule promotes: for scope release, every member of the release.
 	var verdicts []promotionrules.ConditionVerdict
@@ -276,7 +291,7 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 	if blocked, outcome := e.conditionOutcome(run, published, verdicts); blocked {
 		return outcome, nil
 	}
-	return e.promote(ctx, run, members, published)
+	return e.promote(ctx, run, members)
 }
 
 func skippedOrError(err error, reason string) (repository.PromotionEvaluationOutcome, error) {
@@ -333,7 +348,7 @@ func (e *PromotionEvaluator) authorizationLost(ctx context.Context, rule reposit
 const errGrantLookupFailed = "grant_lookup_failed"
 
 // park moves the rule to authorization_lost and announces it with promotion.failed, in one transaction with the audit
-// record. The evaluation fails with the reason; the rule evaluates nothing more until an edit restores it.
+// record. The rule evaluates nothing more until an edit restores it, and this evaluation waits for that like the others.
 func (e *PromotionEvaluator) park(ctx context.Context, rule repository.PromotionRule, source, target repository.HostedRepository, evaluation repository.PromotionEvaluation, reason string) (repository.PromotionEvaluationOutcome, error) {
 	payload, _ := json.Marshal(map[string]string{"ruleId": rule.ID, "ruleName": rule.Name, "ruleVersion": rule.Version, "state": repository.PromotionRuleAuthorizationLost, "reason": reason,
 		"sourceRepositoryId": source.ID, "targetRepositoryId": target.ID, "format": string(source.Format)})
@@ -349,7 +364,8 @@ func (e *PromotionEvaluator) park(ctx context.Context, rule repository.Promotion
 		// The rule was edited, parked or deleted since this evaluation read it: what it found is stale, so decide again.
 		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationPending, Reason: reasonRuleChanged}, nil
 	}
-	return failed(reasonAuthorizationLost + ":" + reason)
+	// The artifact is not lost with the authority: like every other evaluation of the parked rule it waits for an edit.
+	return e.later(evaluation.EventOccurredAt, reasonAuthorizationLost+":"+reason), nil
 }
 
 // ruleRun is a rule loaded for evaluation.
@@ -542,7 +558,7 @@ func (e *PromotionEvaluator) members(ctx context.Context, run ruleRun, evaluatio
 // already holds is a success no-op; different bytes at its coordinate are a conflict; when every member already has a live
 // attempt under its key the evaluation is a replay and asks for nothing, which is what the second file event of a release
 // does.
-func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members []promotionMember, published time.Time) (repository.PromotionEvaluationOutcome, error) {
+func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members []promotionMember) (repository.PromotionEvaluationOutcome, error) {
 	version, _ := strconv.ParseInt(run.rule.Version, 10, 64)
 	principal := serviceAccountPrincipal(run.rule.RunAsServiceAccountID)
 	requests := make([]PromotionRequest, 0, len(members))
@@ -575,7 +591,7 @@ func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members [
 	resolved := e.service.resolveTarget(ctx, run.source, run.target.ID)
 	for _, request := range requests {
 		if _, perr := e.service.admit(ctx, request, resolved); perr != nil {
-			return e.promotionRefusal(perr, published)
+			return e.promotionRefusal(perr)
 		}
 	}
 	promotionID := ""
@@ -583,7 +599,7 @@ func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members [
 		request.admitted = true
 		result, perr := e.service.request(ctx, request, resolved)
 		if perr != nil {
-			return e.promotionRefusal(perr, published)
+			return e.promotionRefusal(perr)
 		}
 		if promotionID == "" {
 			promotionID = result.Promotion.ID
@@ -617,16 +633,17 @@ func (e *PromotionEvaluator) replay(ctx context.Context, keys []string) (string,
 }
 
 // promotionRefusal maps a refusal of the PromotionService to an outcome: a server error is transient, a vanished source is
-// a skip, a refusal by quarantine or the target's admission policy waits like a failed condition (a release or a new
-// scan can lift it; a rule never bypasses either), and anything else is a failure.
-func (e *PromotionEvaluator) promotionRefusal(perr *PromotionError, published time.Time) (repository.PromotionEvaluationOutcome, error) {
+// a skip, a refusal by quarantine or the target's admission policy is a skip with its code (a rule never bypasses either;
+// a rule that wants to wait for a scan or a release carries the securityPolicy condition, which waits without an audit record
+// per look), and anything else is a failure.
+func (e *PromotionEvaluator) promotionRefusal(perr *PromotionError) (repository.PromotionEvaluationOutcome, error) {
 	switch {
 	case perr.Status >= http.StatusInternalServerError:
 		return repository.PromotionEvaluationOutcome{}, perr
 	case perr.Status == http.StatusNotFound:
 		return skipped(reasonSourceUnavailable)
 	case perr.Status == http.StatusForbidden:
-		return e.later(published, perr.Code), nil
+		return skipped(perr.Code)
 	}
 	return failed(perr.Code)
 }

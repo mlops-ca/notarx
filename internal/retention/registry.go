@@ -114,6 +114,9 @@ func DefaultRegistry() []Entry {
 		// artifact was skipped or the evaluation failed; pending and waiting rows are live. The 7 day keep time leaves the
 		// recorded reason inspectable.
 		{Table: "promotion_evaluations", TimeColumn: "updated_at", Terminal: "state IN ('queued','skipped','failed')", KeyColumns: []string{"id"}, Standard: 7 * day, FreeTier: 1 * day},
+		// A pending row is claimed within seconds. One that was due a month ago means no node runs the evaluator (a deployment
+		// that lists worker kinds without evaluator, or a rule created and forgotten): it is dropped rather than kept forever.
+		{Table: "promotion_evaluations", Label: "promotion_evaluations_unclaimed", TimeColumn: "next_attempt_at", Terminal: "state = 'pending'", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},
 		{Table: "repository_request_rollup", TimeColumn: "bucket_start", Terminal: "TRUE", KeyColumns: []string{"repository_id", "bucket_start", "outcome"}, Standard: 400 * day, FreeTier: 400 * day},
 		{Table: "webhook_deliveries", Label: "webhook_deliveries_succeeded", TimeColumn: "updated_at", Terminal: "state = 'succeeded'", KeyColumns: []string{"id"}, Standard: 14 * day, FreeTier: 3 * day},
 		// A dead delivery is inspectable and replayable while its domain event is kept (14 days, 3 on the free tier), so
