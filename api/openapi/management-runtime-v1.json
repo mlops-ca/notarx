@@ -6721,6 +6721,181 @@
         }
       }
     },
+    "/repositories/{repositoryId}/imports": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/RepositoryId"
+        }
+      ],
+      "post": {
+        "operationId": "createRepositoryImport",
+        "description": "Opens an import session into a repository: the receiving side of a push from another notarx instance (ADR 0021, Remote targets). Needs ImportWrite (the grant scope repositories:import) on the target, which implies no read. Everything the sender claims (coordinate, digest, format manifest, chain path, evidence) is recorded as received and verified against the bytes at commit. The answer lists the blobs still to upload as missing; a blob is not listed once this session holds its verified bytes, and nothing else about the contents of other repositories is ever reported. A chainPath longer than NOTARX_PROMOTION_MAX_HOPS, or one that already contains this instance and the target repository, is refused with 422 (chain_too_long, chain_loop); this instance appends its own hop. A repeat of an idempotencyKey of a live or committed session by the same principal, for the same format, coordinate and digest, returns that session with 200 and checks no limit; any other request under the key is 409 idempotency_conflict. A request over a limit writes nothing and is refused with its own code: import_blob_too_large and import_session_too_large (413), import_too_many_blobs (422), import_too_many_sessions (429), import_staging_quota_exceeded (507).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateImport"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The session of an earlier request under the same idempotencyKey.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSession"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Session opened.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "413": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "429": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "507": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/imports/{importId}/blobs/{sha256}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ImportId"
+        },
+        {
+          "name": "sha256",
+          "in": "path",
+          "required": true,
+          "description": "Lowercase hex SHA-256 of the blob, without the sha256 prefix.",
+          "schema": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        }
+      ],
+      "put": {
+        "operationId": "uploadImportBlob",
+        "description": "Streams one blob of an open session. The server hashes the bytes while it streams them into a staging key and refuses a digest or size that differs from the claim (422 digest_mismatch, 422 size_mismatch) before anything is visible. A blob the session already holds is accepted again without being read (204). Only the principal that opened the session may upload (others get 404), and a session that is not open (committing, committed, aborted or expired) is 409 import_session_closed.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "contentEncoding": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "The blob is verified and staged."
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/imports/{importId}/commit": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ImportId"
+        }
+      ],
+      "post": {
+        "operationId": "commitImport",
+        "description": "Commits a session whose blobs are all uploaded. It re-verifies every staged digest and size, checks the target's quarantine and admission policy (the sender's evidence is never counted: the receiver's policy has the final word), and publishes through the format's importer, which recomputes the coordinate from the verified bytes and refuses a claim they contradict. Idempotent: a committed session answers 200 again with the same result, and a commit that was interrupted can be sent again. Only the principal that opened the session may commit (others get 404).",
+        "responses": {
+          "200": {
+            "description": "The artifact is published; state is committed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "503": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/remote-instances": {
       "get": {
         "operationId": "listRemoteInstances",
@@ -24167,6 +24342,171 @@
           }
         }
       },
+      "ImportBlobClaim": {
+        "type": "object",
+        "required": [
+          "digest",
+          "size"
+        ],
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "PromotionChainHop": {
+        "type": "object",
+        "required": [
+          "instance",
+          "repository",
+          "ruleId",
+          "at"
+        ],
+        "description": "One step of the path an artifact took to its repository. The list is appended to and never rewritten.",
+        "properties": {
+          "instance": {
+            "type": "string",
+            "description": "The remote instance the artifact came from; empty for this instance."
+          },
+          "repository": {
+            "type": "string",
+            "description": "The repository the artifact was promoted from."
+          },
+          "ruleId": {
+            "type": "string",
+            "description": "The promotion rule that promoted it; empty for a manual promotion."
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CreateImport": {
+        "type": "object",
+        "required": [
+          "coordinate",
+          "digest",
+          "formatManifest",
+          "blobs",
+          "idempotencyKey"
+        ],
+        "description": "What the sender claims to push. Every field is recorded as received and verified against the bytes.",
+        "properties": {
+          "coordinate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "description": "Digest of the artifact (a Raw file: its content digest)."
+          },
+          "formatManifest": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The format's own description of the unit, parsed by the importer of the target format. Raw: {path, contentType?}."
+          },
+          "blobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ImportBlobClaim"
+            }
+          },
+          "chainPath": {
+            "type": "array",
+            "description": "The hops the artifact has taken so far; absent means depth 0.",
+            "items": {
+              "$ref": "#/components/schemas/PromotionChainHop"
+            }
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The sender's unverified scan, SBOM and signature claims; stored as claims and never counted toward the receiver's policy."
+          }
+        }
+      },
+      "ImportSessionState": {
+        "type": "string",
+        "enum": [
+          "open",
+          "committing",
+          "committed",
+          "aborted",
+          "expired"
+        ]
+      },
+      "ImportSession": {
+        "type": "object",
+        "required": [
+          "id",
+          "repositoryId",
+          "format",
+          "coordinate",
+          "digest",
+          "state",
+          "bytes",
+          "missing",
+          "createdAt",
+          "expiresAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "repositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "format": {
+            "type": "string"
+          },
+          "coordinate": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ImportSessionState"
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0,
+            "description": "Total of the claimed blob sizes."
+          },
+          "missing": {
+            "type": "array",
+            "description": "The blobs still to upload, by digest.",
+            "items": {
+              "$ref": "#/components/schemas/ImportBlobClaim"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "RemoteInstanceAuthKind": {
         "type": "string",
         "enum": [
@@ -27160,34 +27500,6 @@
           "cancelled"
         ]
       },
-      "PromotionChainHop": {
-        "type": "object",
-        "required": [
-          "instance",
-          "repository",
-          "ruleId",
-          "at"
-        ],
-        "description": "One step of the path an artifact took to its repository. The list is appended to and never rewritten.",
-        "properties": {
-          "instance": {
-            "type": "string",
-            "description": "The remote instance the artifact came from; empty for this instance."
-          },
-          "repository": {
-            "type": "string",
-            "description": "The repository the artifact was promoted from."
-          },
-          "ruleId": {
-            "type": "string",
-            "description": "The promotion rule that promoted it; empty for a manual promotion."
-          },
-          "at": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "PromotionApproval": {
         "type": "object",
         "required": [
@@ -29549,6 +29861,15 @@
             "prefix",
             "contains"
           ]
+        }
+      },
+      "ImportId": {
+        "name": "importId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
         }
       },
       "RemoteInstanceId": {

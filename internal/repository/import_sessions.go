@@ -109,6 +109,11 @@ type ImportSessionStore interface {
 	CreateImportSession(ctx context.Context, session ImportSession, blobs []ImportBlob, limits ImportLimits) (stored ImportSession, replayed bool, err error)
 	// GetImportSession returns ErrNotFound for an unknown id.
 	GetImportSession(ctx context.Context, id string) (ImportSession, error)
+	// GetImportBlob returns the blob of the session with the digest, verified or not: ErrNotFound for a session or a digest
+	// the session did not claim.
+	GetImportBlob(ctx context.Context, sessionID, digest string) (ImportBlob, error)
+	// ListImportBlobs returns every blob of the session, verified or not, by digest; ErrNotFound for an unknown session.
+	ListImportBlobs(ctx context.Context, sessionID string) ([]ImportBlob, error)
 	// MissingImportBlobs lists the blobs of the session that are not verified yet, by digest.
 	MissingImportBlobs(ctx context.Context, sessionID string) ([]ImportBlob, error)
 	// RecordImportBlob marks the blob verified once its bytes are staged and hashed. It refuses a session that is not

@@ -90,8 +90,23 @@ type Exporter interface {
 	ExportUnit(ctx context.Context, repositoryID, coordinate, digest string) (ExportedUnit, error)
 }
 
-// Importer publishes an exported unit into a repository, reading each blob through open. It must be idempotent for a
-// digest already present and report a different digest at the same coordinate as a conflict.
+// The refusals of an Importer. The importer verifies every claim of the sender against the bytes it reads, so a mismatch
+// is reported before anything becomes visible.
+var (
+	// ErrImportInvalidUnit is a unit the format cannot read: a malformed manifest or a blob set that does not match it.
+	ErrImportInvalidUnit = errors.New("import unit is invalid")
+	// ErrImportMismatch is a claim the verified bytes contradict: the coordinate, the digest or the size.
+	ErrImportMismatch = errors.New("import unit differs from the verified bytes")
+	// ErrImportConflict is a coordinate that already holds a different digest.
+	ErrImportConflict = errors.New("a different artifact already exists at the coordinate")
+	// ErrImportUnsupportedLayout is a target repository whose layout the importer does not publish into.
+	ErrImportUnsupportedLayout = errors.New("the target repository layout does not accept imports")
+)
+
+// Importer publishes an exported unit into a repository, reading each blob through open. It never trusts the sender:
+// the manifest is parsed by the format itself, and coordinate, size and layout are recomputed from the bytes it reads
+// (ErrImportMismatch for a claim they contradict, ErrImportInvalidUnit for a unit it cannot read). It must be idempotent
+// for a digest already present and report a different digest at the same coordinate as ErrImportConflict.
 type Importer interface {
 	ImportUnit(ctx context.Context, repositoryID string, unit ExportedUnit, open func(BlobDescriptor) (io.ReadCloser, error)) error
 }

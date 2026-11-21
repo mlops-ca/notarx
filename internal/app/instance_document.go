@@ -16,9 +16,10 @@ type localInstanceIDReader interface {
 // this deployment, the instance protocol version, the formats accepted as import targets and the import limits.
 // The route is anonymous, read-only and carries no credential or repository data.
 type instanceDocumentHandler struct {
-	ids    localInstanceIDReader
-	limits remoteinstance.Limits
-	cache  *instanceIDCache
+	ids     localInstanceIDReader
+	limits  remoteinstance.Limits
+	formats []string
+	cache   *instanceIDCache
 }
 
 // instanceIDCache keeps the id once read: it never changes for a deployment.
@@ -27,18 +28,14 @@ type instanceIDCache struct {
 	id string
 }
 
-// newInstanceDocumentHandler serves the instance document with the import limits the instance enforces; the zero value
-// advertises the defaults.
-func newInstanceDocumentHandler(ids localInstanceIDReader, limits remoteinstance.Limits) instanceDocumentHandler {
+// newInstanceDocumentHandler serves the instance document with the formats that accept imports and the import limits the
+// instance enforces; the zero limits advertise the defaults.
+func newInstanceDocumentHandler(ids localInstanceIDReader, limits remoteinstance.Limits, formats []string) instanceDocumentHandler {
 	if limits == (remoteinstance.Limits{}) {
 		limits = remoteinstance.DefaultLimits()
 	}
-	return instanceDocumentHandler{ids: ids, limits: limits, cache: &instanceIDCache{}}
+	return instanceDocumentHandler{ids: ids, limits: limits, formats: formats, cache: &instanceIDCache{}}
 }
-
-// instanceImportFormats lists the formats this instance accepts as import targets. The importer slices of ADR 0021
-// (7b onward) add their formats here; none is accepted yet.
-func instanceImportFormats() []string { return []string{} }
 
 func (h instanceDocumentHandler) localID(ctx context.Context) (string, error) {
 	h.cache.mu.Lock()
@@ -61,7 +58,7 @@ func (h instanceDocumentHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeNativeMavenJSON(w, http.StatusOK, remoteinstance.Document{InstanceID: id, APIVersion: remoteinstance.APIVersion, Formats: instanceImportFormats(), Limits: h.limits})
+	writeNativeMavenJSON(w, http.StatusOK, remoteinstance.Document{InstanceID: id, APIVersion: remoteinstance.APIVersion, Formats: h.formats, Limits: h.limits})
 }
 
 func registerInstanceRoutes(mux *runtimeLogMux, handler instanceDocumentHandler) {

@@ -102,6 +102,21 @@ func exerciseImportSessionStore(t *testing.T, store ImportSessionStore, principa
 	if got := missingDigests(session.ID); len(got) != 2 || got[0] != min(dg("a"), dg("b")) || got[1] != max(dg("a"), dg("b")) {
 		t.Fatalf("missing = %v", got)
 	}
+	if got, blobErr := store.GetImportBlob(ctx, session.ID, dg("a")); blobErr != nil || got.Size != 10 || got.Verified || got.StagingKey != ImportStagingKey(session.ID, dg("a")) {
+		t.Fatalf("blob = %+v %v", got, blobErr)
+	}
+	if all, listErr := store.ListImportBlobs(ctx, session.ID); listErr != nil || len(all) != 2 || all[0].Digest != min(dg("a"), dg("b")) || all[1].Digest != max(dg("a"), dg("b")) {
+		t.Fatalf("list = %+v %v", all, listErr)
+	}
+	if _, listErr := store.ListImportBlobs(ctx, uuid.NewString()); !errors.Is(listErr, ErrNotFound) {
+		t.Fatalf("list of an unknown session = %v", listErr)
+	}
+	if _, blobErr := store.GetImportBlob(ctx, session.ID, dg("zzz")); !errors.Is(blobErr, ErrNotFound) {
+		t.Fatalf("unclaimed blob = %v", blobErr)
+	}
+	if _, blobErr := store.GetImportBlob(ctx, uuid.NewString(), dg("a")); !errors.Is(blobErr, ErrNotFound) {
+		t.Fatalf("blob of an unknown session = %v", blobErr)
+	}
 	if _, missErr := store.MissingImportBlobs(ctx, uuid.NewString()); !errors.Is(missErr, ErrNotFound) {
 		t.Fatalf("missing of an unknown session = %v", missErr)
 	}

@@ -18,6 +18,13 @@ RepositoryId:
   schema:
     type: string
     format: uuid
+ImportId:
+  name: importId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
 PromotionBatchId:
   name: batchId
   in: path

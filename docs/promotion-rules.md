@@ -173,3 +173,4 @@ remote rule is skipped with `remote_target_not_supported`.
 | `NOTARX_PROMOTION_EVALUATOR_INTERVAL` | `5s` | Poll interval of the evaluator between wake-ups |
 | `NOTARX_PROMOTION_EVALUATOR_CONCURRENCY` | `4` | Evaluations one node claims and evaluates at once (1 to 64) |
 | `NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY` | `32` | The most promotion rules one source repository can have (1 to 1024) |
+| `NOTARX_PROMOTION_MAX_HOPS` | `8` | The longest `chainPath` an import from another instance may carry (1 to 64) |

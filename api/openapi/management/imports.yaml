@@ -1,0 +1,89 @@
+---
+repositories_repositoryId_imports:
+  parameters:
+  - "$ref": "../components/parameters.yaml#/RepositoryId"
+  post:
+    operationId: createRepositoryImport
+    description: >-
+      Opens an import session into a repository: the receiving side of a push from another notarx instance (ADR 0021, Remote targets). Needs ImportWrite (the grant scope repositories:import) on the target, which implies no read. Everything the sender claims (coordinate, digest, format manifest, chain path, evidence) is recorded as received and verified against the bytes at commit. The answer lists the blobs still to upload as missing; a blob is not listed once this session holds its verified bytes, and nothing else about the contents of other repositories is ever reported. A chainPath longer than NOTARX_PROMOTION_MAX_HOPS, or one that already contains this instance and the target repository, is refused with 422 (chain_too_long, chain_loop); this instance appends its own hop. A repeat of an idempotencyKey of a live or committed session by the same principal, for the same format, coordinate and digest, returns that session with 200 and checks no limit; any other request under the key is 409 idempotency_conflict. A request over a limit writes nothing and is refused with its own code: import_blob_too_large and import_session_too_large (413), import_too_many_blobs (422), import_too_many_sessions (429), import_staging_quota_exceeded (507).
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/CreateImport"
+    responses:
+      '200':
+        description: The session of an earlier request under the same idempotencyKey.
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/schemas.yaml#/ImportSession"
+      '201':
+        description: Session opened.
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/schemas.yaml#/ImportSession"
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '409': {"$ref": "../components/responses.yaml#/Problem"}
+      '413': {"$ref": "../components/responses.yaml#/Problem"}
+      '422': {"$ref": "../components/responses.yaml#/Problem"}
+      '429': {"$ref": "../components/responses.yaml#/Problem"}
+      '503': {"$ref": "../components/responses.yaml#/Problem"}
+      '507': {"$ref": "../components/responses.yaml#/Problem"}
+imports_importId_blobs_sha256:
+  parameters:
+  - "$ref": "../components/parameters.yaml#/ImportId"
+  - name: sha256
+    in: path
+    required: true
+    description: Lowercase hex SHA-256 of the blob, without the sha256 prefix.
+    schema:
+      type: string
+      pattern: "^[a-f0-9]{64}$"
+  put:
+    operationId: uploadImportBlob
+    description: >-
+      Streams one blob of an open session. The server hashes the bytes while it streams them into a staging key and refuses a digest or size that differs from the claim (422 digest_mismatch, 422 size_mismatch) before anything is visible. A blob the session already holds is accepted again without being read (204). Only the principal that opened the session may upload (others get 404), and a session that is not open (committing, committed, aborted or expired) is 409 import_session_closed.
+    requestBody:
+      required: true
+      content:
+        application/octet-stream:
+          schema:
+            type: string
+            contentEncoding: binary
+    responses:
+      '204':
+        description: The blob is verified and staged.
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '409': {"$ref": "../components/responses.yaml#/Problem"}
+      '422': {"$ref": "../components/responses.yaml#/Problem"}
+      '503': {"$ref": "../components/responses.yaml#/Problem"}
+imports_importId_commit:
+  parameters:
+  - "$ref": "../components/parameters.yaml#/ImportId"
+  post:
+    operationId: commitImport
+    description: >-
+      Commits a session whose blobs are all uploaded. It re-verifies every staged digest and size, checks the target's quarantine and admission policy (the sender's evidence is never counted: the receiver's policy has the final word), and publishes through the format's importer, which recomputes the coordinate from the verified bytes and refuses a claim they contradict. Idempotent: a committed session answers 200 again with the same result, and a commit that was interrupted can be sent again. Only the principal that opened the session may commit (others get 404).
+    responses:
+      '200':
+        description: The artifact is published; state is committed.
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/schemas.yaml#/ImportSession"
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '409': {"$ref": "../components/responses.yaml#/Problem"}
+      '422': {"$ref": "../components/responses.yaml#/Problem"}
+      '503': {"$ref": "../components/responses.yaml#/Problem"}

@@ -22,6 +22,23 @@ func TestPromotionConfigMaxRulesPerRepository(t *testing.T) {
 	}
 }
 
+func TestPromotionConfigMaxHops(t *testing.T) {
+	got, err := promotionConfigFromEnv(PromotionConfig{})
+	if err != nil || got.MaxHops != DefaultPromotionMaxHops {
+		t.Fatalf("default = %+v, %v", got, err)
+	}
+	t.Setenv("NOTARX_PROMOTION_MAX_HOPS", "3")
+	if got, err = promotionConfigFromEnv(PromotionConfig{}); err != nil || got.MaxHops != 3 {
+		t.Fatalf("3 = %+v, %v", got, err)
+	}
+	for _, bad := range []string{"0", "-1", "many", "65"} {
+		t.Setenv("NOTARX_PROMOTION_MAX_HOPS", bad)
+		if _, err = promotionConfigFromEnv(PromotionConfig{}); err == nil {
+			t.Fatalf("%q must be refused", bad)
+		}
+	}
+}
+
 func TestPromotionConfigEvaluator(t *testing.T) {
 	got, err := promotionConfigFromEnv(PromotionConfig{})
 	if err != nil || !got.Enabled() || got.EvaluatorInterval != 5*time.Second || got.EvaluatorConcurrency != 4 {

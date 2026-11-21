@@ -94,6 +94,32 @@ func (s *MemoryStore) GetImportSession(_ context.Context, id string) (ImportSess
 	return cloneImportSession(session), nil
 }
 
+// GetImportBlob implements ImportSessionStore.
+func (s *MemoryStore) GetImportBlob(_ context.Context, sessionID, digest string) (ImportBlob, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	blob, ok := s.importBlobs[sessionID][digest]
+	if !ok {
+		return ImportBlob{}, ErrNotFound
+	}
+	return blob, nil
+}
+
+// ListImportBlobs implements ImportSessionStore.
+func (s *MemoryStore) ListImportBlobs(_ context.Context, sessionID string) ([]ImportBlob, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if _, ok := s.importSessions[sessionID]; !ok {
+		return nil, ErrNotFound
+	}
+	blobs := make([]ImportBlob, 0, len(s.importBlobs[sessionID]))
+	for _, blob := range s.importBlobs[sessionID] {
+		blobs = append(blobs, blob)
+	}
+	sort.Slice(blobs, func(i, j int) bool { return blobs[i].Digest < blobs[j].Digest })
+	return blobs, nil
+}
+
 // MissingImportBlobs implements ImportSessionStore.
 func (s *MemoryStore) MissingImportBlobs(_ context.Context, sessionID string) ([]ImportBlob, error) {
 	s.mu.RLock()

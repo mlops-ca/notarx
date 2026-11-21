@@ -113,8 +113,29 @@ func (s *PostgresStore) GetImportSession(ctx context.Context, id string) (Import
 	return session, err
 }
 
+// GetImportBlob implements ImportSessionStore.
+func (s *PostgresStore) GetImportBlob(ctx context.Context, sessionID, digest string) (ImportBlob, error) {
+	var blob ImportBlob
+	err := s.db.QueryRowContext(ctx, `SELECT session_id::text,digest,size,staging_key,verified FROM import_blobs WHERE session_id=$1::uuid AND digest=$2`, sessionID, digest).
+		Scan(&blob.SessionID, &blob.Digest, &blob.Size, &blob.StagingKey, &blob.Verified)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ImportBlob{}, ErrNotFound
+	}
+	return blob, err
+}
+
+// ListImportBlobs implements ImportSessionStore.
+func (s *PostgresStore) ListImportBlobs(ctx context.Context, sessionID string) ([]ImportBlob, error) {
+	return s.queryImportBlobs(ctx, sessionID, false)
+}
+
 // MissingImportBlobs implements ImportSessionStore.
 func (s *PostgresStore) MissingImportBlobs(ctx context.Context, sessionID string) ([]ImportBlob, error) {
+	return s.queryImportBlobs(ctx, sessionID, true)
+}
+
+// queryImportBlobs lists the blobs of a session by digest, only the unverified ones when missingOnly.
+func (s *PostgresStore) queryImportBlobs(ctx context.Context, sessionID string, missingOnly bool) ([]ImportBlob, error) {
 	var exists bool
 	if err := s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM import_sessions WHERE id=$1::uuid)`, sessionID).Scan(&exists); err != nil {
 		return nil, err
@@ -122,20 +143,20 @@ func (s *PostgresStore) MissingImportBlobs(ctx context.Context, sessionID string
 	if !exists {
 		return nil, ErrNotFound
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT session_id::text,digest,size,staging_key,verified FROM import_blobs WHERE session_id=$1::uuid AND NOT verified ORDER BY digest`, sessionID)
+	rows, err := s.db.QueryContext(ctx, `SELECT session_id::text,digest,size,staging_key,verified FROM import_blobs WHERE session_id=$1::uuid AND (NOT $2::boolean OR NOT verified) ORDER BY digest`, sessionID, missingOnly)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	missing := []ImportBlob{}
+	blobs := []ImportBlob{}
 	for rows.Next() {
 		var blob ImportBlob
 		if err = rows.Scan(&blob.SessionID, &blob.Digest, &blob.Size, &blob.StagingKey, &blob.Verified); err != nil {
 			return nil, err
 		}
-		missing = append(missing, blob)
+		blobs = append(blobs, blob)
 	}
-	return missing, rows.Err()
+	return blobs, rows.Err()
 }
 
 // lockImportSession reads the session state under a row lock.
