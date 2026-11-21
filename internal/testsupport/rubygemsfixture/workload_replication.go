@@ -52,13 +52,16 @@ func WorkloadReplicationContract(t *testing.T, s ReplicationStore, ws WorkloadSt
 				}
 				return j
 			}
+			// The check proves the authority snapshot; erroring with errActive after it keeps the probe from
+			// persisting a queued job that another test's worker would claim on a shared database.
+			errActive := errors.New("workload authority is active")
 			check := func(ctx context.Context, a dist.Authority) error {
 				if a.Subject != subject || !a.Active {
 					return dist.ErrAccessDenied
 				}
-				return ctx.Err()
+				return errors.Join(errActive, ctx.Err())
 			}
-			if _, _, err = s.CreateRubyGemsReplication(ctx, newJob(), check); err != nil {
+			if _, _, err = s.CreateRubyGemsReplication(ctx, newJob(), check); !errors.Is(err, errActive) {
 				t.Fatalf("workload job refused: %v", err)
 			}
 			switch mode {
