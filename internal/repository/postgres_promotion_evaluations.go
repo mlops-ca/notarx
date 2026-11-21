@@ -48,9 +48,14 @@ func (s *PostgresStore) ListEnabledPromotionRules(ctx context.Context, sourceRep
 // index in due-time order (no global sort), are locked with SKIP LOCKED so concurrent workers take disjoint rows, and
 // are leased in the same statement. The lease moves next_attempt_at to its expiry, so a row whose worker died is due
 // again by itself.
-const claimPromotionEvaluationsQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), candidates AS (
+const claimPromotionEvaluationsQuery = `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now), exhausted AS (
+    UPDATE promotion_evaluations e SET state='failed',last_reason='attempts_exhausted',lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now
+    FROM clock WHERE e.id IN (
+        SELECT x.id FROM promotion_evaluations x WHERE x.state IN ('pending','waiting') AND x.next_attempt_at<=clock.now AND x.attempts>=$4
+        ORDER BY x.next_attempt_at FOR UPDATE OF x SKIP LOCKED LIMIT 100)
+), candidates AS (
     SELECT e.id FROM promotion_evaluations e CROSS JOIN clock
-    WHERE e.state IN ('pending','waiting') AND e.next_attempt_at<=clock.now
+    WHERE e.state IN ('pending','waiting') AND e.next_attempt_at<=clock.now AND e.attempts<$4
     ORDER BY e.next_attempt_at FOR UPDATE OF e SKIP LOCKED LIMIT $3
 ), claimed AS (
     UPDATE promotion_evaluations e SET lease_owner=$1,lease_token=gen_random_uuid(),lease_expires_at=clock.now+$2::interval,next_attempt_at=clock.now+$2::interval,
@@ -63,7 +68,7 @@ func intervalOf(d time.Duration) string { return fmt.Sprintf("%d milliseconds", 
 
 // ClaimPromotionEvaluations implements PromotionEvaluationStore.
 func (s *PostgresStore) ClaimPromotionEvaluations(ctx context.Context, owner string, lease time.Duration, limit int) ([]PromotionEvaluation, error) {
-	rows, err := s.db.QueryContext(ctx, claimPromotionEvaluationsQuery, owner, intervalOf(lease), limit)
+	rows, err := s.db.QueryContext(ctx, claimPromotionEvaluationsQuery, owner, intervalOf(lease), limit, PromotionEvaluationMaxAttempts)
 	if err != nil {
 		return nil, err
 	}
@@ -132,9 +137,9 @@ WHERE e.rule_id=$1::uuid AND ($2='' OR e.state=$2) ORDER BY e.created_at DESC,e.
 
 // ParkPromotionRule implements PromotionEvaluationStore. The state change, the promotion.failed event and the audit
 // records commit together, so a parked rule is always announced.
-func (s *PostgresStore) ParkPromotionRule(ctx context.Context, ruleID, state, reason string, event events.Event, audit ...AuditRecord) (bool, error) {
+func (s *PostgresStore) ParkPromotionRule(ctx context.Context, ruleID, expectedVersion, state, reason string, event events.Event, audit ...AuditRecord) (bool, error) {
 	parked, err := runTransactional(ctx, s, audit, func(q sqlRunner) (bool, error) {
-		result, execErr := q.ExecContext(ctx, `UPDATE promotion_rules SET state=$2,state_reason=$3,updated_at=now() WHERE id=$1::uuid AND state='active'`, ruleID, state, truncateReason(reason))
+		result, execErr := q.ExecContext(ctx, `UPDATE promotion_rules SET state=$2,state_reason=$3,updated_at=now() WHERE id=$1::uuid AND state='active' AND version=$4::text::bigint`, ruleID, state, truncateReason(reason), expectedVersion)
 		if execErr != nil {
 			return false, execErr
 		}

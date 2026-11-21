@@ -19,7 +19,9 @@ type staticFanout struct {
 	err   error
 }
 
-func (f staticFanout) MatchingRules(context.Context, events.Event) ([]string, error) { return f.rules, f.err }
+func (f staticFanout) MatchingRules(context.Context, events.Event) ([]string, error) {
+	return f.rules, f.err
+}
 
 type evaluationFixture struct {
 	store  *PostgresStore
@@ -258,12 +260,18 @@ func TestPostgresParkPromotionRuleAnnouncesAndInvalidates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _, _ = f.store.db.ExecContext(ctx, `DELETE FROM webhook_subscriptions WHERE id=$1`, subscription.ID) })
+	t.Cleanup(func() {
+		_, _ = f.store.db.ExecContext(ctx, `DELETE FROM webhook_subscriptions WHERE id=$1`, subscription.ID)
+	})
 	var scopes []string
 	f.store.SetCacheInvalidator(func(scope, _ string) { scopes = append(scopes, scope) })
 	t.Cleanup(func() { f.store.SetCacheInvalidator(nil) })
 	event := events.Event{Type: events.PromotionFailed, RepositoryID: f.target.ID, Format: "raw", Coordinate: "releases/a.txt", Digest: "sha256:" + uuid.NewString(), Version: "rule:" + f.rule.ID + ":1"}
-	parked, err := f.store.ParkPromotionRule(ctx, f.rule.ID, PromotionRuleAuthorizationLost, "service_account_disabled", event)
+	// A decision made from an older version of the rule is refused: the rule was edited since.
+	if stale, staleErr := f.store.ParkPromotionRule(ctx, f.rule.ID, "99", PromotionRuleAuthorizationLost, "stale", event); staleErr != nil || stale {
+		t.Fatalf("parked on a stale version: %v, %v", stale, staleErr)
+	}
+	parked, err := f.store.ParkPromotionRule(ctx, f.rule.ID, f.rule.Version, PromotionRuleAuthorizationLost, "service_account_disabled", event)
 	if err != nil || !parked {
 		t.Fatalf("parked = %v, %v", parked, err)
 	}
@@ -280,7 +288,7 @@ func TestPostgresParkPromotionRuleAnnouncesAndInvalidates(t *testing.T) {
 	if enabled, err := f.store.ListEnabledPromotionRules(ctx, f.source.ID); err != nil || len(enabled) != 0 {
 		t.Fatalf("a parked rule is listed as enabled: %+v, %v", enabled, err)
 	}
-	if again, err := f.store.ParkPromotionRule(ctx, f.rule.ID, PromotionRuleAuthorizationLost, "again", event); err != nil || again {
+	if again, err := f.store.ParkPromotionRule(ctx, f.rule.ID, rule.Version, PromotionRuleAuthorizationLost, "again", event); err != nil || again {
 		t.Fatalf("a parked rule was parked again: %v, %v", again, err)
 	}
 	// An edit returns it to active.
@@ -289,5 +297,53 @@ func TestPostgresParkPromotionRuleAnnouncesAndInvalidates(t *testing.T) {
 	}
 	if enabled, err := f.store.ListEnabledPromotionRules(ctx, f.source.ID); err != nil || len(enabled) != 1 {
 		t.Fatalf("enabled rules = %+v, %v", enabled, err)
+	}
+}
+
+// A row that used all its attempts is failed by the claim and never claimed again; a row below the limit is still claimed.
+func TestPostgresClaimFailsRowsThatUsedTheirAttempts(t *testing.T) {
+	f := newEvaluationFixture(t)
+	ctx := context.Background()
+	events.SetRuleFanout(staticFanout{rules: []string{f.rule.ID}})
+	if _, err := f.publish(t, true); err != nil {
+		t.Fatal(err)
+	}
+	for attempt := 1; attempt <= PromotionEvaluationMaxAttempts; attempt++ {
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			claimed, err := f.store.ClaimPromotionEvaluations(ctx, "dying-worker", 5*time.Millisecond, 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(claimed) == 1 {
+				if claimed[0].Attempts != attempt {
+					t.Fatalf("claim %d counted %d attempts", attempt, claimed[0].Attempts)
+				}
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("claim %d never became due", attempt)
+			}
+			<-time.After(5 * time.Millisecond)
+		}
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		claimed, err := f.store.ClaimPromotionEvaluations(ctx, "survivor", time.Minute, 1)
+		if err != nil || len(claimed) != 0 {
+			t.Fatalf("a row with no attempts left was claimed: %+v, %v", claimed, err)
+		}
+		if failed, listErr := f.store.ListPromotionEvaluations(ctx, PromotionEvaluationQuery{RuleID: f.rule.ID, State: PromotionEvaluationFailed, Limit: 10}); listErr != nil {
+			t.Fatal(listErr)
+		} else if len(failed) == 1 {
+			if failed[0].LastReason != PromotionEvaluationExhausted || failed[0].LeaseToken != "" {
+				t.Fatalf("failed row = %+v", failed[0])
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the exhausted row was never failed")
+		}
+		<-time.After(5 * time.Millisecond)
 	}
 }

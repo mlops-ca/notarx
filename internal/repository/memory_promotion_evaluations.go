@@ -78,10 +78,17 @@ func (s *MemoryStore) ClaimPromotionEvaluations(_ context.Context, owner string,
 	defer s.mu.Unlock()
 	now := time.Now().UTC()
 	var due []PromotionEvaluation
-	for _, evaluation := range s.promotionEvaluations {
-		if (evaluation.State == PromotionEvaluationPending || evaluation.State == PromotionEvaluationWaiting) && !evaluation.NextAttemptAt.After(now) {
-			due = append(due, evaluation)
+	for id, evaluation := range s.promotionEvaluations {
+		if (evaluation.State != PromotionEvaluationPending && evaluation.State != PromotionEvaluationWaiting) || evaluation.NextAttemptAt.After(now) {
+			continue
 		}
+		if evaluation.Attempts >= PromotionEvaluationMaxAttempts {
+			evaluation.State, evaluation.LastReason, evaluation.UpdatedAt = PromotionEvaluationFailed, PromotionEvaluationExhausted, now
+			evaluation.LeaseOwner, evaluation.LeaseToken, evaluation.LeaseExpiresAt = "", "", time.Time{}
+			s.promotionEvaluations[id] = evaluation
+			continue
+		}
+		due = append(due, evaluation)
 	}
 	sortEvaluationsOldestDueFirst(due)
 	if limit > 0 && len(due) > limit {
@@ -141,11 +148,11 @@ func (s *MemoryStore) ListPromotionEvaluations(_ context.Context, query Promotio
 }
 
 // ParkPromotionRule implements PromotionEvaluationStore.
-func (s *MemoryStore) ParkPromotionRule(ctx context.Context, ruleID, state, reason string, event events.Event, audit ...AuditRecord) (bool, error) {
+func (s *MemoryStore) ParkPromotionRule(ctx context.Context, ruleID, expectedVersion, state, reason string, event events.Event, audit ...AuditRecord) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	rule, ok := s.promotionRules[ruleID]
-	if !ok || rule.State != PromotionRuleActive {
+	if !ok || rule.State != PromotionRuleActive || rule.Version != expectedVersion {
 		return false, nil
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {

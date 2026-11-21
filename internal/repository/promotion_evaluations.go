@@ -48,7 +48,8 @@ func (s PromotionEvaluationState) Terminal() bool {
 }
 
 // PromotionEvaluationMaxAttempts is how many claims an evaluation gets before a transient failure becomes final. A claim
-// counts every time the row is taken, so an evaluator that keeps dying on one row also exhausts it.
+// counts every time the row is taken, so an evaluator that keeps dying on one row also exhausts it: the claim fails such a
+// row with PromotionEvaluationExhausted.
 const PromotionEvaluationMaxAttempts = 8
 
 // PromotionEvaluation is one row of promotion_evaluations. It names its event by (EventSeq, EventOccurredAt): the event
@@ -105,7 +106,9 @@ type PromotionEvaluationStore interface {
 	// ListEnabledPromotionRules returns the enabled, active rules of a source repository: the rule set of the fan-out.
 	ListEnabledPromotionRules(ctx context.Context, sourceRepositoryID string) ([]PromotionRule, error)
 	// ClaimPromotionEvaluations takes up to limit due pending or waiting rows with FOR UPDATE SKIP LOCKED and leases them
-	// to owner. A row whose lease expired is due again, so a crashed worker's rows come back without a scheduler.
+	// to owner. A row whose lease expired is due again, so a crashed worker's rows come back without a scheduler; a due
+	// row that already used PromotionEvaluationMaxAttempts claims is failed with attempts_exhausted instead of claimed, so
+	// a row that keeps killing its worker stops.
 	ClaimPromotionEvaluations(ctx context.Context, owner string, lease time.Duration, limit int) ([]PromotionEvaluation, error)
 	// FinishPromotionEvaluation records the outcome of a claimed row and releases the lease. It returns
 	// ErrPromotionEvaluationLeaseLost when the lease is no longer the caller's.
@@ -113,10 +116,14 @@ type PromotionEvaluationStore interface {
 	// ListPromotionEvaluations lists the evaluations of a rule, newest first.
 	ListPromotionEvaluations(ctx context.Context, query PromotionEvaluationQuery) ([]PromotionEvaluation, error)
 	// ParkPromotionRule moves an active rule to state (authorization_lost or paused) with a reason, bumping no version:
-	// parking is not an edit. It reports whether the rule was active. The change and the promotion.failed event commit
-	// together with the audit records.
-	ParkPromotionRule(ctx context.Context, ruleID, state, reason string, event events.Event, audit ...AuditRecord) (bool, error)
+	// parking is not an edit. It is conditional on the version the caller decided from, so a rule edited since is left
+	// alone, and it reports whether the rule was parked. The change and the promotion.failed event commit together with the
+	// audit records.
+	ParkPromotionRule(ctx context.Context, ruleID, expectedVersion, state, reason string, event events.Event, audit ...AuditRecord) (bool, error)
 }
+
+// PromotionEvaluationExhausted is the reason of an evaluation the claim failed because it used all its attempts.
+const PromotionEvaluationExhausted = "attempts_exhausted"
 
 // PromotionEvaluationBackoff is the delay before a transient failure of a claimed evaluation is tried again: 5 seconds, doubling,
 // up to 5 minutes.

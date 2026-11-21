@@ -22,14 +22,15 @@ type RuleSource interface {
 type CoordinateValidator func(format repository.Format) func(coordinate string) bool
 
 // CandidateOf is the match candidate of a published artifact, derived from its format and canonical coordinate the way a
-// promotion addresses it: name@version for npm, PyPI, Go (the version keeps its leading "v"), Cargo and versioned Raw,
-// reference#revision for Conan (the version is the second segment of the reference), group:artifact:version for Maven.
-// The tags that point at the artifact and the properties frozen at seal are not known at publication; the evaluator
-// reads them when it reloads the artifact.
+// promotion addresses it: name@version for npm, PyPI, Go (the version keeps its leading "v") and Cargo,
+// reference#revision for Conan (the version is the second segment of the reference), group:artifact:version for Maven. A
+// Raw path has no version here: a flat repository has no version concept, and the version of a versioned repository is
+// read from the repository (CandidatesOf, and the evaluator). The tags that point at the artifact and the properties frozen
+// at seal are not known at publication; the evaluator reads them when it reloads the artifact.
 func CandidateOf(format repository.Format, coordinate string) promotionrules.Candidate {
 	candidate := promotionrules.Candidate{Coordinate: coordinate}
 	switch format {
-	case repository.FormatNPM, repository.FormatPyPI, repository.FormatCargo, repository.FormatRaw:
+	case repository.FormatNPM, repository.FormatPyPI, repository.FormatCargo:
 		if at := strings.LastIndex(coordinate, "@"); at > 0 {
 			candidate.Version = coordinate[at+1:]
 		}

@@ -114,20 +114,28 @@ channel and by a poll), and for each one:
 1. reloads the rule and the artifact and checks the rule is still enabled and active;
 2. re-authorizes the run-as service account: it must exist, be active, be able to read the source and write the target.
    A refusal parks the rule in state `authorization_lost`, announces `promotion.failed` with the rule id and the reason, and
-   fails the evaluation. Evaluation stops until an edit of the rule returns it to `active`;
+   fails the evaluation (the park is conditional on the rule version the evaluation read, so a rule edited meanwhile is
+   evaluated again instead). Evaluation stops until an edit of the rule returns it to `active`. A grant set that cannot be
+   read is a transient error that retries the evaluation, never a reason to park;
 3. re-checks the match against the artifact as it is now (refs, and for a versioned Raw source the properties frozen at
-   seal; a file of a versioned Raw source is evaluated as its version `name@version`, and waits, polling every five
-   minutes for up to a week, while the version is open);
-4. evaluates the conditions with the dry run's verdicts. A failed condition skips the artifact with the reason
-   `condition_failed:<condition>:<reason>`; an age condition waits until `published + minAge` instead. The scan wait and the
-   re-pend on a new scan result belong to a later slice;
+   seal; a file of a versioned Raw source is evaluated as its version `name@version`, published when it is sealed, and
+   waits while the version is open);
+4. evaluates the conditions with the dry run's verdicts, reading the target's admission policy as it is now. An age
+   condition waits until `published + minAge` (never less than five seconds ahead). Any other failing condition (a scan
+   that has not completed, evidence that is missing, the target's policy, a quarantine) can still change, so the
+   evaluation waits and looks again after a quarter of the artifact's age, between one minute and one hour, and is
+   dropped with the reason `condition_failed:<condition>:<reason>` a week after publication. Findings above `maxSeverity`
+   are final and skip at once. The re-pend on a new scan result, which makes the recheck immediate, belongs to a later
+   slice;
 5. for `scope: release` expands the artifact through the format's `ReleaseSet`, admits every member before queueing any,
    and calls `PromotionService.Request` for each member as the service account. A member whose digest the target already
    holds (a completed promotion into it) is a no-op; different bytes at its coordinate fail the evaluation with
    `conflict`. Quarantine and the target's admission policy still apply: a refusal skips with its code.
 
 The outcome of a row is `queued` (promotion requested; the `artifact_promotions` row shows its progress), `waiting`,
-`skipped` or `failed`, with the reason in `last_reason`. Delivery is at least once; the promotion is effectively once because
+`skipped` or `failed`, with the reason in `last_reason`. A row that is claimed eight times without an outcome (a worker that dies on it every time) is failed by the claim with
+`attempts_exhausted`, and a panic in an evaluation is recorded as a failed attempt like any other error. Delivery is at
+least once; the promotion is effectively once because
 its provenance idempotency key is `rule:<ruleId>:<sha256(target|coordinate|digest|generation>`, where the generation is the
 time the target coordinate was tombstoned, so promoting again after a tombstone mints a new key and nothing else does. A
 promotion whose last attempt failed, was rejected, expired or was cancelled is retried by the next request under its key,

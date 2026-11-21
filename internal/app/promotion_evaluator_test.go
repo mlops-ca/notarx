@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -220,7 +221,7 @@ func TestWorkerCrashAndDuplicateDeliveryYieldOnePromotionRowAndOneJob(t *testing
 	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
 	asset := f.publishRaw(f.source, "releases/widget.txt", "widget")
 	// A worker claims the evaluation, requests the promotion and dies before it records the outcome: its lease expires.
-	claimed, err := f.store.ClaimPromotionEvaluations(ctx, "crashed-worker", time.Nanosecond, 1)
+	claimed, err := f.store.ClaimPromotionEvaluations(ctx, "crashed-worker", 0, 1)
 	if err != nil || len(claimed) != 1 {
 		t.Fatalf("claimed = %+v, %v", claimed, err)
 	}
@@ -324,9 +325,9 @@ func TestRepromotionAfterTheTargetWasTombstonedMintsANewKey(t *testing.T) {
 	if err := f.store.DeleteRawAsset(ctx, f.target.ID, asset.Path); err != nil {
 		t.Fatal(err)
 	}
-	generation, presence, conflict, err := f.evaluator.targetState(ctx, f.target, repository.FormatRaw, asset.Path, asset.Digest)
-	if err != nil || presence != targetEmpty || conflict != "" || generation == "" {
-		t.Fatalf("after tombstone: generation=%q presence=%v conflict=%q err=%v", generation, presence, conflict, err)
+	generation, holds, conflict, err := f.evaluator.targetState(ctx, f.target, repository.FormatRaw, asset.Path, asset.Digest)
+	if err != nil || holds || conflict != "" || generation == "" {
+		t.Fatalf("after tombstone: generation=%q holds=%v conflict=%q err=%v", generation, holds, conflict, err)
 	}
 	old := RulePromotionKey(f.rule.ID, f.target.ID, asset.Path, asset.Digest, "")
 	renewed := RulePromotionKey(f.rule.ID, f.target.ID, asset.Path, asset.Digest, generation)
@@ -425,29 +426,77 @@ func TestEvaluationReauthorizesSourceReadAndTargetWriteEveryTime(t *testing.T) {
 	}
 }
 
-func TestEvaluatorHonoursConditionsAndWaitsForTheAge(t *testing.T) {
+func TestFailedConditionWaitsAndPromotesOnceItHolds(t *testing.T) {
 	ctx := context.Background()
 	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), json.RawMessage(`{"scan":{"completed":true}}`))
-	f.publishRaw(f.source, "releases/widget.txt", "widget")
+	asset := f.publishRaw(f.source, "releases/widget.txt", "widget")
 	f.runOnce()
-	if got := f.evaluations(repository.PromotionEvaluationSkipped); len(got) != 1 || got[0].LastReason != reasonConditionPrefix+"scan:scan_not_completed" {
-		t.Fatalf("a rule that needs a scan promoted an unscanned artifact: %+v", f.evaluations())
+	waiting := f.evaluations(repository.PromotionEvaluationWaiting)
+	if len(waiting) != 1 || waiting[0].LastReason != reasonConditionPrefix+"scan:scan_not_completed" || waiting[0].Attempts != 0 {
+		t.Fatalf("a rule that needs a scan must wait for it: %+v", f.evaluations())
+	}
+	if waiting[0].NextAttemptAt.Before(f.now.Add(conditionPollFloor - time.Second)) {
+		t.Fatalf("next attempt = %v, want at least a minute after %v", waiting[0].NextAttemptAt, f.now)
 	}
 	if rows := f.promotionRows(f.target.ID); len(rows) != 0 {
 		t.Fatalf("rows = %+v", rows)
 	}
-	// An age condition waits until the artifact is old enough, on the injected clock.
-	aged := f.rule
-	aged.Conditions = json.RawMessage(`{"minAge":"72h"}`)
-	updated, err := f.store.UpdatePromotionRule(ctx, aged, f.rule.Version)
+	// The scan completes clean; the next look promotes.
+	if _, err := f.store.ReplaceArtifactIntelligence(ctx, repository.ArtifactIntelligence{RepositoryID: f.source.ID, Format: repository.FormatRaw, Coordinate: asset.Path, Digest: asset.Digest,
+		Vulnerability: &repository.ArtifactVulnerabilitySummary{Scanner: "test", Status: "clean", ScannedAt: f.now}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if outcome, err := f.evaluator.evaluate(ctx, waiting[0]); err != nil || outcome.State != repository.PromotionEvaluationQueued {
+		t.Fatalf("after the scan: %+v, %v", outcome, err)
+	}
+}
+
+func TestFindingsAboveTheLimitSkipForGoodAndAWeekOldWaitGivesUp(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), json.RawMessage(`{"scan":{"completed":true,"maxSeverity":"medium"}}`))
+	asset := f.publishRaw(f.source, "releases/widget.txt", "widget")
+	if _, err := f.store.ReplaceArtifactIntelligence(ctx, repository.ArtifactIntelligence{RepositoryID: f.source.ID, Format: repository.FormatRaw, Coordinate: asset.Path, Digest: asset.Digest,
+		Vulnerability: &repository.ArtifactVulnerabilitySummary{Scanner: "test", Status: "vulnerable", High: 1, ScannedAt: f.now}}, ""); err != nil {
+		t.Fatal(err)
+	}
+	f.runOnce()
+	if got := f.evaluations(repository.PromotionEvaluationSkipped); len(got) != 1 || got[0].LastReason != reasonConditionPrefix+"scan:severity_above_medium" {
+		t.Fatalf("findings above the limit: %+v", f.evaluations())
+	}
+	// A condition that never holds stops being rechecked a week after publication.
+	unscanned := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: "releases/old.txt", Digest: "sha256:" + strings.Repeat("0", 64), EventOccurredAt: f.now.Add(-8 * 24 * time.Hour)}
+	old := f.publishRaw(f.source, unscanned.Coordinate, "old")
+	unscanned.Digest = old.Digest
+	if outcome, err := f.evaluator.evaluate(ctx, unscanned); err != nil || outcome.State != repository.PromotionEvaluationSkipped || outcome.Reason != reasonConditionPrefix+"scan:scan_not_completed" {
+		t.Fatalf("a week-old wait: %+v, %v", outcome, err)
+	}
+}
+
+func TestSecurityPolicyConditionReadsTheTargetPolicy(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), json.RawMessage(`{"securityPolicy":"pass"}`))
+	current, err := f.store.GetRepositorySecurityPolicy(ctx, f.target.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.rule = updated
-	asset := f.publishRaw(f.source, "releases/second.txt", "second")
+	if _, err = f.store.ReplaceRepositorySecurityPolicy(ctx, f.target.ID, repository.RepositorySecurityPolicy{Enabled: true, RequireSignature: true}, current.Version); err != nil {
+		t.Fatal(err)
+	}
+	f.publishRaw(f.source, "releases/widget.txt", "widget")
 	f.runOnce()
 	waiting := f.evaluations(repository.PromotionEvaluationWaiting)
-	if len(waiting) != 1 || waiting[0].Coordinate != asset.Path || waiting[0].Attempts != 0 {
+	if len(waiting) != 1 || !strings.HasPrefix(waiting[0].LastReason, reasonConditionPrefix+"securityPolicy:") {
+		t.Fatalf("the target's policy was not evaluated: %+v", f.evaluations())
+	}
+}
+
+func TestAgeConditionWaitsUntilPublishedPlusMinAgeAndNeverSpins(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), json.RawMessage(`{"minAge":"72h"}`))
+	f.publishRaw(f.source, "releases/widget.txt", "widget")
+	f.runOnce()
+	waiting := f.evaluations(repository.PromotionEvaluationWaiting)
+	if len(waiting) != 1 || waiting[0].Attempts != 0 {
 		t.Fatalf("evaluations = %+v", f.evaluations())
 	}
 	if want := waiting[0].EventOccurredAt.Add(72 * time.Hour); !waiting[0].NextAttemptAt.Equal(want) {
@@ -458,9 +507,97 @@ func TestEvaluatorHonoursConditionsAndWaitsForTheAge(t *testing.T) {
 	}
 	// Three days later the same evaluation finds the artifact old enough and the promotion is requested.
 	f.now = f.now.Add(73 * time.Hour)
-	due := waiting[0]
-	if outcome, evalErr := f.evaluator.evaluate(ctx, due); evalErr != nil || outcome.State != repository.PromotionEvaluationQueued || outcome.PromotionID == "" {
-		t.Fatalf("a due evaluation: %+v, %v", outcome, evalErr)
+	if outcome, err := f.evaluator.evaluate(ctx, waiting[0]); err != nil || outcome.State != repository.PromotionEvaluationQueued || outcome.PromotionID == "" {
+		t.Fatalf("a due evaluation: %+v, %v", outcome, err)
+	}
+	// A clock that runs behind the database's can find an evaluation a moment too early: it waits at least waitFloor, it
+	// does not come straight back.
+	other := f.publishRaw(f.source, "releases/other.txt", "other")
+	early := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: other.Path, Digest: other.Digest, EventOccurredAt: f.now.Add(-72*time.Hour + time.Millisecond)}
+	if outcome, err := f.evaluator.evaluate(ctx, early); err != nil || outcome.State != repository.PromotionEvaluationWaiting || outcome.NextAttemptAt.Before(f.now.Add(waitFloor)) {
+		t.Fatalf("an almost old enough artifact: %+v, %v", outcome, err)
+	}
+}
+
+// panickingStore panics when the evaluator reads a rule.
+type panickingStore struct{ *repository.MemoryStore }
+
+func (panickingStore) GetPromotionRule(context.Context, string) (repository.PromotionRule, error) {
+	panic("corrupt rule")
+}
+
+func TestPanickingEvaluationIsRecordedAndFailsOnceItsAttemptsAreUsed(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	f.publishRaw(f.source, "releases/widget.txt", "widget")
+	evaluator := NewPromotionEvaluator(PromotionEvaluatorOptions{Store: panickingStore{f.store}, Authorizer: RepositoryAuthorizer{Grants: f.store, Legacy: testAuthenticator()}, Owner: "panicker"})
+	if handled, err := evaluator.RunOnce(ctx); err != nil || handled != 1 {
+		t.Fatalf("a panic escaped or was not counted: %d, %v", handled, err)
+	}
+	pending := f.evaluations(repository.PromotionEvaluationPending)
+	if len(pending) != 1 || pending[0].LastReason != reasonEvaluationPanic || pending[0].Attempts != 1 || pending[0].LeaseToken != "" || !pending[0].NextAttemptAt.After(f.now) {
+		t.Fatalf("evaluations = %+v", f.evaluations())
+	}
+}
+
+// A worker that dies on the same row every time stops after the attempts the row has: the claim fails the row instead of
+// taking it again.
+func TestRowThatKeepsKillingItsWorkerIsFailedByTheClaim(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	f.publishRaw(f.source, "releases/widget.txt", "widget")
+	for attempt := 1; attempt <= repository.PromotionEvaluationMaxAttempts; attempt++ {
+		claimed, err := f.store.ClaimPromotionEvaluations(ctx, "dying", 0, 1)
+		if err != nil || len(claimed) != 1 || claimed[0].Attempts != attempt {
+			t.Fatalf("claim %d = %+v, %v", attempt, claimed, err)
+		}
+	}
+	if claimed, err := f.store.ClaimPromotionEvaluations(ctx, "survivor", time.Minute, 1); err != nil || len(claimed) != 0 {
+		t.Fatalf("a row with no attempts left was claimed: %+v, %v", claimed, err)
+	}
+	if got := f.evaluations(repository.PromotionEvaluationFailed); len(got) != 1 || got[0].LastReason != repository.PromotionEvaluationExhausted || got[0].LeaseToken != "" {
+		t.Fatalf("evaluations = %+v", f.evaluations())
+	}
+}
+
+// grantsDownStore cannot read repository grants.
+type grantsDownStore struct{ *repository.MemoryStore }
+
+func (grantsDownStore) GetRepositoryGrants(context.Context, string) (repository.RepositoryGrantSet, error) {
+	return repository.RepositoryGrantSet{}, errors.New("database unavailable")
+}
+
+func TestUnreadableGrantsRetryTheEvaluationAndDoNotParkTheRule(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	f.publishRaw(f.source, "releases/widget.txt", "widget")
+	evaluator := NewPromotionEvaluator(PromotionEvaluatorOptions{Store: f.store, Authorizer: RepositoryAuthorizer{Grants: grantsDownStore{f.store}, Legacy: testAuthenticator()}, Owner: "blip"})
+	if handled, err := evaluator.RunOnce(ctx); err != nil || handled != 1 {
+		t.Fatalf("handled = %d, %v", handled, err)
+	}
+	if pending := f.evaluations(repository.PromotionEvaluationPending); len(pending) != 1 || pending[0].LastReason != reasonEvaluationError {
+		t.Fatalf("a database blip must retry the evaluation: %+v", f.evaluations())
+	}
+	if rule, err := f.store.GetPromotionRule(ctx, f.rule.ID); err != nil || rule.State != repository.PromotionRuleActive {
+		t.Fatalf("a database blip parked the rule: %+v, %v", rule, err)
+	}
+}
+
+func TestParkingIsConditionalOnTheRuleVersionTheEvaluationRead(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	stale := f.rule
+	edited, err := f.store.UpdatePromotionRule(ctx, f.rule, f.rule.Version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	evaluation := repository.PromotionEvaluation{RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: "a.txt", Digest: "sha256:aa"}
+	outcome, err := f.evaluator.park(ctx, stale, f.source, f.target, evaluation, "service_account_disabled")
+	if err != nil || outcome.State != repository.PromotionEvaluationPending || outcome.Reason != reasonRuleChanged {
+		t.Fatalf("park on a stale rule: %+v, %v", outcome, err)
+	}
+	if rule, getErr := f.store.GetPromotionRule(ctx, f.rule.ID); getErr != nil || rule.State != repository.PromotionRuleActive || rule.Version != edited.Version {
+		t.Fatalf("a rule edited since was parked: %+v, %v", rule, getErr)
 	}
 }
 
