@@ -80,3 +80,7 @@ func promotionConfigFromEnv(current PromotionConfig) (PromotionConfig, error) {
 	}
 	return current, nil
 }
+
+// LoadPromotion reads the promotion settings from the environment, for the commands that are not the gateway (the event
+// repair tool fans the events it writes out to the rules only when promotion is enabled).
+func LoadPromotion() (PromotionConfig, error) { return promotionConfigFromEnv(PromotionConfig{}) }

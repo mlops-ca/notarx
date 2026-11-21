@@ -43,3 +43,18 @@ func TestPromotionConfigEvaluator(t *testing.T) {
 		}
 	}
 }
+
+func TestLoadPromotionReadsTheEnvironment(t *testing.T) {
+	got, err := LoadPromotion()
+	if err != nil || !got.Enabled() {
+		t.Fatalf("default = %+v, %v", got, err)
+	}
+	t.Setenv("NOTARX_PROMOTION_ENABLED", "false")
+	if got, err = LoadPromotion(); err != nil || got.Enabled() {
+		t.Fatalf("disabled = %+v, %v", got, err)
+	}
+	t.Setenv("NOTARX_PROMOTION_ENABLED", "maybe")
+	if _, err = LoadPromotion(); err == nil {
+		t.Fatal("an invalid value must be refused, as the gateway refuses it")
+	}
+}

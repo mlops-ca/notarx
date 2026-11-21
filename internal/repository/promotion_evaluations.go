@@ -85,6 +85,9 @@ type PromotionEvaluationOutcome struct {
 	NextAttemptAt time.Time
 	// PromotionID is the provenance row of a queued outcome.
 	PromotionID string
+	// NotAnAttempt returns the attempt the claim counted: the evaluator decided nothing (the rule changed under it) and
+	// asks to be looked at again, which must not use up the row's attempts.
+	NotAnAttempt bool
 }
 
 // PromotionEvaluationQuery lists the evaluations of one rule, newest first.
@@ -106,7 +109,9 @@ type PromotionRuleMatcher interface {
 
 // PromotionEvaluationStore is the queue of rule evaluations (ADR 0021, Evaluator).
 type PromotionEvaluationStore interface {
-	// ListEnabledPromotionRules returns the enabled, active rules of a source repository: the rule set of the fan-out.
+	// ListEnabledPromotionRules returns the enabled rules of a source repository in any state: the rule set of the fan-out. A
+	// parked rule is included so the artifacts published while it is parked wait for it instead of being lost; the evaluator
+	// decides what a parked rule does.
 	ListEnabledPromotionRules(ctx context.Context, sourceRepositoryID string) ([]PromotionRule, error)
 	// ClaimPromotionEvaluations takes up to limit due pending or waiting rows with FOR UPDATE SKIP LOCKED and leases them
 	// to owner. A row whose lease expired is due again, so a crashed worker's rows come back without a scheduler; a due

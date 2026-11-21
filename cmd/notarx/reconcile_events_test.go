@@ -42,11 +42,3 @@ func TestReconcileEventsReportsAnUnreachableDatabase(t *testing.T) {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
-
-func TestReconcileEventsEvaluatesRulesUnlessPromotionIsDisabled(t *testing.T) {
-	for value, want := range map[string]bool{"": true, "true": true, " true ": true, "false": false, " false\n": false} {
-		if got := promotionEnabled(func(string) string { return value }); got != want {
-			t.Errorf("NOTARX_PROMOTION_ENABLED=%q: enabled = %v, want %v", value, got, want)
-		}
-	}
-}

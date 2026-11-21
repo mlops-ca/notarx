@@ -84,7 +84,7 @@ func newEvaluatorFixture(t *testing.T, format repository.Format, match promotion
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.evaluator = NewPromotionEvaluator(PromotionEvaluatorOptions{Store: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: testAuthenticator()}, Owner: "test-worker", Now: func() time.Time { return f.now }})
+	f.evaluator = NewPromotionEvaluator(PromotionEvaluatorOptions{Store: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: testAuthenticator()}, Owner: "test-worker", Concurrency: 1, Now: func() time.Time { return f.now }})
 	return f
 }
 
@@ -127,13 +127,21 @@ func (f *evaluatorFixture) evaluations(states ...repository.PromotionEvaluationS
 	return out
 }
 
+// runOnce evaluates what is due until nothing is, one row at a time (the fixture's evaluator has concurrency 1), and returns
+// how many evaluations it ran.
 func (f *evaluatorFixture) runOnce() int {
 	f.t.Helper()
-	handled, err := f.evaluator.RunOnce(context.Background())
-	if err != nil {
-		f.t.Fatal(err)
+	total := 0
+	for {
+		handled, err := f.evaluator.RunOnce(context.Background())
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		if handled == 0 {
+			return total
+		}
+		total += handled
 	}
-	return handled
 }
 
 func (f *evaluatorFixture) promotionRows(targetID string) []repository.ArtifactPromotion {
@@ -372,10 +380,14 @@ func TestRevokedServiceAccountParksTheRuleAndAnnouncesPromotionFailed(t *testing
 	if err = json.Unmarshal(stored[0].Event.Payload, &payload); err != nil || payload["ruleId"] != f.rule.ID || payload["state"] != repository.PromotionRuleAuthorizationLost || payload["reason"] != "service_account_disabled" {
 		t.Fatalf("payload = %s, %v", stored[0].Event.Payload, err)
 	}
-	// A parked rule fans out nothing.
+	// An artifact published while the rule is parked still gets its evaluation, which waits for the rule; nothing is promoted.
 	f.publishRaw(f.source, "releases/next.txt", "next")
-	if got := f.evaluations(repository.PromotionEvaluationPending); len(got) != 0 {
-		t.Fatalf("a parked rule fanned out: %+v", got)
+	f.runOnce()
+	if got := f.evaluations(repository.PromotionEvaluationWaiting); len(got) != 2 {
+		t.Fatalf("a parked rule must keep the evaluations of what is published meanwhile waiting: %+v", f.evaluations())
+	}
+	if rows := f.promotionRows(f.target.ID); len(rows) != 0 {
+		t.Fatalf("a parked rule promoted: %+v", rows)
 	}
 	// Editing the rule once the account is active again restores it.
 	active := repository.ServiceAccountActive
@@ -481,9 +493,11 @@ func TestFindingsAboveTheLimitWaitForARescanAndAWeekOldWaitGivesUp(t *testing.T)
 	}
 }
 
-func TestSecurityPolicyConditionReadsTheTargetPolicy(t *testing.T) {
+// The target's admission policy is a condition of every rule, written or not: an artifact it refuses waits (for a scan or
+// evidence) instead of reaching the promotion request, whose refusal is final and audited.
+func TestTargetPolicyIsAlwaysAConditionAndAnArtifactItRefusesWaits(t *testing.T) {
 	ctx := context.Background()
-	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), json.RawMessage(`{"securityPolicy":"pass"}`))
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
 	current, err := f.store.GetRepositorySecurityPolicy(ctx, f.target.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -496,6 +510,9 @@ func TestSecurityPolicyConditionReadsTheTargetPolicy(t *testing.T) {
 	waiting := f.evaluations(repository.PromotionEvaluationWaiting)
 	if len(waiting) != 1 || !strings.HasPrefix(waiting[0].LastReason, reasonConditionPrefix+"securityPolicy:") {
 		t.Fatalf("the target's policy was not evaluated: %+v", f.evaluations())
+	}
+	if rows := f.promotionRows(f.target.ID); len(rows) != 0 {
+		t.Fatalf("an artifact the target refuses reached a promotion request: %+v", rows)
 	}
 }
 
@@ -602,7 +619,7 @@ func TestParkingIsConditionalOnTheRuleVersionTheEvaluationRead(t *testing.T) {
 	}
 	evaluation := repository.PromotionEvaluation{RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: "a.txt", Digest: "sha256:aa"}
 	outcome, err := f.evaluator.park(ctx, stale, f.source, f.target, evaluation, "service_account_disabled")
-	if err != nil || outcome.State != repository.PromotionEvaluationPending || outcome.Reason != reasonRuleChanged {
+	if err != nil || outcome.State != repository.PromotionEvaluationPending || outcome.Reason != reasonRuleChanged || !outcome.NotAnAttempt {
 		t.Fatalf("park on a stale rule: %+v, %v", outcome, err)
 	}
 	if rule, getErr := f.store.GetPromotionRule(ctx, f.rule.ID); getErr != nil || rule.State != repository.PromotionRuleActive || rule.Version != edited.Version {
@@ -635,7 +652,7 @@ func TestReleaseScopeOnVersionedRawPromotesEveryFileOfTheVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.evaluator = NewPromotionEvaluator(PromotionEvaluatorOptions{Store: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: testAuthenticator()}, Owner: "test-worker", Now: func() time.Time { return f.now }})
+	f.evaluator = NewPromotionEvaluator(PromotionEvaluatorOptions{Store: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: testAuthenticator()}, Owner: "test-worker", Concurrency: 1, Now: func() time.Time { return f.now }})
 	first := f.publishRaw(source, "tool/1.0.0/bin/tool", "binary")
 	// A file of an open version is announced, but the version is not released until it is sealed.
 	f.runOnce()
@@ -816,12 +833,9 @@ func TestEvaluationsOfAParkedRuleWaitAndPromoteOnceTheRuleIsEdited(t *testing.T)
 	if _, err := f.store.UpdateServiceAccount(ctx, repository.ServiceAccountUpdate{ID: f.account.ID, State: &disabled}, f.account.Version); err != nil {
 		t.Fatal(err)
 	}
-	// The two evaluations run at once: one parks the rule and the other either finds it parked or, having read it active,
-	// loses the park to the first and is decided again (pending, due at once). Run until nothing is pending.
-	for round := 0; round < 3 && (round == 0 || len(f.evaluations(repository.PromotionEvaluationPending)) > 0); round++ {
-		f.runOnce()
-	}
-	// Both wait for the rule to come back.
+	// One evaluation parks the rule and the next finds it parked; both wait for the rule to come back.
+	f.runOnce()
+	f.runOnce()
 	waitingRows := f.evaluations(repository.PromotionEvaluationWaiting)
 	if len(waitingRows) != 2 {
 		t.Fatalf("evaluations = %+v", f.evaluations())
@@ -830,7 +844,12 @@ func TestEvaluationsOfAParkedRuleWaitAndPromoteOnceTheRuleIsEdited(t *testing.T)
 	if !reasons[reasonAuthorizationLost+":service_account_disabled"] || !reasons[reasonRuleParkedPrefix+repository.PromotionRuleAuthorizationLost] {
 		t.Fatalf("reasons = %v", reasons)
 	}
-	waiting := waitingRows[0]
+	// An artifact published while the rule is parked still gets its evaluation, which waits too.
+	f.publishRaw(f.source, "releases/third.txt", "third")
+	f.runOnce()
+	if got := f.evaluations(repository.PromotionEvaluationWaiting); len(got) != 3 {
+		t.Fatalf("an artifact published while the rule is parked was not evaluated: %+v", f.evaluations())
+	}
 	active := repository.ServiceAccountActive
 	account, err := f.store.GetServiceAccount(ctx, f.account.ID)
 	if err != nil {
@@ -846,8 +865,13 @@ func TestEvaluationsOfAParkedRuleWaitAndPromoteOnceTheRuleIsEdited(t *testing.T)
 	if _, err = f.store.UpdatePromotionRule(ctx, rule, rule.Version); err != nil {
 		t.Fatal(err)
 	}
-	if outcome, evalErr := f.evaluator.evaluate(ctx, waiting); evalErr != nil || outcome.State != repository.PromotionEvaluationQueued {
-		t.Fatalf("after the edit: %+v, %v", outcome, evalErr)
+	// The edit makes what waited for the rule due at once: the next run promotes all three.
+	f.runOnce()
+	if queued := f.evaluations(repository.PromotionEvaluationQueued); len(queued) != 3 {
+		t.Fatalf("after the edit: %+v", f.evaluations())
+	}
+	if rows := f.promotionRows(f.target.ID); len(rows) != 3 {
+		t.Fatalf("rows = %+v", rows)
 	}
 }
 
@@ -877,7 +901,7 @@ func TestReleaseConditionsHoldForEveryMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.evaluator = NewPromotionEvaluator(PromotionEvaluatorOptions{Store: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: testAuthenticator()}, Owner: "test-worker", Now: func() time.Time { return f.now }})
+	f.evaluator = NewPromotionEvaluator(PromotionEvaluatorOptions{Store: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: testAuthenticator()}, Owner: "test-worker", Concurrency: 1, Now: func() time.Time { return f.now }})
 	first := f.publishRaw(f.source, "tool/1.0.0/bin/tool", "binary")
 	second := f.publishRaw(f.source, "tool/1.0.0/README.md", "readme")
 	if _, err = store.SealRawVersion(ctx, repository.SealRawVersionInput{RepositoryID: f.source.ID, Name: "tool", Version: "1.0.0", Actor: "ci"}); err != nil {
@@ -940,5 +964,23 @@ func TestReleaseEdgeCasesAreDecidedWithAReasonNotRetried(t *testing.T) {
 	evaluation := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: raw.rule.ID, RepositoryID: raw.source.ID, Coordinate: asset.Path, Digest: asset.Digest, EventOccurredAt: raw.now}
 	if outcome, err := raw.evaluator.evaluate(ctx, evaluation); err != nil || outcome.State != repository.PromotionEvaluationFailed || outcome.Reason != reasonReleaseTooLarge {
 		t.Fatalf("too large: %+v, %v", outcome, err)
+	}
+}
+
+// A decision that was not taken (the rule changed under the evaluation) gives the claimed attempt back.
+func TestEvaluationThatDecidedNothingDoesNotUseUpAnAttempt(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	f.publishRaw(f.source, "releases/widget.txt", "widget")
+	claimed, err := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Minute, 1)
+	if err != nil || len(claimed) != 1 || claimed[0].Attempts != 1 {
+		t.Fatalf("claimed = %+v, %v", claimed, err)
+	}
+	if err = f.store.FinishPromotionEvaluation(ctx, claimed[0].ID, claimed[0].LeaseToken, repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationPending, Reason: reasonRuleChanged, NotAnAttempt: true}); err != nil {
+		t.Fatal(err)
+	}
+	again, err := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Minute, 1)
+	if err != nil || len(again) != 1 || again[0].Attempts != 1 {
+		t.Fatalf("claimed again = %+v, %v", again, err)
 	}
 }

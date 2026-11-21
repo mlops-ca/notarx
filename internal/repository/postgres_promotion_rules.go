@@ -151,7 +151,11 @@ func (s *PostgresStore) UpdatePromotionRule(ctx context.Context, rule PromotionR
 }
 
 func (s *PostgresStore) updatePromotionRule(ctx context.Context, rule PromotionRule, expectedVersion string, audit []AuditRecord) (PromotionRule, error) {
-	return runAudited(ctx, s, audit, func(q sqlRunner) (PromotionRule, error) {
+	return runTransactional(ctx, s, audit, func(q sqlRunner) (PromotionRule, error) {
+		var previous sql.NullString
+		if err := q.QueryRowContext(ctx, `SELECT state FROM promotion_rules WHERE id=$1::uuid FOR UPDATE`, rule.ID).Scan(&previous); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return PromotionRule{}, err
+		}
 		updated, err := scanPromotionRule(q.QueryRowContext(ctx, `UPDATE promotion_rules
 SET name=$2,target_kind=$3,target_repository_id=$4::uuid,remote_instance_id=$5::uuid,remote_repository=$6,match=$7::jsonb,conditions=$8::jsonb,approval=$9::jsonb,schedule=$10::jsonb,
     run_as_service_account_id=$11::uuid,enabled=$12,updated_by=$13,version=version+1,updated_at=now(),
@@ -160,6 +164,10 @@ WHERE id=$1::uuid AND version=$14::text::bigint RETURNING `+promotionRuleColumns
 			rule.ID, rule.Name, rule.TargetKind, nullableText(rule.TargetRepositoryID), nullableText(rule.RemoteInstanceID), nullableText(rule.RemoteRepository),
 			[]byte(rule.Match), emptyObjectIfAbsent(rule.Conditions), nullableJSON(rule.Approval), nullableJSON(rule.Schedule), rule.RunAsServiceAccountID, rule.Enabled, rule.UpdatedBy, expectedVersion))
 		if !errors.Is(err, sql.ErrNoRows) {
+			if err == nil && previous.String == PromotionRuleAuthorizationLost {
+				// The rule is restored: what waited for it is due now, not after the poll delay.
+				_, err = q.ExecContext(ctx, `UPDATE promotion_evaluations SET next_attempt_at=clock_timestamp(),updated_at=clock_timestamp() WHERE rule_id=$1::uuid AND state='waiting'`, rule.ID)
+			}
 			return updated, promotionRuleWriteError(err)
 		}
 		var exists bool

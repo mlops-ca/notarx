@@ -25,7 +25,7 @@ func (s *MemoryStore) fanOutPromotionEvaluationsLocked(ctx context.Context, even
 	}
 	var rules []PromotionRule
 	for _, rule := range s.promotionRules {
-		if rule.SourceRepositoryID == event.RepositoryID && rule.Enabled && rule.State == PromotionRuleActive {
+		if rule.SourceRepositoryID == event.RepositoryID && rule.Enabled {
 			rules = append(rules, clonePromotionRule(rule))
 		}
 	}
@@ -64,7 +64,7 @@ func (s *MemoryStore) ListEnabledPromotionRules(_ context.Context, sourceReposit
 	defer s.mu.RUnlock()
 	var rules []PromotionRule
 	for _, rule := range s.promotionRules {
-		if rule.SourceRepositoryID == sourceRepositoryID && rule.Enabled && rule.State == PromotionRuleActive {
+		if rule.SourceRepositoryID == sourceRepositoryID && rule.Enabled {
 			rules = append(rules, clonePromotionRule(rule))
 		}
 	}
@@ -119,8 +119,11 @@ func (s *MemoryStore) FinishPromotionEvaluation(_ context.Context, id, leaseToke
 			evaluation.NextAttemptAt = outcome.NextAttemptAt.UTC()
 		}
 	}
-	if outcome.State == PromotionEvaluationWaiting {
+	switch {
+	case outcome.State == PromotionEvaluationWaiting:
 		evaluation.Attempts = 0
+	case outcome.NotAnAttempt:
+		evaluation.Attempts = max(evaluation.Attempts-1, 0)
 	}
 	if outcome.PromotionID != "" {
 		evaluation.PromotionID = outcome.PromotionID

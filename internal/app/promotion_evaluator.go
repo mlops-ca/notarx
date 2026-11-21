@@ -251,6 +251,7 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 		return repository.PromotionEvaluationOutcome{}, err
 	}
 	published := evaluation.EventOccurredAt
+	trigger := promotionMember{evaluation.Coordinate, evaluation.Digest}
 	evaluation, version, outcome, err := e.reload(ctx, run, evaluation)
 	if err != nil || outcome.State != "" {
 		return outcome, err
@@ -275,6 +276,11 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 		return skipped(reasonEmptyRelease)
 	case len(members) > e.releaseMax:
 		return failed(reasonReleaseTooLarge)
+	}
+	if id, requested, shortErr := e.releaseRequested(ctx, run, members, trigger); shortErr != nil {
+		return repository.PromotionEvaluationOutcome{}, shortErr
+	} else if requested {
+		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationQueued, PromotionID: id}, nil
 	}
 	// The conditions hold for every artifact the rule promotes: for scope release, every member of the release.
 	var verdicts []promotionrules.ConditionVerdict
@@ -362,7 +368,7 @@ func (e *PromotionEvaluator) park(ctx context.Context, rule repository.Promotion
 	}
 	if !parked {
 		// The rule was edited, parked or deleted since this evaluation read it: what it found is stale, so decide again.
-		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationPending, Reason: reasonRuleChanged}, nil
+		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationPending, Reason: reasonRuleChanged, NextAttemptAt: e.now().Add(waitFloor), NotAnAttempt: true}, nil
 	}
 	// The artifact is not lost with the authority: like every other evaluation of the parked rule it waits for an edit.
 	return e.later(evaluation.EventOccurredAt, reasonAuthorizationLost+":"+reason), nil
@@ -412,11 +418,12 @@ func (e *PromotionEvaluator) prepare(ctx context.Context, rule repository.Promot
 	if tagged, has := formatmodule.Capability[formatmodule.Tagged](e.registry, source.Format); has && compiled.HasRefs() {
 		run.tagged = tagged
 	}
-	if conditions.SecurityPolicy != "" {
-		// The target's admission policy as it is now, like the dry run: the authoritative evaluation runs again in the job.
-		if run.policy, err = e.ports.securityPolicies.GetRepositorySecurityPolicy(ctx, target.ID); err != nil {
-			return ruleRun{}, err
-		}
+	// The target's admission policy as it is now is always a condition: a rule never bypasses it, and evaluating it here makes
+	// an artifact the policy refuses wait (for a scan, evidence) instead of reaching the promotion request, whose refusal is
+	// final and audited. The authoritative evaluation runs again in the promotion job.
+	run.conditions.SecurityPolicy = promotionrules.SecurityPolicyPass
+	if run.policy, err = e.ports.securityPolicies.GetRepositorySecurityPolicy(ctx, target.ID); err != nil {
+		return ruleRun{}, err
 	}
 	return run, nil
 }
@@ -551,6 +558,27 @@ func (e *PromotionEvaluator) members(ctx context.Context, run ruleRun, evaluatio
 		members = append(members, promotionMember{member.Coordinate, member.Digest})
 	}
 	return members, nil
+}
+
+// releaseRequested answers an evaluation of a release that an earlier evaluation already requested. Every file of a release
+// publishes its own event, so a release of N files is evaluated N times; the first requests every member together, and the
+// others find the attempt of the member that triggered them under its key and return it without checking the release again.
+// Evaluations that run at the same time may each do the full work; the keys make the requests one.
+func (e *PromotionEvaluator) releaseRequested(ctx context.Context, run ruleRun, members []promotionMember, trigger promotionMember) (string, bool, error) {
+	if run.match.Scope() != promotionrules.ScopeRelease || len(members) < 2 {
+		return "", false, nil
+	}
+	for _, member := range members {
+		if member != trigger {
+			continue
+		}
+		generation, _, _, err := e.targetState(ctx, run.target, run.source.Format, member.coordinate, member.digest)
+		if err != nil {
+			return "", false, err
+		}
+		return e.replay(ctx, []string{RulePromotionKey(run.rule.ID, run.target.ID, member.coordinate, member.digest, generation)})
+	}
+	return "", false, nil
 }
 
 // promote asks the PromotionService for the promotion of every member: all of them are admitted before any is queued

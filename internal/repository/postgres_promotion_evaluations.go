@@ -39,7 +39,7 @@ func (s *PostgresStore) ListEnabledPromotionRules(ctx context.Context, sourceRep
 // ListEnabledPromotionRulesFrom lists the enabled, active rules of a source repository through q: the rule fan-out passes
 // the publishing transaction, so a cache miss does not take a second connection while the transaction holds one.
 func ListEnabledPromotionRulesFrom(ctx context.Context, q RuleQuerier, sourceRepositoryID string) ([]PromotionRule, error) {
-	rows, err := q.QueryContext(ctx, `SELECT `+promotionRuleColumns+` FROM promotion_rules WHERE source_repository_id=$1::uuid AND enabled AND state='active' ORDER BY promotion_rules.id`, sourceRepositoryID)
+	rows, err := q.QueryContext(ctx, `SELECT `+promotionRuleColumns+` FROM promotion_rules WHERE source_repository_id=$1::uuid AND enabled ORDER BY promotion_rules.id`, sourceRepositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -106,10 +106,10 @@ func (s *PostgresStore) FinishPromotionEvaluation(ctx context.Context, id, lease
 	result, err := s.db.ExecContext(ctx, `WITH clock AS MATERIALIZED (SELECT clock_timestamp() AS now)
 UPDATE promotion_evaluations e SET state=$3,last_reason=$4,
     next_attempt_at=CASE WHEN $3 IN ('pending','waiting') THEN COALESCE($5::timestamptz,clock.now) ELSE e.next_attempt_at END,
-    attempts=CASE WHEN $3='waiting' THEN 0 ELSE e.attempts END,promotion_id=COALESCE($6::uuid,e.promotion_id),
+    attempts=CASE WHEN $3='waiting' THEN 0 WHEN $7::boolean THEN GREATEST(e.attempts-1,0) ELSE e.attempts END,promotion_id=COALESCE($6::uuid,e.promotion_id),
     lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=clock.now
 FROM clock WHERE e.id=$1::uuid AND e.lease_token=$2::uuid AND e.lease_expires_at>clock.now`,
-		id, leaseToken, string(outcome.State), truncateRunes(outcome.Reason, promotionReasonMax), next, nullableText(outcome.PromotionID))
+		id, leaseToken, string(outcome.State), truncateRunes(outcome.Reason, promotionReasonMax), next, nullableText(outcome.PromotionID), outcome.NotAnAttempt)
 	if err != nil {
 		return err
 	}

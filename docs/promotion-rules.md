@@ -102,8 +102,8 @@ artifacts are examined. `truncated` says whether either bound cut the answer sho
 ## Evaluation
 
 Publishing an artifact to a source repository writes `artifact.published`. In the transaction of the publication,
-`events.Emit` inserts one pending row of `promotion_evaluations` for every enabled, active rule of that repository whose
-`coordinate` and `version` can match. The rule set comes from an in-process cache that every rule change flushes on every
+`events.Emit` inserts one pending row of `promotion_evaluations` for every enabled rule of that repository (a parked rule
+included: its evaluations wait for it) whose `coordinate` and `version` can match. The rule set comes from an in-process cache that every rule change flushes on every
 node (`NOTARX_AUTHZ_CACHE_TTL` bounds a lost notification), so a created, enabled, disabled, edited or parked rule starts or
 stops fanning out within the TTL; an artifact published in that window on a node whose cache is behind is not evaluated by
 a rule created in it; the backfill of a later slice recovers such history. A cache miss reads the rules through the connection of the
@@ -115,30 +115,34 @@ channel and by a poll), and for each one:
 
 1. reloads the rule and the artifact and checks the rule is still enabled and active (a disabled rule skips the evaluation; a
    parked rule makes it wait like a failing condition, so the artifacts published meanwhile are promoted once an edit
-   restores the rule; the evaluation that finds the authority lost waits too);
+   restores the rule, which makes them due at once; the evaluation that finds the authority lost waits too, and a wait
+   ends a week after publication);
 2. re-authorizes the run-as service account: it must exist, be active, be able to read the source and write the target.
    A refusal parks the rule in state `authorization_lost`, announces `promotion.failed` with the rule id and the reason, and
    and the evaluation waits (the park, its event and its audit record happen only if the rule is still active at the version
    the evaluation read, so a rule edited meanwhile is evaluated again instead). Evaluation stops until an edit of the rule
    returns it to `active`. A grant set that cannot be
-   read is a transient error that retries the evaluation, never a reason to park;
+   read is a transient error that retries the evaluation, never a reason to park; an evaluation that finds the rule edited
+   meanwhile is looked at again without using up an attempt;
 3. re-checks the match against the artifact as it is now (refs, and for a versioned Raw source the properties frozen at
    seal; a file of a versioned Raw source is evaluated as its version `name@version`, published when it is sealed, and
    waits while the version is open and still being written to; a version idle for a week is dropped);
 4. expands `scope: release` through the format's `ReleaseSet` and evaluates the conditions with the dry run's verdicts for
-   every artifact the rule promotes (every member of a release), reading the target's admission policy as it is now. An
+   every artifact the rule promotes (every member of a release). The target's admission policy as it is now is always one of
+   them, whether the rule writes `securityPolicy` or not. An
    age condition waits until `published + minAge` (never less than five seconds ahead). Any other failing condition (a
    scan that has not completed or found too much, evidence that is missing, the target's policy, a quarantine) can still
    change, so the evaluation waits and looks again after a quarter of the artifact's age, between one minute and one
    hour, and is dropped with the reason `condition_failed:<condition>:<reason>` a week after publication. The re-pend on
    a new scan result, which makes the recheck immediate, belongs to a later slice;
 5. admits every member against a target resolved once before queueing any, and calls `PromotionService.Request` for each
-   member as the service account (admission is not repeated inside the request); a rule whose members all have a live
-   attempt under their keys asks for nothing. A release of more than 1000 members fails with `release_too_large`, one with
+   member as the service account (admission is not repeated inside the request). Every file of a release announces itself, so
+   a release is evaluated once per file: the evaluation of a file whose own attempt already exists under its key returns it
+   without checking the release again. A release of more than 1000 members fails with `release_too_large`, one with
    none is skipped with `release_has_no_members`, and `scope: release` on a format without `ReleaseSet` fails with
    `unsupported_format`. A refusal by quarantine or the target's admission policy skips the artifact with its code (one audit
-   record); a rule that should wait for a scan or a release carries the `securityPolicy` condition, which waits; A member whose digest the target already
-   holds (a completed promotion into it) is a no-op; different bytes at its coordinate fail the evaluation with
+   record; the admission policy is checked as a condition first, so this is only a race); A member whose digest the target already
+   holds (a completed promotion into it that is newer than the target's tombstone; the provenance, not the target's contents, decides) is a no-op; different bytes at its coordinate fail the evaluation with
    `conflict` (targets are immutable) and a log line. Quarantine and the target's admission policy still apply: a refusal skips with its code.
 
 The outcome of a row is `queued` (promotion requested; the `artifact_promotions` row shows its progress), `waiting`,
@@ -153,7 +157,7 @@ returns that attempt. Rows of a worker that died become due again when their two
 after 7 days (1 day on the free tier), and a pending row that was due 30 days ago (7 on the free tier) is dropped too: it
 means no node runs the evaluator, so a deployment that sets `NOTARX_WORKER_KINDS` must include `evaluator` on at least one
 worker, or set `NOTARX_PROMOTION_ENABLED=false` everywhere. `notarx reconcile-events` fans the events it repairs out to the
-rules like a publication does. Remote targets are evaluated by the remote push slice; until then an evaluation for a
+rules like a publication does; the age of such an artifact counts from the repaired event. Remote targets are evaluated by the remote push slice; until then an evaluation for a
 remote rule is skipped with `remote_target_not_supported`.
 
 ## Configuration

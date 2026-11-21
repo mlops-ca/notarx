@@ -353,6 +353,9 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	if cfg.Promotion.Enabled() {
 		events.SetRuleFanout(app.NewPromotionRuleFanout(caches.registry))
 		defer events.SetRuleFanout(nil)
+		if cfg.HasRole(config.NodeRoleWorker) && !cfg.WorkerKindEnabled("evaluator") {
+			slog.Warn("promotion rules are evaluated, but this worker does not run the evaluator kind: the evaluations that publications write wait until a worker with the evaluator kind runs (unclaimed ones are dropped after 30 days)", "workerKinds", cfg.WorkerKinds)
+		}
 		if cfg.HasRole(config.NodeRoleWorker) {
 			authority := authorization.Authenticator{AdminToken: cfg.AdminToken, AdminActor: cfg.AdminActor, ResolverToken: cfg.ResolverToken, ResolverActor: cfg.ResolverActor, RepositoryReaders: cfg.RepositoryReaders, LegacyReadPermissive: cfg.LegacyReadPermissive}
 			promotionEvaluator = app.NewPromotionEvaluator(app.PromotionEvaluatorOptions{Store: gatewayStore, Authorizer: authorization.RepositoryAuthorizer{Grants: gatewayStore, Legacy: authority},

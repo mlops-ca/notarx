@@ -107,6 +107,13 @@ func (s *MemoryStore) UpdatePromotionRule(ctx context.Context, rule PromotionRul
 	rule.State, rule.StateReason = current.State, current.StateReason
 	if current.State == PromotionRuleAuthorizationLost {
 		rule.State, rule.StateReason = PromotionRuleActive, ""
+		// The rule is restored: what waited for it is due now, not after the poll delay.
+		for id, evaluation := range s.promotionEvaluations {
+			if evaluation.RuleID == rule.ID && evaluation.State == PromotionEvaluationWaiting {
+				evaluation.NextAttemptAt, evaluation.UpdatedAt = time.Now().UTC(), time.Now().UTC()
+				s.promotionEvaluations[id] = evaluation
+			}
+		}
 	}
 	if !s.promotionRuleReferencesLocked(rule) {
 		return PromotionRule{}, ErrPromotionRuleReference
