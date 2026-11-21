@@ -55,6 +55,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 			_, _ = first.db.ExecContext(context.Background(), `DELETE FROM domain_events WHERE payload->>'operationId'=$1`, operationID)
 		}
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM replication_plans WHERE source_repository_id=$1 OR target_repository_id=$2`, source.ID, target.ID)
+		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM artifact_promotions WHERE target_repository_id=$1::uuid`, target.ID)
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM lifecycle_jobs WHERE repository_id=$1`, target.ID)
 		_, _ = first.db.ExecContext(context.Background(), `DELETE FROM hosted_repositories WHERE id IN ($1,$2)`, source.ID, target.ID)
 		_ = first.Close()
