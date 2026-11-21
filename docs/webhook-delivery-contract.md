@@ -33,9 +33,10 @@ subscription simply receives nothing yet.
 The Cargo-specific names (`cargo.promotion.*`, `cargo.replication.*`) no longer
 exist. Today the database emits `artifact.promoted`, `promotion.failed`,
 `replication.completed` and `replication.failed` for Cargo with `format`
-`cargo`, and `artifact.quarantined` and `artifact.released` for every format;
-the remaining types are emitted by the slices of ADR 0021 that own their state
-changes, and a subscription may already list them.
+`cargo`, `artifact.quarantined` and `artifact.released` for every format, and
+`artifact.published` for Raw, OCI and Maven; the remaining types are emitted by
+the slices of ADR 0021 that own their state changes, and a subscription may
+already list them.
 
 Each event carries a stable UUIDv7, the repository id, format, coordinate and
 digest when it has them, a type-specific `version` that forms its dedupe key
@@ -46,6 +47,12 @@ digest when it has them, a type-specific `version` that forms its dedupe key
   operation id for promotion and replication events (a replication plan adds its
   attempt count, because an explicit replay is a new run), and empty for
   `artifact.published`.
+- `artifact.published` is written in the transaction that makes the publication
+  visible: a Raw write that points a path at a digest it does not already hold,
+  a new OCI manifest, a new Maven artifact (a release, a snapshot build, a
+  promotion or replication target). The payload is `{format, actor}` (`actor`
+  only when the publisher is known); `coordinate` is the Raw path, the OCI
+  repository name or the Maven coordinate.
 - `artifact.quarantined` and `artifact.released` carry the repository ID and
   format, the canonical coordinate and digest, the quarantine state, reason,
   actor and version.
@@ -73,6 +80,27 @@ Internal consumers read the log with a durable cursor, in order and at least onc
 at a time; a failed event is retried with an exponential backoff, and one that fails ten times
 in a row is logged and skipped. The `occurredAt` of an event is the database time of its
 emission.
+
+### Catch-up and repair
+
+While formats convert to native emission, the `events` worker kind runs a
+reconciler every 15 minutes, one worker node at a time (a lease row of
+`scheduled_tasks`): it lists the visible Raw, OCI and Maven publications
+younger than the event retention (14 days when `NOTARX_EVENTS_RETENTION` is
+`off`) that have no `artifact.published` event and writes one, idempotently by
+dedupe key. A publication that fails is reported and does not hold back the
+others. Writing the digest and content type a Raw path already holds changes
+neither its update time nor its events. The
+insert is guarded by `WHERE NOT EXISTS` a row with the same dedupe key at or after
+the retention floor, under `pg_advisory_xact_lock(hashtextextended(dedupe_key,0))`,
+so concurrent reconcilers write one event and an event older than the floor does
+not block a new one. `notarx reconcile-events` runs the same pass once from the
+command line (`NOTARX_DATABASE_URL`, `NOTARX_EVENTS_RETENTION`) and prints how many
+events it wrote. The auto-scan on publish of Raw, OCI and Maven is driven by
+these events (the `scan` worker kind reads them within seconds), not by the
+publish request; a repeat push of a digest the repository already holds does not
+schedule a second scan. History older than the retention is recovered by a rule's
+`backfill`, not by the reconciler.
 
 ### Retention
 

@@ -221,7 +221,7 @@ func (s *MemoryStore) GetOCIBlob(_ context.Context, repositoryID, digest string)
 	}
 	return v, nil
 }
-func (s *MemoryStore) PutOCIManifest(_ context.Context, manifest OCIManifest, reference string) (OCIManifest, error) {
+func (s *MemoryStore) PutOCIManifest(ctx context.Context, manifest OCIManifest, reference string) (OCIManifest, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	key := ociManifestKey(manifest.RepositoryID, manifest.Name, manifest.Digest)
@@ -232,6 +232,7 @@ func (s *MemoryStore) PutOCIManifest(_ context.Context, manifest OCIManifest, re
 			manifest.CreatedAt = time.Now().UTC()
 		}
 		s.ociManifests[key] = manifest
+		s.emitPublishedLocked(ctx, manifest.RepositoryID, FormatOCI, manifest.Name, manifest.Digest)
 	}
 	if !strings.HasPrefix(reference, "sha256:") {
 		s.ociTags[ociTagKey(manifest.RepositoryID, manifest.Name, reference)] = manifest.Digest
@@ -240,7 +241,7 @@ func (s *MemoryStore) PutOCIManifest(_ context.Context, manifest OCIManifest, re
 	return manifest, nil
 }
 
-func (s *MemoryStore) PublishReplicatedOCIManifest(_ context.Context, publication OCIReplicationPublication) (OCIManifest, error) {
+func (s *MemoryStore) PublishReplicatedOCIManifest(ctx context.Context, publication OCIReplicationPublication) (OCIManifest, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	source, ok := s.ociManifests[ociManifestKey(publication.SourceRepositoryID, publication.Manifest.Name, publication.Manifest.Digest)]
@@ -272,6 +273,7 @@ func (s *MemoryStore) PublishReplicatedOCIManifest(_ context.Context, publicatio
 		s.ociRepositoryBlobs[publication.TargetRepositoryID][digest] = true
 	}
 	s.ociManifests[key] = publication.Manifest
+	s.emitPublishedLocked(ctx, publication.Manifest.RepositoryID, FormatOCI, publication.Manifest.Name, publication.Manifest.Digest)
 	delete(s.ociObjectIntents, publication.Manifest.ObjectKey)
 	return publication.Manifest, nil
 }

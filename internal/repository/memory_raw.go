@@ -103,10 +103,12 @@ func (s *MemoryStore) CompleteRawUploadIf(ctx context.Context, id string, asset 
 	now := time.Now().UTC()
 	asset.UpdatedAt = now
 	s.rawObjects[asset.Digest] = RawObject{RepositoryID: asset.RepositoryID, Digest: asset.Digest, ObjectKey: asset.ObjectKey, Size: asset.Size, CreatedAt: now}
-	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = asset
+	previous, existed := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]
+	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = rawAssetAfterWrite(asset, previous, existed)
 	if versioned {
-		s.recordVersionedWriteLocked(asset, rawWriteActor(ctx))
+		s.recordVersionedWriteLocked(asset, publishActor(ctx))
 	}
+	s.emitRawPublishedLocked(ctx, asset, previous, existed)
 	v.State = "completed"
 	s.rawUploads[id] = v
 	return asset, nil
@@ -177,6 +179,23 @@ func (s *MemoryStore) StageRawObject(_ context.Context, object RawObject) error 
 	return nil
 }
 
+// rawAssetAfterWrite is the stored reference after a write: writing the digest and content type a path already holds
+// changes nothing, so it keeps the previous update time (the PostgreSQL store does the same).
+func rawAssetAfterWrite(asset, previous RawAsset, existed bool) RawAsset {
+	if existed && previous.Digest == asset.Digest && previous.ContentType == asset.ContentType {
+		asset.UpdatedAt = previous.UpdatedAt
+	}
+	return asset
+}
+
+// emitRawPublishedLocked emits artifact.published for a write that changed what the path references: pointing a path
+// at the digest it already holds publishes nothing new.
+func (s *MemoryStore) emitRawPublishedLocked(ctx context.Context, asset, previous RawAsset, existed bool) {
+	if !existed || previous.Digest != asset.Digest {
+		s.emitPublishedLocked(ctx, asset.RepositoryID, FormatRaw, asset.Path, asset.Digest)
+	}
+}
+
 func (s *MemoryStore) PutRawAsset(ctx context.Context, asset RawAsset) (RawAsset, error) {
 	return s.PutRawAssetIf(ctx, asset, RawWriteCondition{})
 }
@@ -211,10 +230,12 @@ func (s *MemoryStore) PutRawAssetIf(ctx context.Context, asset RawAsset, conditi
 	} else {
 		s.rawObjects[asset.Digest] = RawObject{RepositoryID: asset.RepositoryID, Digest: asset.Digest, ObjectKey: asset.ObjectKey, Size: asset.Size, CreatedAt: time.Now().UTC()}
 	}
-	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = asset
+	previous, existed := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]
+	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = rawAssetAfterWrite(asset, previous, existed)
 	if versioned {
-		s.recordVersionedWriteLocked(asset, rawWriteActor(ctx))
+		s.recordVersionedWriteLocked(asset, publishActor(ctx))
 	}
+	s.emitRawPublishedLocked(ctx, asset, previous, existed)
 	return asset, nil
 }
 func (s *MemoryStore) GetRawAsset(_ context.Context, repositoryID, path string) (RawAsset, error) {

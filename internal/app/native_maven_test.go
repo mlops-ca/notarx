@@ -99,6 +99,7 @@ func TestNativeMavenPublishIsInvisibleUntilCommitAndAuditedOnRead(t *testing.T) 
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
+	scans := publicationScanDispatcher(t, store, repository.FormatMaven)
 	objects := objectstore.NewMemoryStore()
 	h := newTestGateway(t, GatewayOptions{Dependencies: publicationScanDependencies(Dependencies{}, repository.FormatMaven), Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatMaven: objects}})
 	pom := []byte("<project><groupId>org.example</groupId><artifactId>widget</artifactId><version>1.0.0</version></project>")
@@ -140,6 +141,9 @@ func TestNativeMavenPublishIsInvisibleUntilCommitAndAuditedOnRead(t *testing.T) 
 	h.ServeHTTP(committed, commit)
 	if committed.Code != http.StatusOK {
 		t.Fatalf("commit=%d %s", committed.Code, committed.Body.String())
+	}
+	if _, err = scans.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	requirePublicationScan(t, store, repo.ID, repository.FormatMaven, "org.example:widget:1.0.0", pomDigest)
 	served := httptest.NewRecorder()

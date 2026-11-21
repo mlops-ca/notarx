@@ -196,6 +196,14 @@ func (r backgroundRuntime) startWorkers(ctx context.Context, cfg config.Config, 
 		dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default()}
 		background.Go(ctx, func() { dispatcher.Run(ctx) })
 	}
+	if cfg.WorkerKindEnabled("events") {
+		// Catch-up for publications whose format does not emit artifact.published itself yet (ADR 0021, slice 1c removes it).
+		if keep, err := cfg.Retention.KeepOrDefault("domain_events"); err != nil {
+			slog.Error("published event reconciler not started: event retention", "error", err)
+		} else {
+			app.PublishedEventReconciler{Store: r.store, Retention: keep, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID}.Start(ctx, 15*time.Minute)
+		}
+	}
 	if cfg.WorkerKindEnabled("webhook") {
 		owner := cfg.InstanceID + "/" + r.workerSessionID
 		app.WebhookDeliveryWorker{Store: r.store, InstanceID: owner}.Start(ctx, 5*time.Second)

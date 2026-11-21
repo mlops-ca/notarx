@@ -314,14 +314,14 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	}
 	oci := OCIHandler{Resolver: resolver, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Client: upstreamClient, Authenticator: authenticator, Cache: cache}
 	publicationScanner := NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics)
-	nativeOCI := newNativeOCIHandler(store, options.Storage[repository.FormatOCI], authenticator).withMetrics(metrics).withProxy(oci).withPublicationScanner(publicationScanner)
+	nativeOCI := newNativeOCIHandler(store, options.Storage[repository.FormatOCI], authenticator).withMetrics(metrics).withProxy(oci)
 	nativeOCI.discovery, nativeOCI.groups = options.OCIDiscoveryStore, store
 	rawLegacy := RawHandler{Store: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: rawClient, Metrics: metrics, Cache: rawCache}
 	rawModule := rawformat.New(rawformat.Options{Store: store, Repositories: store, Groups: store, Objects: options.Storage[repository.FormatRaw], Authenticator: authenticator,
 		Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator, LegacyFallback: func(Principal, repository.HostedRepository, RepositoryOperation) AuthorizationDecision {
 			return AuthorizationDecision{Allowed: true, Source: "legacy_protocol", Reason: "authenticated"}
 		}},
-		Audit: store, Anonymous: store, ReadPolicies: store, Quarantine: store, Client: rawClient, Cache: rawCache, Metrics: rawModuleMetrics{metrics}, Scanner: publicationScanner,
+		Audit: store, Anonymous: store, ReadPolicies: store, Quarantine: store, Client: rawClient, Cache: rawCache, Metrics: rawModuleMetrics{metrics},
 		GroupRuntime: rawModuleGroupRuntime{resolver: v2GroupResolver{groups: store, repos: store, audit: store, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}}, policy: store},
 		LegacyStore:  store, LegacyRuntime: rawRuntime{handler: rawLegacy}, RecordFailure: recordRawFailure})
 	modules := []formatmodule.Module{rawModule}
@@ -396,7 +396,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mux.Handle("/api/v1/conan/groups", conanAPI)
 	mux.Handle("/api/v1/conan/groups/", conanAPI)
 	nativeObjects := options.Storage[repository.FormatMaven]
-	nativeMaven := newNativeMavenHandler(store, nativeObjects, authenticator).withGroupVisibilityMode(options.GroupVisibilityMode).withMetrics(metrics).withProxy(mavenClient, mavenCache).withPublicationScanner(publicationScanner)
+	nativeMaven := newNativeMavenHandler(store, nativeObjects, authenticator).withGroupVisibilityMode(options.GroupVisibilityMode).withMetrics(metrics).withProxy(mavenClient, mavenCache)
 	mavenProxyOperations := mavenProxyOperationsHandler{store: store, authenticator: authenticator, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, client: mavenClient, cache: mavenCache, maintenance: maintenance}
 	proxyCacheBrowse := proxyCacheBrowseHandler{store: store, entriesStore: store, audit: store, maintenance: maintenance, authenticator: authenticator, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}}
 	nativeConanObjects := options.Storage[repository.FormatConan]

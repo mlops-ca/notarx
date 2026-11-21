@@ -147,6 +147,21 @@ func (c Config) Keep(e Entry) (time.Duration, bool) {
 	return e.Standard, true
 }
 
+// KeepOrDefault is the keep time of a table, and the standard keep time of its registry entry when the table is switched
+// off (kept for ever), for a caller that needs a bounded window of rows to look at.
+func (c Config) KeepOrDefault(table string) (time.Duration, error) {
+	for _, entry := range DefaultRegistry() {
+		if entry.Table != table {
+			continue
+		}
+		if keep, on := c.Keep(entry); on {
+			return keep, nil
+		}
+		return entry.Standard, nil
+	}
+	return 0, fmt.Errorf("retention: unknown table %q", table)
+}
+
 // KeepFor is Keep by table name for the first entry of that table; the partition
 // manager uses it for the audit tables.
 func (c Config) KeepFor(table string) (time.Duration, bool, error) {

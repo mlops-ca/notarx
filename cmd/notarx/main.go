@@ -78,6 +78,12 @@ func main() {
 		stop()
 		os.Exit(code)
 	}
+	if len(os.Args) > 1 && os.Args[1] == "reconcile-events" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		code := runReconcileEvents(ctx, os.Args[2:], os.Getenv, os.LookupEnv, os.Stdout, os.Stderr)
+		stop()
+		os.Exit(code)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "preflight" {
 		os.Exit(preflight.RunCLI(context.Background(), os.Args[2:], os.Stdout, os.Stderr))
 	}
@@ -354,9 +360,10 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 	}
 	migrationTargetID := nexusmigration.TargetBinding(cfg.ObjectStore.Binding())
 	migrationScanner := app.NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics)
+	// Raw, Maven and OCI publications emit artifact.published in their own transaction and the scan consumer schedules
+	// the scan; the other formats are still scheduled here.
 	migrationPublication := app.NewNexusMigrationPublication(store, app.SharedObjectStores(objectStore), migrationTargetID, cfg.MigrationStoragePoolID).
-		WithPublicationScanner(migrationScanner).
-		WithOCI(app.NewNexusOCIMigrationPublication(store, objectStore).WithPublicationScanner(migrationScanner)).
+		WithOCI(app.NewNexusOCIMigrationPublication(store, objectStore)).
 		WithConan(app.NewNexusConanMigrationPublication(store, store, objectStore).WithPublicationScanner(migrationScanner)).
 		WithNPM(app.NewNexusNPMMigrationPublication(store, objectStore).WithPublicationScanner(migrationScanner)).
 		WithPyPI(app.NewNexusPyPIMigrationPublication(store, objectStore).WithPublicationScanner(migrationScanner))

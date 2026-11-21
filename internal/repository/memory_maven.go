@@ -172,7 +172,7 @@ func (s *MemoryStore) MarkMavenPublishObject(_ context.Context, id, name, key st
 // The open session groups the files of one client deployment, while release
 // coordinates may append previously absent classifier paths without allowing
 // an existing path to change bytes.
-func (s *MemoryStore) PublishMavenProtocolAssets(_ context.Context, id string, assets []MavenAsset) (MavenArtifact, error) {
+func (s *MemoryStore) PublishMavenProtocolAssets(ctx context.Context, id string, assets []MavenAsset) (MavenArtifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, ok := s.mavenSessions[id]
@@ -248,6 +248,7 @@ func (s *MemoryStore) PublishMavenProtocolAssets(_ context.Context, id string, a
 	}
 	if !found {
 		s.mavenArtifacts[artifact.ID] = artifact
+		s.emitPublishedLocked(ctx, artifact.RepositoryID, FormatMaven, artifact.Coordinate, artifact.Digest)
 	}
 	for _, asset := range prepared {
 		if _, exists := s.mavenObjectIntents[asset.ObjectKey]; !exists {
@@ -398,6 +399,7 @@ func (s *MemoryStore) commitMavenPublishSessionLocked(ctx context.Context, id st
 		s.mavenObjectRefs[placed[k].ObjectKey] = true
 	}
 	s.mavenArtifacts[id] = artifact
+	s.emitPublishedLocked(ctx, artifact.RepositoryID, FormatMaven, artifact.Coordinate, artifact.Digest)
 	session.State = "committed"
 	s.mavenSessions[id] = session
 	return artifact, nil
@@ -590,7 +592,7 @@ func (s *MemoryStore) RestoreMavenArtifact(_ context.Context, repositoryID, arti
 	return artifact, nil
 }
 
-func (s *MemoryStore) PromoteMavenArtifact(_ context.Context, promotion MavenPromotion) (MavenArtifact, error) {
+func (s *MemoryStore) PromoteMavenArtifact(ctx context.Context, promotion MavenPromotion) (MavenArtifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Cross-repository SNAPSHOT promotion is out of scope.
@@ -629,10 +631,11 @@ func (s *MemoryStore) PromoteMavenArtifact(_ context.Context, promotion MavenPro
 	}
 	artifact := MavenArtifact{ID: promotion.ID, RepositoryID: promotion.TargetRepositoryID, Coordinate: source.Coordinate, Digest: source.Digest, State: "visible", CreatedAt: time.Now().UTC()}
 	s.mavenArtifacts[artifact.ID] = artifact
+	s.emitPublishedLocked(ctx, artifact.RepositoryID, FormatMaven, artifact.Coordinate, artifact.Digest)
 	return artifact, nil
 }
 
-func (s *MemoryStore) PublishReplicatedMavenArtifact(_ context.Context, replication MavenReplication) (MavenArtifact, error) {
+func (s *MemoryStore) PublishReplicatedMavenArtifact(ctx context.Context, replication MavenReplication) (MavenArtifact, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Cross-repository SNAPSHOT replication is out of scope.
@@ -679,6 +682,7 @@ func (s *MemoryStore) PublishReplicatedMavenArtifact(_ context.Context, replicat
 	}
 	artifact := MavenArtifact{ID: replication.ID, RepositoryID: replication.TargetRepositoryID, Coordinate: source.Coordinate, Digest: source.Digest, State: "visible", CreatedAt: time.Now().UTC()}
 	s.mavenArtifacts[artifact.ID] = artifact
+	s.emitPublishedLocked(ctx, artifact.RepositoryID, FormatMaven, artifact.Coordinate, artifact.Digest)
 	return artifact, nil
 }
 

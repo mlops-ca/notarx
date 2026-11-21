@@ -218,3 +218,22 @@ func TestScanHistoryRetentionAliasAndPrecedence(t *testing.T) {
 		t.Fatal("an invalid alias value must be refused")
 	}
 }
+
+func TestKeepOrDefaultBoundsAnOffTable(t *testing.T) {
+	cfg, err := LoadConfig(lookupFrom(map[string]string{"NOTARX_EVENTS_RETENTION": "5d"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if keep, err := cfg.KeepOrDefault("domain_events"); err != nil || keep != 5*day {
+		t.Fatalf("keep = %v %v", keep, err)
+	}
+	if cfg, err = LoadConfig(lookupFrom(map[string]string{"NOTARX_EVENTS_RETENTION": "off"})); err != nil {
+		t.Fatal(err)
+	}
+	if keep, err := cfg.KeepOrDefault("domain_events"); err != nil || keep != 14*day {
+		t.Fatalf("an off table falls back to the standard keep time, got %v %v", keep, err)
+	}
+	if _, err = cfg.KeepOrDefault("nope"); err == nil {
+		t.Fatal("an unknown table was accepted")
+	}
+}

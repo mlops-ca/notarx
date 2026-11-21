@@ -246,6 +246,9 @@ func (s *PostgresStore) CommitMavenSnapshotImport(ctx context.Context, p MavenSn
 		if err != nil {
 			return v, err
 		}
+		if err = emitPublishedPostgres(ctx, tx, p.RepositoryID, FormatMaven, p.Coordinate, a.Digest); err != nil {
+			return v, err
+		}
 	}
 	for _, a := range p.Assets {
 		var claimed, deleted bool

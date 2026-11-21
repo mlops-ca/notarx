@@ -287,6 +287,7 @@ func TestNativeRawHostedResumableUploadIsAtomic(t *testing.T) {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
+	scans := publicationScanDispatcher(t, store, repository.FormatRaw)
 	handler := newTestGateway(t, GatewayOptions{Dependencies: publicationScanDependencies(Dependencies{}, repository.FormatRaw), Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatOCI: objectstore.NewMemoryStore(), repository.FormatRaw: objectstore.NewMemoryStore()}})
 	request := func(method, path string, body []byte) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, bytes.NewReader(body))
@@ -334,6 +335,9 @@ func TestNativeRawHostedResumableUploadIsAtomic(t *testing.T) {
 	handler.ServeHTTP(completed, complete)
 	if completed.Code != http.StatusCreated {
 		t.Fatalf("complete=%d %s", completed.Code, completed.Body.String())
+	}
+	if _, err = scans.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	requirePublicationScan(t, store, repo.ID, repository.FormatRaw, "releases/app.bin", "sha256:"+hex.EncodeToString(sum[:]))
 	read := request(http.MethodGet, "/raw/downloads/releases/app.bin", nil)

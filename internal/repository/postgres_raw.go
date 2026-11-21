@@ -92,7 +92,7 @@ func (s *PostgresStore) CompleteRawUploadIf(ctx context.Context, id string, asse
 	if repoID != asset.RepositoryID || path != asset.Path {
 		return asset, ErrNotFound
 	}
-	version, err := s.beginVersionedWrite(ctx, tx, asset, condition, rawWriteActor(ctx))
+	version, err := s.beginVersionedWrite(ctx, tx, asset, condition, publishActor(ctx))
 	if err != nil {
 		return asset, err
 	}
@@ -201,7 +201,7 @@ func (s *PostgresStore) PutRawAssetIf(ctx context.Context, v RawAsset, condition
 	}
 	// A write to a versioned repository takes the version row lock before any object row, so every writer and
 	// deleter of a version orders its locks the same way and two files with identical bytes cannot deadlock.
-	version, err := s.beginVersionedWrite(ctx, tx, v, condition, rawWriteActor(ctx))
+	version, err := s.beginVersionedWrite(ctx, tx, v, condition, publishActor(ctx))
 	if err != nil {
 		return v, err
 	}
@@ -249,18 +249,27 @@ func (d rawUsageDelta) reserve(ctx context.Context, tx *sql.Tx, repositoryID str
 	return capacity.Reserve(ctx, tx, repositoryID, d.bytes, d.objects)
 }
 
+// rawPath is what a path references before a write: the size and digest it counted, and whether it exists.
+type rawPath struct {
+	size   int64
+	digest string
+	exists bool
+}
+
 // lockRawPath serialises writers of one path, including the first insert of an absent
 // path, so the usage delta computed from the previous reference is exact. It returns
-// the size the path counted before the write (0 and false when absent).
-func lockRawPath(ctx context.Context, tx *sql.Tx, repositoryID, path string) (size int64, exists bool, err error) {
-	if err = lockUsagePath(ctx, tx, "raw:"+repositoryID+":"+path); err != nil {
-		return 0, false, err
+// the reference the path held before the write (zero when absent).
+func lockRawPath(ctx context.Context, tx *sql.Tx, repositoryID, path string) (rawPath, error) {
+	if err := lockUsagePath(ctx, tx, "raw:"+repositoryID+":"+path); err != nil {
+		return rawPath{}, err
 	}
-	err = tx.QueryRowContext(ctx, `SELECT o.size FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2`, repositoryID, path).Scan(&size)
+	var previous rawPath
+	err := tx.QueryRowContext(ctx, `SELECT o.size,a.digest FROM native_raw_assets a JOIN native_raw_objects o ON o.digest=a.digest WHERE a.repository_id=$1::uuid AND a.path=$2`, repositoryID, path).Scan(&previous.size, &previous.digest)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, nil
+		return rawPath{}, nil
 	}
-	return size, err == nil, err
+	previous.exists = err == nil
+	return previous, err
 }
 
 // replaceRawAssetIf points the path at asset inside tx. A conditional write
@@ -274,7 +283,7 @@ func (s *PostgresStore) replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset
 	if version != nil {
 		return s.replaceVersionedRawAsset(ctx, tx, asset, *version)
 	}
-	previousSize, existed, err := lockRawPath(ctx, tx, asset.RepositoryID, asset.Path)
+	previous, err := lockRawPath(ctx, tx, asset.RepositoryID, asset.Path)
 	if err != nil {
 		return RawAsset{}, rawUsageDelta{}, err
 	}
@@ -282,8 +291,8 @@ func (s *PostgresStore) replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset
 	if err = tx.QueryRowContext(ctx, `SELECT size FROM native_raw_objects WHERE digest=$1`, asset.Digest).Scan(&newSize); err != nil {
 		return RawAsset{}, rawUsageDelta{}, err
 	}
-	delta := rawUsageDelta{bytes: newSize - previousSize}
-	if !existed {
+	delta := rawUsageDelta{bytes: newSize - previous.size}
+	if !previous.exists {
 		delta.objects = 1
 	}
 	current, err := replaceRawAssetRow(ctx, tx, asset, condition)
@@ -293,12 +302,26 @@ func (s *PostgresStore) replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset
 	if err = refreshArtifactCatalog(ctx, tx, asset.RepositoryID, FormatRaw, asset.Path); err != nil {
 		return RawAsset{}, rawUsageDelta{}, err
 	}
+	// Pointing a path at the digest it already holds publishes nothing new.
+	if previous.digest != asset.Digest {
+		if err = emitPublishedPostgres(ctx, tx, asset.RepositoryID, FormatRaw, asset.Path, asset.Digest); err != nil {
+			return RawAsset{}, rawUsageDelta{}, err
+		}
+	}
 	return current, delta, nil
 }
 
+// rawUpsertUpdatedAtSQL and rawUpdateUpdatedAtSQL keep updated_at when a write leaves the reference as it is: writing the digest and content type a path
+// already holds is not a change, so it neither moves the Last-Modified of the path nor makes an old publication look new to
+// the published-event reconciler.
+const (
+	rawUpsertUpdatedAtSQL = `CASE WHEN native_raw_assets.digest IS DISTINCT FROM EXCLUDED.digest OR native_raw_assets.content_type IS DISTINCT FROM EXCLUDED.content_type THEN now() ELSE native_raw_assets.updated_at END`
+	rawUpdateUpdatedAtSQL = `CASE WHEN digest IS DISTINCT FROM $3 OR content_type IS DISTINCT FROM $4 THEN now() ELSE updated_at END`
+)
+
 func replaceRawAssetRow(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition) (RawAsset, error) {
 	if condition.Unconditional() {
-		_, err := tx.ExecContext(ctx, `INSERT INTO native_raw_assets (repository_id,path,digest,content_type) VALUES ($1,$2,$3,$4) ON CONFLICT (repository_id,path) DO UPDATE SET digest=EXCLUDED.digest,content_type=EXCLUDED.content_type,updated_at=now()`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
+		_, err := tx.ExecContext(ctx, `INSERT INTO native_raw_assets (repository_id,path,digest,content_type) VALUES ($1,$2,$3,$4) ON CONFLICT (repository_id,path) DO UPDATE SET digest=EXCLUDED.digest,content_type=EXCLUDED.content_type,updated_at=`+rawUpsertUpdatedAtSQL, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
 		return RawAsset{}, err
 	}
 	for attempt := 0; attempt < 3; attempt++ {
@@ -312,7 +335,7 @@ func replaceRawAssetRow(ctx context.Context, tx *sql.Tx, asset RawAsset, conditi
 			return current, ErrPreconditionFailed
 		}
 		if exists {
-			_, err = tx.ExecContext(ctx, `UPDATE native_raw_assets SET digest=$3,content_type=$4,updated_at=now() WHERE repository_id=$1::uuid AND path=$2`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
+			_, err = tx.ExecContext(ctx, `UPDATE native_raw_assets SET digest=$3,content_type=$4,updated_at=`+rawUpdateUpdatedAtSQL+` WHERE repository_id=$1::uuid AND path=$2`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
 			return RawAsset{}, err
 		}
 		result, err := tx.ExecContext(ctx, `INSERT INTO native_raw_assets (repository_id,path,digest,content_type) VALUES ($1,$2,$3,$4) ON CONFLICT (repository_id,path) DO NOTHING`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
@@ -374,7 +397,7 @@ func (s *PostgresStore) DeleteRawAsset(ctx context.Context, repositoryID, path s
 	if layout == RawLayoutVersioned {
 		return s.deleteVersionedRawAsset(ctx, tx, repositoryID, path, strict, audit)
 	}
-	if _, _, err = lockRawPath(ctx, tx, repositoryID, path); err != nil {
+	if _, err = lockRawPath(ctx, tx, repositoryID, path); err != nil {
 		return err
 	}
 	var asset RawAsset
@@ -422,7 +445,7 @@ func (s *PostgresStore) RestoreRawAsset(ctx context.Context, repositoryID, path 
 	if layout == RawLayoutVersioned {
 		return RawAsset{}, ErrRawLayoutMismatch
 	}
-	if _, _, err = lockRawPath(ctx, tx, repositoryID, path); err != nil {
+	if _, err = lockRawPath(ctx, tx, repositoryID, path); err != nil {
 		return RawAsset{}, err
 	}
 	var asset RawAsset

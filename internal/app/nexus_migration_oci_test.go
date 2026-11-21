@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/nexusmigration"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/ocigraph"
@@ -28,6 +29,7 @@ type nexusOCIContractStore interface {
 	repository.RepositoryCapacityStore
 	repository.LifecycleJobStore
 	repository.ArtifactQuarantineStore
+	repository.DomainEventStore
 }
 
 func nexusOCIInventory(repo repository.HostedRepository, fixture ocifixture.Fixture) nexusmigration.Entry {
@@ -146,7 +148,13 @@ func exerciseNexusOCICompletePublication(t *testing.T, store nexusOCIContractSto
 	if _, err = store.ReplaceRepositorySecurityPolicy(ctx, repo.ID, policy, policy.Version); err != nil {
 		t.Fatal(err)
 	}
-	p := NewNexusOCIMigrationPublication(store, objects).WithPublicationScanner(NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatOCI}, nil))
+	p := NewNexusOCIMigrationPublication(store, objects)
+	// The closure's manifests emit artifact.published in the publish transaction and the scan consumer schedules their
+	// scans; the first pass creates the consumer's cursor.
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{repository.FormatOCI}, nil).Consumer()}}
+	if _, err = dispatcher.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
 	locked, release, err := p.Lock(ctx, e)
 	if err != nil {
 		t.Fatal(err)
@@ -189,22 +197,36 @@ func exerciseNexusOCICompletePublication(t *testing.T, store nexusOCIContractSto
 	if err = p.Publish(locked, e); err != nil {
 		t.Fatalf("idempotent commit replay=%v", err)
 	}
+	if _, err = dispatcher.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
 	jobs, err := store.ListLifecycleJobs(ctx, repo.ID, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
-	scans := 0
-	for _, job := range jobs {
-		if job.Kind == repository.LifecycleJobScan {
-			scans++
-			var payload repository.ArtifactScanPayload
-			if json.Unmarshal(job.Payload, &payload) != nil || payload.Format != repository.FormatOCI || payload.Coordinate != f.Name || payload.Digest != f.Root {
-				t.Fatalf("wrong migration scan identity: %s", job.Payload)
-			}
+	// Every manifest of the closure (the root index and its children) emitted artifact.published once, as a push of
+	// each manifest would, so each is scanned once.
+	manifests := map[string]bool{}
+	for _, asset := range e.Assets {
+		if strings.HasPrefix(asset.TargetPath, f.Name+"/manifests/") {
+			manifests["sha256:"+asset.SHA256] = true
 		}
 	}
-	if scans != 1 {
-		t.Fatalf("OCI migration scan jobs=%d want1", scans)
+	if !manifests[f.Root] {
+		t.Fatalf("the root %s is not among the closure manifests %v", f.Root, manifests)
+	}
+	scanned := map[string]bool{}
+	for _, job := range jobs {
+		if job.Kind == repository.LifecycleJobScan {
+			var payload repository.ArtifactScanPayload
+			if json.Unmarshal(job.Payload, &payload) != nil || payload.Format != repository.FormatOCI || payload.Coordinate != f.Name || !manifests[payload.Digest] || scanned[payload.Digest] {
+				t.Fatalf("wrong migration scan identity: %s", job.Payload)
+			}
+			scanned[payload.Digest] = true
+		}
+	}
+	if len(scanned) != len(manifests) {
+		t.Fatalf("OCI migration scanned %v, want every manifest of %v", scanned, manifests)
 	}
 	for _, asset := range e.Assets {
 		if !strings.HasPrefix(asset.TargetPath, "blobs/") {

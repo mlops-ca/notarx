@@ -73,9 +73,7 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		h.list(w, r, repo, prefix)
 		return true
 	}
-	if versioned(repo) {
-		r = r.WithContext(repository.WithRawWriteActor(r.Context(), principal.Actor))
-	}
+	r = r.WithContext(repository.WithWriteActor(r.Context(), principal.Actor))
 	if id := r.URL.Query().Get("uploadId"); id != "" {
 		// The store binds the upload id as a uuid, so a malformed one is a client
 		// error rather than a database error (ADR 0023 section 4).
@@ -177,9 +175,6 @@ func (h *Module) serveRepository(w http.ResponseWriter, r *http.Request) bool {
 		}
 		w.Header().Set("ETag", `"`+digest+`"`)
 		w.Header().Set("Digest", "sha-256="+base64.StdEncoding.EncodeToString(spool.DigestBytes()))
-		if h.publicationScanner != nil && !asset.Replayed {
-			_ = h.publicationScanner.Schedule(r.Context(), repo, path, digest, principal.Actor)
-		}
 		w.WriteHeader(rawWriteStatus(asset))
 	case http.MethodDelete:
 		if err := h.store.DeleteRawAsset(r.Context(), repo.ID, path); err != nil {
@@ -328,9 +323,6 @@ func (h *Module) upload(w http.ResponseWriter, r *http.Request, repo repository.
 		}
 		w.Header().Set("ETag", `"`+asset.Digest+`"`)
 		w.Header().Set("Digest", expected)
-		if h.publicationScanner != nil && !asset.Replayed {
-			_ = h.publicationScanner.Schedule(r.Context(), repo, asset.Path, asset.Digest, actor)
-		}
 		w.WriteHeader(rawWriteStatus(asset))
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)

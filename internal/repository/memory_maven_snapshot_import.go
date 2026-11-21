@@ -94,7 +94,7 @@ func (s *MemoryStore) BeginMavenSnapshotImport(_ context.Context, p MavenSnapsho
 	s.mavenImports[key] = cloneMavenImport(v)
 	return cloneMavenImport(v), nil
 }
-func (s *MemoryStore) CommitMavenSnapshotImport(_ context.Context, p MavenSnapshotImportPlan) (MavenSnapshotImport, error) {
+func (s *MemoryStore) CommitMavenSnapshotImport(ctx context.Context, p MavenSnapshotImportPlan) (MavenSnapshotImport, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.checkMavenImportLocked(p); err != nil {
@@ -141,6 +141,7 @@ func (s *MemoryStore) CommitMavenSnapshotImport(_ context.Context, p MavenSnapsh
 		a.CreatedAt, _ = time.Parse("20060102.150405", a.SourceTimestamp)
 		a.State = "visible"
 		s.mavenArtifacts[a.ID] = a
+		s.emitPublishedLocked(ctx, p.RepositoryID, FormatMaven, p.Coordinate, a.Digest)
 	}
 	for _, a := range p.Assets {
 		s.mavenAssets[p.RepositoryID+"\x00"+a.Path] = a

@@ -29,12 +29,6 @@ type NexusOCIMigrationStore interface {
 type NexusOCIMigrationPublication struct {
 	store   NexusOCIMigrationStore
 	objects objectstore.Store
-	scanner nexusMigrationPublicationScanner
-}
-
-func (p *NexusOCIMigrationPublication) WithPublicationScanner(scanner nexusMigrationPublicationScanner) *NexusOCIMigrationPublication {
-	p.scanner = scanner
-	return p
 }
 
 var _ NexusFormatMigrationPublication = (*NexusOCIMigrationPublication)(nil)
@@ -435,7 +429,7 @@ func (p *NexusOCIMigrationPublication) Publish(ctx context.Context, entry nexusm
 	if !lock.verified.Load() {
 		return nexusmigration.Failed("target_verification_required")
 	}
-	err = p.store.PublishOCIImportClosure(ctx, lock.closure)
+	err = p.store.PublishOCIImportClosure(repository.WithWriteActor(ctx, entry.Actor), lock.closure)
 	if errors.Is(err, repository.ErrNameExists) {
 		return nexusmigration.Failed("target_conflict")
 	}
@@ -447,9 +441,6 @@ func (p *NexusOCIMigrationPublication) Publish(ctx context.Context, entry nexusm
 	}
 	if err != nil {
 		return nexusmigration.Failed("native_publish_failed")
-	}
-	if !nilDependency(p.scanner) {
-		_ = p.scanner.ScheduleRepository(ctx, entry.TargetRepositoryID, repository.FormatOCI, lock.closure.Name, lock.closure.RootDigest, entry.Actor)
 	}
 	return nil
 }

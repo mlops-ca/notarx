@@ -171,6 +171,7 @@ func (s *MemoryStore) PublishOCIImportClosure(ctx context.Context, c OCIImportCl
 		if _, ok := s.ociManifests[key]; !ok {
 			m.CreatedAt = now
 			s.ociManifests[key] = m.OCIManifest
+			s.emitPublishedLocked(ctx, c.RepositoryID, FormatOCI, c.Name, m.Digest)
 		}
 		delete(s.ociObjectIntents, m.ObjectKey)
 	}
