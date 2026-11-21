@@ -26,6 +26,24 @@ var (
 	ErrRemoteInstanceInUse      = errors.New("remote instance is still the target of a promotion rule")
 )
 
+// RemoteInstanceInUseRuleLimit is how many blocking rules a RemoteInstanceInUseError names.
+const RemoteInstanceInUseRuleLimit = 20
+
+// PromotionRuleRef names a promotion rule.
+type PromotionRuleRef struct {
+	ID   string `json:"ruleId"`
+	Name string `json:"name"`
+}
+
+// RemoteInstanceInUseError is ErrRemoteInstanceInUse with the rules that still target the instance, by name, up to
+// RemoteInstanceInUseRuleLimit.
+type RemoteInstanceInUseError struct{ Rules []PromotionRuleRef }
+
+func (e *RemoteInstanceInUseError) Error() string { return ErrRemoteInstanceInUse.Error() }
+
+// Unwrap makes errors.Is(err, ErrRemoteInstanceInUse) hold.
+func (e *RemoteInstanceInUseError) Unwrap() error { return ErrRemoteInstanceInUse }
+
 // RemoteInstance is a registered peer notarx instance that promotions can push to. TokenSealed holds the static
 // token sealed by internal/secrets (stored as TEXT); it is never part of an API response, an audit record or an
 // event.

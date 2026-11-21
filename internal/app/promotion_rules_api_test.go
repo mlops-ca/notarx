@@ -470,6 +470,36 @@ func TestPromotionRuleConfusedDeputyRefusal(t *testing.T) {
 	}
 }
 
+// ImportWrite is delegable authority like the rest: a run-as service account that holds only the import scope on a
+// repository is a deputy a creator without it cannot use.
+func TestPromotionRuleConfusedDeputyRefusesImportWriteTheCreatorLacks(t *testing.T) {
+	f := newRuleFixture(t)
+	ctx := context.Background()
+	authenticator := testAuthenticator()
+	fallback := func(principal Principal, _ repository.HostedRepository, operation RepositoryOperation) AuthorizationDecision {
+		switch {
+		case strings.HasPrefix(principal.Actor, "service-account:") && operation == RepositoryImportWrite:
+			return AuthorizationDecision{Allowed: true, Source: "legacy_static", Reason: "import_granted"}
+		case principal.Actor == "importer":
+			return AuthorizationDecision{Allowed: true, Source: "legacy_static", Reason: "import_granted"}
+		}
+		return AuthorizationDecision{Source: "legacy_static", Reason: "scope_not_granted"}
+	}
+	handler := newPromotionRuleHandler(newManagementScope(f.store, f.store, f.store, f.store, authenticator, nil), f.store, generatedRepositoryAPIAdapter{}, 0)
+	handler.authorizer = authorization.RepositoryAuthorizer{Grants: f.store, Legacy: authenticator, LegacyFallback: fallback}
+	repo, err := f.store.CreateHostedRepository(ctx, repository.HostedRepository{ID: uuid.NewString(), Name: "import-target", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repositories := []repository.HostedRepository{repo}
+	if _, _, denied := handler.confusedDeputy(ctx, Principal{Actor: "importer"}, f.account.ID, repositories); denied {
+		t.Fatal("a creator that holds ImportWrite holds what the service account holds")
+	}
+	if got, operation, denied := handler.confusedDeputy(ctx, Principal{Actor: "bystander"}, f.account.ID, repositories); !denied || got.ID != repo.ID || operation != RepositoryImportWrite {
+		t.Fatalf("a creator without ImportWrite was not refused: %v %s %s", denied, got.Name, operation)
+	}
+}
+
 func TestPromotionRuleDryRunNeverEnqueuesAndReportsVerdicts(t *testing.T) {
 	f := newRuleFixture(t)
 	ctx := context.Background()

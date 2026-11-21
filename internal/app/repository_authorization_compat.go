@@ -24,6 +24,7 @@ const (
 	RepositoryWrite        = authorization.RepositoryWrite
 	RepositoryAdmin        = authorization.RepositoryAdmin
 	RepositoryIntelligence = authorization.RepositoryIntelligence
+	RepositoryImportWrite  = authorization.RepositoryImportWrite
 )
 
 var NewOIDCValidator = authorization.NewOIDCValidator

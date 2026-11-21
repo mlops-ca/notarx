@@ -69,9 +69,13 @@ func (s *MemoryStore) emitPublishedLocked(ctx context.Context, repositoryID stri
 // artifact.published event at or after $1, oldest first. The dedupe key is spelled as events.Event.DedupeKey builds
 // it: type|repo|coordinate|digest|version with an empty version.
 var publishedCandidateQueries = append([]string{
+	// The files of a versioned repository are not publications: the sealed version is, below.
 	`SELECT a.repository_id::text,'raw',a.path,a.digest FROM native_raw_assets a
-WHERE a.updated_at >= $1 AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.dedupe_key = 'artifact.published|' || a.repository_id::text || '|' || a.path || '|' || a.digest || '|' AND e.occurred_at >= $1)
+WHERE a.updated_at >= $1 AND NOT EXISTS (SELECT 1 FROM hosted_repositories h WHERE h.id = a.repository_id AND h.raw_layout = 'versioned') AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.dedupe_key = 'artifact.published|' || a.repository_id::text || '|' || a.path || '|' || a.digest || '|' AND e.occurred_at >= $1)
 ORDER BY a.updated_at,a.repository_id,a.path LIMIT $2`,
+	`SELECT v.repository_id::text,'raw',v.name || '@' || v.version,v.manifest_digest FROM native_raw_versions v
+WHERE v.state = 'sealed' AND v.sealed_at >= $1 AND ` + notAnnounced("v.repository_id", "v.name || '@' || v.version", "v.manifest_digest") + `
+ORDER BY v.sealed_at,v.repository_id,v.name,v.version LIMIT $2`,
 	`SELECT m.repository_id::text,'oci',m.name,m.digest FROM native_oci_manifests m
 WHERE m.created_at >= $1 AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.dedupe_key = 'artifact.published|' || m.repository_id::text || '|' || m.name || '|' || m.digest || '|' AND e.occurred_at >= $1)
 ORDER BY m.created_at,m.repository_id,m.name,m.digest LIMIT $2`,
@@ -203,7 +207,14 @@ func (s *MemoryStore) ReconcilePublishedEvents(_ context.Context, floor time.Tim
 		}
 	}
 	for _, asset := range s.rawAssets {
-		add(asset.UpdatedAt, publishedCandidate{asset.RepositoryID, string(FormatRaw), asset.Path, asset.Digest})
+		if _, versioned := s.versionedRepositoryLocked(asset.RepositoryID); !versioned {
+			add(asset.UpdatedAt, publishedCandidate{asset.RepositoryID, string(FormatRaw), asset.Path, asset.Digest})
+		}
+	}
+	for _, version := range s.rawVersions {
+		if version.State == RawVersionSealed {
+			add(version.SealedAt, publishedCandidate{version.RepositoryID, string(FormatRaw), version.Coordinate(), version.ManifestDigest})
+		}
 	}
 	for _, manifest := range s.ociManifests {
 		add(manifest.CreatedAt, publishedCandidate{manifest.RepositoryID, string(FormatOCI), manifest.Name, manifest.Digest})

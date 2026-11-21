@@ -88,12 +88,7 @@ type uploadHeaders struct {
 // multipart upload through the SDK transfer manager above it.
 func (s *S3Store) upload(ctx context.Context, key string, body io.ReadSeeker, size int64, headers uploadHeaders) error {
 	if s.uploader == nil || size <= s.threshold {
-		_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
-			Bucket: aws.String(s.bucket), Key: aws.String(key), Body: body, ContentLength: aws.Int64(size),
-			ContentType: headers.ContentType, CacheControl: headers.CacheControl, ContentDisposition: headers.ContentDisposition,
-			ContentEncoding: headers.ContentEncoding, ContentLanguage: headers.ContentLanguage, Metadata: headers.Metadata,
-		})
-		return err
+		return s.putObject(ctx, key, body, size, headers)
 	}
 	if size > MaxMultipartObjectBytes(s.partSize) {
 		return fmt.Errorf("%w: %d bytes exceeds %d at a part size of %d; raise the part size", ErrObjectTooLarge, size, MaxMultipartObjectBytes(s.partSize), s.partSize)
@@ -104,6 +99,37 @@ func (s *S3Store) upload(ctx context.Context, key string, body io.ReadSeeker, si
 		ContentEncoding: headers.ContentEncoding, ContentLanguage: headers.ContentLanguage, Metadata: headers.Metadata,
 	})
 	return err
+}
+
+// putObjectAttempts bounds how often a single PutObject is repeated after the server answers NoSuchKey.
+const putObjectAttempts = 3
+
+// putObject writes one object with a single PutObject request. A PutObject has no key to find, so NoSuchKey is not an
+// answer it can mean: an S3 server that keeps objects as files (RustFS 1.0.0-beta.12 in the integration environment)
+// gives it when a concurrent delete removes the then-empty parent directory of the key between its directory creation and
+// its rename, which a burst of OCI uploads and the cleanup of their finished staging objects provokes. The write is
+// idempotent (one key, the same bytes), so the request is sent again from the start of the body, at most putObjectAttempts
+// times; NoSuchBucket and every other error end it at once.
+func (s *S3Store) putObject(ctx context.Context, key string, body io.ReadSeeker, size int64, headers uploadHeaders) error {
+	start, err := body.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return err
+	}
+	for attempt := 1; ; attempt++ {
+		_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
+			Bucket: aws.String(s.bucket), Key: aws.String(key), Body: body, ContentLength: aws.Int64(size),
+			ContentType: headers.ContentType, CacheControl: headers.CacheControl, ContentDisposition: headers.ContentDisposition,
+			ContentEncoding: headers.ContentEncoding, ContentLanguage: headers.ContentLanguage, Metadata: headers.Metadata,
+		})
+		var apiError smithy.APIError
+		if err == nil || attempt >= putObjectAttempts || !errors.As(err, &apiError) || apiError.ErrorCode() != "NoSuchKey" || ctx.Err() != nil {
+			return err
+		}
+		if _, seekErr := body.Seek(start, io.SeekStart); seekErr != nil {
+			return errors.Join(err, seekErr)
+		}
+		slog.Warn("object store answered NoSuchKey to a PutObject; sending it again", "attempt", attempt)
+	}
 }
 
 // ProbePrefix is the key prefix of the capability probe's throw-away objects.

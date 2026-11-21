@@ -56,6 +56,7 @@ export function AuthorizationRolesPanel() {
       value: "repositories:intelligence",
       label: t("access.artifactIntelligence"),
     },
+    { value: "repositories:import", label: t("access.scopeImport") },
     { value: "repositories:admin", label: t("access.admin") },
   ];
 

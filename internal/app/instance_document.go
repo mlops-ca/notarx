@@ -27,8 +27,13 @@ type instanceIDCache struct {
 	id string
 }
 
-func newInstanceDocumentHandler(ids localInstanceIDReader) instanceDocumentHandler {
-	return instanceDocumentHandler{ids: ids, limits: remoteinstance.DefaultLimits(), cache: &instanceIDCache{}}
+// newInstanceDocumentHandler serves the instance document with the import limits the instance enforces; the zero value
+// advertises the defaults.
+func newInstanceDocumentHandler(ids localInstanceIDReader, limits remoteinstance.Limits) instanceDocumentHandler {
+	if limits == (remoteinstance.Limits{}) {
+		limits = remoteinstance.DefaultLimits()
+	}
+	return instanceDocumentHandler{ids: ids, limits: limits, cache: &instanceIDCache{}}
 }
 
 // instanceImportFormats lists the formats this instance accepts as import targets. The importer slices of ADR 0021

@@ -155,6 +155,8 @@ func (r backgroundRuntime) startSchedulers(ctx context.Context, cfg config.Confi
 	r.taskQueue.StartCacheScheduler(ctx, 5*time.Minute)
 	// One scheduler at a time deletes the meta objects no row references (ADR 0023 section 9).
 	app.NewMetaSweeper(r.store, r.metaObjects, r.metrics, cfg).Start(ctx)
+	// Every scheduler node reaps expired import sessions and their staging objects (ADR 0021); the store divides the work.
+	app.ImportSessionReaper{Store: r.store, Objects: r.objects}.Start(ctx)
 	// One scheduler at a time seals the idle open versions of versioned Raw repositories (ADR 0028).
 	app.NewRawVersionSweeper(r.store, r.metrics, cfg).Start(ctx)
 	app.NativeMavenMaintenance{Store: r.store, Objects: r.objects, Metrics: r.metrics}.StartScheduler(ctx, time.Hour)
@@ -196,7 +198,7 @@ func (r backgroundRuntime) startWorkers(ctx context.Context, cfg config.Config, 
 	}
 	if cfg.WorkerKindEnabled("scan") && r.scanner != nil {
 		scheduler := app.NewPublicationScanScheduler(r.store, true, r.scannerFormats, r.metrics)
-		dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default()}
+		dispatcher := &events.Dispatcher{Source: r.store, Leases: r.store, Owner: cfg.InstanceID + "/" + r.workerSessionID, Consumers: []events.Consumer{scheduler.Consumer()}, Logger: slog.Default(), ObserveLag: r.metrics.SetEventHorizonLag}
 		background.Go(ctx, func() { dispatcher.Run(ctx) })
 	}
 	if r.promotionEvaluator != nil && cfg.WorkerKindEnabled("evaluator") {

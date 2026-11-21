@@ -119,6 +119,8 @@ type Config struct {
 	Remote RemoteConfig
 	// Promotion is the promotion rule policy (NOTARX_PROMOTION_*, ADR 0021).
 	Promotion PromotionConfig
+	// Import is the limit policy of the import sessions a promotion from another instance opens (NOTARX_IMPORT_*, ADR 0021).
+	Import ImportConfig
 	// SAML is the SAML service provider policy (NOTARX_SAML_*, ADR 0018 section 3).
 	SAML SAMLConfig
 	// SCIM is the SCIM 2.0 server policy (NOTARX_SCIM_*, ADR 0018 section 4).
@@ -617,6 +619,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.Promotion = promotion
+	}
+	if imports, err := importConfigFromEnv(cfg.Import); err != nil {
+		return Config{}, err
+	} else {
+		cfg.Import = imports
 	}
 	if saml, err := samlConfigFromEnv(cfg.SAML); err != nil {
 		return Config{}, err

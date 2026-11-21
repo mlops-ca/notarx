@@ -393,3 +393,56 @@ func TestRemoteInstanceRegistrationOverTheInstanceProtocol(t *testing.T) {
 		t.Fatalf("private network without the allow flag = %d %s", got.Code, got.Body.String())
 	}
 }
+
+// Deleting a remote instance that promotion rules still target is a 409 in_use that names the rules.
+func TestRemoteInstanceAPIDeleteConflictNamesTheBlockingRules(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	source, err := store.CreateHostedRepository(ctx, repository.HostedRepository{ID: "0197c0de-0000-7000-8000-0000000000a1", Name: "dev", Format: repository.FormatRaw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := store.CreateServiceAccount(ctx, repository.ServiceAccount{ID: "0197c0de-0000-7000-8000-0000000000a2", Name: "runner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote, err := store.CreateRemoteInstance(ctx, repository.RemoteInstance{ID: "0197c0de-0000-7000-8000-0000000000a3", Name: "peer", BaseURL: "https://peer.example.test", InstanceID: "0197c0de-0000-7000-8000-0000000000a4",
+		AuthKind: repository.RemoteInstanceAuthStaticToken, TokenSealed: "v1:kid:sealed", State: repository.RemoteInstanceStateActive})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, name := range []string{"release", "nightly"} {
+		if _, err = store.CreatePromotionRule(ctx, repository.PromotionRule{ID: fmt.Sprintf("0197c0de-0000-7000-8000-0000000000b%d", i), Name: name, SourceRepositoryID: source.ID, TargetKind: repository.PromotionTargetRemote,
+			RemoteInstanceID: remote.ID, RemoteRepository: "releases", Match: json.RawMessage(`{"coordinate":{"glob":"**"}}`), Conditions: json.RawMessage(`{}`), RunAsServiceAccountID: account.ID, CreatedBy: "alice"}, 32); err != nil {
+			t.Fatal(err)
+		}
+	}
+	api := remoteAPI{t: t, handler: newTestGateway(t, GatewayOptions{Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})}
+	got := api.do(http.MethodDelete, "/api/v2/remote-instances/"+remote.ID, "admin-secret", "", "")
+	var problem struct {
+		Code  string
+		Rules []struct{ RuleID, Name string }
+	}
+	if got.Code != http.StatusConflict || json.Unmarshal(got.Body.Bytes(), &problem) != nil || problem.Code != "in_use" {
+		t.Fatalf("delete = %d %s", got.Code, got.Body.String())
+	}
+	if len(problem.Rules) != 2 || problem.Rules[0].Name != "nightly" || problem.Rules[1].Name != "release" || problem.Rules[0].RuleID == "" {
+		t.Fatalf("blocking rules = %+v", problem.Rules)
+	}
+	if _, err = store.GetRemoteInstance(ctx, remote.ID); err != nil {
+		t.Fatalf("the refused delete removed the instance: %v", err)
+	}
+}
+
+// The instance document advertises the import limits this instance enforces, so a sender never plans a push that the
+// receiver's own configuration would refuse.
+func TestWellKnownInstanceDocumentAdvertisesTheConfiguredImportLimits(t *testing.T) {
+	limits := remoteinstance.Limits{MaxBlobBytes: 1 << 20, MaxSessionBytes: 8 << 20, MaxBlobsPerSession: 7, MaxOpenSessionsPerPrincipal: 2}
+	handler := newTestGateway(t, GatewayOptions{Store: repository.NewMemoryStore(), Adapter: TestAdapter{}, Authenticator: testAuthenticator(), ImportLimits: limits})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/.well-known/notarx", nil))
+	var document remoteinstance.Document
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &document) != nil || document.Limits != limits {
+		t.Fatalf("well-known = %d %s", w.Code, w.Body.String())
+	}
+}

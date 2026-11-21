@@ -778,6 +778,7 @@ export type Grant = {
     | "repositories:write"
     | "repositories:admin"
     | "repositories:intelligence"
+    | "repositories:import"
   >;
   /**
    * Optional canonical resource prefix. Empty or omitted grants repository-wide access.
@@ -1523,7 +1524,8 @@ export type Problem = {
     | "version_not_sealed"
     | "version_empty"
     | "checksum_mismatch"
-    | "promotion_batch_rejected";
+    | "promotion_batch_rejected"
+    | "in_use";
   message: string;
   requestId: string;
   /**
@@ -1534,6 +1536,10 @@ export type Problem = {
    * Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
    */
   members?: Array<VisibilityConflictMember>;
+  /**
+   * Present on in_use when a remote instance is deleted while promotion rules still target it. The blocking rules by name, at most 20.
+   */
+  rules?: Array<PromotionRuleReference>;
 };
 
 export type RepositoryPage = {
@@ -1993,6 +1999,11 @@ export type VisibilityConflictMember = {
   repositoryId: string;
   name: string;
   visibility: Visibility;
+};
+
+export type PromotionRuleReference = {
+  ruleId: string;
+  name: string;
 };
 
 /**
@@ -4031,6 +4042,7 @@ export type RepositoryGrantRecord = {
     | "repositories:write"
     | "repositories:admin"
     | "repositories:intelligence"
+    | "repositories:import"
   >;
   resourcePrefix?: string;
 };
@@ -4044,6 +4056,7 @@ export type AuthorizationTemplateGrant = {
     | "repositories:write"
     | "repositories:admin"
     | "repositories:intelligence"
+    | "repositories:import"
   >;
   resourcePrefix?: string;
 };
@@ -4075,6 +4088,7 @@ export type AuthorizationRoleWritable = {
     | "repositories:write"
     | "repositories:admin"
     | "repositories:intelligence"
+    | "repositories:import"
   >;
 };
 
@@ -4482,6 +4496,7 @@ export type EffectiveAccessPermissions = {
   write: EffectiveAccessDecision;
   admin: EffectiveAccessDecision;
   intelligence: EffectiveAccessDecision;
+  importWrite?: EffectiveAccessDecision;
 };
 
 export type RepositoryEffectiveAccess = {

@@ -655,20 +655,23 @@ func TestReleaseScopeOnVersionedRawPromotesEveryFileOfTheVersion(t *testing.T) {
 	}
 	f.evaluator = NewPromotionEvaluator(PromotionEvaluatorOptions{Store: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: testAuthenticator()}, Owner: "test-worker", Concurrency: 1, Now: func() time.Time { return f.now }})
 	first := f.publishRaw(source, "tool/1.0.0/bin/tool", "binary")
-	// A file of an open version is announced, but the version is not released until it is sealed.
-	f.runOnce()
-	if waiting := f.evaluations(repository.PromotionEvaluationWaiting); len(waiting) != 1 || waiting[0].LastReason != reasonVersionNotSealed {
-		t.Fatalf("evaluations = %+v", f.evaluations())
-	}
 	second := f.publishRaw(source, "tool/1.0.0/README.md", "readme")
-	if _, err = store.SealRawVersion(ctx, repository.SealRawVersionInput{RepositoryID: source.ID, Name: "tool", Version: "1.0.0", Actor: "ci"}); err != nil {
+	// The files of an open version publish nothing: the version is announced once, when it is sealed.
+	f.runOnce()
+	if all := f.evaluations(); len(all) != 0 {
+		t.Fatalf("the files of an open version were evaluated: %+v", all)
+	}
+	sealed, err := store.SealRawVersion(ctx, repository.SealRawVersionInput{RepositoryID: source.ID, Name: "tool", Version: "1.0.0", Actor: "ci"})
+	if err != nil {
 		t.Fatal(err)
 	}
-	// Both file evaluations (the waiting one is made due by the clock) now see the sealed version.
-	for _, evaluation := range f.evaluations() {
-		if outcome, evalErr := f.evaluator.evaluate(ctx, evaluation); evalErr != nil || outcome.State != repository.PromotionEvaluationQueued {
-			t.Fatalf("evaluation %s: %+v, %v", evaluation.Coordinate, outcome, evalErr)
-		}
+	// The one evaluation of the sealed version names it as name@version under its manifest digest and promotes both files.
+	evaluations := f.evaluations()
+	if len(evaluations) != 1 || evaluations[0].Coordinate != "tool@1.0.0" || evaluations[0].Digest != sealed.ManifestDigest {
+		t.Fatalf("evaluations = %+v", evaluations)
+	}
+	if outcome, evalErr := f.evaluator.evaluate(ctx, evaluations[0]); evalErr != nil || outcome.State != repository.PromotionEvaluationQueued {
+		t.Fatalf("evaluation %s: %+v, %v", evaluations[0].Coordinate, outcome, evalErr)
 	}
 	rows := f.promotionRows(target.ID)
 	if len(rows) != 2 {
@@ -685,9 +688,12 @@ func TestReleaseScopeOnVersionedRawPromotesEveryFileOfTheVersion(t *testing.T) {
 		t.Fatalf("promoted %+v, want %s and %s", got, first.Path, second.Path)
 	}
 	// A version outside the match is not released.
-	other := f.publishRaw(source, "other/2.0.0/file", "other")
-	for _, evaluation := range f.evaluations(repository.PromotionEvaluationPending) {
-		if evaluation.Coordinate == other.Path {
+	f.publishRaw(source, "other/2.0.0/file", "other")
+	if _, err = store.SealRawVersion(ctx, repository.SealRawVersionInput{RepositoryID: source.ID, Name: "other", Version: "2.0.0", Actor: "ci"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, evaluation := range f.evaluations() {
+		if evaluation.Coordinate == "other@2.0.0" {
 			t.Fatalf("a version outside the match fanned out: %+v", evaluation)
 		}
 	}
@@ -939,7 +945,7 @@ func TestReleaseConditionsHoldForEveryMember(t *testing.T) {
 	if rows := f.promotionRows(f.target.ID); len(rows) != 0 {
 		t.Fatalf("a release with an unscanned member was promoted: %+v", rows)
 	}
-	if waiting := f.evaluations(repository.PromotionEvaluationWaiting); len(waiting) != 2 || waiting[0].LastReason != reasonConditionPrefix+"scan:scan_not_completed" {
+	if waiting := f.evaluations(repository.PromotionEvaluationWaiting); len(waiting) != 1 || waiting[0].LastReason != reasonConditionPrefix+"scan:scan_not_completed" {
 		t.Fatalf("evaluations = %+v", f.evaluations())
 	}
 	if _, err = store.ReplaceArtifactIntelligence(ctx, repository.ArtifactIntelligence{RepositoryID: f.source.ID, Format: repository.FormatRaw, Coordinate: second.Path, Digest: second.Digest,

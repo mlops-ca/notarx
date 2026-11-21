@@ -84,6 +84,9 @@ type GatewayOptions struct {
 	// private networks. RemoteDiscoverer replaces the egress-backed instance document client (tests).
 	RemoteAllowPrivateNetworks bool
 	RemoteDiscoverer           remoteinstance.Discoverer
+	// ImportLimits are the import limits this instance enforces (NOTARX_IMPORT_MAX_*, ADR 0021), advertised in
+	// GET /.well-known/notarx; the zero value advertises the defaults.
+	ImportLimits remoteinstance.Limits
 	// PromotionMaxRulesPerRepository is NOTARX_PROMOTION_MAX_RULES_PER_REPOSITORY (ADR 0021); zero means the default of 32.
 	PromotionMaxRulesPerRepository int
 	// SCIM configures the SCIM 2.0 server (NOTARX_SCIM_*, ADR 0018 section 4); the zero value leaves it off and

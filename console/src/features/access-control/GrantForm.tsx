@@ -212,6 +212,10 @@ export function GrantForm({
                   value: `${BUILTIN_PERMISSION_PREFIX}intelligence`,
                   label: t("access.artifactIntelligenceSecurityMetadata"),
                 },
+                {
+                  value: `${BUILTIN_PERMISSION_PREFIX}import`,
+                  label: t("access.importPeerPromotion"),
+                },
               ],
             },
             {

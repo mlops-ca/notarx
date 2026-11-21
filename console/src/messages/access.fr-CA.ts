@@ -259,7 +259,10 @@ export const accessFrCA: Record<keyof typeof accessEnCA, string> = {
   "access.limitByPrefix": "Limiter par préfixe",
   "access.canonicalPrefix": "Préfixe canonique",
   "access.readWriteAdminIntelligence":
-    "Lecture + écriture + admin + intelligence",
+    "Lecture + écriture + admin + intelligence + importation",
+  "access.scopeImport": "Importation depuis une instance paire",
+  "access.importPeerPromotion":
+    "Importation · recevoir des promotions d’une autre instance",
   "access.readWrite": "Lecture + écriture",
   "access.noGlobalRoleRepositoryGrantsDecideAccess":
     "Aucun rôle global; les autorisations de dépôt décident de l’accès",

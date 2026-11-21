@@ -225,9 +225,7 @@ func (s *PostgresStore) replaceVersionedRawAsset(ctx context.Context, tx *sql.Tx
 	if err = refreshArtifactCatalog(ctx, tx, asset.RepositoryID, FormatRaw, asset.Path); err != nil {
 		return RawAsset{}, rawUsageDelta{}, err
 	}
-	if err = emitPublishedPostgres(ctx, tx, asset.RepositoryID, FormatRaw, asset.Path, asset.Digest); err != nil {
-		return RawAsset{}, rawUsageDelta{}, err
-	}
+	// Nothing is published yet: the version announces itself once, when it is sealed.
 	return RawAsset{}, rawUsageDelta{bytes: size, objects: 1}, nil
 }
 
@@ -609,6 +607,10 @@ func (s *PostgresStore) sealRawVersion(ctx context.Context, input SealRawVersion
 		return RawVersion{}, err
 	}
 	if err = insertAudits(ctx, tx, rawVersionAudit(input.Audit, found)); err != nil {
+		return RawVersion{}, err
+	}
+	// A sealed version is one publication, addressed as name@version under its manifest digest (ADR 0021, ADR 0028).
+	if err = emitPublishedPostgres(ctx, tx, found.RepositoryID, FormatRaw, found.Coordinate(), found.ManifestDigest); err != nil {
 		return RawVersion{}, err
 	}
 	return found, tx.Commit()

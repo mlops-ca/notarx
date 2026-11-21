@@ -182,10 +182,14 @@ the delivery fan-out see one consistent set and a new subscription never misses 
 Cargo triggers call the same function, so there is one emission rule. Internal consumers
 (`events.Dispatcher`) read the log by `(occurred_at, seq)` from a per-consumer row in
 `domain_event_cursors`. `occurred_at` is the database clock, so the dispatcher reads only below
-the start of the oldest open transaction and below a five second settle horizon: an event that
-commits late is never behind the cursor. `occurred_at` is always the database clock at emission, never a caller-supplied time. One node serves a
+the first emission of the oldest open transaction that has emitted and below a five second settle horizon: an event that
+commits late is never behind the cursor. `emit_domain_event` stamps the session with
+`application_name = 'notarx-emit:<epoch microseconds>'` at a transaction's first emission (reverted at its end), so a
+long transaction that never emits (an import, a job, an idle session) does not hold the log back; one that emits delays
+consumers by the time it stays open after its first emission. The gauge `notarx_event_horizon_lag_seconds` and a
+dispatcher warning (above one minute) report that delay. `occurred_at` is always the database clock at emission, never a caller-supplied time. One node serves a
 consumer at a time through a lease row of `scheduled_tasks` (kind `event-dispatcher`) that it renews on every
-pass; a consumer without a cursor starts at the present; delivery is at least once, a failed event is
+pass; a consumer without a cursor starts at the present, except one that declares a catch-up window: the scan consumer starts at the retention window of the log (14 d), so publications made while scanning was off or during an upgrade gap are still scheduled (the scan job key is idempotent); delivery is at least once, a failed event is
 retried with an exponential backoff (to five minutes), and one that fails ten times in a row is logged and
 skipped so a poisoned event cannot block the consumer.
 `webhook_deliveries` carries `event_occurred_at` so its join to `domain_events` is pruned to one
@@ -345,10 +349,10 @@ API) set by the system without a version bump, conditionally on the rule version
 newer than the target's tombstone; bytes that differ from a completed promotion are `conflict` (an OCI image name holds many digests, so only the
 exact manifest decides there); a direct publication into the target that no promotion made is refused by the format's job, not by the
 evaluator. The target's admission policy is evaluated as a condition of every rule. A condition that can still change (a scan, findings above the
-limit, evidence, the target's policy, a quarantine, an open Raw version) makes the evaluation wait and look again, after a quarter of the artifact's
+limit, evidence, the target's policy, a quarantine) makes the evaluation wait and look again, after a quarter of the artifact's
 age between one minute and one hour, until a week after the age condition was met (after publication without one); for `scope: release` the
-conditions hold for every member, checked in order with the first failing member deciding. A versioned Raw file event is evaluated as its version,
-which counts as published when it is sealed; `scope: release` on versioned Raw expands to the files of the version through `ReleaseSet`, and a release of more than
+conditions hold for every member, checked in order with the first failing member deciding. A versioned Raw repository emits `artifact.published` once per version, in the seal transaction, with the coordinate `name@version` and
+the manifest digest (a file written into an open version emits nothing); the version counts as published when it is sealed; `scope: release` on versioned Raw expands to the files of the version through `ReleaseSet`, and a release of more than
 1000 members fails with `release_too_large`.
 
 ### Provenance and approval
@@ -451,8 +455,20 @@ rejects the import.
 
 Limits (all configurable, defaults in Configuration): max blob size, max
 session bytes, max blobs per session, max open sessions per principal, and
-a staging quota. Abandoned sessions and staging keys are removed by a reaper
-whose TTL equals `NOTARX_IMPORT_SESSION_TTL`.
+a staging quota (`NOTARX_IMPORT_STAGING_QUOTA_BYTES`, default 100 GiB: the bytes claimed by every live session of the
+instance together). A request over a limit is refused with a typed error and writes nothing; a replay of an
+idempotency key checks no limit. `import_sessions` records the claims as received (coordinate, digest, format manifest,
+chain path and evidence stay unverified until the bytes are) and `import_blobs` the blobs with their staging keys,
+assigned when the session is created. Abandoned sessions and staging keys are removed by a reaper
+whose TTL equals `NOTARX_IMPORT_SESSION_TTL`: every node runs it once a minute, the sessions are taken with
+`FOR UPDATE SKIP LOCKED` one session per transaction (a session whose objects cannot be deleted is skipped for the rest of the pass),
+staging objects are deleted before their keys are emptied, and the retention janitor then deletes
+the finished rows (the `import_sessions` registry entry). `ImportWrite` is the grant scope `repositories:import`: admin
+includes it, write does not, and it implies no read. A blob digest must be `sha256:<64 hex>` because it is part of the staging key.
+A retry under the idempotency key of a dead session (aborted, expired or past its expiry) gets a new session whatever it
+asks for: the dead one keeps its row for the reaper under a renamed key. Only an open session is aborted; a committing one finishes or expires. Starting the commit keeps the session at least an hour (`ImportCommitGrace`)
+so a running commit never loses its staging objects to the reaper. An upload that the store refuses with a closed session
+deletes the object it staged, since the reaper may already have emptied the staging keys.
 
 OCI: the unit is the manifest digest plus all child manifests/blobs plus
 referrers (signatures, SBOMs as referrer manifests) by digest. Blob sharing
@@ -542,7 +558,8 @@ matched artifacts with a per-condition verdict and never enqueues.
 (24h), `NOTARX_IMPORT_MAX_BLOB_BYTES` (10 GiB),
 `NOTARX_IMPORT_MAX_SESSION_BYTES` (50 GiB),
 `NOTARX_IMPORT_MAX_BLOBS_PER_SESSION` (2000),
-`NOTARX_IMPORT_MAX_OPEN_SESSIONS_PER_PRINCIPAL` (4).
+`NOTARX_IMPORT_MAX_OPEN_SESSIONS_PER_PRINCIPAL` (4),
+`NOTARX_IMPORT_STAGING_QUOTA_BYTES` (100 GiB).
 
 ## Security considerations
 

@@ -108,7 +108,9 @@ func (s *MemoryStore) CompleteRawUploadIf(ctx context.Context, id string, asset 
 	if versioned {
 		s.recordVersionedWriteLocked(asset, publishActor(ctx))
 	}
-	s.emitRawPublishedLocked(ctx, asset, previous, existed)
+	if !versioned {
+		s.emitRawPublishedLocked(ctx, asset, previous, existed)
+	}
 	v.State = "completed"
 	s.rawUploads[id] = v
 	return asset, nil
@@ -235,7 +237,9 @@ func (s *MemoryStore) PutRawAssetIf(ctx context.Context, asset RawAsset, conditi
 	if versioned {
 		s.recordVersionedWriteLocked(asset, publishActor(ctx))
 	}
-	s.emitRawPublishedLocked(ctx, asset, previous, existed)
+	if !versioned {
+		s.emitRawPublishedLocked(ctx, asset, previous, existed)
+	}
 	return asset, nil
 }
 func (s *MemoryStore) GetRawAsset(_ context.Context, repositoryID, path string) (RawAsset, error) {

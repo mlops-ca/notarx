@@ -391,7 +391,7 @@ func (h promotionRuleHandler) checkRunAs(w http.ResponseWriter, r *http.Request,
 	return true
 }
 
-var promotionRuleOperations = []RepositoryOperation{RepositoryRead, RepositoryWrite, RepositoryAdmin, RepositoryIntelligence}
+var promotionRuleOperations = []RepositoryOperation{RepositoryRead, RepositoryWrite, RepositoryAdmin, RepositoryIntelligence, RepositoryImportWrite}
 
 // serviceAccountPrincipal is the principal a service account authenticates as: its actor is the durable
 // service-account:<id> and it carries no role, so every permission comes from grants.

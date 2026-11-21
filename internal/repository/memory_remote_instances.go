@@ -99,10 +99,24 @@ func (s *MemoryStore) DeleteRemoteInstance(ctx context.Context, id string, audit
 	if _, ok := s.remoteInstances[id]; !ok {
 		return ErrNotFound
 	}
+	var inUse *RemoteInstanceInUseError
 	for _, rule := range s.promotionRules {
 		if rule.RemoteInstanceID == id {
-			return ErrRemoteInstanceInUse
+			if inUse == nil {
+				inUse = &RemoteInstanceInUseError{}
+			}
+			inUse.Rules = append(inUse.Rules, PromotionRuleRef{ID: rule.ID, Name: rule.Name})
 		}
+	}
+	if inUse != nil {
+		sort.Slice(inUse.Rules, func(i, j int) bool {
+			if inUse.Rules[i].Name != inUse.Rules[j].Name {
+				return inUse.Rules[i].Name < inUse.Rules[j].Name
+			}
+			return inUse.Rules[i].ID < inUse.Rules[j].ID
+		})
+		inUse.Rules = inUse.Rules[:min(len(inUse.Rules), RemoteInstanceInUseRuleLimit)]
+		return inUse
 	}
 	if err := s.commitAuditLocked(ctx, audit); err != nil {
 		return err

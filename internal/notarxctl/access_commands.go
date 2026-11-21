@@ -25,7 +25,7 @@ const (
 )
 
 var grantScopes = map[string]bool{
-	"repositories:read": true, "repositories:write": true, "repositories:admin": true, "repositories:intelligence": true,
+	"repositories:read": true, "repositories:write": true, "repositories:admin": true, "repositories:intelligence": true, "repositories:import": true,
 }
 
 // grantRow is one grant in the CLI's own shape, so grants, aggregated
@@ -275,7 +275,7 @@ func grantUpsertCommand() command {
 			seen := map[string]bool{}
 			for _, scope := range scopes {
 				if !grantScopes[scope] || seen[scope] {
-					return &UsageError{Message: fmt.Sprintf("invalid or repeated --scope %q", scope), Hint: "use repositories:read, repositories:write, repositories:admin, or repositories:intelligence once each"}
+					return &UsageError{Message: fmt.Sprintf("invalid or repeated --scope %q", scope), Hint: "use repositories:read, repositories:write, repositories:admin, repositories:intelligence, or repositories:import once each"}
 				}
 				seen[scope] = true
 			}

@@ -41,11 +41,11 @@ func (input *catalogueInput) setFlags(fs *flag.FlagSet, kind, operation string) 
 func validateCatalogueScopes(scopes []string) error {
 	seen := map[string]bool{}
 	if len(scopes) == 0 {
-		return &UsageError{Message: "at least one repository scope is required", Hint: "use repositories:read, repositories:write, repositories:admin, or repositories:intelligence"}
+		return &UsageError{Message: "at least one repository scope is required", Hint: "use repositories:read, repositories:write, repositories:admin, repositories:intelligence, or repositories:import"}
 	}
 	for _, scope := range scopes {
 		if !grantScopes[scope] || seen[scope] {
-			return &UsageError{Message: fmt.Sprintf("invalid or repeated repository scope %q", scope), Hint: "use each of repositories:read, repositories:write, repositories:admin, or repositories:intelligence at most once"}
+			return &UsageError{Message: fmt.Sprintf("invalid or repeated repository scope %q", scope), Hint: "use each of repositories:read, repositories:write, repositories:admin, repositories:intelligence, or repositories:import at most once"}
 		}
 		seen[scope] = true
 	}

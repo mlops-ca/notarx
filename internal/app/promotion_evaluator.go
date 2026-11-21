@@ -50,7 +50,6 @@ const (
 	reasonAuthorizationLost = "authorization_lost"
 	reasonConditionPrefix   = "condition_failed:"
 	reasonEvaluationError   = "evaluation_error"
-	reasonVersionNotSealed  = "version_not_sealed"
 	reasonEvaluationPanic   = "evaluation_panic"
 	reasonUnsupportedFormat = "unsupported_format"
 	reasonEmptyRelease      = "release_has_no_members"
@@ -452,7 +451,7 @@ func (e *PromotionEvaluator) prepare(ctx context.Context, rule repository.Promot
 // Timing of conditions that depend on something that has not happened yet.
 const (
 	// conditionGiveUp is how long after publication an artifact may keep failing a condition that can still change (a
-	// scan, evidence, a release from quarantine, the open version of a Raw repository) before the evaluation is dropped.
+	// scan, evidence, a release from quarantine) before the evaluation is dropped.
 	conditionGiveUp = 7 * 24 * time.Hour
 	// conditionPollFloor and conditionPollCeiling bound the delay before a waiting evaluation looks again: a quarter of
 	// the artifact's age, so a fresh artifact is rechecked quickly and an old one rarely.
@@ -478,21 +477,21 @@ func (e *PromotionEvaluator) laterBy(published time.Time, reason string, delay t
 	return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationWaiting, Reason: reason, NextAttemptAt: e.now().Add(delay)}
 }
 
-// reload reads the artifact the evaluation names as it is now. A file of a versioned Raw repository is announced by its
-// path, but the artifact a rule matches and promotes is its version, name@version with the manifest digest and the
-// properties frozen at seal (ADR 0028): the evaluation is rewritten to that and the version is returned, and the
-// evaluation waits while the version is still open. Every other format returns the evaluation as it is.
+// reload reads the artifact the evaluation names as it is now. A versioned Raw repository publishes a version once, at
+// seal, as name@version with the manifest digest (ADR 0028): the version is read for the properties frozen at seal and
+// returned, and the evaluation is dropped when the version is gone or not sealed. Every other format returns the
+// evaluation as it is.
 func (e *PromotionEvaluator) reload(ctx context.Context, run ruleRun, evaluation repository.PromotionEvaluation) (repository.PromotionEvaluation, *repository.RawVersion, repository.PromotionEvaluationOutcome, error) {
 	if run.source.Format != repository.FormatRaw || run.source.RawLayout != repository.RawLayoutVersioned {
 		return evaluation, nil, repository.PromotionEvaluationOutcome{}, nil
 	}
 	versions, ok := any(e.store).(repository.NativeRawVersionStore)
-	parsed, parseErr := repository.ParseRawVersionPath(evaluation.Coordinate)
-	if !ok || parseErr != nil {
+	name, versionString, parsed := repository.ParseRawVersionCoordinate(evaluation.Coordinate)
+	if !ok || !parsed {
 		outcome := skipped(reasonNoMatch)
 		return evaluation, nil, outcome, nil
 	}
-	version, err := versions.GetRawVersion(ctx, run.source.ID, parsed.Name, parsed.Version)
+	version, err := versions.GetRawVersion(ctx, run.source.ID, name, versionString)
 	if errors.Is(err, repository.ErrNotFound) {
 		outcome := skipped(reasonSourceUnavailable)
 		return evaluation, nil, outcome, nil
@@ -500,15 +499,10 @@ func (e *PromotionEvaluator) reload(ctx context.Context, run ruleRun, evaluation
 	if err != nil {
 		return evaluation, nil, repository.PromotionEvaluationOutcome{}, err
 	}
-	if version.State != repository.RawVersionSealed {
-		// An open version is waited for as long as it keeps being written to: the clock is its last write, not the first file.
-		active := evaluation.EventOccurredAt
-		if version.UpdatedAt.After(active) {
-			active = version.UpdatedAt
-		}
-		return evaluation, nil, e.later(active, reasonVersionNotSealed), nil
+	if version.State != repository.RawVersionSealed || version.ManifestDigest != evaluation.Digest {
+		// Only a sealed version publishes, and its manifest never changes: anything else is not the artifact the event named.
+		return evaluation, nil, skipped(reasonSourceUnavailable), nil
 	}
-	evaluation.Coordinate, evaluation.Digest = version.Coordinate(), version.ManifestDigest
 	return evaluation, &version, repository.PromotionEvaluationOutcome{}, nil
 }
 
@@ -589,7 +583,7 @@ func (e *PromotionEvaluator) members(ctx context.Context, run ruleRun, evaluatio
 	return members, nil
 }
 
-// releaseRequested answers an evaluation of a release that an earlier evaluation already requested. Every file of a release
+// releaseRequested answers an evaluation of a release that an earlier evaluation already requested. Every file of a Maven release
 // publishes its own event, so a release of N files is evaluated N times; the first requests every member together, and the
 // others find the attempt of the member that triggered them under its key and return it without checking the release again.
 // Evaluations that run at the same time may each do the full work; the keys make the requests one.
@@ -613,7 +607,7 @@ func (e *PromotionEvaluator) releaseRequested(ctx context.Context, run ruleRun, 
 // promote asks the PromotionService for the promotion of every member: all of them are admitted before any is queued
 // (all-or-nothing, like a batch), each under its own idempotency key, against a target resolved once. A member the target
 // already holds is a success no-op; different bytes at its coordinate are a conflict; when every member already has a live
-// attempt under its key the evaluation is a replay and asks for nothing, which is what the second file event of a release
+// attempt under its key the evaluation is a replay and asks for nothing, which is what the second file event of a Maven release
 // does.
 func (e *PromotionEvaluator) promote(ctx context.Context, run ruleRun, members []promotionMember) (repository.PromotionEvaluationOutcome, error) {
 	version, _ := strconv.ParseInt(run.rule.Version, 10, 64)

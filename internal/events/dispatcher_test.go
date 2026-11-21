@@ -1,8 +1,11 @@
 package events
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +40,9 @@ type fakeSource struct {
 	advErr   error
 	settle   time.Duration
 	consumer string
+	starts   []string
+	lookback time.Duration
+	startErr error
 }
 
 func (f *fakeSource) ReadEvents(_ context.Context, consumer string, types []Type, settle time.Duration, limit int) ([]Stored, error) {
@@ -52,6 +58,12 @@ func (f *fakeSource) ReadEvents(_ context.Context, consumer string, types []Type
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeSource) StartCursor(_ context.Context, consumer string, lookback time.Duration) error {
+	f.starts = append(f.starts, consumer)
+	f.lookback = lookback
+	return f.startErr
 }
 
 func (f *fakeSource) AdvanceCursor(_ context.Context, consumer string, cursor Cursor) error {
@@ -214,6 +226,75 @@ func TestDispatcherReportsSourceFailures(t *testing.T) {
 	d = &Dispatcher{Source: &fakeSource{events: []Stored{stored(1, "a")}, advErr: errors.New("cursor")}, Consumers: []Consumer{{Name: "c1", Handler: HandlerFunc(func(context.Context, Event) error { return nil })}}}
 	if n, err := d.RunOnce(context.Background()); err == nil || n != 0 {
 		t.Errorf("advance failure: n=%d err=%v", n, err)
+	}
+}
+
+type lagSource struct {
+	fakeSource
+	lag time.Duration
+	err error
+}
+
+func (l *lagSource) EventHorizonLag(context.Context) (time.Duration, error) { return l.lag, l.err }
+
+func TestDispatcherObservesAndWarnsAboutHorizonLag(t *testing.T) {
+	source := &lagSource{lag: 3 * time.Minute}
+	var logs bytes.Buffer
+	var observed []time.Duration
+	now := time.Unix(1000, 0)
+	d := &Dispatcher{Source: source, Logger: slog.New(slog.NewTextHandler(&logs, nil)), ObserveLag: func(lag time.Duration) { observed = append(observed, lag) },
+		Now: func() time.Time { return now }, Consumers: []Consumer{{Name: "c1", Handler: HandlerFunc(func(context.Context, Event) error { return nil })}}}
+	for range 2 {
+		if _, err := d.RunOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(observed) != 2 || observed[0] != 3*time.Minute {
+		t.Fatalf("observed = %v", observed)
+	}
+	if n := strings.Count(logs.String(), "held back"); n != 1 {
+		t.Fatalf("warnings within the interval = %d\n%s", n, logs.String())
+	}
+	now = now.Add(HorizonWarnEvery)
+	if _, err := d.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(logs.String(), "held back"); n != 2 {
+		t.Fatalf("warnings after the interval = %d", n)
+	}
+	source.lag = time.Second
+	logs.Reset()
+	now = now.Add(time.Hour)
+	if _, err := d.RunOnce(context.Background()); err != nil || logs.Len() != 0 {
+		t.Fatalf("a small lag was logged: %v %s", err, logs.String())
+	}
+	source.err = errors.New("stats down")
+	if _, err := d.RunOnce(context.Background()); err != nil || !strings.Contains(logs.String(), "lag unavailable") {
+		t.Fatalf("a lag failure must be logged without failing the pass: %v %s", err, logs.String())
+	}
+}
+
+func TestDispatcherStartsACatchUpConsumerOnceBeforeReading(t *testing.T) {
+	source := &fakeSource{events: []Stored{stored(1, "a")}}
+	consumer := Consumer{Name: "late", CatchUp: 72 * time.Hour, Handler: HandlerFunc(func(context.Context, Event) error { return nil })}
+	plain := Consumer{Name: "plain", Handler: consumer.Handler}
+	d := &Dispatcher{Source: source, Consumers: []Consumer{consumer, plain}}
+	for range 2 {
+		if _, err := d.RunOnce(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(source.starts) != 1 || source.starts[0] != "late" || source.lookback != 72*time.Hour {
+		t.Fatalf("starts = %v lookback = %v; want one start of the catch-up consumer", source.starts, source.lookback)
+	}
+	source.startErr = errors.New("down")
+	d = &Dispatcher{Source: source, Consumers: []Consumer{consumer}}
+	if _, err := d.RunOnce(context.Background()); err == nil {
+		t.Fatal("a failed cursor start was swallowed")
+	}
+	source.startErr = nil
+	if _, err := d.RunOnce(context.Background()); err != nil || len(source.starts) != 3 {
+		t.Fatalf("the start must be retried after a failure: %v %v", err, source.starts)
 	}
 }
 

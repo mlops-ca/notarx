@@ -100,8 +100,6 @@ func (e Entry) Validate() error {
 }
 
 // DefaultRegistry lists every table the janitor prunes.
-// Import sessions are added by the slice that creates them, because their columns are not
-// part of the schema yet.
 func DefaultRegistry() []Entry {
 	return []Entry{
 		{Table: "resolver_audit_log", TimeColumn: "occurred_at", Terminal: "TRUE", KeyColumns: []string{"id"}, Standard: 90 * day, FreeTier: 7 * day, PartitionedOnPostgres: true},
@@ -119,6 +117,10 @@ func DefaultRegistry() []Entry {
 		// runs the evaluator (a deployment that lists worker kinds without evaluator, or a rule created and forgotten): it is
 		// dropped rather than kept forever. The janitor logs the deleted rows by this entry's label.
 		{Table: "promotion_evaluations", Label: "promotion_evaluations_unclaimed", TimeColumn: "next_attempt_at", Terminal: "state IN ('pending','waiting')", KeyColumns: []string{"id"}, Standard: 30 * day, FreeTier: 7 * day},
+		// Import sessions of ADR 0021: a finished session (committed, aborted or expired) is deleted, with its blob rows by
+		// cascade, once the reaper has deleted its staging objects and emptied their keys; a session that still names
+		// staging objects is never deleted, so a failing object store cannot orphan them. A live session is the reaper's.
+		{Table: "import_sessions", TimeColumn: "updated_at", Terminal: "state IN ('committed','aborted','expired') AND NOT EXISTS (SELECT 1 FROM import_blobs b WHERE b.session_id = import_sessions.id AND b.staging_key <> '')", KeyColumns: []string{"id"}, Standard: 7 * day, FreeTier: 1 * day},
 		{Table: "repository_request_rollup", TimeColumn: "bucket_start", Terminal: "TRUE", KeyColumns: []string{"repository_id", "bucket_start", "outcome"}, Standard: 400 * day, FreeTier: 400 * day},
 		{Table: "webhook_deliveries", Label: "webhook_deliveries_succeeded", TimeColumn: "updated_at", Terminal: "state = 'succeeded'", KeyColumns: []string{"id"}, Standard: 14 * day, FreeTier: 3 * day},
 		// A dead delivery is inspectable and replayable while its domain event is kept (14 days, 3 on the free tier), so

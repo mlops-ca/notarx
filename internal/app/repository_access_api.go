@@ -163,6 +163,7 @@ func (h accessManagementHandler) repositoryEffectiveAccess(ctx context.Context, 
 	decision := func(operation RepositoryOperation) adminopenapi.EffectiveAccessDecision {
 		return effectiveAccessDecision(h.authorizer.AuthorizeResource(ctx, principal, repo, operation, resource))
 	}
+	importWrite := decision(RepositoryImportWrite)
 	anonymous := access.DescribeAnonymous(ctx, h.anonymousPolicy, repo)
 	response := adminopenapi.RepositoryEffectiveAccess{
 		Actor: principal.Actor, Identity: currentIdentityResponse(principal),
@@ -178,6 +179,7 @@ func (h accessManagementHandler) repositoryEffectiveAccess(ctx context.Context, 
 			Write:        decision(RepositoryWrite),
 			Admin:        decision(RepositoryAdmin),
 			Intelligence: decision(RepositoryIntelligence),
+			ImportWrite:  &importWrite,
 		},
 	}
 	response.Repository.Id = uuid.MustParse(repo.ID)
@@ -286,10 +288,10 @@ func authorizationRoleScopes(body *adminopenapi.AuthorizationRoleWritable) []str
 }
 
 func validAuthorizationScopes(scopes []string) bool {
-	if len(scopes) == 0 || len(scopes) > 4 {
+	if len(scopes) == 0 || len(scopes) > 5 {
 		return false
 	}
-	validScopes := map[string]bool{"repositories:read": true, "repositories:write": true, "repositories:admin": true, "repositories:intelligence": true}
+	validScopes := map[string]bool{"repositories:read": true, "repositories:write": true, "repositories:admin": true, "repositories:intelligence": true, authorization.GrantScopeImport: true}
 	seen := map[string]bool{}
 	for _, scope := range scopes {
 		if !validScopes[scope] || seen[scope] {
@@ -745,7 +747,7 @@ func (h accessManagementHandler) authorizationAudit(r *http.Request, repositoryN
 }
 
 func validRepositoryGrants(grants []repository.RepositoryGrant, format repository.Format) bool {
-	validScopes := map[string]bool{"repositories:read": true, "repositories:write": true, "repositories:admin": true, "repositories:intelligence": true}
+	validScopes := map[string]bool{"repositories:read": true, "repositories:write": true, "repositories:admin": true, "repositories:intelligence": true, authorization.GrantScopeImport: true}
 	keys := map[string]bool{}
 	for _, grant := range grants {
 		if !validGrantPrincipal(grant.Principal) || len(grant.Scopes) == 0 || !validGrantResourcePrefix(grant.ResourcePrefix, format) {

@@ -10,7 +10,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/events"
+	"github.com/mlops-ca/notarx/internal/testsupport"
 )
 
 func publishedKey(repo HostedRepository, coordinate, digest string) string {
@@ -224,5 +226,78 @@ func TestPostgresEmitOnceHonoursTheRetentionFloor(t *testing.T) {
 	}
 	if n := countDomainEvents(t, store, event.DedupeKey()); n != 2 {
 		t.Fatalf("%d events, want 2", n)
+	}
+}
+
+// A sealed version of a versioned Raw repository is one publication addressed as name@version under the manifest digest,
+// written in the seal transaction: files written into the open version emit nothing, a seal whose transaction fails
+// leaves no event and no sealed version, a repeated seal adds none, and the reconciler leaves both the files and the
+// announced version alone.
+func TestPostgresRawVersionEmitsPublishedAtSealInItsTransaction(t *testing.T) {
+	store := counterTestStore(t)
+	ctx := context.Background()
+	repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: uuid.NewString(), Name: "raw-seal-" + uuid.NewString(), Format: FormatRaw, RawLayout: RawLayoutVersioned, SealMode: RawSealExplicit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { testsupport.PurgeRepository(t, store.db, repo.ID) })
+	files := []RawAsset{rawFixture(repo, "tool/1.0.0/a", "a "+repo.ID), rawFixture(repo, "tool/1.0.0/b", "b "+repo.ID)}
+	for _, file := range files {
+		if _, err = store.PutRawAssetIf(ctx, file, RawWriteCondition{RequireAbsent: true}); err != nil {
+			t.Fatal(err)
+		}
+		if n := countDomainEvents(t, store, publishedKey(repo, file.Path, file.Digest)); n != 0 {
+			t.Fatalf("a file of an open version emitted %d events", n)
+		}
+	}
+	input := SealRawVersionInput{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0"}
+	_, manifestDigest := RawVersionManifest("tool", "1.0.0", files, nil)
+	key := publishedKey(repo, "tool@1.0.0", manifestDigest)
+
+	// Fail the event insert of this version only: the seal must roll back with it.
+	function, trigger := "reject_"+strings.ReplaceAll(uuid.NewString(), "-", ""), "reject_"+strings.ReplaceAll(uuid.NewString(), "-", "")
+	if _, err = store.db.ExecContext(ctx, `CREATE FUNCTION `+function+`() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'event rejected'; END $$`); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_, _ = store.db.ExecContext(context.Background(), `DROP TRIGGER IF EXISTS `+trigger+` ON domain_events`)
+		_, _ = store.db.ExecContext(context.Background(), `DROP FUNCTION IF EXISTS `+function+`()`)
+	})
+	if _, err = store.db.ExecContext(ctx, `CREATE TRIGGER `+trigger+` BEFORE INSERT ON domain_events FOR EACH ROW WHEN (NEW.dedupe_key = '`+key+`') EXECUTE FUNCTION `+function+`()`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.SealRawVersion(ctx, input); err == nil {
+		t.Fatal("a seal whose event could not be written succeeded")
+	}
+	if version, getErr := store.GetRawVersion(ctx, repo.ID, "tool", "1.0.0"); getErr != nil || version.State != RawVersionOpen {
+		t.Fatalf("version after the failed seal = %+v, %v; want open", version, getErr)
+	}
+	if _, err = store.db.ExecContext(ctx, `DROP TRIGGER `+trigger+` ON domain_events`); err != nil {
+		t.Fatal(err)
+	}
+
+	sealed, err := store.SealRawVersion(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sealed.ManifestDigest != manifestDigest {
+		t.Fatalf("manifest digest = %s, want %s", sealed.ManifestDigest, manifestDigest)
+	}
+	if _, err = store.SealRawVersion(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	if n := countDomainEvents(t, store, key); n != 1 {
+		t.Fatalf("seal left %d events, want exactly 1", n)
+	}
+	if _, err = store.ReconcilePublishedEvents(ctx, time.Now().Add(-time.Hour), 10000); err != nil {
+		t.Fatal(err)
+	}
+	if n := countDomainEvents(t, store, key); n != 1 {
+		t.Fatalf("the reconciler changed the version's events to %d", n)
+	}
+	for _, file := range files {
+		if n := countDomainEvents(t, store, publishedKey(repo, file.Path, file.Digest)); n != 0 {
+			t.Fatalf("the reconciler announced a file of a versioned repository (%d events)", n)
+		}
 	}
 }

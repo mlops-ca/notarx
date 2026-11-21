@@ -44,6 +44,8 @@ export const remoteInstancesFrCA: Record<
   "remoteInstances.deleteTitle": "Supprimer l’instance distante",
   "remoteInstances.deleteMessage":
     "Supprimer {name} ? Les règles de promotion qui la ciblent cessent de fonctionner.",
+  "remoteInstances.inUse":
+    "Impossible de supprimer {name} : des règles de promotion la ciblent encore ({rules}). Changez la cible de ces règles ou supprimez-les d’abord.",
   "remoteInstances.loading": "Chargement des instances distantes",
   "remoteInstances.emptyTitle": "Aucune instance distante",
   "remoteInstances.emptyHint":

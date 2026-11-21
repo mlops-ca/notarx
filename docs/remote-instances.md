@@ -42,7 +42,7 @@ Every notarx instance answers `GET /.well-known/notarx` at the server root, anon
   "instanceId": "0197c0de-0000-7000-8000-000000000001",
   "apiVersion": "1",
   "formats": [],
-  "limits": {"maxBlobBytes": 10737418240, "maxSessionBytes": 53687709120, "maxBlobsPerSession": 2000, "maxOpenSessionsPerPrincipal": 4}
+  "limits": {"maxBlobBytes": 10737418240, "maxSessionBytes": 53687091200, "maxBlobsPerSession": 2000, "maxOpenSessionsPerPrincipal": 4}
 }
 ```
 
@@ -64,3 +64,23 @@ Requests to remote instances go through `internal/egress`:
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `NOTARX_REMOTE_ALLOW_PRIVATE_NETWORKS` | `false` | Let remote instance requests reach private addresses, for deployments whose peers live on a private network |
+
+## Import sessions
+
+A push from another notarx instance is received through an import session (ADR 0021, Remote targets). The `ImportWrite`
+permission (`repositories:import`) lets a principal create sessions in a repository; it implies no read access. Each
+session records what the sender claims and the blobs it intends to send, under these limits, which the instance document
+advertises. The session store enforces them; the endpoints that create sessions come with the Raw importer (issue 582), so
+until then nothing creates a session:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `NOTARX_IMPORT_SESSION_TTL` | `24h` | Lifetime of a session; the reaper then expires it and deletes its staging objects (at least 1 minute) |
+| `NOTARX_IMPORT_MAX_BLOB_BYTES` | `10737418240` | Largest blob of a session |
+| `NOTARX_IMPORT_MAX_SESSION_BYTES` | `53687091200` | Most bytes one session claims |
+| `NOTARX_IMPORT_MAX_BLOBS_PER_SESSION` | `2000` | Most blobs one session lists |
+| `NOTARX_IMPORT_MAX_OPEN_SESSIONS_PER_PRINCIPAL` | `4` | Live sessions one principal holds at once |
+| `NOTARX_IMPORT_STAGING_QUOTA_BYTES` | `107374182400` | Bytes claimed by every live session of the instance together |
+
+A request over a limit is refused and writes nothing. Every node runs the reaper once a minute; a finished session row is
+pruned by the retention janitor once its staging objects are gone.

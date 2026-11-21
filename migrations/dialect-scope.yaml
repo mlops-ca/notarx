@@ -84,3 +84,12 @@ migrations:
   000026_promotion_evaluations.sql:
     dialect: postgres
     reason: creates promotion_evaluations with partial claim, waiting and retention indexes and the queue wake-up trigger, adds the state of a promotion rule and the cache-invalidation triggers; the catalogue carries the table and the columns into the MySQL baseline with generated-column indexes
+  000027_domain_events_emitter_horizon.sql:
+    dialect: postgres
+    reason: replaces the emit_domain_event function so the first emission of a transaction stamps its session with an application_name that bounds the dispatcher read horizon; the MySQL baseline carries tables only
+  000028_promotion_retry_attempts.sql:
+    dialect: postgres
+    reason: replaces the promotion_job_state_change function so a retried failed or cancelled promotion job records a new attempt row; the MySQL baseline carries tables only
+  000029_import_sessions.sql:
+    dialect: postgres
+    reason: creates import_sessions and import_blobs with the (state, expires_at) reaper index, the per-principal count index and the retention age index; the catalogue carries both tables into the MySQL baseline

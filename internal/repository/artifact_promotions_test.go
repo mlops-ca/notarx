@@ -104,15 +104,24 @@ func TestMemoryPromotionRowFollowsTheJobAndEmitsTerminalEvents(t *testing.T) {
 	if _, err = store.RetryLifecycleJob(ctx, target.ID, job.ID); err != nil || state() != ArtifactPromotionQueued {
 		t.Fatalf("retry err=%v state=%s", err, state())
 	}
+	retried, _ := store.GetArtifactPromotionByJob(ctx, job.ID)
+	if retried.ID == row.ID || retried.Attempt != 2 || retried.IdempotencyKey != row.IdempotencyKey || retried.JobID != job.ID || !retried.CompletedAt.IsZero() {
+		t.Fatalf("the retry did not record attempt 2: %+v (first %+v)", retried, row)
+	}
+	if first := store.artifactPromotions[row.ID]; first.State != ArtifactPromotionFailed || first.Attempt != 1 || first.CompletedAt.IsZero() {
+		t.Fatalf("the failed attempt was rewritten: %+v", first)
+	}
 	claimed, _ = store.ClaimLifecycleJobsByKindAndFormat(ctx, LifecycleJobPromotion, FormatRaw, 1)
 	if err = store.CompleteLifecycleJob(ctx, job.ID, claimed[0].LeaseToken); err != nil || state() != ArtifactPromotionCompleted {
 		t.Fatalf("complete err=%v state=%s", err, state())
 	}
+	// Each attempt emits its own outcome: the failure under the first row, the completion under the retry.
 	types := map[WebhookEventType]string{}
 	for _, event := range store.webhookEvents {
 		types[event.Type] = event.Version
-		if event.RepositoryID != target.ID || event.Coordinate != "a.bin" || event.Digest != digest || event.Format != "raw" || event.Version != row.ID {
-			t.Fatalf("event %+v", event)
+		want := map[WebhookEventType]string{WebhookEventPromotionFailed: row.ID, WebhookEventArtifactPromoted: retried.ID}[event.Type]
+		if event.RepositoryID != target.ID || event.Coordinate != "a.bin" || event.Digest != digest || event.Format != "raw" || event.Version != want {
+			t.Fatalf("event %+v, want version %s", event, want)
 		}
 	}
 	if len(store.webhookEvents) != 2 || types[WebhookEventPromotionFailed] == "" || types[WebhookEventArtifactPromoted] == "" {

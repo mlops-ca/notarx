@@ -51,7 +51,15 @@ const (
 	RepositoryWrite        RepositoryOperation = "write"
 	RepositoryAdmin        RepositoryOperation = "admin"
 	RepositoryIntelligence RepositoryOperation = "intelligence"
+	// RepositoryImportWrite is ImportWrite (ADR 0021): creating import sessions and streaming blobs into a repository on
+	// behalf of a promotion from another instance. It is its own scope, held by the service account a peer's trust policy
+	// maps to, and is not implied by repositories:write.
+	RepositoryImportWrite RepositoryOperation = "import_write"
 )
+
+// GrantScopeImport is the repository grant scope that allows RepositoryImportWrite (and, like every scope, is implied by
+// GrantScopeAdmin).
+const GrantScopeImport = "repositories:import"
 
 // Role is a coarse, globally-scoped capability granted to a credential such as
 // an API key or OIDC identity. It is evaluated before per-repository grants so
@@ -312,6 +320,10 @@ func grantAllows(scopes []string, operation RepositoryOperation) bool {
 			}
 		case RepositoryIntelligence:
 			if scope == "repositories:intelligence" || scope == "repositories:admin" {
+				return true
+			}
+		case RepositoryImportWrite:
+			if scope == GrantScopeImport || scope == GrantScopeAdmin {
 				return true
 			}
 		}

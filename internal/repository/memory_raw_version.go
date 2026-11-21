@@ -401,6 +401,7 @@ func (s *MemoryStore) sealRawVersionLocked(ctx context.Context, key string, vers
 		return RawVersion{}, err
 	}
 	s.rawVersions[key] = version
+	s.emitPublishedLocked(ctx, version.RepositoryID, FormatRaw, version.Coordinate(), version.ManifestDigest)
 	return version, nil
 }
 

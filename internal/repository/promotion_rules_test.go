@@ -84,6 +84,12 @@ func exercisePromotionRuleStore(t *testing.T, store promotionRuleTestStore) {
 	if createdRemote.TargetKind != PromotionTargetRemote || createdRemote.TargetRepositoryID != "" || createdRemote.RemoteInstanceID != remote.ID || createdRemote.RemoteRepository != "releases" || createdRemote.Enabled {
 		t.Fatalf("remote rule = %#v", createdRemote)
 	}
+	// A remote instance that a rule still targets cannot be deleted, and the refusal names the rule.
+	var inUse *RemoteInstanceInUseError
+	if err = store.DeleteRemoteInstance(ctx, remote.ID); !errors.Is(err, ErrRemoteInstanceInUse) || !errors.As(err, &inUse) ||
+		len(inUse.Rules) != 1 || inUse.Rules[0].ID != createdRemote.ID || inUse.Rules[0].Name != remoteRule.Name {
+		t.Fatalf("delete of a targeted remote instance = %v (%#v)", err, inUse)
+	}
 	for name, mutate := range map[string]func(*PromotionRule){
 		"unknown source":          func(r *PromotionRule) { r.SourceRepositoryID = uuid.NewString() },
 		"unknown target":          func(r *PromotionRule) { r.TargetRepositoryID = uuid.NewString() },

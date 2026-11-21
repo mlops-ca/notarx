@@ -194,6 +194,17 @@ func ParseRawVersionPath(path string) (RawVersionPath, error) {
 	return parsed, nil
 }
 
+// ParseRawVersionCoordinate splits the name@version coordinate of a version of a versioned repository, which is how a
+// sealed version is published and promoted (RawVersion.Coordinate), and validates both parts.
+func ParseRawVersionCoordinate(coordinate string) (name, version string, ok bool) {
+	at := strings.LastIndex(coordinate, "@")
+	if at <= 0 {
+		return "", "", false
+	}
+	name, version = coordinate[:at], coordinate[at+1:]
+	return name, version, ValidRawVersionName(name) && ValidRawVersionString(version)
+}
+
 // RawVersionPathRange returns the half-open byte range [from, to) that holds exactly the files of a version:
 // "/" + 1 is "0", so "name/version0" is the first path after every "name/version/..." path.
 func RawVersionPathRange(name, version string) (from, to string) {

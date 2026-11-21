@@ -246,7 +246,11 @@ export const accessEnCA = {
     "Repository path prefix · dists/bookworm/",
   "access.limitByPrefix": "Limit by prefix",
   "access.canonicalPrefix": "Canonical prefix",
-  "access.readWriteAdminIntelligence": "Read + write + admin + intelligence",
+  "access.readWriteAdminIntelligence":
+    "Read + write + admin + intelligence + import",
+  "access.scopeImport": "Import from a peer instance",
+  "access.importPeerPromotion":
+    "Import · receive promotions from another instance",
   "access.readWrite": "Read + write",
   "access.noGlobalRoleRepositoryGrantsDecideAccess":
     "No global role; repository grants decide access",

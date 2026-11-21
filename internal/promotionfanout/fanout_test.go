@@ -56,10 +56,13 @@ func TestCandidateOfDerivesTheVersionTheWayAPromotionAddressesIt(t *testing.T) {
 	}
 }
 
-func TestCandidatesOfOffersTheVersionedReadingOfARawPath(t *testing.T) {
-	got := CandidatesOf(repository.FormatRaw, "tool/1.0.0/bin/tool")
-	if len(got) != 2 || got[0].Coordinate != "tool/1.0.0/bin/tool" || got[1].Coordinate != "tool@1.0.0" || got[1].Version != "1.0.0" {
+func TestCandidatesOfOffersTheVersionedReadingOfARawVersionCoordinate(t *testing.T) {
+	got := CandidatesOf(repository.FormatRaw, "tool@1.0.0")
+	if len(got) != 2 || got[0].Coordinate != "tool@1.0.0" || got[0].Version != "" || got[1].Coordinate != "tool@1.0.0" || got[1].Version != "1.0.0" {
 		t.Fatalf("candidates = %+v", got)
+	}
+	if got = CandidatesOf(repository.FormatRaw, "tool/1.0.0/bin/tool"); len(got) != 1 {
+		t.Fatalf("a file path is not a version coordinate: %+v", got)
 	}
 	if got = CandidatesOf(repository.FormatRaw, "flat.txt"); len(got) != 1 {
 		t.Fatalf("a flat path has one reading: %+v", got)
