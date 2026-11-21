@@ -117,6 +117,8 @@ type Config struct {
 	Workload WorkloadConfig
 	// Remote is the remote instance policy of promotion targets (NOTARX_REMOTE_*, ADR 0021).
 	Remote RemoteConfig
+	// Promotion is the promotion rule policy (NOTARX_PROMOTION_*, ADR 0021).
+	Promotion PromotionConfig
 	// SAML is the SAML service provider policy (NOTARX_SAML_*, ADR 0018 section 3).
 	SAML SAMLConfig
 	// SCIM is the SCIM 2.0 server policy (NOTARX_SCIM_*, ADR 0018 section 4).
@@ -610,6 +612,11 @@ func Load() (Config, error) {
 		return Config{}, err
 	} else {
 		cfg.Remote = remote
+	}
+	if promotion, err := promotionConfigFromEnv(cfg.Promotion); err != nil {
+		return Config{}, err
+	} else {
+		cfg.Promotion = promotion
 	}
 	if saml, err := samlConfigFromEnv(cfg.SAML); err != nil {
 		return Config{}, err

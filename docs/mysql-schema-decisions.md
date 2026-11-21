@@ -252,6 +252,7 @@ Every PostgreSQL partial, expression, trigram or operator-class index and what M
 | nexus_migration_batches | nexus_migration_schedule_occurrence | unique-flag | a unique index over a predicate becomes a generated column that is NULL outside it (ADR 0022) |
 | nexus_migration_schedules | nexus_migration_schedules_due | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
 | oci_discovery_snapshots | oci_discovery_snapshots_body_key_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
+| promotion_rules | promotion_rules_name_bytes_idx | full | an operator class or collation PostgreSQL needs for prefix search: MySQL's bin collation serves LIKE 'x%' from a plain index |
 | remote_instances | remote_instances_name_bytes_idx | full | an operator class or collation PostgreSQL needs for prefix search: MySQL's bin collation serves LIKE 'x%' from a plain index |
 | replication_checkpoints | replication_checkpoints_updated_at_brin_idx | drop | BRIN has no MySQL form: time-ordered scans use the primary key and the retention indexes |
 | replication_plans | replication_plans_claim_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
@@ -289,6 +290,7 @@ MySQL rejects a CHECK on a column that a foreign key action rewrites, so the gen
 
 | Table | Constraint | Reason |
 | --- | --- | --- |
+| promotion_rules | promotion_rules_target_check | the column is in the referential action of the foreign key `target_repository_id -> hosted_repositories(id) on delete cascade`; MySQL refuses a CHECK on it (error 3823); the store validates it |
 | scheduled_tasks | scheduled_tasks_check | the column is in the referential action of the foreign key `repository_id -> hosted_repositories(id) on delete cascade`; MySQL refuses a CHECK on it (error 3823); the store validates it |
 
 ## Triggers

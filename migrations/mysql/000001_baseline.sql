@@ -2504,6 +2504,41 @@ CREATE TABLE `oci_subject_bindings` (
   CONSTRAINT `oci_subject_bindings_subject_check` CHECK (REGEXP_LIKE(`subject`, '^sha256:[a-f0-9]{64}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `promotion_rules` (
+  `approval` JSON NULL,
+  `conditions` JSON NOT NULL DEFAULT (CAST('{}' AS JSON)),
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `created_by` TEXT NOT NULL,
+  `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `match` JSON NOT NULL,
+  `name` VARCHAR(255) NOT NULL,
+  `remote_instance_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `remote_repository` TEXT NULL,
+  `run_as_service_account_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `schedule` JSON NULL,
+  `source_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `target_kind` TEXT NOT NULL,
+  `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updated_by` TEXT NOT NULL,
+  `version` BIGINT NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_promotion_rules_name` (`name`),
+  KEY `ix_promotion_rules_remote_instance_id` (`remote_instance_id`),
+  KEY `ix_promotion_rules_run_as_service_account_id` (`run_as_service_account_id`),
+  KEY `ix_promotion_rules_source_repository_id_enabled` (`source_repository_id`, `enabled`),
+  KEY `ix_promotion_rules_target_repository_id` (`target_repository_id`),
+  KEY `ix_promotion_rules_name_bytes_idx` (`name`),
+  CONSTRAINT `promotion_rules_actor_check` CHECK (((((CHAR_LENGTH(`created_by`) >= 1) AND (CHAR_LENGTH(`created_by`) <= 255)) AND (CHAR_LENGTH(`updated_by`) >= 1)) AND (CHAR_LENGTH(`updated_by`) <= 255))),
+  CONSTRAINT `promotion_rules_approval_check` CHECK (((`approval` IS NULL) OR (JSON_TYPE(`approval`) = 'OBJECT'))),
+  CONSTRAINT `promotion_rules_conditions_check` CHECK ((JSON_TYPE(`conditions`) = 'OBJECT')),
+  CONSTRAINT `promotion_rules_match_check` CHECK ((JSON_TYPE(`match`) = 'OBJECT')),
+  CONSTRAINT `promotion_rules_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
+  CONSTRAINT `promotion_rules_schedule_check` CHECK (((`schedule` IS NULL) OR (JSON_TYPE(`schedule`) = 'OBJECT'))),
+  CONSTRAINT `promotion_rules_version_check` CHECK ((`version` >= 1))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `public_access_policy` (
   `enabled` TINYINT(1) NOT NULL DEFAULT 0,
   `singleton` TINYINT(1) NOT NULL DEFAULT 1,
@@ -3390,6 +3425,10 @@ ALTER TABLE `oci_bound_objects` ADD CONSTRAINT `fk_oci_bound_objects_source_id` 
 ALTER TABLE `oci_group_members` ADD CONSTRAINT `fk_oci_group_members_group_name` FOREIGN KEY (`group_name`) REFERENCES `oci_groups` (`name`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `oci_group_members` ADD CONSTRAINT `fk_oci_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `oci_subject_bindings` ADD CONSTRAINT `fk_oci_subject_bindings_source_id` FOREIGN KEY (`source_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_remote_instance_id` FOREIGN KEY (`remote_instance_id`) REFERENCES `remote_instances` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_run_as_service_account_id` FOREIGN KEY (`run_as_service_account_id`) REFERENCES `service_accounts` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_source_repository_id` FOREIGN KEY (`source_repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
+ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_target_repository_id` FOREIGN KEY (`target_repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `raw_group_members` ADD CONSTRAINT `fk_raw_group_members_group_name` FOREIGN KEY (`group_name`) REFERENCES `raw_groups` (`name`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `raw_group_members` ADD CONSTRAINT `fk_raw_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `replication_checkpoints` ADD CONSTRAINT `fk_replication_checkpoints_plan_id` FOREIGN KEY (`plan_id`) REFERENCES `replication_plans` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
