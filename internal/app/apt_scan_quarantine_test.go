@@ -88,6 +88,7 @@ func TestAPTHTTPScanAndQuarantineSignedReads(t *testing.T) {
 	if _, err = store.ReplaceRepositorySecurityPolicy(ctx, repo.ID, policy, policy.Version); err != nil {
 		t.Fatal(err)
 	}
+	dispatcher := publicationScanDispatcher(t, store, repository.FormatAPT)
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{APTSigner: aptManagementSigner{}, ArtifactScanner: scanner, ArtifactScannerFormats: []repository.Format{repository.FormatAPT}}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatAPT: objects}})
 	call := func(method, path, token, body, version string) *httptest.ResponseRecorder {
 		r := httptest.NewRequest(method, path, strings.NewReader(body))
@@ -125,6 +126,9 @@ func TestAPTHTTPScanAndQuarantineSignedReads(t *testing.T) {
 		t.Fatalf("legacy Group exposed Hosted snapshot: %d %s", w.Code, w.Body.String())
 	}
 
+	if _, err = dispatcher.RunOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
 	jobs, err := store.ListLifecycleJobs(ctx, repo.ID, 100)
 	if err != nil || len(jobs) != 1 {
 		t.Fatalf("publication jobs: %+v %v", jobs, err)

@@ -57,7 +57,7 @@ func (s *MemoryStore) GetAPTLifecycleResult(_ context.Context, id string) (APTLi
 	return r, nil
 }
 
-func (s *MemoryStore) CommitAPTLifecycleSnapshot(_ context.Context, plan APTLifecycleCommit, snapshot APTRepositorySnapshot, assets []APTSnapshotAsset, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
+func (s *MemoryStore) CommitAPTLifecycleSnapshot(ctx context.Context, plan APTLifecycleCommit, snapshot APTRepositorySnapshot, assets []APTSnapshotAsset, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.aptLifecycleResults[plan.ID]; ok {
@@ -78,7 +78,7 @@ func (s *MemoryStore) CommitAPTLifecycleSnapshot(_ context.Context, plan APTLife
 		d.RestoredAt = plan.Now
 		s.aptDeletions[id] = d
 	}
-	result, err := s.publishAPTRepositorySnapshotLocked(snapshot, assets, release, audit)
+	result, err := s.publishAPTRepositorySnapshotLocked(ctx, snapshot, assets, release, audit)
 	if err != nil {
 		s.aptDeletions = previous
 		return APTRepositorySnapshot{}, err

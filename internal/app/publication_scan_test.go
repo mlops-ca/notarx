@@ -288,6 +288,7 @@ func TestConanPublicationEnqueuesRecipeAndPackageScans(t *testing.T) {
 	if _, err = store.ReplaceRepositorySecurityPolicy(ctx, repo.ID, policy, policy.Version); err != nil {
 		t.Fatal(err)
 	}
+	scans := publicationScanDispatcher(t, store, repository.FormatConan)
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{
 
 		ArtifactScanner: scanning.ScannerFunc(func(context.Context, scanning.Artifact) (scanning.Report, error) {
@@ -301,6 +302,9 @@ func TestConanPublicationEnqueuesRecipeAndPackageScans(t *testing.T) {
 	publishConanPublicationFixture(t, handler, repo.ID, "admin-secret", recipe, recipeBodies)
 	pkg, packageBodies := conanPackagePublicationFixture(t, recipe.Reference, recipe.RecipeRevision)
 	publishConanPublicationFixture(t, handler, repo.ID, "admin-secret", pkg, packageBodies)
+	if _, err = scans.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 
 	jobs, err := store.ListLifecycleJobs(ctx, repo.ID, 100)
 	if err != nil {

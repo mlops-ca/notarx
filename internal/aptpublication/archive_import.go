@@ -100,7 +100,7 @@ func (i *SnapshotArchiveImporter) Import(ctx context.Context, repositoryID, expe
 			return repository.APTRepositorySnapshot{}, err
 		}
 	}
-	return i.store.CommitAPTArchiveRestore(snapshotCtx, plan, archive.release, repository.AuditRecord{
+	return i.store.CommitAPTArchiveRestore(repository.WithWriteActor(snapshotCtx, actor), plan, archive.release, repository.AuditRecord{
 		Repository: repo.Name, GroupName: repo.Name, Actor: actor, Outcome: repository.AuditResolved, OccurredAt: time.Now().UTC(), Format: string(repository.FormatAPT), Resource: "snapshots/" + snapshot.ID, Representation: snapshot.ReleaseDigest,
 		Operation: "apt.repository_snapshot.restore", Status: 200, CacheDisposition: "bypass", AuthorizationSource: "repository_admin", AuthorizationReason: "trusted_archive_restored",
 		Evidence: map[string]string{"archiveDigest": archive.digest, "restoreId": plan.ID, "keyFingerprint": snapshot.KeyFingerprint, "signerIdentity": snapshot.SignerIdentity, "signatureAlgorithm": snapshot.SignatureAlgorithm},

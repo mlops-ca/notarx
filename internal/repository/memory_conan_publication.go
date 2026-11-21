@@ -125,12 +125,14 @@ func (s *MemoryStore) CommitConanPublicationSession(ctx context.Context, id stri
 		return ConanPublishSession{}, false, ErrDisabled
 	}
 	replay := false
+	// The put emits artifact.published for a revision it creates; the event names the actor.
+	ctx = WithWriteActor(ctx, actor)
 	if session.Kind == "recipe" {
 		replay = exists
-		_, err = s.putConanRecipeRevisionLocked(ConanRecipeRevision{RepositoryID: session.RepositoryID, Reference: session.Reference, Revision: session.RecipeRevision, Digest: digest}, assets)
+		_, err = s.putConanRecipeRevisionLocked(ctx, ConanRecipeRevision{RepositoryID: session.RepositoryID, Reference: session.Reference, Revision: session.RecipeRevision, Digest: digest}, assets)
 	} else {
 		_, replay = s.conanPackages[conanPackageKey(session.RepositoryID, session.Reference, session.RecipeRevision, session.PackageID, session.PackageRevision)]
-		_, err = s.putConanPackageRevisionLocked(ConanPackageRevision{RepositoryID: session.RepositoryID, Reference: session.Reference, RecipeRevision: session.RecipeRevision, PackageID: session.PackageID, Revision: session.PackageRevision, Digest: digest}, assets)
+		_, err = s.putConanPackageRevisionLocked(ctx, ConanPackageRevision{RepositoryID: session.RepositoryID, Reference: session.Reference, RecipeRevision: session.RecipeRevision, PackageID: session.PackageID, Revision: session.PackageRevision, Digest: digest}, assets)
 	}
 	if err != nil {
 		return ConanPublishSession{}, false, err

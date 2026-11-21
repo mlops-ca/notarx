@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func (s *MemoryStore) CommitAPTDistributionSnapshot(_ context.Context, d APTDistributionCommit, snapshot APTRepositorySnapshot, assets []APTSnapshotAsset, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
+func (s *MemoryStore) CommitAPTDistributionSnapshot(ctx context.Context, d APTDistributionCommit, snapshot APTRepositorySnapshot, assets []APTSnapshotAsset, release []byte, audit AuditRecord) (APTRepositorySnapshot, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.aptLifecycleResults[d.ID]; ok {
@@ -67,7 +67,7 @@ func (s *MemoryStore) CommitAPTDistributionSnapshot(_ context.Context, d APTDist
 	if err := validateAPTDistributionCommit(d, snapshot, baseID, s.aptSnapshotPackages[baseID], s.aptSnapshotPackages[snapshot.ID], assets); err != nil {
 		return APTRepositorySnapshot{}, err
 	}
-	result, err := s.publishAPTRepositorySnapshotLocked(snapshot, assets, release, audit)
+	result, err := s.publishAPTRepositorySnapshotLocked(ctx, snapshot, assets, release, audit)
 	if err != nil {
 		return APTRepositorySnapshot{}, err
 	}

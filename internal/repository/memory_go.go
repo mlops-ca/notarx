@@ -83,7 +83,7 @@ func (s *MemoryStore) PutGoModuleVersion(_ context.Context, incoming GoModuleVer
 	return incoming, nil
 }
 
-func (s *MemoryStore) PublishGoModule(_ context.Context, incoming GoModulePublication) (GoModuleVersion, bool, error) {
+func (s *MemoryStore) PublishGoModule(ctx context.Context, incoming GoModulePublication) (GoModuleVersion, bool, error) {
 	publication, err := normalizeGoModulePublication(incoming, time.Now().UTC())
 	if err != nil {
 		return GoModuleVersion{}, false, err
@@ -123,6 +123,7 @@ func (s *MemoryStore) PublishGoModule(_ context.Context, incoming GoModulePublic
 	for _, asset := range publication.Assets {
 		s.goAssets[goAssetKey(asset.RepositoryID, asset.Module, asset.Version, asset.Kind)] = asset
 	}
+	s.emitPublishedLocked(ctx, version.RepositoryID, FormatGo, goModuleCoordinate(version.Module, version.Version), goPublicationDigest(publication.Assets))
 	return version, false, nil
 }
 

@@ -316,7 +316,6 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 		goClient = client
 	}
 	oci := OCIHandler{Resolver: resolver, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Client: upstreamClient, Authenticator: authenticator, Cache: cache}
-	publicationScanner := NewPublicationScanScheduler(store, dependencies.ArtifactScanner != nil, dependencies.ArtifactScannerFormats, metrics)
 	nativeOCI := newNativeOCIHandler(store, options.Storage[repository.FormatOCI], authenticator).withMetrics(metrics).withProxy(oci)
 	nativeOCI.discovery, nativeOCI.groups = options.OCIDiscoveryStore, store
 	rawLegacy := RawHandler{Store: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: rawClient, Metrics: metrics, Cache: rawCache}
@@ -403,9 +402,9 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	mavenProxyOperations := mavenProxyOperationsHandler{store: store, authenticator: authenticator, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, client: mavenClient, cache: mavenCache, maintenance: maintenance}
 	proxyCacheBrowse := proxyCacheBrowseHandler{store: store, entriesStore: store, audit: store, maintenance: maintenance, authenticator: authenticator, authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}}
 	nativeConanObjects := options.Storage[repository.FormatConan]
-	nativeConanPublish := newNativeConanPublishHandler(store, options.ConanPublications, nativeConanObjects, authenticator).withPublicationScanner(publicationScanner)
+	nativeConanPublish := newNativeConanPublishHandler(store, options.ConanPublications, nativeConanObjects, authenticator)
 	nativeNPMObjects := options.Storage[repository.FormatNPM]
-	nativeNPM := newNativeNPMHandler(store, options.NPMMetadata, nativeNPMObjects, authenticator).withMetrics(metrics).withProxy(npmClient).withPublicationScanner(publicationScanner)
+	nativeNPM := newNativeNPMHandler(store, options.NPMMetadata, nativeNPMObjects, authenticator).withMetrics(metrics).withProxy(npmClient)
 	if dependencies.NPMMetadataTTL > 0 {
 		nativeNPM.metadataTTL = dependencies.NPMMetadataTTL
 	}
@@ -414,10 +413,10 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	}
 	nativeNPM.protection = newNPMProxyProtection(dependencies.NPMProxyCoordinator, dependencies.NPMBreakerTTL)
 	nativePyPIObjects := options.Storage[repository.FormatPyPI]
-	nativePyPI := newNativePyPIHandler(store, nativePyPIObjects, authenticator).withMetrics(metrics).withProxy(pypiClient).withPublicationScanner(publicationScanner)
+	nativePyPI := newNativePyPIHandler(store, nativePyPIObjects, authenticator).withMetrics(metrics).withProxy(pypiClient)
 	nativeGoObjects := options.Storage[repository.FormatGo]
-	nativeGo := newNativeGoHandler(store, nativeGoObjects, authenticator).withMetrics(metrics).withProxy(goClient).withPublicationScanner(publicationScanner)
-	nativeCargo := newNativeCargoHandler(store, options.Storage[repository.FormatCargo], authenticator).withPublicationScanner(publicationScanner)
+	nativeGo := newNativeGoHandler(store, nativeGoObjects, authenticator).withMetrics(metrics).withProxy(goClient)
+	nativeCargo := newNativeCargoHandler(store, options.Storage[repository.FormatCargo], authenticator)
 	nativeCargo.upstream = UpstreamClient{HTTPClient: dependencies.CargoUpstreamClient}
 	nativeAPTObjects := options.Storage[repository.FormatAPT]
 	aptClient := APTClient(UpstreamClient{})
@@ -432,7 +431,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 	}
 	var aptSnapshotPublisher *aptpublication.Publisher
 	if dependencies.APTSigner != nil {
-		aptSnapshotPublisher = aptpublication.NewPublisher(store, nativeAPTObjects, dependencies.APTSigner).WithMetrics(metrics).WithPublicationScanner(publicationScanner)
+		aptSnapshotPublisher = aptpublication.NewPublisher(store, nativeAPTObjects, dependencies.APTSigner).WithMetrics(metrics)
 	}
 	publishRouter := nativePublishRouter{maven: nativeMaven, conan: nativeConanPublish}
 	hostedRepositories := hostedRepositoryAPIHandler{store: store, groups: store, authenticator: authenticator, groupMode: options.GroupVisibilityMode}
@@ -564,7 +563,7 @@ func NewGatewayHandler(options GatewayOptions) (http.Handler, error) {
 			}}}
 	mux.Handle("/apt/", aptGroupRouter)
 	conan := ConanHandler{Store: store, NativeStore: store, Repositories: store, Authorizer: RepositoryAuthorizer{Grants: store, Legacy: authenticator}, Authenticator: authenticator, Client: conanClient, Metrics: metrics, Cache: conanCache, NativeObjects: nativeConanObjects, ReadPolicies: store, Quarantine: store}
-	conan.Publications, conan.PublicationScanner = options.ConanPublications, &publicationScanner
+	conan.Publications = options.ConanPublications
 	conanGroupRouter := v2GroupRouter{format: repository.FormatConan, groups: store, repos: store, audit: store, auth: authenticator,
 		conan: &v2GroupConanHandler{conan: &conan, auth: authenticator},
 		next:  conan}

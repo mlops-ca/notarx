@@ -15,7 +15,7 @@ func npmVersionKey(repositoryID, name, version string) string {
 	return repositoryID + "\x00" + name + "\x00" + version
 }
 
-func (s *MemoryStore) PublishNPMVersion(_ context.Context, version NPMVersion, distTags map[string]string) (NPMVersion, error) {
+func (s *MemoryStore) PublishNPMVersion(ctx context.Context, version NPMVersion, distTags map[string]string) (NPMVersion, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -39,6 +39,7 @@ func (s *MemoryStore) PublishNPMVersion(_ context.Context, version NPMVersion, d
 	version.SourceVersion = ""
 	version.Manifest = append([]byte(nil), version.Manifest...)
 	s.npmVersions[versionKey] = version
+	s.emitPublishedLocked(ctx, version.RepositoryID, FormatNPM, version.PackageName+"@"+version.Version, version.Digest)
 
 	packageKey := npmPackageKey(version.RepositoryID, version.PackageName)
 	pkg, exists := s.npmPackages[packageKey]

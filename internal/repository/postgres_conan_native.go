@@ -107,6 +107,9 @@ func putConanRecipeRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanRec
 			return ConanRecipeRevision{}, err
 		}
 	}
+	if err = emitPublishedPostgres(ctx, tx, revision.RepositoryID, FormatConan, conanRecipeCoordinate(revision.Reference, revision.Revision), revision.Digest); err != nil {
+		return ConanRecipeRevision{}, err
+	}
 	if err = usage.reserve(ctx, tx); err != nil {
 		return ConanRecipeRevision{}, err
 	}
@@ -172,6 +175,9 @@ func putConanPackageRevisionTx(ctx context.Context, tx *sql.Tx, revision ConanPa
 		if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_assets (repository_id,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING`, asset.RepositoryID, asset.Reference, asset.RecipeRevision, asset.PackageID, asset.PackageRevision, asset.Path, asset.ObjectKey, asset.Digest, asset.Size); err != nil {
 			return ConanPackageRevision{}, err
 		}
+	}
+	if err = emitPublishedPostgres(ctx, tx, revision.RepositoryID, FormatConan, conanPackageCoordinate(revision.Reference, revision.RecipeRevision, revision.PackageID, revision.Revision), revision.Digest); err != nil {
+		return ConanPackageRevision{}, err
 	}
 	if err = usage.reserve(ctx, tx); err != nil {
 		return ConanPackageRevision{}, err
@@ -279,8 +285,14 @@ func (s *PostgresStore) PublishReplicatedConanRevision(ctx context.Context, publ
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_conan_publish_sessions s WHERE s.repository_id=$1 AND s.reference=$2 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, publication.Recipe.RepositoryID, publication.Recipe.Reference, publication.Recipe.Revision, publication.Recipe.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
+	if err = emitPublishedPostgres(ctx, tx, publication.Recipe.RepositoryID, FormatConan, conanRecipeCoordinate(publication.Recipe.Reference, publication.Recipe.Revision), publication.Recipe.Digest); err != nil {
+		return ConanRecipeRevision{}, err
+	}
 	for _, pkg := range publication.Packages {
 		if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_package_revisions (repository_id,reference,recipe_revision,package_id,revision,digest,state) VALUES ($1,$2,$3,$4,$5,$6,'visible')`, publication.Recipe.RepositoryID, pkg.Reference, pkg.RecipeRevision, pkg.PackageID, pkg.Revision, pkg.Digest); err != nil {
+			return ConanRecipeRevision{}, err
+		}
+		if err = emitPublishedPostgres(ctx, tx, publication.Recipe.RepositoryID, FormatConan, conanPackageCoordinate(pkg.Reference, pkg.RecipeRevision, pkg.PackageID, pkg.Revision), pkg.Digest); err != nil {
 			return ConanRecipeRevision{}, err
 		}
 	}
@@ -353,8 +365,29 @@ func (s *PostgresStore) PromoteConanRecipeRevision(ctx context.Context, p ConanP
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_recipe_revisions (repository_id,reference,revision,digest,state,publisher) VALUES ($1,$2,$3,$4,'visible',COALESCE((SELECT s.publisher FROM native_conan_publish_sessions s WHERE s.repository_id=$1 AND s.reference=$2 AND s.state IN ('open','committed') ORDER BY s.expires_at DESC LIMIT 1),''))`, p.TargetRepositoryID, p.Reference, p.Revision, p.Digest); err != nil {
 		return ConanRecipeRevision{}, err
 	}
-	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_package_revisions(repository_id,reference,recipe_revision,package_id,revision,digest,state) SELECT $1,reference,recipe_revision,package_id,revision,digest,'visible' FROM native_conan_package_revisions WHERE repository_id=$2::uuid AND reference=$3 AND recipe_revision=$4 AND state='visible'`, p.TargetRepositoryID, p.SourceRepositoryID, p.Reference, p.Revision); err != nil {
+	if err = emitPublishedPostgres(ctx, tx, p.TargetRepositoryID, FormatConan, conanRecipeCoordinate(p.Reference, p.Revision), p.Digest); err != nil {
 		return ConanRecipeRevision{}, err
+	}
+	packages, err := tx.QueryContext(ctx, `INSERT INTO native_conan_package_revisions(repository_id,reference,recipe_revision,package_id,revision,digest,state) SELECT $1,reference,recipe_revision,package_id,revision,digest,'visible' FROM native_conan_package_revisions WHERE repository_id=$2::uuid AND reference=$3 AND recipe_revision=$4 AND state='visible' RETURNING package_id,revision,digest`, p.TargetRepositoryID, p.SourceRepositoryID, p.Reference, p.Revision)
+	if err != nil {
+		return ConanRecipeRevision{}, err
+	}
+	var promoted []ConanPackageRevision
+	for packages.Next() {
+		var pkg ConanPackageRevision
+		if err = packages.Scan(&pkg.PackageID, &pkg.Revision, &pkg.Digest); err != nil {
+			_ = packages.Close()
+			return ConanRecipeRevision{}, err
+		}
+		promoted = append(promoted, pkg)
+	}
+	if err = errors.Join(packages.Err(), packages.Close()); err != nil {
+		return ConanRecipeRevision{}, err
+	}
+	for _, pkg := range promoted {
+		if err = emitPublishedPostgres(ctx, tx, p.TargetRepositoryID, FormatConan, conanPackageCoordinate(p.Reference, p.Revision, pkg.PackageID, pkg.Revision), pkg.Digest); err != nil {
+			return ConanRecipeRevision{}, err
+		}
 	}
 	if _, err = tx.ExecContext(ctx, `INSERT INTO native_conan_assets(repository_id,reference,recipe_revision,package_id,package_revision,path,object_key,digest,size) SELECT $1,a.reference,a.recipe_revision,a.package_id,a.package_revision,a.path,a.object_key,a.digest,a.size FROM native_conan_assets a WHERE a.repository_id=$2::uuid AND a.reference=$3 AND a.recipe_revision=$4 AND (a.package_id='' OR EXISTS(SELECT 1 FROM native_conan_package_revisions p WHERE p.repository_id=a.repository_id AND p.reference=a.reference AND p.recipe_revision=a.recipe_revision AND p.package_id=a.package_id AND p.revision=a.package_revision AND p.state='visible'))`, p.TargetRepositoryID, p.SourceRepositoryID, p.Reference, p.Revision); err != nil {
 		return ConanRecipeRevision{}, err

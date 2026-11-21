@@ -31,15 +31,10 @@ type NexusNPMMigrationStore interface {
 type NexusNPMMigrationPublication struct {
 	store   NexusNPMMigrationStore
 	objects objectstore.Store
-	scanner nexusMigrationPublicationScanner
 }
 
 func NewNexusNPMMigrationPublication(store NexusNPMMigrationStore, objects objectstore.Store) *NexusNPMMigrationPublication {
 	return &NexusNPMMigrationPublication{store: store, objects: objects}
-}
-func (p *NexusNPMMigrationPublication) WithPublicationScanner(scanner nexusMigrationPublicationScanner) *NexusNPMMigrationPublication {
-	p.scanner = scanner
-	return p
 }
 
 var _ NexusFormatMigrationPublication = (*NexusNPMMigrationPublication)(nil)
@@ -315,7 +310,8 @@ func (p *NexusNPMMigrationPublication) Publish(ctx context.Context, e nexusmigra
 	if err != nil {
 		return err
 	}
-	if err = p.store.PublishNPMImport(ctx, c); err != nil {
+	// The import emits artifact.published in its transaction; the event names the migration actor.
+	if err = p.store.PublishNPMImport(repository.WithWriteActor(ctx, e.Actor), c); err != nil {
 		if errors.Is(err, repository.ErrNameExists) {
 			return nexusmigration.Failed("target_conflict")
 		}
@@ -326,11 +322,6 @@ func (p *NexusNPMMigrationPublication) Publish(ctx context.Context, e nexusmigra
 			return nexusmigration.Failed("target_quota_exceeded")
 		}
 		return err
-	}
-	if !nilDependency(p.scanner) {
-		for _, v := range c.Versions {
-			_ = p.scanner.ScheduleRepository(ctx, e.TargetRepositoryID, repository.FormatNPM, e.Identity+"@"+v.Version, v.Digest, e.Actor)
-		}
 	}
 	return nil
 }

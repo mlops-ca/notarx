@@ -9,10 +9,9 @@ import (
 	"github.com/mlops-ca/notarx/internal/events"
 )
 
-// PublishedEventReconciler is the catch-up path of ADR 0021 (slice 1b): it emits artifact.published for the visible
-// Raw, OCI and Maven publications that have none inside the retention window, so a publication committed before its
-// format emitted natively (or by a path that does not emit) still reaches the consumers. It exists as a worker while
-// the formats are converted in waves and as a repair tool afterwards.
+// PublishedEventReconciler is the repair path of ADR 0021 (slice 1c): it emits artifact.published for the visible
+// publications of the nine formats that have none inside the retention window, so a publication whose event was lost
+// still reaches the consumers. Every format emits in its publish transaction; nothing schedules the reconciler.
 type PublishedEventReconciler interface {
 	// ReconcilePublishedEvents emits the missing events of up to limit publications per format and returns how many
 	// it wrote. Only publications at or after floor are considered: an older event is outside the retention window
@@ -35,6 +34,24 @@ func (c publishedCandidate) event() events.Event {
 	return events.Published(c.RepositoryID, c.Format, c.Coordinate, c.Digest, "")
 }
 
+// conanRecipeCoordinate is the coordinate of a recipe revision: reference#revision.
+func conanRecipeCoordinate(reference, revision string) string { return reference + "#" + revision }
+
+// conanPackageCoordinate is the coordinate of a package revision: reference#recipeRevision/packageID#revision.
+func conanPackageCoordinate(reference, recipeRevision, packageID, revision string) string {
+	return conanRecipeCoordinate(reference, recipeRevision) + "/" + packageID + "#" + revision
+}
+
+// goPublicationDigest is the digest a Go module version publishes under: its zip, the artifact a scan and a promotion name.
+func goPublicationDigest(assets []GoModuleAsset) string {
+	for _, asset := range assets {
+		if asset.Kind == "zip" {
+			return asset.Digest
+		}
+	}
+	return ""
+}
+
 // emitPublishedPostgres emits artifact.published in the transaction that makes the publication visible. A failure
 // fails that transaction: a silently missed event would break the chain guarantee.
 func emitPublishedPostgres(ctx context.Context, tx sqlRunner, repositoryID string, format Format, coordinate, digest string) error {
@@ -51,7 +68,7 @@ func (s *MemoryStore) emitPublishedLocked(ctx context.Context, repositoryID stri
 // publishedCandidateQueries select the visible publications of one format at or after $1 that have no
 // artifact.published event at or after $1, oldest first. The dedupe key is spelled as events.Event.DedupeKey builds
 // it: type|repo|coordinate|digest|version with an empty version.
-var publishedCandidateQueries = []string{
+var publishedCandidateQueries = append([]string{
 	`SELECT a.repository_id::text,'raw',a.path,a.digest FROM native_raw_assets a
 WHERE a.updated_at >= $1 AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.dedupe_key = 'artifact.published|' || a.repository_id::text || '|' || a.path || '|' || a.digest || '|' AND e.occurred_at >= $1)
 ORDER BY a.updated_at,a.repository_id,a.path LIMIT $2`,
@@ -61,6 +78,51 @@ ORDER BY m.created_at,m.repository_id,m.name,m.digest LIMIT $2`,
 	`SELECT a.repository_id::text,'maven',a.coordinate,a.digest FROM native_maven_artifacts a
 WHERE a.state = 'visible' AND a.created_at >= $1 AND NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.dedupe_key = 'artifact.published|' || a.repository_id::text || '|' || a.coordinate || '|' || a.digest || '|' AND e.occurred_at >= $1)
 ORDER BY a.created_at,a.repository_id,a.coordinate,a.digest LIMIT $2`,
+}, hostedPublicationQueries()...)
+
+// notAnnounced is the NOT EXISTS clause shared by the candidate queries of the formats added in slice 1c: no event with the
+// dedupe key of (repository, coordinate, digest) exists at or after $1.
+func notAnnounced(repository, coordinate, digest string) string {
+	return "NOT EXISTS (SELECT 1 FROM domain_events e WHERE e.dedupe_key = 'artifact.published|' || " + repository + "::text || '|' || " + coordinate + " || '|' || " + digest + " || '|' AND e.occurred_at >= $1)"
+}
+
+func hostedPublicationQueries() []string {
+	hosted := func(alias, column string) string {
+		return "JOIN hosted_repositories h ON h.id = " + alias + "." + column + " AND h.repo_type = 'hosted'"
+	}
+	return []string{
+		// npm, PyPI, Go and Cargo select only hosted repositories: a proxy cache write is not a publication.
+		`SELECT v.repository_id::text,'npm',v.package_name || '@' || v.version,v.digest FROM native_npm_versions v ` + hosted("v", "repository_id") + `
+WHERE v.state = 'visible' AND v.digest <> '' AND v.created_at >= $1 AND ` + notAnnounced("v.repository_id", "v.package_name || '@' || v.version", "v.digest") + `
+ORDER BY v.created_at,v.repository_id,v.package_name,v.version LIMIT $2`,
+		`SELECT f.repository_id::text,'pypi',f.project || '@' || f.version,f.digest FROM native_pypi_files f ` + hosted("f", "repository_id") + `
+WHERE f.state = 'visible' AND f.object_key <> '' AND f.created_at >= $1 AND ` + notAnnounced("f.repository_id", "f.project || '@' || f.version", "f.digest") + `
+ORDER BY f.created_at,f.repository_id,f.project,f.version,f.filename LIMIT $2`,
+		`SELECT a.repository_id::text,'go',a.module_path || '@' || a.version,a.digest FROM native_go_assets a ` + hosted("a", "repository_id") + `
+WHERE a.kind = 'zip' AND a.collected_at IS NULL AND a.created_at >= $1
+AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t WHERE t.repository_id = a.repository_id AND t.format = 'go' AND t.coordinate = a.module_path || '@' || a.version)
+AND ` + notAnnounced("a.repository_id", "a.module_path || '@' || a.version", "a.digest") + `
+ORDER BY a.created_at,a.repository_id,a.module_path,a.version LIMIT $2`,
+		`SELECT p.repository_id::text,'cargo',n.name || '@' || r.version,r.digest FROM native_cargo_publications p
+JOIN native_cargo_identity_reservations r USING (repository_id,collision_key,version_key) JOIN native_cargo_names n USING (repository_id,collision_key)
+WHERE p.collected_at IS NULL AND p.created_at >= $1
+AND NOT EXISTS (SELECT 1 FROM artifact_tombstones t WHERE t.repository_id = p.repository_id AND t.format = 'cargo' AND t.coordinate = n.name || '@' || r.version)
+AND ` + notAnnounced("p.repository_id", "n.name || '@' || r.version", "r.digest") + `
+ORDER BY p.created_at,p.repository_id,n.name,r.version LIMIT $2`,
+		`SELECT r.repository_id::text,'conan',r.reference || '#' || r.revision,r.digest FROM native_conan_recipe_revisions r ` + hosted("r", "repository_id") + `
+WHERE r.state = 'visible' AND r.created_at >= $1 AND ` + notAnnounced("r.repository_id", "r.reference || '#' || r.revision", "r.digest") + `
+ORDER BY r.created_at,r.repository_id,r.reference,r.revision LIMIT $2`,
+		`SELECT p.repository_id::text,'conan',p.reference || '#' || p.recipe_revision || '/' || p.package_id || '#' || p.revision,p.digest FROM native_conan_package_revisions p ` + hosted("p", "repository_id") + `
+WHERE p.state = 'visible' AND p.created_at >= $1 AND ` + notAnnounced("p.repository_id", "p.reference || '#' || p.recipe_revision || '/' || p.package_id || '#' || p.revision", "p.digest") + `
+ORDER BY p.created_at,p.repository_id,p.reference,p.recipe_revision,p.package_id,p.revision LIMIT $2`,
+		// APT: a pool path published by the earliest snapshot of the repository that carries it with this digest.
+		`SELECT a.repository_id::text,'apt',a.path,a.digest FROM native_apt_snapshot_assets a JOIN native_apt_repository_snapshots s ON s.id = a.snapshot_id
+WHERE a.path LIKE 'pool/%' AND s.state IN ('visible','retired') AND s.published_at >= $1
+AND NOT EXISTS (SELECT 1 FROM native_apt_snapshot_assets a2 JOIN native_apt_repository_snapshots s2 ON s2.id = a2.snapshot_id
+  WHERE a2.repository_id = a.repository_id AND a2.path = a.path AND a2.digest = a.digest AND s2.state IN ('visible','retired') AND s2.published_at < s.published_at)
+AND ` + notAnnounced("a.repository_id", "a.path", "a.digest") + `
+ORDER BY s.published_at,a.repository_id,a.path LIMIT $2`,
+	}
 }
 
 // ReconcilePublishedEvents implements PublishedEventReconciler. Each publication is emitted in its own transaction
@@ -151,6 +213,7 @@ func (s *MemoryStore) ReconcilePublishedEvents(_ context.Context, floor time.Tim
 			add(artifact.CreatedAt, publishedCandidate{artifact.RepositoryID, string(FormatMaven), artifact.Coordinate, artifact.Digest})
 		}
 	}
+	s.addNativePublicationCandidatesLocked(add)
 	written := 0
 	perFormat := map[string]int{}
 	for _, c := range candidates {

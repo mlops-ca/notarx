@@ -69,19 +69,18 @@ type conanCacheEntry struct {
 }
 
 type ConanHandler struct {
-	Store              repository.ConanStore
-	NativeStore        repository.NativeConanStore
-	Repositories       repository.HostedRepositoryStore
-	Authorizer         RepositoryAuthorizer
-	Authenticator      Authenticator
-	Client             ConanClient
-	Cache              *ConanCache
-	NativeObjects      ObjectStore
-	Metrics            *Metrics
-	ReadPolicies       repository.RepositoryQuarantineReadPolicyStore
-	Quarantine         repository.ArtifactQuarantineStore
-	Publications       repository.ConanPublicationStore
-	PublicationScanner *publicationScanScheduler
+	Store         repository.ConanStore
+	NativeStore   repository.NativeConanStore
+	Repositories  repository.HostedRepositoryStore
+	Authorizer    RepositoryAuthorizer
+	Authenticator Authenticator
+	Client        ConanClient
+	Cache         *ConanCache
+	NativeObjects ObjectStore
+	Metrics       *Metrics
+	ReadPolicies  repository.RepositoryQuarantineReadPolicyStore
+	Quarantine    repository.ArtifactQuarantineStore
+	Publications  repository.ConanPublicationStore
 }
 
 var errConanArtifactQuarantined = errors.New(repository.ArtifactQuarantinedReason)

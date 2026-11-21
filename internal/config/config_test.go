@@ -672,6 +672,19 @@ func TestLoadRejectsUnknownClusterRoleOrWorkerFilter(t *testing.T) {
 	}
 }
 
+// The published-event reconciler is a repair tool (notarx reconcile-events), not a worker kind: no default or explicit
+// worker set schedules it.
+func TestLoadRejectsTheRemovedEventsWorkerKind(t *testing.T) {
+	setCompleteConfiguration(t)
+	t.Setenv("NOTARX_WORKER_KINDS", "events")
+	if _, err := Load(); err == nil {
+		t.Fatal("Load() accepted NOTARX_WORKER_KINDS=events")
+	}
+	if _, ok := supportedWorkerKinds["events"]; ok {
+		t.Fatal("events is a supported worker kind")
+	}
+}
+
 func TestLoadRejectsStandaloneRoleCombination(t *testing.T) {
 	setCompleteConfiguration(t)
 	t.Setenv("NOTARX_NODE_ROLES", "standalone,worker")

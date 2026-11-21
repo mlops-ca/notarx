@@ -36,17 +36,16 @@ const (
 )
 
 type nativeGoHandler struct {
-	store              nativeGoPublicationStore
-	repos              repository.HostedRepositoryStore
-	objects            ObjectStore
-	auth               Authenticator
-	authorizer         RepositoryAuthorizer
-	audit              repository.Store
-	metrics            *Metrics
-	proxy              GoClient
-	readPolicies       repository.RepositoryQuarantineReadPolicyStore
-	quarantine         repository.ArtifactQuarantineStore
-	publicationScanner *publicationScanScheduler
+	store        nativeGoPublicationStore
+	repos        repository.HostedRepositoryStore
+	objects      ObjectStore
+	auth         Authenticator
+	authorizer   RepositoryAuthorizer
+	audit        repository.Store
+	metrics      *Metrics
+	proxy        GoClient
+	readPolicies repository.RepositoryQuarantineReadPolicyStore
+	quarantine   repository.ArtifactQuarantineStore
 }
 
 type nativeGoPublicationStore interface {
@@ -82,11 +81,6 @@ func (h nativeGoHandler) withProxy(client GoClient) nativeGoHandler {
 
 func (h nativeGoHandler) withMetrics(metrics *Metrics) nativeGoHandler {
 	h.metrics = metrics
-	return h
-}
-
-func (h nativeGoHandler) withPublicationScanner(scanner publicationScanScheduler) nativeGoHandler {
-	h.publicationScanner = &scanner
 	return h
 }
 
@@ -591,7 +585,7 @@ func (h nativeGoHandler) publishSpool(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 	if _, lookupErr := h.store.GetGoModuleVersion(publicationCtx, repo.ID, route.module, route.version); lookupErr == nil {
-		version, replayed, publishErr := h.store.PublishGoModule(publicationCtx, publication)
+		version, replayed, publishErr := h.store.PublishGoModule(repository.WithWriteActor(publicationCtx, publisher), publication)
 		if publishErr != nil {
 			h.writeGoPublicationStoreError(w, publishErr)
 			return
@@ -641,7 +635,7 @@ func (h nativeGoHandler) publishSpool(w http.ResponseWriter, r *http.Request, re
 			return
 		}
 	}
-	version, replayed, err := h.store.PublishGoModule(publicationCtx, publication)
+	version, replayed, err := h.store.PublishGoModule(repository.WithWriteActor(publicationCtx, publisher), publication)
 	if err != nil {
 		h.cleanupGoPublicationObjects(publicationCtx, createdKeys)
 		h.writeGoPublicationStoreError(w, err)
@@ -706,9 +700,6 @@ func (h nativeGoHandler) writeGoPublicationStoreError(w http.ResponseWriter, err
 }
 
 func (h nativeGoHandler) writeGoPublicationSuccess(w http.ResponseWriter, r *http.Request, repo repository.HostedRepository, route goRoute, publisher string, version repository.GoModuleVersion, zipAsset repository.GoModuleAsset, replayed bool) {
-	if !replayed && h.publicationScanner != nil {
-		_ = h.publicationScanner.Schedule(r.Context(), repo, route.module+"@"+route.version, zipAsset.Digest, publisher)
-	}
 	status := http.StatusCreated
 	if replayed {
 		status = http.StatusOK

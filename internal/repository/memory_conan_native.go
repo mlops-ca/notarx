@@ -104,13 +104,13 @@ func (s *MemoryStore) conanObjectVisibleLocked(key string) bool {
 	return false
 }
 
-func (s *MemoryStore) PutConanRecipeRevision(_ context.Context, revision ConanRecipeRevision, assets []ConanAsset) (ConanRecipeRevision, error) {
+func (s *MemoryStore) PutConanRecipeRevision(ctx context.Context, revision ConanRecipeRevision, assets []ConanAsset) (ConanRecipeRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.putConanRecipeRevisionLocked(revision, assets)
+	return s.putConanRecipeRevisionLocked(ctx, revision, assets)
 }
 
-func (s *MemoryStore) putConanRecipeRevisionLocked(revision ConanRecipeRevision, assets []ConanAsset) (ConanRecipeRevision, error) {
+func (s *MemoryStore) putConanRecipeRevisionLocked(ctx context.Context, revision ConanRecipeRevision, assets []ConanAsset) (ConanRecipeRevision, error) {
 	if err := s.conanAssetsAvailableLocked(assets); err != nil {
 		return ConanRecipeRevision{}, err
 	}
@@ -127,16 +127,17 @@ func (s *MemoryStore) putConanRecipeRevisionLocked(revision ConanRecipeRevision,
 	s.claimConanAssetsLocked(assets)
 	revision.State, revision.CreatedAt = "visible", time.Now().UTC()
 	s.conanRecipes[key] = revision
+	s.emitPublishedLocked(ctx, revision.RepositoryID, FormatConan, conanRecipeCoordinate(revision.Reference, revision.Revision), revision.Digest)
 	return revision, nil
 }
 
-func (s *MemoryStore) PutConanPackageRevision(_ context.Context, revision ConanPackageRevision, assets []ConanAsset) (ConanPackageRevision, error) {
+func (s *MemoryStore) PutConanPackageRevision(ctx context.Context, revision ConanPackageRevision, assets []ConanAsset) (ConanPackageRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.putConanPackageRevisionLocked(revision, assets)
+	return s.putConanPackageRevisionLocked(ctx, revision, assets)
 }
 
-func (s *MemoryStore) putConanPackageRevisionLocked(revision ConanPackageRevision, assets []ConanAsset) (ConanPackageRevision, error) {
+func (s *MemoryStore) putConanPackageRevisionLocked(ctx context.Context, revision ConanPackageRevision, assets []ConanAsset) (ConanPackageRevision, error) {
 	if err := s.conanAssetsAvailableLocked(assets); err != nil {
 		return ConanPackageRevision{}, err
 	}
@@ -156,6 +157,7 @@ func (s *MemoryStore) putConanPackageRevisionLocked(revision ConanPackageRevisio
 	s.claimConanAssetsLocked(assets)
 	revision.State, revision.CreatedAt = "visible", time.Now().UTC()
 	s.conanPackages[key] = revision
+	s.emitPublishedLocked(ctx, revision.RepositoryID, FormatConan, conanPackageCoordinate(revision.Reference, revision.RecipeRevision, revision.PackageID, revision.Revision), revision.Digest)
 	return revision, nil
 }
 
@@ -197,7 +199,7 @@ func (s *MemoryStore) claimConanAssetsLocked(assets []ConanAsset) {
 	}
 }
 
-func (s *MemoryStore) PublishReplicatedConanRevision(_ context.Context, publication ConanReplicationPublication) (ConanRecipeRevision, error) {
+func (s *MemoryStore) PublishReplicatedConanRevision(ctx context.Context, publication ConanReplicationPublication) (ConanRecipeRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if err := s.conanAssetsAvailableLocked(publication.SourceAssets); err != nil {
@@ -259,14 +261,16 @@ func (s *MemoryStore) PublishReplicatedConanRevision(_ context.Context, publicat
 	}
 	publication.Recipe.State, publication.Recipe.CreatedAt = "visible", now
 	s.conanRecipes[key] = publication.Recipe
+	s.emitPublishedLocked(ctx, publication.Recipe.RepositoryID, FormatConan, conanRecipeCoordinate(publication.Recipe.Reference, publication.Recipe.Revision), publication.Recipe.Digest)
 	for _, pkg := range publication.Packages {
 		pkg.RepositoryID, pkg.State, pkg.CreatedAt = publication.Recipe.RepositoryID, "visible", now
 		s.conanPackages[conanPackageKey(pkg.RepositoryID, pkg.Reference, pkg.RecipeRevision, pkg.PackageID, pkg.Revision)] = pkg
+		s.emitPublishedLocked(ctx, pkg.RepositoryID, FormatConan, conanPackageCoordinate(pkg.Reference, pkg.RecipeRevision, pkg.PackageID, pkg.Revision), pkg.Digest)
 	}
 	return publication.Recipe, nil
 }
 
-func (s *MemoryStore) PromoteConanRecipeRevision(_ context.Context, promotion ConanPromotion) (ConanRecipeRevision, error) {
+func (s *MemoryStore) PromoteConanRecipeRevision(ctx context.Context, promotion ConanPromotion) (ConanRecipeRevision, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	source, ok := s.conanRecipes[conanRecipeKey(promotion.SourceRepositoryID, promotion.Reference, promotion.Revision)]
@@ -291,10 +295,12 @@ func (s *MemoryStore) PromoteConanRecipeRevision(_ context.Context, promotion Co
 		asset.RepositoryID = promotion.TargetRepositoryID
 		s.conanAssets[conanAssetKey(asset)] = asset
 	}
+	s.emitPublishedLocked(ctx, promotion.TargetRepositoryID, FormatConan, conanRecipeCoordinate(promotion.Reference, promotion.Revision), promotion.Digest)
 	for _, pkg := range s.conanPackages {
 		if pkg.RepositoryID == promotion.SourceRepositoryID && pkg.Reference == promotion.Reference && pkg.RecipeRevision == promotion.Revision && pkg.State == "visible" {
 			pkg.RepositoryID = promotion.TargetRepositoryID
 			s.conanPackages[conanPackageKey(pkg.RepositoryID, pkg.Reference, pkg.RecipeRevision, pkg.PackageID, pkg.Revision)] = pkg
+			s.emitPublishedLocked(ctx, pkg.RepositoryID, FormatConan, conanPackageCoordinate(pkg.Reference, pkg.RecipeRevision, pkg.PackageID, pkg.Revision), pkg.Digest)
 		}
 	}
 	source.RepositoryID, source.CreatedAt = promotion.TargetRepositoryID, time.Now().UTC()

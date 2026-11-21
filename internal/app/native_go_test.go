@@ -142,6 +142,7 @@ func TestNativeGoHostedPublishesCanonicalZipAndServesModule(t *testing.T) {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store, repo.ID)
+	scans := publicationScanDispatcher(t, store, repository.FormatGo)
 	handler := newTestGateway(t, GatewayOptions{Dependencies: publicationScanDependencies(Dependencies{}, repository.FormatGo), Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatGo: objectstore.NewMemoryStore()}})
 	base := "/go/" + repo.Name + "/" + escapedModule
 	request := func(method, suffix string, body []byte) *httptest.ResponseRecorder {
@@ -184,6 +185,9 @@ func TestNativeGoHostedPublishesCanonicalZipAndServesModule(t *testing.T) {
 	})
 	if response := request(http.MethodPut, "/@v/"+version+".zip", changed); response.Code != http.StatusConflict {
 		t.Fatalf("conflicting publish=%d body=%s", response.Code, response.Body.String())
+	}
+	if _, err = scans.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
 	}
 	jobs, err := store.ListLifecycleJobs(context.Background(), repo.ID, 10)
 	if err != nil {

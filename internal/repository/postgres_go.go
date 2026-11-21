@@ -148,6 +148,9 @@ func (s *PostgresStore) PublishGoModule(ctx context.Context, incoming GoModulePu
 	if err = refreshArtifactCatalog(ctx, tx, version.RepositoryID, FormatGo, version.Module); err != nil {
 		return GoModuleVersion{}, false, err
 	}
+	if err = emitPublishedPostgres(ctx, tx, version.RepositoryID, FormatGo, goModuleCoordinate(version.Module, version.Version), goPublicationDigest(publication.Assets)); err != nil {
+		return GoModuleVersion{}, false, err
+	}
 	if err = delta.reserve(ctx, tx); err != nil {
 		return GoModuleVersion{}, false, err
 	}
