@@ -304,14 +304,18 @@ func TestCachedGrantSetIsACopy(t *testing.T) {
 	}
 }
 
-// An authenticated protocol read on a warm cache issues no statement for user, repository, group, policy,
-// quarantine and grant resolution (the acceptance bound is one).
+// An authenticated protocol read on a warm cache issues no statement for user, group membership, repository,
+// group, policy, quarantine and grant resolution (the acceptance bound is one).
 func TestWarmAuthenticatedReadResolvesEverythingWithoutStatements(t *testing.T) {
 	f := newFixture(t, 5*time.Second)
 	ctx := context.Background()
-	user := f.addUser(t)
+	user, group := f.addGroupMember(t)
 	f.grant(t, "user:ada")
 	resolve := func() {
+		memberships, err := f.caches.ListUserGroupMemberships(ctx, user.ID)
+		if err != nil || len(memberships) != 1 || memberships[0].GroupID != group.ID {
+			t.Fatalf("memberships = %v, %v", groupIDs(memberships), err)
+		}
 		f.resolveAll(t, ctx)
 		if _, err := f.caches.GetUserByName(ctx, user.Name); err != nil {
 			t.Fatal(err)

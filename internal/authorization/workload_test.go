@@ -424,6 +424,38 @@ func TestWorkloadVerifiedTokenIsCachedAndRevocationIsBounded(t *testing.T) {
 	}
 }
 
+// A bumped issuer, policy or service-account epoch turns a cached verdict into a miss, so a lost eviction of the
+// entry cannot keep serving it past the bump (ADR 0023 section 6).
+func TestWorkloadEpochBumpTurnsACachedVerdictIntoAMiss(t *testing.T) {
+	scopes := []string{repository.CacheScopeWorkloadIssuer, repository.CacheScopeWorkloadPolicy, repository.CacheScopeServiceAccount}
+	for _, scope := range scopes {
+		t.Run(scope, func(t *testing.T) {
+			f := newWorkloadFixture(t, 5*time.Second, false)
+			auth := f.authenticator()
+			token := f.token(t, nil)
+			ctx := context.Background()
+			if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); !ok {
+				t.Fatal("first request refused")
+			}
+			issuer, err := f.store.GetWorkloadIssuer(ctx, f.issuer.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			issuer.Audiences = []string{"https://other.example.test"}
+			if _, err := f.store.UpdateWorkloadIssuer(ctx, issuer, issuer.Version); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); !ok {
+				t.Fatal("inside the window with no notification the cached verdict is still served")
+			}
+			f.registry.Invalidate(scope, "unrelated-id")
+			if _, ok := auth.AuthenticateContext(ctx, "Bearer "+token); ok {
+				t.Fatalf("a bumped %s epoch left the cached verdict in force", scope)
+			}
+		})
+	}
+}
+
 func TestWorkloadPrincipalTokenIsRevalidated(t *testing.T) {
 	f := newWorkloadFixture(t, 0, false)
 	auth := f.authenticator()
