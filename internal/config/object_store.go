@@ -111,7 +111,12 @@ func byteSizeEnv(name string, fallback int64) (int64, error) {
 
 // boolEnv parses a strict true/false environment value.
 func boolEnv(name string, fallback bool) (bool, error) {
-	raw := strings.TrimSpace(os.Getenv(name))
+	return parseBoolValue(name, os.Getenv(name), fallback)
+}
+
+// parseBoolValue parses a strict true/false value; an empty one is the fallback.
+func parseBoolValue(name, value string, fallback bool) (bool, error) {
+	raw := strings.TrimSpace(value)
 	switch raw {
 	case "":
 		return fallback, nil

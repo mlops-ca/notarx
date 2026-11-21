@@ -124,8 +124,8 @@ func matching(rules []compiledRule, event events.Event, validate CoordinateValid
 type Matcher struct{ Validate CoordinateValidator }
 
 // Match implements repository.PromotionRuleMatcher.
-func (m Matcher) Match(_ context.Context, event events.Event, rules []repository.PromotionRule) ([]string, error) {
-	return matching(compile(rules), event, m.Validate), nil
+func (m Matcher) Match(event events.Event, rules []repository.PromotionRule) []string {
+	return matching(compile(rules), event, m.Validate)
 }
 
 var _ repository.PromotionRuleMatcher = Matcher{}
@@ -144,6 +144,9 @@ type Index struct {
 func New(source RuleSource, registry *readcache.Registry, validate CoordinateValidator) *Index {
 	return &Index{source: source, validate: validate, cache: readcache.New[string, []compiledRule](registry, readcache.Options[[]compiledRule]{
 		Name: "promotion_rules", Scope: repository.CacheScopePromotionRule,
+		// A miss loads on the transaction of the publication that found it, so any error is that transaction's: another
+		// publication that joined the load must not fail with it.
+		LeaderError: func(error) bool { return true },
 	})}
 }
 

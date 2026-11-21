@@ -101,18 +101,15 @@ type PromotionEvaluationQuery struct {
 // outcome was not recorded.
 var ErrPromotionEvaluationLeaseLost = errors.New("promotion evaluation lease lost")
 
-// PromotionRuleMatcher decides, from the rules of a source repository, which of them evaluate a published artifact. The
-// in-memory store calls it while it holds its lock; the PostgreSQL path goes through events.RuleFanout instead.
+// PromotionRuleMatcher decides, from the rules of a source repository, which of them evaluate a published artifact. It cannot
+// fail: the in-memory store calls it while it holds its lock and has no way to fail a publication. The PostgreSQL path goes
+// through events.RuleFanout instead.
 type PromotionRuleMatcher interface {
-	Match(ctx context.Context, event events.Event, rules []PromotionRule) ([]string, error)
+	Match(event events.Event, rules []PromotionRule) []string
 }
 
 // PromotionEvaluationStore is the queue of rule evaluations (ADR 0021, Evaluator).
 type PromotionEvaluationStore interface {
-	// ListEnabledPromotionRules returns the enabled rules of a source repository in any state: the rule set of the fan-out. A
-	// parked rule is included so the artifacts published while it is parked wait for it instead of being lost; the evaluator
-	// decides what a parked rule does.
-	ListEnabledPromotionRules(ctx context.Context, sourceRepositoryID string) ([]PromotionRule, error)
 	// ClaimPromotionEvaluations takes up to limit due pending or waiting rows with FOR UPDATE SKIP LOCKED and leases them
 	// to owner. A row whose lease expired is due again, so a crashed worker's rows come back without a scheduler; a due
 	// row that already used PromotionEvaluationMaxAttempts claims is failed with attempts_exhausted instead of claimed, so

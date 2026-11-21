@@ -285,8 +285,9 @@ func TestPostgresParkPromotionRuleAnnouncesAndInvalidates(t *testing.T) {
 	if len(scopes) != 1 || scopes[0] != CacheScopePromotionRule {
 		t.Fatalf("invalidated scopes = %v", scopes)
 	}
-	if enabled, err := f.store.ListEnabledPromotionRules(ctx, f.source.ID); err != nil || len(enabled) != 0 {
-		t.Fatalf("a parked rule is listed as enabled: %+v, %v", enabled, err)
+	// A parked rule is still listed for the fan-out: the evaluations of what is published meanwhile wait for it.
+	if enabled, err := ListEnabledPromotionRulesFrom(ctx, f.store.db, f.source.ID); err != nil || len(enabled) != 1 || enabled[0].State != PromotionRuleAuthorizationLost {
+		t.Fatalf("listed rules = %+v, %v", enabled, err)
 	}
 	if again, err := f.store.ParkPromotionRule(ctx, f.rule.ID, rule.Version, PromotionRuleAuthorizationLost, "again", event); err != nil || again {
 		t.Fatalf("a parked rule was parked again: %v, %v", again, err)
@@ -295,8 +296,8 @@ func TestPostgresParkPromotionRuleAnnouncesAndInvalidates(t *testing.T) {
 	if updated, err := f.store.UpdatePromotionRule(ctx, rule, rule.Version); err != nil || updated.State != PromotionRuleActive || updated.StateReason != "" {
 		t.Fatalf("edited rule = %+v, %v", updated, err)
 	}
-	if enabled, err := f.store.ListEnabledPromotionRules(ctx, f.source.ID); err != nil || len(enabled) != 1 {
-		t.Fatalf("enabled rules = %+v, %v", enabled, err)
+	if enabled, err := ListEnabledPromotionRulesFrom(ctx, f.store.db, f.source.ID); err != nil || len(enabled) != 1 || enabled[0].State != PromotionRuleActive {
+		t.Fatalf("listed rules = %+v, %v", enabled, err)
 	}
 }
 

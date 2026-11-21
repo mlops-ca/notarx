@@ -153,7 +153,7 @@ func (s *PostgresStore) UpdatePromotionRule(ctx context.Context, rule PromotionR
 func (s *PostgresStore) updatePromotionRule(ctx context.Context, rule PromotionRule, expectedVersion string, audit []AuditRecord) (PromotionRule, error) {
 	return runTransactional(ctx, s, audit, func(q sqlRunner) (PromotionRule, error) {
 		var previous sql.NullString
-		if err := q.QueryRowContext(ctx, `SELECT state FROM promotion_rules WHERE id=$1::uuid FOR UPDATE`, rule.ID).Scan(&previous); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		if err := q.QueryRowContext(ctx, `SELECT state FROM promotion_rules WHERE id=$1::uuid FOR NO KEY UPDATE`, rule.ID).Scan(&previous); err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return PromotionRule{}, err
 		}
 		updated, err := scanPromotionRule(q.QueryRowContext(ctx, `UPDATE promotion_rules

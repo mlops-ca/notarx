@@ -81,6 +81,10 @@ func promotionConfigFromEnv(current PromotionConfig) (PromotionConfig, error) {
 	return current, nil
 }
 
-// LoadPromotion reads the promotion settings from the environment, for the commands that are not the gateway (the event
-// repair tool fans the events it writes out to the rules only when promotion is enabled).
-func LoadPromotion() (PromotionConfig, error) { return promotionConfigFromEnv(PromotionConfig{}) }
+// PromotionEnabled reads NOTARX_PROMOTION_ENABLED through lookup, for the commands that are not the gateway: the event repair
+// tool fans the events it writes out to the rules only when promotion is enabled. It parses the value exactly as the gateway
+// does and reads nothing else.
+func PromotionEnabled(lookup func(string) (string, bool)) (bool, error) {
+	raw, _ := lookup("NOTARX_PROMOTION_ENABLED")
+	return parseBoolValue("NOTARX_PROMOTION_ENABLED", raw, true)
+}

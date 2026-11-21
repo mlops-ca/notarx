@@ -225,7 +225,7 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 	}
 	if rule.State != repository.PromotionRuleActive {
 		// A parked rule comes back with an edit, and the artifacts published meanwhile must not be lost: wait.
-		return e.later(evaluation.EventOccurredAt, reasonRuleParkedPrefix+rule.State), nil
+		return e.laterBy(evaluation.EventOccurredAt, reasonRuleParkedPrefix+rule.State, conditionPollFloor), nil
 	}
 	if rule.TargetKind != repository.PromotionTargetLocal {
 		return skipped(reasonRemoteUnsupported)
@@ -371,7 +371,7 @@ func (e *PromotionEvaluator) park(ctx context.Context, rule repository.Promotion
 		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationPending, Reason: reasonRuleChanged, NextAttemptAt: e.now().Add(waitFloor), NotAnAttempt: true}, nil
 	}
 	// The artifact is not lost with the authority: like every other evaluation of the parked rule it waits for an edit.
-	return e.later(evaluation.EventOccurredAt, reasonAuthorizationLost+":"+reason), nil
+	return e.laterBy(evaluation.EventOccurredAt, reasonAuthorizationLost+":"+reason, conditionPollFloor), nil
 }
 
 // ruleRun is a rule loaded for evaluation.
@@ -445,11 +445,15 @@ const (
 // than conditionGiveUp, gives up with the reason. Scan completion and evidence arrive after publication, so a failing
 // condition is not final (the re-pend on artifact.scan.completed of a later slice only makes the recheck immediate).
 func (e *PromotionEvaluator) later(published time.Time, reason string) repository.PromotionEvaluationOutcome {
-	age := e.now().Sub(published)
-	if age > conditionGiveUp {
+	return e.laterBy(published, reason, min(max(e.now().Sub(published)/4, conditionPollFloor), conditionPollCeiling))
+}
+
+// laterBy is later with the delay given: a wait for a rule to be restored looks again every minute, so an evaluation that
+// read the rule parked just before an edit restored it is at most a minute late.
+func (e *PromotionEvaluator) laterBy(published time.Time, reason string, delay time.Duration) repository.PromotionEvaluationOutcome {
+	if e.now().Sub(published) > conditionGiveUp {
 		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationSkipped, Reason: reason}
 	}
-	delay := min(max(age/4, conditionPollFloor), conditionPollCeiling)
 	return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationWaiting, Reason: reason, NextAttemptAt: e.now().Add(delay)}
 }
 

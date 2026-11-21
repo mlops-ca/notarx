@@ -19,9 +19,9 @@ func (s *MemoryStore) SetPromotionRuleMatcher(matcher PromotionRuleMatcher) {
 // fanOutPromotionEvaluationsLocked is events.Emit's rule fan-out for the in-memory store: one pending evaluation per
 // enabled, active rule of the source repository that the matcher accepts, once per (event, rule). The caller holds s.mu.
 // With no matcher installed no evaluation is written.
-func (s *MemoryStore) fanOutPromotionEvaluationsLocked(ctx context.Context, event WebhookEvent) error {
+func (s *MemoryStore) fanOutPromotionEvaluationsLocked(event WebhookEvent) {
 	if s.promotionMatcher == nil || event.Type != events.ArtifactPublished || event.RepositoryID == "" {
-		return nil
+		return
 	}
 	var rules []PromotionRule
 	for _, rule := range s.promotionRules {
@@ -29,10 +29,7 @@ func (s *MemoryStore) fanOutPromotionEvaluationsLocked(ctx context.Context, even
 			rules = append(rules, clonePromotionRule(rule))
 		}
 	}
-	matched, err := s.promotionMatcher.Match(ctx, event.domainEvent(), rules)
-	if err != nil {
-		return err
-	}
+	matched := s.promotionMatcher.Match(event.domainEvent(), rules)
 	if s.promotionEvaluations == nil {
 		s.promotionEvaluations = map[string]PromotionEvaluation{}
 	}
@@ -46,7 +43,6 @@ func (s *MemoryStore) fanOutPromotionEvaluationsLocked(ctx context.Context, even
 			Coordinate: event.Coordinate, Digest: event.Digest, State: PromotionEvaluationPending, NextAttemptAt: now, CreatedAt: now, UpdatedAt: now}
 		s.promotionEvaluations[evaluation.ID] = evaluation
 	}
-	return nil
 }
 
 func (s *MemoryStore) hasEvaluationLocked(seq int64, ruleID string) bool {
@@ -56,20 +52,6 @@ func (s *MemoryStore) hasEvaluationLocked(seq int64, ruleID string) bool {
 		}
 	}
 	return false
-}
-
-// ListEnabledPromotionRules implements PromotionEvaluationStore.
-func (s *MemoryStore) ListEnabledPromotionRules(_ context.Context, sourceRepositoryID string) ([]PromotionRule, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var rules []PromotionRule
-	for _, rule := range s.promotionRules {
-		if rule.SourceRepositoryID == sourceRepositoryID && rule.Enabled {
-			rules = append(rules, clonePromotionRule(rule))
-		}
-	}
-	sortPromotionRulesByID(rules)
-	return rules, nil
 }
 
 // ClaimPromotionEvaluations implements PromotionEvaluationStore.

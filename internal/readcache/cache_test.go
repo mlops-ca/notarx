@@ -428,3 +428,43 @@ func TestScopeFlushPayloadEvictsTheScopeOnce(t *testing.T) {
 		t.Fatal("a flush of one scope emptied another")
 	}
 }
+
+func TestFollowerDoesNotInheritALeaderErrorTheCacheMarksAsTheLeaders(t *testing.T) {
+	reg := NewRegistry(time.Minute)
+	cache := New[string, string](reg, Options[string]{Name: "leader-error", Scope: "leader-error", LeaderError: func(err error) bool { return errors.Is(err, errLeaderTransaction) }})
+	started, release := make(chan struct{}), make(chan struct{})
+	var calls atomic.Int32
+	load := func(context.Context) (string, error) {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-release
+			return "", errLeaderTransaction
+		}
+		return "loaded by the follower", nil
+	}
+	var wg sync.WaitGroup
+	var leaderErr, followerErr error
+	var followerValue string
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, leaderErr = cache.Get(context.Background(), "key", load)
+	}()
+	<-started
+	go func() {
+		defer wg.Done()
+		followerValue, followerErr = cache.Get(context.Background(), "key", load)
+	}()
+	// The follower joins the leader's flight; the leader fails with an error of its own transaction.
+	waitFor(t, func() bool { return cache.stats().Misses >= 2 })
+	close(release)
+	wg.Wait()
+	if !errors.Is(leaderErr, errLeaderTransaction) {
+		t.Fatalf("leader error = %v", leaderErr)
+	}
+	if followerErr != nil || followerValue != "loaded by the follower" || calls.Load() != 2 {
+		t.Fatalf("follower = %q, %v after %d loads", followerValue, followerErr, calls.Load())
+	}
+}
+
+var errLeaderTransaction = errors.New("leader transaction aborted")

@@ -44,17 +44,21 @@ func TestPromotionConfigEvaluator(t *testing.T) {
 	}
 }
 
-func TestLoadPromotionReadsTheEnvironment(t *testing.T) {
-	got, err := LoadPromotion()
-	if err != nil || !got.Enabled() {
-		t.Fatalf("default = %+v, %v", got, err)
+func TestPromotionEnabledReadsOnlyTheFlagThroughTheLookup(t *testing.T) {
+	lookup := func(value string, set bool) func(string) (string, bool) {
+		return func(name string) (string, bool) {
+			if name != "NOTARX_PROMOTION_ENABLED" {
+				t.Fatalf("read %s", name)
+			}
+			return value, set
+		}
 	}
-	t.Setenv("NOTARX_PROMOTION_ENABLED", "false")
-	if got, err = LoadPromotion(); err != nil || got.Enabled() {
-		t.Fatalf("disabled = %+v, %v", got, err)
+	for value, want := range map[string]bool{"": true, "true": true, " true ": true, "false": false} {
+		if got, err := PromotionEnabled(lookup(value, value != "")); err != nil || got != want {
+			t.Errorf("%q = %v, %v; want %v", value, got, err, want)
+		}
 	}
-	t.Setenv("NOTARX_PROMOTION_ENABLED", "maybe")
-	if _, err = LoadPromotion(); err == nil {
+	if _, err := PromotionEnabled(lookup("maybe", true)); err == nil {
 		t.Fatal("an invalid value must be refused, as the gateway refuses it")
 	}
 }

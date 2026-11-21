@@ -57,12 +57,12 @@ func runReconcileEvents(ctx context.Context, args []string, getenv func(string) 
 		return 1
 	}
 	defer func() { _ = store.Close() }()
-	promotion, err := config.LoadPromotion()
+	promotionEnabled, err := config.PromotionEnabled(lookup)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 2
 	}
-	if promotion.Enabled() {
+	if promotionEnabled {
 		// A repaired event is as good as one a publication wrote: it starts the evaluations of the rules that match it. The
 		// process has no long-lived cache to keep fresh, so the rule set is read through the transaction every time.
 		events.SetRuleFanout(app.NewPromotionRuleFanout(readcache.NewRegistry(0)))

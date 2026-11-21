@@ -31,13 +31,10 @@ type RuleQuerier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-// ListEnabledPromotionRules implements PromotionEvaluationStore; promotion_rules_source_idx serves it.
-func (s *PostgresStore) ListEnabledPromotionRules(ctx context.Context, sourceRepositoryID string) ([]PromotionRule, error) {
-	return ListEnabledPromotionRulesFrom(ctx, s.db, sourceRepositoryID)
-}
-
-// ListEnabledPromotionRulesFrom lists the enabled, active rules of a source repository through q: the rule fan-out passes
-// the publishing transaction, so a cache miss does not take a second connection while the transaction holds one.
+// ListEnabledPromotionRulesFrom lists the enabled rules of a source repository, in any state, through q: the rule fan-out
+// passes the publishing transaction, so a cache miss does not take a second connection while the transaction holds one. A
+// parked rule is listed so that the artifacts published while it is parked get evaluations that wait for it; the evaluator
+// decides what a parked rule does. promotion_rules_source_idx serves it.
 func ListEnabledPromotionRulesFrom(ctx context.Context, q RuleQuerier, sourceRepositoryID string) ([]PromotionRule, error) {
 	rows, err := q.QueryContext(ctx, `SELECT `+promotionRuleColumns+` FROM promotion_rules WHERE source_repository_id=$1::uuid AND enabled ORDER BY promotion_rules.id`, sourceRepositoryID)
 	if err != nil {

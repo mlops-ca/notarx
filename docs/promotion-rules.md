@@ -115,8 +115,8 @@ channel and by a poll), and for each one:
 
 1. reloads the rule and the artifact and checks the rule is still enabled and active (a disabled rule skips the evaluation; a
    parked rule makes it wait like a failing condition, so the artifacts published meanwhile are promoted once an edit
-   restores the rule, which makes them due at once; the evaluation that finds the authority lost waits too, and a wait
-   ends a week after publication);
+   restores the rule, which makes them due at once (one that was being evaluated at that moment is at most a minute
+   late); the evaluation that finds the authority lost waits too, and a wait ends a week after publication);
 2. re-authorizes the run-as service account: it must exist, be active, be able to read the source and write the target.
    A refusal parks the rule in state `authorization_lost`, announces `promotion.failed` with the rule id and the reason, and
    and the evaluation waits (the park, its event and its audit record happen only if the rule is still active at the version

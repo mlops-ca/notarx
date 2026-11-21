@@ -81,29 +81,25 @@ func TestMatcherLeavesOutOnlyWhatCannotMatch(t *testing.T) {
 	}
 	m := Matcher{}
 	event := events.Published("repo", "npm", "app@1.0.0", "sha256:aa", "")
-	got, err := m.Match(context.Background(), event, rules)
-	if err != nil {
-		t.Fatal(err)
-	}
+	got := m.Match(event, rules)
 	if want := []string{"any", "broken", "refs"}; !slices.Equal(got, want) {
 		t.Fatalf("1.0.0 matched %v, want %v", got, want)
 	}
 	event = events.Published("repo", "npm", "app@2.1.0", "sha256:aa", "")
-	if got, _ = m.Match(context.Background(), event, rules); !slices.Equal(got, []string{"any", "range", "broken", "refs"}) {
+	if got = m.Match(event, rules); !slices.Equal(got, []string{"any", "range", "broken", "refs"}) {
 		t.Fatalf("2.1.0 matched %v", got)
 	}
 	// A coordinate the format refuses is never matched.
 	m.Validate = func(repository.Format) func(string) bool { return func(c string) bool { return c != "app@2.1.0" } }
-	if got, _ = m.Match(context.Background(), event, rules); !slices.Equal(got, []string{"broken"}) {
+	if got = m.Match(event, rules); !slices.Equal(got, []string{"broken"}) {
 		t.Fatalf("invalid coordinate matched %v", got)
 	}
 }
 
 func TestMatcherReadsAGoModuleVersionWithItsLeadingV(t *testing.T) {
 	rules := []repository.PromotionRule{rule(t, "range", promotionrules.Match{Coordinate: promotionrules.Coordinate{Glob: "**"}, Version: &promotionrules.VersionRange{Range: ">=1.2.0"}})}
-	got, err := Matcher{}.Match(context.Background(), events.Published("repo", "go", "example.com/mod@v1.3.0", "sha256:aa", ""), rules)
-	if err != nil || !slices.Equal(got, []string{"range"}) {
-		t.Fatalf("matched %v, %v", got, err)
+	if got := (Matcher{}).Match(events.Published("repo", "go", "example.com/mod@v1.3.0", "sha256:aa", ""), rules); !slices.Equal(got, []string{"range"}) {
+		t.Fatalf("matched %v", got)
 	}
 }
 
