@@ -1,0 +1,51 @@
+export const remoteInstancesEnCA = {
+  "remoteInstances.title": "Remote instances",
+  "remoteInstances.description":
+    "Other notarx instances that this instance can promote to. Each registration is checked against the remote's well-known instance document.",
+  "remoteInstances.add": "Add remote instance",
+  "remoteInstances.edit": "Edit remote instance",
+  "remoteInstances.editRow": "Edit {name}",
+  "remoteInstances.testRow": "Test {name}",
+  "remoteInstances.deleteRow": "Delete {name}",
+  "remoteInstances.name": "Name",
+  "remoteInstances.baseUrl": "Base URL",
+  "remoteInstances.baseUrlHint":
+    "The https address of the remote notarx instance. Private networks are refused unless the operator allows them.",
+  "remoteInstances.instanceId": "Instance id",
+  "remoteInstances.auth": "Authentication",
+  "remoteInstances.auth.workload_identity": "Workload identity",
+  "remoteInstances.auth.static_token": "Static token",
+  "remoteInstances.audience": "Audience",
+  "remoteInstances.audienceHint":
+    "The audience of the workload assertion minted for this remote.",
+  "remoteInstances.token": "Token",
+  "remoteInstances.tokenHint": "Stored encrypted and never shown again.",
+  "remoteInstances.tokenReplaceHint":
+    "A token is configured. Enter a new value to replace it, or leave this empty to keep it.",
+  "remoteInstances.tokenConfigured": "Token configured",
+  "remoteInstances.tokenNotConfigured": "No token",
+  "remoteInstances.trustEvidence": "Trust provenance evidence from this remote",
+  "remoteInstances.enabled": "Enabled",
+  "remoteInstances.stateUnreachable": "Unreachable",
+  "remoteInstances.state": "State",
+  "remoteInstances.lastChecked": "Last checked",
+  "remoteInstances.actions": "Actions",
+  "remoteInstances.editAction": "Edit",
+  "remoteInstances.test": "Test",
+  "remoteInstances.delete": "Delete",
+  "remoteInstances.create": "Add",
+  "remoteInstances.save": "Save",
+  "remoteInstances.deleteTitle": "Delete remote instance",
+  "remoteInstances.deleteMessage":
+    "Delete {name}? Promotion rules that target it stop working.",
+  "remoteInstances.loading": "Loading remote instances",
+  "remoteInstances.emptyTitle": "No remote instances",
+  "remoteInstances.emptyHint":
+    "Add a remote instance to promote artifacts to another notarx.",
+  "remoteInstances.loadMore": "Load more",
+  "remoteInstances.testReachable": "{name} is reachable",
+  "remoteInstances.testUnreachable": "{name} is unreachable",
+  "remoteInstances.testDetail":
+    "Instance id {instanceId}, API {apiVersion}, formats: {formats}.",
+  "remoteInstances.testFailed": "Reason: {error}",
+};
