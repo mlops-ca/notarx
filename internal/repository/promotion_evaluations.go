@@ -157,7 +157,3 @@ func sortEvaluationsOldestDueFirst(items []PromotionEvaluation) {
 		return strings.Compare(a.ID, b.ID)
 	})
 }
-
-func sortPromotionRulesByID(rules []PromotionRule) {
-	slices.SortFunc(rules, func(a, b PromotionRule) int { return strings.Compare(a.ID, b.ID) })
-}

@@ -224,8 +224,7 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 		return skipped(reasonRuleDisabled)
 	}
 	if rule.State != repository.PromotionRuleActive {
-		// A parked rule comes back with an edit, and the artifacts published meanwhile must not be lost: wait.
-		return e.laterBy(evaluation.EventOccurredAt, reasonRuleParkedPrefix+rule.State, conditionPollFloor), nil
+		return e.waitForRule(ctx, rule, evaluation, reasonRuleParkedPrefix+rule.State)
 	}
 	if rule.TargetKind != repository.PromotionTargetLocal {
 		return skipped(reasonRemoteUnsupported)
@@ -283,19 +282,18 @@ func (e *PromotionEvaluator) evaluate(ctx context.Context, evaluation repository
 		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationQueued, PromotionID: id}, nil
 	}
 	// The conditions hold for every artifact the rule promotes: for scope release, every member of the release.
-	var verdicts []promotionrules.ConditionVerdict
+	// The first member that fails decides, so a release that waits for a scan costs one member's reads per look, not the release's.
 	for _, member := range members {
-		memberVerdicts, found, verdictErr := run.verdicts(ctx, dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: member.coordinate}, Digest: member.digest, CreatedAt: published})
+		verdicts, found, verdictErr := run.verdicts(ctx, dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: member.coordinate}, Digest: member.digest, CreatedAt: published})
 		if verdictErr != nil {
 			return repository.PromotionEvaluationOutcome{}, verdictErr
 		}
 		if !found {
 			return skipped(reasonSourceUnavailable)
 		}
-		verdicts = append(verdicts, memberVerdicts...)
-	}
-	if blocked, outcome := e.conditionOutcome(run, published, verdicts); blocked {
-		return outcome, nil
+		if blocked, outcome := e.conditionOutcome(run, published, verdicts); blocked {
+			return outcome, nil
+		}
 	}
 	return e.promote(ctx, run, members)
 }
@@ -371,7 +369,22 @@ func (e *PromotionEvaluator) park(ctx context.Context, rule repository.Promotion
 		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationPending, Reason: reasonRuleChanged, NextAttemptAt: e.now().Add(waitFloor), NotAnAttempt: true}, nil
 	}
 	// The artifact is not lost with the authority: like every other evaluation of the parked rule it waits for an edit.
-	return e.laterBy(evaluation.EventOccurredAt, reasonAuthorizationLost+":"+reason, conditionPollFloor), nil
+	return e.waitForRule(ctx, rule, evaluation, reasonAuthorizationLost+":"+reason)
+}
+
+// waitForRule is the outcome of an evaluation of a parked rule: it holds until the end of the week the artifact has, without
+// polling, because the edit that restores the rule makes the waiting evaluations due at once. An evaluation that read the
+// rule parked a moment before such an edit would hold for the week, so the rule is read once more first; if it is active
+// again the evaluation is looked at again now, without using up an attempt.
+func (e *PromotionEvaluator) waitForRule(ctx context.Context, rule repository.PromotionRule, evaluation repository.PromotionEvaluation, reason string) (repository.PromotionEvaluationOutcome, error) {
+	fresh, err := e.store.GetPromotionRule(ctx, rule.ID)
+	if err != nil && !errors.Is(err, repository.ErrNotFound) {
+		return repository.PromotionEvaluationOutcome{}, err
+	}
+	if err == nil && (fresh.State == repository.PromotionRuleActive || fresh.Version != rule.Version) {
+		return repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationPending, Reason: reasonRuleChanged, NextAttemptAt: e.now().Add(waitFloor), NotAnAttempt: true}, nil
+	}
+	return e.laterBy(evaluation.EventOccurredAt, reason, max(evaluation.EventOccurredAt.Add(conditionGiveUp).Sub(e.now()), conditionPollFloor)+time.Second), nil
 }
 
 // ruleRun is a rule loaded for evaluation.
@@ -529,7 +542,9 @@ func (e *PromotionEvaluator) conditionOutcome(run ruleRun, published time.Time, 
 	}
 	switch {
 	case first != nil:
-		return true, e.later(published, reasonConditionPrefix+first.Condition+":"+first.Reason)
+		// The give-up clock of a condition that can still change starts when the age wait is over, so a long minAge does not
+		// use up the week the artifact has to pass it.
+		return true, e.later(published.Add(run.minAge), reasonConditionPrefix+first.Condition+":"+first.Reason)
 	case waitsForAge:
 		deadline := published.Add(run.minAge)
 		if floor := e.now().Add(waitFloor); deadline.Before(floor) {
@@ -693,7 +708,13 @@ func (e *PromotionEvaluator) targetState(ctx context.Context, target repository.
 	case !errors.Is(tombstoneErr, repository.ErrNotFound):
 		return "", false, "", tombstoneErr
 	}
-	page, err := e.service.promotions.PageArtifactPromotions(ctx, repository.ArtifactPromotionQuery{RepositoryIDs: []string{target.ID}, TargetRepositoryID: target.ID, Format: format, State: repository.ArtifactPromotionCompleted, Coordinate: coordinate, Limit: 1})
+	query := repository.ArtifactPromotionQuery{RepositoryIDs: []string{target.ID}, TargetRepositoryID: target.ID, Format: format, State: repository.ArtifactPromotionCompleted, Coordinate: coordinate, Limit: 1}
+	if format == repository.FormatOCI {
+		// An image name holds many digests (a moved tag is a new manifest), so a different digest is no conflict: only the
+		// exact manifest decides.
+		query.Digest = digest
+	}
+	page, err := e.service.promotions.PageArtifactPromotions(ctx, query)
 	if err != nil {
 		return "", false, "", err
 	}

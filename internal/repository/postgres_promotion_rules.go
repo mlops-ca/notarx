@@ -166,7 +166,7 @@ WHERE id=$1::uuid AND version=$14::text::bigint RETURNING `+promotionRuleColumns
 		if !errors.Is(err, sql.ErrNoRows) {
 			if err == nil && previous.String == PromotionRuleAuthorizationLost {
 				// The rule is restored: what waited for it is due now, not after the poll delay.
-				_, err = q.ExecContext(ctx, `UPDATE promotion_evaluations SET next_attempt_at=clock_timestamp(),updated_at=clock_timestamp() WHERE rule_id=$1::uuid AND state='waiting'`, rule.ID)
+				_, err = q.ExecContext(ctx, `UPDATE promotion_evaluations SET next_attempt_at=clock_timestamp(),updated_at=clock_timestamp() WHERE rule_id=$1::uuid AND state='waiting' AND lease_token IS NULL`, rule.ID)
 			}
 			return updated, promotionRuleWriteError(err)
 		}

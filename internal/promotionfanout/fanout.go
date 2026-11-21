@@ -13,7 +13,8 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-// RuleSource lists the enabled, active rules of a source repository through the querier it is given.
+// RuleSource lists the enabled rules of a source repository, in any state, through the querier it is given. A parked rule is
+// included on purpose: the artifacts published while it is parked get evaluations that wait for it.
 type RuleSource func(ctx context.Context, q repository.RuleQuerier, sourceRepositoryID string) ([]repository.PromotionRule, error)
 
 // CoordinateValidator returns the format's canonical-coordinate check, or nil when the format declares none.
@@ -130,7 +131,7 @@ func (m Matcher) Match(event events.Event, rules []repository.PromotionRule) []s
 
 var _ repository.PromotionRuleMatcher = Matcher{}
 
-// Index is the cached rule set of ADR 0023 section 6: the enabled rules of each source repository, compiled once, held
+// Index is the cached rule set of ADR 0023 section 6: the enabled rules of each source repository (parked ones included), compiled once, held
 // for NOTARX_AUTHZ_CACHE_TTL and flushed by the promotion_rule invalidation scope, which every rule change announces
 // (migration 000026 triggers and the store's local eviction). A rule created, enabled, disabled, edited or parked
 // therefore starts or stops fanning out within the TTL, on every node.

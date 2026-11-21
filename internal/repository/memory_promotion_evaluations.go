@@ -17,7 +17,7 @@ func (s *MemoryStore) SetPromotionRuleMatcher(matcher PromotionRuleMatcher) {
 }
 
 // fanOutPromotionEvaluationsLocked is events.Emit's rule fan-out for the in-memory store: one pending evaluation per
-// enabled, active rule of the source repository that the matcher accepts, once per (event, rule). The caller holds s.mu.
+// enabled rule of the source repository, in any state, that the matcher accepts, once per (event, rule). The caller holds s.mu.
 // With no matcher installed no evaluation is written.
 func (s *MemoryStore) fanOutPromotionEvaluationsLocked(event WebhookEvent) {
 	if s.promotionMatcher == nil || event.Type != events.ArtifactPublished || event.RepositoryID == "" {

@@ -796,6 +796,28 @@ func TestChainPromotesOCIFromDevThroughStagingToRelease(t *testing.T) {
 			t.Fatalf("%s holds %+v, %v", repo.Name, got, err)
 		}
 	}
+	// A second build of the image is another manifest under the same name: it is promoted too, not refused as a conflict.
+	second := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.manifest.v1+json","annotations":{"build":"2"}}`)
+	secondSum := sha256.Sum256(second)
+	secondDigest := fmt.Sprintf("sha256:%x", secondSum[:])
+	if err := objects.Put(ctx, "oci/dev/manifest-2", second); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.store.StageOCIObjectIntent(ctx, repository.OCIObjectIntent{RepositoryID: c.dev.ID, ObjectKey: "oci/dev/manifest-2", Digest: secondDigest, Size: int64(len(second))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.store.PutOCIManifest(ctx, repository.OCIManifest{RepositoryID: c.dev.ID, Name: "team/widget", Digest: secondDigest, ObjectKey: "oci/dev/manifest-2", Size: int64(len(second))}, secondDigest); err != nil {
+		t.Fatal(err)
+	}
+	c.settle(func() error { return worker.RunJobs(ctx, 10) })
+	for _, repo := range []repository.HostedRepository{c.staging, c.release} {
+		if got, err := c.store.GetOCIManifest(ctx, repo.ID, "team/widget", secondDigest); err != nil || got.Digest != secondDigest {
+			t.Fatalf("%s did not receive the second build: %+v, %v", repo.Name, got, err)
+		}
+		if rows := c.promotionRows(repo); len(rows) != 2 {
+			t.Fatalf("promotions into %s = %+v", repo.Name, rows)
+		}
+	}
 }
 
 func TestChainPromotesMavenFromDevThroughStagingToRelease(t *testing.T) {
@@ -982,5 +1004,78 @@ func TestEvaluationThatDecidedNothingDoesNotUseUpAnAttempt(t *testing.T) {
 	again, err := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Minute, 1)
 	if err != nil || len(again) != 1 || again[0].Attempts != 1 {
 		t.Fatalf("claimed again = %+v, %v", again, err)
+	}
+}
+
+func TestConditionGiveUpStartsWhenTheAgeWaitEnds(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), json.RawMessage(`{"minAge":"336h","scan":{"completed":true}}`))
+	asset := f.publishRaw(f.source, "releases/widget.txt", "widget")
+	// Published 14 days and an hour ago: the 14 day age is satisfied an hour ago, the scan has not completed. The week the
+	// artifact has to pass the scan started then, so it waits; it does not give up a week after it was published.
+	old := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: asset.Path, Digest: asset.Digest, EventOccurredAt: f.now.Add(-337 * time.Hour)}
+	if outcome, err := f.evaluator.evaluate(ctx, old); err != nil || outcome.State != repository.PromotionEvaluationWaiting || outcome.Reason != reasonConditionPrefix+"scan:scan_not_completed" {
+		t.Fatalf("after the age wait: %+v, %v", outcome, err)
+	}
+}
+
+func TestWaitForAParkedRuleHoldsForTheWeekUnlessTheRuleIsActiveAgain(t *testing.T) {
+	ctx := context.Background()
+	f := newEvaluatorFixture(t, repository.FormatRaw, globMatch("**"), nil)
+	evaluation := repository.PromotionEvaluation{ID: uuid.NewString(), RuleID: f.rule.ID, RepositoryID: f.source.ID, Coordinate: "a.txt", Digest: "sha256:aa", EventOccurredAt: f.now}
+	// The evaluation read the rule parked, but it is active again by the time it records its wait: no week-long hold.
+	parked := f.rule
+	parked.State = repository.PromotionRuleAuthorizationLost
+	outcome, err := f.evaluator.waitForRule(ctx, parked, evaluation, reasonRuleParkedPrefix+repository.PromotionRuleAuthorizationLost)
+	if err != nil || outcome.State != repository.PromotionEvaluationPending || !outcome.NotAnAttempt || outcome.Reason != reasonRuleChanged {
+		t.Fatalf("rule active again: %+v, %v", outcome, err)
+	}
+	// While it stays parked the evaluation holds until the end of the artifact's week, without polling.
+	if _, parkErr := f.store.ParkPromotionRule(ctx, f.rule.ID, f.rule.Version, repository.PromotionRuleAuthorizationLost, "service_account_disabled", events.Event{Type: events.PromotionFailed, RepositoryID: f.target.ID, Version: "x"}); parkErr != nil {
+		t.Fatal(parkErr)
+	}
+	outcome, err = f.evaluator.waitForRule(ctx, parked, evaluation, reasonRuleParkedPrefix+repository.PromotionRuleAuthorizationLost)
+	if err != nil || outcome.State != repository.PromotionEvaluationWaiting || outcome.NextAttemptAt.Before(f.now.Add(conditionGiveUp)) {
+		t.Fatalf("rule parked: %+v, %v", outcome, err)
+	}
+	// An evaluation that is leased when the rule is restored keeps its lease; only the rows nobody holds are made due.
+	f.publishRaw(f.source, "releases/held.txt", "held")
+	claimed, err := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Hour, 1)
+	if err != nil || len(claimed) != 1 {
+		t.Fatalf("claimed = %+v, %v", claimed, err)
+	}
+	if err = f.store.FinishPromotionEvaluation(ctx, claimed[0].ID, claimed[0].LeaseToken, repository.PromotionEvaluationOutcome{State: repository.PromotionEvaluationWaiting, Reason: "x", NextAttemptAt: f.now.Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	again, err := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Hour, 1)
+	if err != nil || len(again) != 0 {
+		t.Fatalf("a waiting row due in an hour was claimed: %+v, %v", again, err)
+	}
+	current, err := f.store.GetPromotionRule(ctx, f.rule.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.UpdatePromotionRule(ctx, current, current.Version); err != nil {
+		t.Fatal(err)
+	}
+	if woken, claimErr := f.store.ClaimPromotionEvaluations(ctx, "worker", time.Hour, 1); claimErr != nil || len(woken) != 1 || woken[0].ID != claimed[0].ID {
+		t.Fatalf("the edit must make the waiting row due: %+v, %v", woken, claimErr)
+	}
+	// The row is leased now, still waiting: a later restore leaves its lease alone.
+	edited, err := f.store.GetPromotionRule(ctx, f.rule.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parked, parkErr := f.store.ParkPromotionRule(ctx, f.rule.ID, edited.Version, repository.PromotionRuleAuthorizationLost, "again", events.Event{Type: events.PromotionFailed, RepositoryID: f.target.ID, Version: "y"}); parkErr != nil || !parked {
+		t.Fatalf("parked = %v, %v", parked, parkErr)
+	}
+	if edited, err = f.store.GetPromotionRule(ctx, f.rule.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.store.UpdatePromotionRule(ctx, edited, edited.Version); err != nil {
+		t.Fatal(err)
+	}
+	if held, claimErr := f.store.ClaimPromotionEvaluations(ctx, "other-worker", time.Hour, 1); claimErr != nil || len(held) != 0 {
+		t.Fatalf("a restore took the lease of a row a worker holds: %+v, %v", held, claimErr)
 	}
 }

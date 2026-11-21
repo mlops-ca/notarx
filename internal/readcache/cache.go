@@ -70,7 +70,7 @@ type Options[V any] struct {
 	IsNegative func(error) bool
 	// LeaderError reports a load error that belongs to the request that ran the load and that a follower of the same load must not
 	// inherit (a load that runs on the leader's transaction fails with the state of that transaction). A follower that sees one
-	// loads again on its own. Cancellation and deadline errors always count.
+	// loads again on its own until it leads a load. Cancellation and deadline errors always count, once.
 	LeaderError func(error) bool
 }
 
@@ -360,9 +360,15 @@ func (c *Cache[K, V]) GetVersioned(ctx context.Context, key K, version uint64, l
 		}
 		l := res.(*loaded[V])
 		// A follower must not inherit the cancellation of the leader's request.
-		if l.err != nil && ctx.Err() == nil && attempt == 0 &&
-			(errors.Is(l.err, context.Canceled) || errors.Is(l.err, context.DeadlineExceeded) || (!led && c.opts.LeaderError != nil && c.opts.LeaderError(l.err))) {
-			continue
+		if l.err != nil && ctx.Err() == nil {
+			if attempt == 0 && (errors.Is(l.err, context.Canceled) || errors.Is(l.err, context.DeadlineExceeded)) {
+				continue
+			}
+			// A follower of a load that failed with its leader's own error loads again until it leads a load itself, so
+			// it never fails with the state of another caller's transaction.
+			if !led && c.opts.LeaderError != nil && c.opts.LeaderError(l.err) {
+				continue
+			}
 		}
 		return l.value, l.err
 	}

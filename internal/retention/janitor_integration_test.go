@@ -364,7 +364,7 @@ func fixtures() map[string]fixture {
 	return map[string]fixture{
 		"repository_request_rollup":          {},
 		"promotion_evaluations":              {terminal: map[string]string{"state": "'skipped'"}, live: map[string]string{"state": "'pending'"}},
-		"promotion_evaluations_unclaimed":    {terminal: map[string]string{"state": "'pending'"}, live: map[string]string{"state": "'waiting'"}},
+		"promotion_evaluations_unclaimed":    {terminal: map[string]string{"state": "'waiting'"}, live: map[string]string{"state": "'queued'"}},
 		"webhook_deliveries_succeeded":       {terminal: map[string]string{"state": "'succeeded'", "delivered_at": "now()"}, live: map[string]string{"state": "'pending'", "delivered_at": "NULL", "next_attempt_at": "now()"}},
 		"webhook_deliveries_dead":            {terminal: map[string]string{"state": "'dead'"}, live: map[string]string{"state": "'retrying'", "next_attempt_at": "now()"}},
 		"lifecycle_jobs_done":                {terminal: map[string]string{"state": "'completed'", "kind": "'scan'", "idempotency_key": "md5(random()::text)"}, live: map[string]string{"state": "'running'"}},

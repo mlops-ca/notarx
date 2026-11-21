@@ -115,8 +115,9 @@ channel and by a poll), and for each one:
 
 1. reloads the rule and the artifact and checks the rule is still enabled and active (a disabled rule skips the evaluation; a
    parked rule makes it wait like a failing condition, so the artifacts published meanwhile are promoted once an edit
-   restores the rule, which makes them due at once (one that was being evaluated at that moment is at most a minute
-   late); the evaluation that finds the authority lost waits too, and a wait ends a week after publication);
+   restores the rule, which makes them due at once; the evaluation that finds the authority lost waits too. They hold
+   without polling until a week after publication, when they are dropped; an evaluation that finds the rule active
+   again when it records its wait is looked at again at once);
 2. re-authorizes the run-as service account: it must exist, be active, be able to read the source and write the target.
    A refusal parks the rule in state `authorization_lost`, announces `promotion.failed` with the rule id and the reason, and
    and the evaluation waits (the park, its event and its audit record happen only if the rule is still active at the version
@@ -133,7 +134,8 @@ channel and by a poll), and for each one:
    age condition waits until `published + minAge` (never less than five seconds ahead). Any other failing condition (a
    scan that has not completed or found too much, evidence that is missing, the target's policy, a quarantine) can still
    change, so the evaluation waits and looks again after a quarter of the artifact's age, between one minute and one
-   hour, and is dropped with the reason `condition_failed:<condition>:<reason>` a week after publication. The re-pend on
+   hour, and is dropped with the reason `condition_failed:<condition>:<reason>` a week after the age condition was met (or
+   after publication, without one). A release is checked member by member and the first member that fails decides. The re-pend on
    a new scan result, which makes the recheck immediate, belongs to a later slice;
 5. admits every member against a target resolved once before queueing any, and calls `PromotionService.Request` for each
    member as the service account (admission is not repeated inside the request). Every file of a release announces itself, so
@@ -143,7 +145,7 @@ channel and by a poll), and for each one:
    `unsupported_format`. A refusal by quarantine or the target's admission policy skips the artifact with its code (one audit
    record; the admission policy is checked as a condition first, so this is only a race); A member whose digest the target already
    holds (a completed promotion into it that is newer than the target's tombstone; the provenance, not the target's contents, decides) is a no-op; different bytes at its coordinate fail the evaluation with
-   `conflict` (targets are immutable) and a log line. Quarantine and the target's admission policy still apply: a refusal skips with its code.
+   `conflict` (targets are immutable; an OCI image name holds many digests, so only the exact manifest decides there) and a log line. Quarantine and the target's admission policy still apply: a refusal skips with its code.
 
 The outcome of a row is `queued` (promotion requested; the `artifact_promotions` row shows its progress), `waiting`,
 `skipped` or `failed`, with the reason in `last_reason`. A row that is claimed eight times without an outcome (a worker that dies on it every time) is failed by the claim with
@@ -154,7 +156,7 @@ time the target coordinate was tombstoned, so promoting again after a tombstone 
 promotion whose last attempt failed, was rejected, expired or was cancelled is retried by the next request under its key,
 which writes attempt N+1 under the same key with its own job; a request whose last attempt is queued, running or completed
 returns that attempt. Rows of a worker that died become due again when their two-minute lease ends. Terminal rows are pruned
-after 7 days (1 day on the free tier), and a pending row that was due 30 days ago (7 on the free tier) is dropped too: it
+after 7 days (1 day on the free tier), and a pending or waiting row that was due 30 days ago (7 on the free tier) is dropped too: it
 means no node runs the evaluator, so a deployment that sets `NOTARX_WORKER_KINDS` must include `evaluator` on at least one
 worker, or set `NOTARX_PROMOTION_ENABLED=false` everywhere. `notarx reconcile-events` fans the events it repairs out to the
 rules like a publication does; the age of such an artifact counts from the repaired event. Remote targets are evaluated by the remote push slice; until then an evaluation for a
