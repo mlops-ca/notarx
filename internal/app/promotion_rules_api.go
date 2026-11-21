@@ -197,12 +197,16 @@ func promotionRuleResponse(rule repository.PromotionRule) (adminopenapi.Promotio
 		target.RemoteInstanceId = &id
 		target.RemoteRepository = &rule.RemoteRepository
 	}
-	return adminopenapi.PromotionRule{
+	apiRule := adminopenapi.PromotionRule{
 		Id: uuid.MustParse(rule.ID), Name: rule.Name, SourceRepositoryId: uuid.MustParse(rule.SourceRepositoryID), Target: target,
 		Match: matchToAPI(match), Conditions: conditionsToAPI(conditions), Mode: adminopenapi.PromotionRuleMode("copy"),
-		RunAsServiceAccountId: uuid.MustParse(rule.RunAsServiceAccountID), Enabled: rule.Enabled, Version: rule.Version,
+		RunAsServiceAccountId: uuid.MustParse(rule.RunAsServiceAccountID), Enabled: rule.Enabled, State: adminopenapi.PromotionRuleState(rule.State), Version: rule.Version,
 		CreatedBy: rule.CreatedBy, UpdatedBy: rule.UpdatedBy, CreatedAt: rule.CreatedAt, UpdatedAt: rule.UpdatedAt,
-	}, nil
+	}
+	if rule.StateReason != "" {
+		apiRule.StateReason = &rule.StateReason
+	}
+	return apiRule, nil
 }
 
 func decodePromotionRuleBody(w http.ResponseWriter, r *http.Request, target any) bool {

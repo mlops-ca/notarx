@@ -162,6 +162,8 @@ type MemoryStore struct {
 	webhookDeliveries      map[string]WebhookDelivery
 	remoteInstances        map[string]RemoteInstance
 	promotionRules         map[string]PromotionRule
+	promotionEvaluations   map[string]PromotionEvaluation
+	promotionMatcher       PromotionRuleMatcher
 	localInstanceID        string
 }
 

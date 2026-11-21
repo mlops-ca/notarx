@@ -325,6 +325,32 @@ synthetic dedupe keys. It also serves backfill after a rule is created
 (`backfill: true`) and recovery. A rule may be event-driven, scheduled, or
 both.
 
+Slice 3c implementation decisions. Rule fan-out is `events.RuleFanout`, installed once at startup and called by `events.Emit` and
+`EmitOnce` for `artifact.published`: it reads the enabled rules of the source repository, in any state, from an `internal/readcache` cache of
+compiled matches (scope `promotion_rule`, flushed on every node by statement triggers on `promotion_rules`, bounded by
+`NOTARX_AUTHZ_CACHE_TTL`, served even to a request that asks management reads to bypass the caches) and offers a rule when its `coordinate`
+and `version` can match; refs and frozen properties are not known at publication, so the evaluator checks them, and a rule whose stored
+match cannot be compiled is offered to the evaluator so that it fails with a reason instead of failing the publication. A cache miss reads
+through the publishing transaction's connection, and a follower of a load never inherits the error of the leader's transaction. The insert
+joins `promotion_rules` with `FOR KEY SHARE`, so a rule deleted or disabled since the cache was read gets no row and a delete that commits
+meanwhile cannot fail the foreign key. A parked rule still receives its evaluations: they hold until a week after publication, without
+polling, and the edit that restores the rule makes them due at once. An artifact published on a node whose cache lags a rule change is
+recovered by backfill. The evaluation queue wakes on `notarx_promotion_evaluations` (the quota alert evaluator owns `notarx_evaluations`).
+A claim sets the lease and moves `next_attempt_at` to its expiry, so the abandoned row of a dead worker is due again without a recovery sweep;
+each claim counts an attempt, a claim fails a row that used its 8 attempts (`attempts_exhausted`), and a transient failure retries with a backoff of
+5 seconds doubling to 5 minutes. A rule has a state (`active`, `authorization_lost`, `paused`, column `promotion_rules.state`, read-only in the
+API) set by the system without a version bump, conditionally on the rule version the evaluation read; an edit returns `authorization_lost` to
+`active` (the evaluator parks it again if the account is still unauthorized). The worker kind is `evaluator`. A remote target is skipped with
+`remote_target_not_supported` until slice 8. A target that already holds the digest is detected from completed provenance rows into it that are
+newer than the target's tombstone; bytes that differ from a completed promotion are `conflict` (an OCI image name holds many digests, so only the
+exact manifest decides there); a direct publication into the target that no promotion made is refused by the format's job, not by the
+evaluator. The target's admission policy is evaluated as a condition of every rule. A condition that can still change (a scan, findings above the
+limit, evidence, the target's policy, a quarantine, an open Raw version) makes the evaluation wait and look again, after a quarter of the artifact's
+age between one minute and one hour, until a week after the age condition was met (after publication without one); for `scope: release` the
+conditions hold for every member, checked in order with the first failing member deciding. A versioned Raw file event is evaluated as its version,
+which counts as published when it is sealed; `scope: release` on versioned Raw expands to the files of the version through `ReleaseSet`, and a release of more than
+1000 members fails with `release_too_large`.
+
 ### Provenance and approval
 
 ```

@@ -3305,6 +3305,14 @@ export type PromotionRule = {
   runAsServiceAccountId: string;
   enabled: boolean;
   /**
+   * active rules are evaluated. The evaluator parks a rule as authorization_lost when its run-as service account can no longer run it (deleted, disabled, or without source read or target write) and announces promotion.failed; an edit of the rule returns it to active. paused is the state of a rule whose target became public. The state is set by the system and is not part of an update.
+   */
+  state: "active" | "authorization_lost" | "paused";
+  /**
+   * Why the rule is not active; empty while it is active.
+   */
+  stateReason?: string;
+  /**
    * Increments on every edit.
    */
   version: string;

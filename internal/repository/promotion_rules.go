@@ -47,11 +47,16 @@ type PromotionRule struct {
 	Schedule              json.RawMessage
 	RunAsServiceAccountID string
 	Enabled               bool
-	Version               string
-	CreatedBy             string
-	UpdatedBy             string
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
+	// State is active, authorization_lost or paused; only an active, enabled rule promotes (a parked rule still receives
+	// evaluations, which hold until it is restored). StateReason is
+	// the reason the evaluator or an approver recorded when it parked the rule.
+	State       string
+	StateReason string
+	Version     string
+	CreatedBy   string
+	UpdatedBy   string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 // PromotionRuleQuery pages rules by name. SourceRepositoryIDs, when not nil, restricts the page to rules whose source

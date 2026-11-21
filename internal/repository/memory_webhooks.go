@@ -152,6 +152,7 @@ func (s *MemoryStore) enqueueWebhookEventLocked(event WebhookEvent) WebhookEvent
 		s.eventSeqs = map[string]int64{}
 	}
 	s.eventSeqs[event.ID] = s.eventSeq
+	s.fanOutPromotionEvaluationsLocked(event)
 	for _, subscription := range s.webhookSubscriptions {
 		if !webhookSubscriptionAccepts(subscription, event.Type) {
 			continue

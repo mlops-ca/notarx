@@ -5347,7 +5347,7 @@ PromotionRuleConditions:
     requireProvenance: {type: boolean}
 PromotionRule:
   type: object
-  required: [id, name, sourceRepositoryId, target, match, conditions, mode, runAsServiceAccountId, enabled, version, createdBy, updatedBy, createdAt, updatedAt]
+  required: [id, name, sourceRepositoryId, target, match, conditions, mode, runAsServiceAccountId, enabled, state, version, createdBy, updatedBy, createdAt, updatedAt]
   properties:
     id: {type: string, format: uuid}
     name: {type: string, minLength: 1, maxLength: 128}
@@ -5358,6 +5358,15 @@ PromotionRule:
     mode: {"$ref": "#/PromotionRuleMode"}
     runAsServiceAccountId: {type: string, format: uuid, description: The service account the rule runs as; source read and target write are authorized for it at every evaluation.}
     enabled: {type: boolean}
+    state:
+      type: string
+      enum: [active, authorization_lost, paused]
+      description: >-
+        active rules are evaluated. The evaluator parks a rule as authorization_lost when its run-as service account can no longer
+        run it (deleted, disabled, or without source read or target write) and announces promotion.failed; an edit of the rule
+        returns it to active. paused is the state of a rule whose target became public. The state is set by the system and is
+        not part of an update.
+    stateReason: {type: string, description: Why the rule is not active; empty while it is active.}
     version: {type: string, description: Increments on every edit.}
     createdBy: {type: string}
     updatedBy: {type: string}

@@ -2518,6 +2518,40 @@ CREATE TABLE `promotion_batches` (
   CONSTRAINT `promotion_batches_items_check` CHECK ((((JSON_TYPE(`items`) = 'ARRAY') AND (JSON_LENGTH(`items`) >= 1)) AND (JSON_LENGTH(`items`) <= 100)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `promotion_evaluations` (
+  `attempts` INT NOT NULL DEFAULT 0,
+  `coordinate` TEXT NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `digest` VARCHAR(144) NOT NULL,
+  `event_occurred_at` DATETIME(6) NOT NULL,
+  `event_seq` BIGINT NOT NULL,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `last_reason` TEXT NOT NULL DEFAULT (''),
+  `lease_expires_at` DATETIME(6) NULL,
+  `lease_owner` TEXT NULL,
+  `lease_token` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `next_attempt_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `promotion_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `rule_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `state` TEXT NOT NULL DEFAULT ('pending'),
+  `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `claimable_at` DATETIME(6) GENERATED ALWAYS AS (IF(`state` IN ('pending', 'waiting'), `next_attempt_at`, NULL)) VIRTUAL NULL,
+  `terminal_at` DATETIME(6) GENERATED ALWAYS AS (IF(`state` IN ('queued', 'skipped', 'failed'), `updated_at`, NULL)) VIRTUAL NULL,
+  `waiting_repository_id` CHAR(36) GENERATED ALWAYS AS (IF(`state` = 'waiting', `repository_id`, NULL)) VIRTUAL NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_promotion_evaluations_event_seq_rule_id` (`event_seq`, `rule_id`),
+  KEY `ix_promotion_evaluations_rule_id` (`rule_id`),
+  KEY `ix_promotion_evaluations_claim_idx` (`claimable_at`),
+  KEY `ix_promotion_evaluations_retention_idx` (`terminal_at`),
+  KEY `ix_promotion_evaluations_waiting_idx` (`waiting_repository_id`, `digest`),
+  CONSTRAINT `promotion_evaluations_attempts_check` CHECK ((`attempts` >= 0)),
+  CONSTRAINT `promotion_evaluations_last_reason_check` CHECK ((CHAR_LENGTH(`last_reason`) <= 1024)),
+  CONSTRAINT `promotion_evaluations_lease_expiry_check` CHECK (((`lease_token` IS NULL) = (`lease_expires_at` IS NULL))),
+  CONSTRAINT `promotion_evaluations_lease_owner_check` CHECK (((`lease_owner` IS NULL) = (`lease_token` IS NULL))),
+  CONSTRAINT `promotion_evaluations_state_check` CHECK ((`state` IN ('pending', 'waiting', 'queued', 'skipped', 'failed')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `promotion_rules` (
   `approval` JSON NULL,
   `conditions` JSON NOT NULL DEFAULT (CAST('{}' AS JSON)),
@@ -2532,6 +2566,8 @@ CREATE TABLE `promotion_rules` (
   `run_as_service_account_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
   `schedule` JSON NULL,
   `source_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `state` TEXT NOT NULL DEFAULT ('active'),
+  `state_reason` TEXT NOT NULL DEFAULT (''),
   `target_kind` TEXT NOT NULL,
   `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
   `updated_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -2550,6 +2586,8 @@ CREATE TABLE `promotion_rules` (
   CONSTRAINT `promotion_rules_match_check` CHECK ((JSON_TYPE(`match`) = 'OBJECT')),
   CONSTRAINT `promotion_rules_name_check` CHECK (((CHAR_LENGTH(`name`) >= 1) AND (CHAR_LENGTH(`name`) <= 128))),
   CONSTRAINT `promotion_rules_schedule_check` CHECK (((`schedule` IS NULL) OR (JSON_TYPE(`schedule`) = 'OBJECT'))),
+  CONSTRAINT `promotion_rules_state_check` CHECK ((`state` IN ('active', 'authorization_lost', 'paused'))),
+  CONSTRAINT `promotion_rules_state_reason_check` CHECK ((CHAR_LENGTH(`state_reason`) <= 1024)),
   CONSTRAINT `promotion_rules_version_check` CHECK ((`version` >= 1))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
@@ -3439,6 +3477,7 @@ ALTER TABLE `oci_bound_objects` ADD CONSTRAINT `fk_oci_bound_objects_source_id` 
 ALTER TABLE `oci_group_members` ADD CONSTRAINT `fk_oci_group_members_group_name` FOREIGN KEY (`group_name`) REFERENCES `oci_groups` (`name`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `oci_group_members` ADD CONSTRAINT `fk_oci_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `oci_subject_bindings` ADD CONSTRAINT `fk_oci_subject_bindings_source_id` FOREIGN KEY (`source_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `promotion_evaluations` ADD CONSTRAINT `fk_promotion_evaluations_rule_id` FOREIGN KEY (`rule_id`) REFERENCES `promotion_rules` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_remote_instance_id` FOREIGN KEY (`remote_instance_id`) REFERENCES `remote_instances` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_run_as_service_account_id` FOREIGN KEY (`run_as_service_account_id`) REFERENCES `service_accounts` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `promotion_rules` ADD CONSTRAINT `fk_promotion_rules_source_repository_id` FOREIGN KEY (`source_repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;

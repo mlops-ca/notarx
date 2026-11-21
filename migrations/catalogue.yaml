@@ -3338,6 +3338,48 @@ tables:
       created_at: now()
     checks:
       promotion_batches_items_check: ((jsonb_typeof(items) = 'array'::text) AND (jsonb_array_length(items) >= 1) AND (jsonb_array_length(items) <= 100))
+  promotion_evaluations:
+    columns:
+      attempts: int32
+      coordinate: text
+      created_at: timestamp
+      digest: text
+      event_occurred_at: timestamp
+      event_seq: int64
+      id: uuid
+      last_reason: text
+      lease_expires_at: timestamp?
+      lease_owner: text?
+      lease_token: uuid?
+      next_attempt_at: timestamp
+      promotion_id: uuid?
+      repository_id: uuid
+      rule_id: uuid
+      state: text
+      updated_at: timestamp
+    primaryKey: [id]
+    unique: [[event_seq, rule_id]]
+    foreignKeys:
+      - rule_id -> promotion_rules(id) on delete cascade
+    defaults:
+      attempts: "0"
+      created_at: now()
+      last_reason: ''''''
+      next_attempt_at: now()
+      state: '''pending'''
+      updated_at: now()
+    indexes:
+      - rule_id
+    special:
+      promotion_evaluations_claim_idx: USING btree (next_attempt_at) WHERE (state = ANY (ARRAY['pending'::text, 'waiting'::text]))
+      promotion_evaluations_retention_idx: USING btree (updated_at) WHERE (state = ANY (ARRAY['queued'::text, 'skipped'::text, 'failed'::text]))
+      promotion_evaluations_waiting_idx: USING btree (repository_id, digest) WHERE (state = 'waiting'::text)
+    checks:
+      promotion_evaluations_attempts_check: (attempts >= 0)
+      promotion_evaluations_last_reason_check: (length(last_reason) <= 1024)
+      promotion_evaluations_lease_expiry_check: ((lease_token IS NULL) = (lease_expires_at IS NULL))
+      promotion_evaluations_lease_owner_check: ((lease_owner IS NULL) = (lease_token IS NULL))
+      promotion_evaluations_state_check: (state = ANY (ARRAY['pending'::text, 'waiting'::text, 'queued'::text, 'skipped'::text, 'failed'::text]))
   promotion_rules:
     columns:
       approval: json?
@@ -3353,6 +3395,8 @@ tables:
       run_as_service_account_id: uuid
       schedule: json?
       source_repository_id: uuid
+      state: text
+      state_reason: text
       target_kind: text
       target_repository_id: uuid?
       updated_at: timestamp
@@ -3369,6 +3413,8 @@ tables:
       conditions: '''{}'''
       created_at: now()
       enabled: "true"
+      state: '''active'''
+      state_reason: ''''''
       updated_at: now()
       version: "1"
     indexes:
@@ -3385,6 +3431,8 @@ tables:
       promotion_rules_match_check: (jsonb_typeof(match) = 'object'::text)
       promotion_rules_name_check: ((length(name) >= 1) AND (length(name) <= 128))
       promotion_rules_schedule_check: ((schedule IS NULL) OR (jsonb_typeof(schedule) = 'object'::text))
+      promotion_rules_state_check: (state = ANY (ARRAY['active'::text, 'authorization_lost'::text, 'paused'::text]))
+      promotion_rules_state_reason_check: (length(state_reason) <= 1024)
       promotion_rules_target_check: (((target_kind = 'local'::text) AND (target_repository_id IS NOT NULL) AND (remote_instance_id IS NULL) AND (remote_repository IS NULL) AND (target_repository_id <> source_repository_id)) OR ((target_kind = 'remote'::text) AND (target_repository_id IS NULL) AND (remote_instance_id IS NOT NULL) AND (remote_repository IS NOT NULL) AND (length(remote_repository) >= 1) AND (length(remote_repository) <= 255)))
       promotion_rules_version_check: (version >= 1)
   public_access_policy:
@@ -4435,6 +4483,10 @@ triggers:
   lifecycle_jobs_notify_insert: 'lifecycle_jobs: AFTER INSERT ON lifecycle_jobs FOR EACH ROW WHEN ((new.state = ANY (ARRAY[''pending''::text, ''retrying''::text]))) EXECUTE FUNCTION notarx_notify_job_kind()'
   lifecycle_jobs_notify_update: 'lifecycle_jobs: AFTER UPDATE OF state, next_attempt_at ON lifecycle_jobs FOR EACH ROW WHEN (((new.state = ANY (ARRAY[''pending''::text, ''retrying''::text])) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_job_kind()'
   lifecycle_jobs_promotion_state: 'lifecycle_jobs: AFTER UPDATE OF state ON lifecycle_jobs FOR EACH ROW WHEN (((new.kind = ''promotion''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION promotion_job_state_change()'
+  promotion_evaluations_notify_insert: 'promotion_evaluations: AFTER INSERT ON promotion_evaluations FOR EACH ROW WHEN ((new.state = ''pending''::text)) EXECUTE FUNCTION notarx_notify_queue(''notarx_promotion_evaluations'')'
+  promotion_rules_notify_cache_delete: 'promotion_rules: AFTER DELETE ON promotion_rules REFERENCING OLD TABLE AS old_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''promotion_rule'')'
+  promotion_rules_notify_cache_insert: 'promotion_rules: AFTER INSERT ON promotion_rules REFERENCING NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''promotion_rule'')'
+  promotion_rules_notify_cache_update: 'promotion_rules: AFTER UPDATE ON promotion_rules REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows FOR EACH STATEMENT EXECUTE FUNCTION notarx_notify_cache_statement_scope(''promotion_rule'')'
   public_access_policy_notify_cache: 'public_access_policy: AFTER INSERT OR DELETE OR UPDATE ON public_access_policy FOR EACH ROW EXECUTE FUNCTION notarx_notify_cache(''policy'', '''')'
   replication_plans_notify_insert: 'replication_plans: AFTER INSERT ON replication_plans FOR EACH ROW WHEN ((new.state = ANY (ARRAY[''pending''::text, ''failed''::text]))) EXECUTE FUNCTION notarx_notify_queue(''notarx_replication_plans'')'
   replication_plans_notify_update: 'replication_plans: AFTER UPDATE OF state, next_attempt_at ON replication_plans FOR EACH ROW WHEN (((new.state = ''pending''::text) AND (old.state IS DISTINCT FROM new.state))) EXECUTE FUNCTION notarx_notify_queue(''notarx_replication_plans'')'

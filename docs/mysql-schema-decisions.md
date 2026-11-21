@@ -252,6 +252,9 @@ Every PostgreSQL partial, expression, trigram or operator-class index and what M
 | nexus_migration_batches | nexus_migration_schedule_occurrence | unique-flag | a unique index over a predicate becomes a generated column that is NULL outside it (ADR 0022) |
 | nexus_migration_schedules | nexus_migration_schedules_due | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
 | oci_discovery_snapshots | oci_discovery_snapshots_body_key_idx | full | a partial index becomes a full index: MySQL has no partial index and the table is small or the predicate selective enough |
+| promotion_evaluations | promotion_evaluations_claim_idx | generated | the claim reads the pending and waiting rows by due time: a virtual column that is next_attempt_at for those two states and NULL otherwise, indexed, so the index stays as small as the PostgreSQL partial index (ADR 0023 section 5) |
+| promotion_evaluations | promotion_evaluations_retention_idx | generated | the retention janitor reads the terminal rows by age: a virtual column that is updated_at for a queued, skipped or failed row and NULL otherwise, indexed (ADR 0023 section 5) |
+| promotion_evaluations | promotion_evaluations_waiting_idx | generated | the scan-completed re-pend reads the waiting rows of one repository and digest: a virtual column that is the repository id for a waiting row and NULL otherwise, indexed with the digest (ADR 0023 section 5) |
 | promotion_rules | promotion_rules_name_bytes_idx | full | an operator class or collation PostgreSQL needs for prefix search: MySQL's bin collation serves LIKE 'x%' from a plain index |
 | remote_instances | remote_instances_name_bytes_idx | full | an operator class or collation PostgreSQL needs for prefix search: MySQL's bin collation serves LIKE 'x%' from a plain index |
 | replication_checkpoints | replication_checkpoints_updated_at_brin_idx | drop | BRIN has no MySQL form: time-ordered scans use the primary key and the retention indexes |
@@ -321,6 +324,10 @@ Each PostgreSQL trigger is dropped (polling or counters replace it), ported to a
 | lifecycle_jobs | lifecycle_jobs_notify_insert | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
 | lifecycle_jobs | lifecycle_jobs_notify_update | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
 | lifecycle_jobs | lifecycle_jobs_promotion_state | ported | the MySQL lifecycle store updates the provenance row and enqueues artifact.promoted or promotion.failed in the same transaction as the job state change (store group D); only the application writes these tables |
+| promotion_evaluations | promotion_evaluations_notify_insert | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
+| promotion_rules | promotion_rules_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| promotion_rules | promotion_rules_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| promotion_rules | promotion_rules_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | public_access_policy | public_access_policy_notify_cache | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | replication_plans | cargo_replication_state_webhook_after_update | ported | the MySQL lifecycle and replication stores enqueue the webhook event in the same transaction as the state change (store group D); only the application writes these tables |
 | replication_plans | replication_plans_notify_insert | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |

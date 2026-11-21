@@ -13,7 +13,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/ids"
@@ -104,6 +106,69 @@ func (e Event) Validate() error {
 // DB is the part of a transaction Emit needs.
 type DB interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// RuleFanout names the promotion rules that evaluate an event (ADR 0021, Evaluator). It reads the enabled rules of the
+// event's source repository from an in-process cache (ADR 0023 section 6), so a publication that no rule can match does not
+// query the rules table. On a cache miss it loads the rules through tx, the connection of the publishing transaction: a
+// second pool connection taken while the transaction holds one could deadlock a saturated pool. The cache lags a rule
+// change on another node by at most NOTARX_AUTHZ_CACHE_TTL; an artifact published in that window is evaluated by a rule
+// created in it only through backfill (ADR 0021, Rules).
+type RuleFanout interface {
+	// MatchingRules returns the ids of the enabled rules whose match can accept the event. The evaluator re-checks the
+	// match against the artifact, so an implementation may over-approximate what it cannot know at publication (the
+	// tags that point at the artifact), and must never leave out a rule that could match.
+	MatchingRules(ctx context.Context, tx DB, event Event) ([]string, error)
+}
+
+// fanOutTypes are the event types that start rule evaluations. artifact.scan.completed joins them with the conditions
+// slice, which re-pends waiting evaluations.
+var fanOutTypes = map[Type]bool{ArtifactPublished: true}
+
+var ruleFanout atomic.Pointer[RuleFanout]
+
+// SetRuleFanout installs the process-wide rule fan-out that Emit and EmitOnce call inside the emitting transaction, or
+// removes it when f is nil (promotion disabled). It is set once at startup.
+func SetRuleFanout(f RuleFanout) {
+	if f == nil {
+		ruleFanout.Store(nil)
+		return
+	}
+	ruleFanout.Store(&f)
+}
+
+// fanOutStatement inserts one pending evaluation per rule of the event that is still enabled. A parked rule gets its
+// evaluations too: they wait for the rule to be restored. The rule set came from a cache that may be a notification behind,
+// so the join to promotion_rules drops a rule that was deleted or disabled since, FOR KEY SHARE makes a delete that commits
+// while the statement runs wait and be seen instead of failing the rule_id foreign key, and ON CONFLICT makes a second
+// emission of the same event insert nothing.
+const fanOutStatement = `INSERT INTO promotion_evaluations (id,event_seq,event_occurred_at,rule_id,repository_id,coordinate,digest,state,next_attempt_at,created_at,updated_at)
+SELECT gen_random_uuid(),e.seq,e.occurred_at,pr.id,e.repository_id,COALESCE(e.coordinate,''),COALESCE(e.digest,''),'pending',clock_timestamp(),clock_timestamp(),clock_timestamp()
+FROM domain_events e JOIN promotion_rules pr ON pr.source_repository_id=e.repository_id AND pr.enabled AND pr.id::text=ANY($3::text[])
+WHERE e.id=$1::uuid AND e.occurred_at=$2
+FOR KEY SHARE OF pr
+ON CONFLICT (event_seq,rule_id) DO NOTHING`
+
+// fanOut inserts the evaluations of a written event in the emitting transaction. A failure fails the transaction: a
+// silently missed evaluation would break the chain guarantee.
+func fanOut(ctx context.Context, tx DB, event Event, occurredAt time.Time) error {
+	fanout := ruleFanout.Load()
+	if fanout == nil || !fanOutTypes[event.Type] || event.RepositoryID == "" {
+		return nil
+	}
+	rules, err := (*fanout).MatchingRules(ctx, tx, event)
+	if err != nil {
+		return fmt.Errorf("events: promotion rule fan-out: %w", err)
+	}
+	if len(rules) == 0 {
+		return nil
+	}
+	if _, err = tx.ExecContext(ctx, fanOutStatement, event.ID, occurredAt, rules); err != nil {
+		return fmt.Errorf("events: insert promotion evaluations: %w", err)
+	}
+	return nil
 }
 
 // Prepare returns the event with its id and payload filled in.
@@ -155,7 +220,18 @@ func Emit(ctx context.Context, tx DB, event Event) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Written: occurredAt.Valid, OccurredAt: occurredAt.Time}, nil
+	return written(ctx, tx, event, occurredAt)
+}
+
+// written builds the Result of an emission and starts the rule evaluations of an event that was written.
+func written(ctx context.Context, tx DB, event Event, occurredAt sql.NullTime) (Result, error) {
+	if !occurredAt.Valid {
+		return Result{}, nil
+	}
+	if err := fanOut(ctx, tx, event, occurredAt.Time); err != nil {
+		return Result{}, err
+	}
+	return Result{Written: true, OccurredAt: occurredAt.Time}, nil
 }
 
 const emitOnceStatement = `SELECT emit_domain_event_once($1::uuid,$2,NULLIF($3,'')::uuid,$4,$5,$6,$7::jsonb,$8,$9,$10)`
@@ -177,5 +253,5 @@ func EmitOnce(ctx context.Context, tx DB, event Event, floor time.Time) (Result,
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{Written: occurredAt.Valid, OccurredAt: occurredAt.Time}, nil
+	return written(ctx, tx, event, occurredAt)
 }

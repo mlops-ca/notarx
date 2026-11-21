@@ -76,7 +76,8 @@ NOTARX_WORKER_KINDS=reclaim,replication
 `go`, and `apt`. APT currently runs only reclaim for management-preview uploads;
 this does not make Hosted APT public. Job kinds include `promotion`, `replication`,
 `retention`, `reclaim`, `intelligence`, `deletion`, `scan`, `recovery`, `cache`,
-`audit`, `webhook`, and `email`. No worker emits or repairs `artifact.published`: every format
+`audit`, `webhook`, `email` and `evaluator` (the promotion rule evaluator of ADR 0021, see
+[Promotion rules](promotion-rules.md#evaluation)). No worker emits or repairs `artifact.published`: every format
 writes it in its publish transaction, and `notarx reconcile-events` is the repair tool (see the
 webhook delivery contract).
 
@@ -221,6 +222,7 @@ newer record) and the provenance tables `artifact_promotions`,
 | `resolver_audit_log` (partition drop) | 90 d | 7 d |
 | `security_audit_log` (partition drop) | 730 d | 90 d |
 | `domain_events` (partition drop; `NOTARX_EVENTS_RETENTION`) | 14 d | 3 d |
+| `promotion_evaluations` | queued, skipped or failed 7 d; a pending or waiting row due 30 d ago (no evaluator runs) | 1 d; 7 d |
 | `repository_request_rollup` | 400 d | 400 d |
 | `webhook_deliveries` | succeeded 14 d, dead 14 d | 3 d, 3 d |
 | `lifecycle_jobs` | completed or cancelled 7 d, failed 30 d | 1 d, 7 d |
@@ -252,8 +254,7 @@ audit table is independent of the resolver audit table. The console-editable aud
 retention policy overrides `resolver_audit_log` once an administrator has edited
 it; the baseline policy is now enabled with 90 days, and the 1000 row cap of audit
 cleanup jobs is lifted. Tables created by ADRs 0018 to 0021 and 0027
-(`promotion_evaluations`, `domain_events`, import sessions, `hf_refs`) join the
-registry in the slice that creates them. Tombstone tables are not pruned yet.
+(import sessions) join the registry in the slice that creates them. Tombstone tables are not pruned yet.
 Metrics: `notarx_retention_deleted_rows_total{table}` and
 `notarx_retention_lag_seconds{table}` (how far past its keep time the oldest eligible
 row is; alert when it keeps growing).

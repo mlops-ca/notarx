@@ -52,6 +52,7 @@ func (s *MemoryStore) CreatePromotionRule(ctx context.Context, rule PromotionRul
 	now := time.Now().UTC()
 	rule.Version, rule.CreatedAt, rule.UpdatedAt = "1", now, now
 	rule.UpdatedBy = rule.CreatedBy
+	rule.State, rule.StateReason = PromotionRuleActive, ""
 	s.promotionRules[rule.ID] = clonePromotionRule(rule)
 	return clonePromotionRule(rule), nil
 }
@@ -102,6 +103,11 @@ func (s *MemoryStore) UpdatePromotionRule(ctx context.Context, rule PromotionRul
 		return PromotionRule{}, ErrVersionConflict
 	}
 	rule.SourceRepositoryID, rule.CreatedBy, rule.CreatedAt = current.SourceRepositoryID, current.CreatedBy, current.CreatedAt
+	// An edit returns a rule whose run-as account lost its authority to active; any other parked state stays.
+	rule.State, rule.StateReason = current.State, current.StateReason
+	if current.State == PromotionRuleAuthorizationLost {
+		rule.State, rule.StateReason = PromotionRuleActive, ""
+	}
 	if !s.promotionRuleReferencesLocked(rule) {
 		return PromotionRule{}, ErrPromotionRuleReference
 	}
@@ -115,6 +121,16 @@ func (s *MemoryStore) UpdatePromotionRule(ctx context.Context, rule PromotionRul
 	}
 	rule.Version, rule.UpdatedAt = nextHostedGroupVersion(current.Version), time.Now().UTC()
 	s.promotionRules[rule.ID] = clonePromotionRule(rule)
+	if rule.State == PromotionRuleActive && current.State != PromotionRuleActive {
+		// An edit is the operator's statement that the rule is ready again; the evaluator parks it again if it is not. What
+		// waited for the rule is due now, except a row a worker holds.
+		for id, evaluation := range s.promotionEvaluations {
+			if evaluation.RuleID == rule.ID && evaluation.State == PromotionEvaluationWaiting && evaluation.LeaseToken == "" {
+				evaluation.NextAttemptAt, evaluation.UpdatedAt = rule.UpdatedAt, rule.UpdatedAt
+				s.promotionEvaluations[id] = evaluation
+			}
+		}
+	}
 	return clonePromotionRule(rule), nil
 }
 
@@ -128,6 +144,11 @@ func (s *MemoryStore) DeletePromotionRule(ctx context.Context, id string, audit 
 		return err
 	}
 	delete(s.promotionRules, id)
+	for evaluationID, evaluation := range s.promotionEvaluations {
+		if evaluation.RuleID == id {
+			delete(s.promotionEvaluations, evaluationID)
+		}
+	}
 	return nil
 }
 
