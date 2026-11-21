@@ -44,6 +44,12 @@ func TestNuGetReplicationCanonicalPlanIdentityAndBounds(t *testing.T) {
 	if _, err = dist.NewJob(p, "service-account:"+uuid.NewString(), "service_account_credential", "", "key"); !errors.Is(err, dist.ErrInvalid) {
 		t.Fatal("service actor without revocable credential accepted")
 	}
+	if _, err = dist.NewJob(p, "service-account:"+uuid.NewString(), "workload_federation", "", "key"); !errors.Is(err, dist.ErrInvalid) {
+		t.Fatal("workload actor without a trust policy accepted")
+	}
+	if _, err = dist.NewJob(p, "service-account:"+uuid.NewString(), "workload_federation", uuid.NewString(), "key"); err != nil {
+		t.Fatalf("workload actor with a trust policy: %v", err)
+	}
 	a, _ := dist.NewJob(p, "operator", "static_admin", "", "key")
 	b, _ := dist.NewJob(reverse, "operator", "static_admin", "", "key")
 	if a.ID != b.ID || a.PlanDigest != b.PlanDigest || !dist.ValidNewJob(a) {

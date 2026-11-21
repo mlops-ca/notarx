@@ -60,3 +60,6 @@ migrations:
   000018_scim_auth_cache_notifications.sql:
     dialect: postgres
     reason: statement-level NOTIFY triggers on the SCIM token and identity provider tables; MySQL polls cache_epochs instead
+  000019_workload_replication_actor.sql:
+    dialect: postgres
+    reason: rewrites the actor_kind checks of the Helm, NuGet and RubyGems replication jobs; the catalogue carries the checks into the MySQL baseline

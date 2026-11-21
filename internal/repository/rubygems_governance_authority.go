@@ -84,6 +84,12 @@ func (s *MemoryStore) rubyGemsGovernanceAuthorityLocked(ctx context.Context, id 
 			}
 			break
 		}
+	case WorkloadActorKind:
+		w := s.WorkloadAuthorityLocked(in.Actor, in.CredentialID)
+		a.Active = w.Active
+		if !w.ValidUntil.IsZero() {
+			a.ValidUntil = RubyGemsEarlierAuthorityExpiry(a.ValidUntil, w.ValidUntil)
+		}
 	case "api_key", "service_account_credential":
 		keyID := strings.TrimPrefix(in.Actor, "api-key:")
 		accountID := ""

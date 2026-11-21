@@ -144,11 +144,11 @@ func NewJob(plan Plan, actor, kind, credential, key string) (Job, error) {
 		return Job{}, ErrInvalid
 	}
 	switch kind {
-	case "static_admin", "static_resolver", "local_session", "api_key", "service_account_credential", "oidc":
+	case "static_admin", "static_resolver", "local_session", "api_key", "service_account_credential", "oidc", "workload_federation":
 	default:
 		return Job{}, ErrInvalid
 	}
-	if kind == "service_account_credential" {
+	if kind == "service_account_credential" || kind == "workload_federation" {
 		if _, err := uuid.Parse(credential); err != nil {
 			return Job{}, ErrInvalid
 		}

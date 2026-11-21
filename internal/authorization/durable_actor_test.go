@@ -2,6 +2,28 @@ package authorization
 
 import "testing"
 
+func TestDurablePrincipalWorkloadFederation(t *testing.T) {
+	enabled := Authenticator{Workload: &WorkloadAuthenticator{}}
+	for _, tt := range []struct {
+		name, actor string
+		auth        Authenticator
+		active      bool
+		want        bool
+	}{
+		{"active", "service-account:account", enabled, true, true},
+		{"policy, issuer or account ended", "service-account:account", enabled, false, false},
+		{"federation disabled", "service-account:account", Authenticator{}, true, false},
+		{"not a service account", "user:operator", enabled, true, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			p, ok := tt.auth.DurablePrincipal(tt.actor, AuthenticationWorkloadFederation, "", tt.active, false)
+			if ok != tt.want || ok && (p.Admin || p.Role != "" || p.AuthenticationKind != AuthenticationWorkloadFederation) {
+				t.Fatalf("principal=%+v allowed=%t", p, ok)
+			}
+		})
+	}
+}
+
 func TestDurablePrincipalUsesCurrentIdentityAndAuthority(t *testing.T) {
 	auth := Authenticator{AdminToken: "current-admin-secret", AdminActor: "current-admin", ResolverToken: "current-reader-secret", ResolverActor: "current-reader"}
 	for _, tt := range []struct {

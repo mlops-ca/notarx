@@ -120,7 +120,7 @@ func helmReplicationActorValid(j dist.Job) bool {
 		return strings.HasPrefix(j.Actor, "user:")
 	case "api_key":
 		return strings.HasPrefix(j.Actor, "api-key:")
-	case "service_account_credential":
+	case "service_account_credential", WorkloadActorKind:
 		return strings.HasPrefix(j.Actor, "service-account:") && j.CredentialID != ""
 	}
 	return false

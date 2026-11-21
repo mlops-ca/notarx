@@ -1828,7 +1828,7 @@ tables:
       native_helm_replication_claim: USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]))
     checks:
       native_helm_replication_jobs_actor_check: ((length(actor) >= 1) AND (length(actor) <= 512))
-      native_helm_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text]))
+      native_helm_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text, 'workload_federation'::text]))
       native_helm_replication_jobs_check: (source_repository_id <> target_repository_id)
       native_helm_replication_jobs_check1: ((state = 'running'::text) = ((lease_owner <> ''::text) AND (lease_token <> ''::text) AND (lease_until IS NOT NULL)))
       native_helm_replication_jobs_lease_fence_check: (lease_fence >= 0)
@@ -2354,7 +2354,7 @@ tables:
       native_nuget_replication_claim: USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]))
     checks:
       native_nuget_replication_jobs_actor_check: ((length(actor) >= 1) AND (length(actor) <= 512))
-      native_nuget_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text]))
+      native_nuget_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text, 'workload_federation'::text]))
       native_nuget_replication_jobs_check: (source_repository_id <> target_repository_id)
       native_nuget_replication_jobs_check1: ((state = 'running'::text) = ((lease_owner <> ''::text) AND (lease_token <> ''::text) AND (lease_until IS NOT NULL)))
       native_nuget_replication_jobs_lease_fence_check: (lease_fence >= 0)
@@ -2806,7 +2806,7 @@ tables:
       native_rubygems_replication_claim: USING btree (created_at, id) WHERE (state = ANY (ARRAY['queued'::text, 'running'::text]))
     checks:
       native_rubygems_replication_jobs_actor_check: ((length(actor) >= 1) AND (length(actor) <= 256))
-      native_rubygems_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text]))
+      native_rubygems_replication_jobs_actor_kind_check: (actor_kind = ANY (ARRAY['static_admin'::text, 'static_resolver'::text, 'local_session'::text, 'oidc'::text, 'api_key'::text, 'service_account_credential'::text, 'workload_federation'::text]))
       native_rubygems_replication_jobs_check: (source_repository_id <> target_repository_id)
       native_rubygems_replication_jobs_check1: ((state = 'running'::text) = ((lease_owner <> ''::text) AND (lease_token <> ''::text) AND (lease_until IS NOT NULL)))
       native_rubygems_replication_jobs_lease_fence_check: (lease_fence >= 0)
