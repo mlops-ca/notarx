@@ -39,6 +39,7 @@ func TestCredentialAndActorShape(t *testing.T) {
 		{StaticAdmin, "admin", id, true, false},
 		{LocalSession, "user:a", "", true, true},
 		{OIDC, "a", "", false, true},
+		{LocalSession, "user:", "", false, true},
 		{APIKey, "api-key:" + id, "", true, true},
 		{APIKey, "user:a", "", false, true},
 		{ServiceAccountCredential, "service-account:" + id, id, true, true},

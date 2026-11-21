@@ -204,9 +204,9 @@ func (a Authenticator) authenticateCredential(ctx context.Context, header string
 		if err == nil && user.State == repository.UserActive && versionMatches && a.userSessionIsActive(ctx, userID, sessionID) {
 			role := Role(user.Role)
 			if user.MustChangePassword {
-				return Principal{Actor: "user:" + user.Name, AuthenticationKind: AuthenticationLocalSession, MustChangePassword: true, UserID: user.ID, SessionID: sessionID}, true
+				return Principal{Actor: durableactor.UserActorPrefix + user.Name, AuthenticationKind: AuthenticationLocalSession, MustChangePassword: true, UserID: user.ID, SessionID: sessionID}, true
 			}
-			return Principal{Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role, AuthenticationKind: AuthenticationLocalSession, UserID: user.ID, SessionID: sessionID}, true
+			return Principal{Actor: durableactor.UserActorPrefix + user.Name, Admin: role == RoleAdmin, Role: role, AuthenticationKind: AuthenticationLocalSession, UserID: user.ID, SessionID: sessionID}, true
 		}
 	}
 	if principal, ok := a.Workload.Authenticate(ctx, token, ""); ok {
@@ -248,14 +248,14 @@ func (a Authenticator) oidcPrincipal(ctx context.Context, identity OIDCIdentity)
 			role := Role(user.Role)
 			if user.MustChangePassword {
 				return Principal{
-					Actor: "user:" + user.Name, RepositoryPatterns: a.RepositoryReaders["user:"+user.Name],
+					Actor: durableactor.UserActorPrefix + user.Name, RepositoryPatterns: a.RepositoryReaders[durableactor.UserActorPrefix+user.Name],
 					AuthenticationKind: AuthenticationOIDC, MustChangePassword: true, UserID: user.ID,
 				}, true
 			}
 			a.ClaimsGroups.Refresh(ctx, identity, user.ID)
 			return Principal{
-				Actor: "user:" + user.Name, Admin: role == RoleAdmin, Role: role,
-				RepositoryPatterns: a.RepositoryReaders["user:"+user.Name], AuthenticationKind: AuthenticationOIDC,
+				Actor: durableactor.UserActorPrefix + user.Name, Admin: role == RoleAdmin, Role: role,
+				RepositoryPatterns: a.RepositoryReaders[durableactor.UserActorPrefix+user.Name], AuthenticationKind: AuthenticationOIDC,
 				OIDCAdminSubject: identity.AdminSubject, UserID: user.ID,
 			}, true
 		}
@@ -272,10 +272,10 @@ func (a Authenticator) oidcPrincipal(ctx context.Context, identity OIDCIdentity)
 }
 
 func (a Authenticator) principalForTokenActor(ctx context.Context, actor string) (Principal, bool) {
-	if !strings.HasPrefix(actor, "user:") || a.Users == nil {
+	if !strings.HasPrefix(actor, durableactor.UserActorPrefix) || a.Users == nil {
 		return a.PrincipalForActor(actor), true
 	}
-	name := strings.TrimPrefix(actor, "user:")
+	name := strings.TrimPrefix(actor, durableactor.UserActorPrefix)
 	user, err := a.Users.GetUserByName(ctx, name)
 	if err != nil || user.State != repository.UserActive {
 		return Principal{}, false
@@ -332,13 +332,13 @@ func (a Authenticator) apiKeyPrincipal(ctx context.Context, token string) (Princ
 			return Principal{}, false
 		}
 		return Principal{
-			Actor:              "service-account:" + account.ID,
+			Actor:              durableactor.ServiceAccountActorPrefix + account.ID,
 			CredentialID:       key.ID,
 			AuthenticationKind: AuthenticationServiceAccountCredential,
 		}, true
 	}
 	role := RoleFromRoles(key.Roles)
-	return Principal{Actor: "api-key:" + key.ID, Admin: role == RoleAdmin, Role: role, AuthenticationKind: AuthenticationAPIKey}, true
+	return Principal{Actor: durableactor.APIKeyActorPrefix + key.ID, Admin: role == RoleAdmin, Role: role, AuthenticationKind: AuthenticationAPIKey}, true
 }
 
 // ResolverPasswordMatches validates a resolver secret without exposing the
@@ -628,11 +628,11 @@ func (a Authenticator) webSessionPrincipal(ctx context.Context, token string) (P
 	if json.Unmarshal(raw, &claims) != nil || claims.Actor == "" || claims.Authentication != AuthenticationOIDC || claims.Role != "" && !validGatewayRole(claims.Role) || !validOIDCMetadata(claims.Authentication, claims.OIDCAdminSubject) {
 		return Principal{}, false
 	}
-	if strings.HasPrefix(claims.Actor, "user:") {
+	if strings.HasPrefix(claims.Actor, durableactor.UserActorPrefix) {
 		if a.Users == nil {
 			return Principal{}, false
 		}
-		user, err := a.Users.GetUserByName(ctx, strings.TrimPrefix(claims.Actor, "user:"))
+		user, err := a.Users.GetUserByName(ctx, strings.TrimPrefix(claims.Actor, durableactor.UserActorPrefix))
 		versionMatches := claims.SessionVersion == user.SessionVersion || claims.SessionVersion == 0 && user.SessionVersion == 1
 		if err != nil || user.State != repository.UserActive || !versionMatches || !a.userSessionIsActive(ctx, user.ID, claims.SessionID) {
 			return Principal{}, false
@@ -763,7 +763,7 @@ func (a Authenticator) principalToken(ctx context.Context, token string) (Princi
 	if json.Unmarshal(raw, &claims) != nil || claims.Actor == "" {
 		return Principal{}, false
 	}
-	if strings.HasPrefix(claims.Actor, "user:") {
+	if strings.HasPrefix(claims.Actor, durableactor.UserActorPrefix) {
 		return a.principalForTokenActor(ctx, claims.Actor)
 	}
 	if claims.Role != "" && !validGatewayRole(claims.Role) {
@@ -776,7 +776,7 @@ func (a Authenticator) principalToken(ctx context.Context, token string) (Princi
 		return Principal{}, false
 	}
 	if claims.Authentication == AuthenticationServiceAccountCredential {
-		const prefix = "service-account:"
+		const prefix = durableactor.ServiceAccountActorPrefix
 		if a.ServiceAccounts == nil || !strings.HasPrefix(claims.Actor, prefix) {
 			return Principal{}, false
 		}

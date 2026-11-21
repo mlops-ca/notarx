@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	"github.com/mlops-ca/notarx/internal/repository"
 	domain "github.com/mlops-ca/notarx/internal/rubygemspublication"
 )
@@ -40,11 +41,11 @@ func (governanceGrants) DeleteRepositoryGrant(context.Context, string, string, s
 // potentially newer database row. No token material crosses the persistence port.
 func (m *Module) governanceIdentity(r *http.Request, p authorization.Principal) (repository.RubyGemsGovernanceIdentity, error) {
 	in := repository.RubyGemsGovernanceIdentity{Actor: p.Actor, Kind: string(p.AuthenticationKind), CredentialID: p.CredentialID, UserID: p.UserID, SessionID: p.SessionID}
-	if (p.AuthenticationKind == authorization.AuthenticationLocalSession || p.AuthenticationKind == authorization.AuthenticationOIDC) && strings.HasPrefix(p.Actor, "user:") && in.UserID == "" {
+	if (p.AuthenticationKind == authorization.AuthenticationLocalSession || p.AuthenticationKind == authorization.AuthenticationOIDC) && strings.HasPrefix(p.Actor, durableactor.UserActorPrefix) && in.UserID == "" {
 		if m.auth.Users == nil {
 			return in, domain.ErrAccessDenied
 		}
-		u, err := m.auth.Users.GetUserByName(r.Context(), strings.TrimPrefix(p.Actor, "user:"))
+		u, err := m.auth.Users.GetUserByName(r.Context(), strings.TrimPrefix(p.Actor, durableactor.UserActorPrefix))
 		if err != nil {
 			return in, domain.ErrAccessDenied
 		}

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -66,7 +67,7 @@ func (a Authenticator) AuthenticateConanToken(ctx context.Context, header, repos
 			return Principal{}, false
 		}
 		key, err := a.APIKeys.FindActiveAPIKeyByHash(ctx, claims.Credential)
-		if err != nil || key.ServiceAccountID == "" || claims.Actor != "service-account:"+key.ServiceAccountID {
+		if err != nil || key.ServiceAccountID == "" || claims.Actor != durableactor.ServiceAccountActorPrefix+key.ServiceAccountID {
 			return Principal{}, false
 		}
 		account, err := a.ServiceAccounts.GetServiceAccount(ctx, key.ServiceAccountID)

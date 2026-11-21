@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/authorization"
-	"github.com/mlops-ca/notarx/internal/durableactor"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
@@ -113,10 +112,6 @@ func (m *Module) previewReplication(w http.ResponseWriter, r *http.Request, p au
 			return
 		}
 		subject := dist.Subject{Actor: identity.Actor, Kind: identity.Kind, CredentialID: identity.CredentialID, UserID: identity.UserID, SessionID: identity.SessionID, SessionVersion: identity.SessionVersion, ValidUntil: identity.ValidUntil}
-		if durableactor.ClassOf(subject.Kind) == durableactor.ClassWorkload {
-			// A workload job lives as long as its trust policy, not as long as the bearer that submitted it.
-			subject.ValidUntil = time.Time{}
-		}
 		job, err := dist.NewJob(in, subject, key)
 		if err != nil {
 			m.replicationFailure(w, err)

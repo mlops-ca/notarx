@@ -56,16 +56,19 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 	if closeErr != nil {
 		return a, closeErr
 	}
+	if !durableactor.ActorValid(in.Kind, in.Actor, in.CredentialID) {
+		return a, domain.ErrAccessDenied
+	}
 	switch durableactor.ClassOf(in.Kind) {
 	case durableactor.ClassStatic:
 		a.Active = true
 	case durableactor.ClassUser:
-		if !strings.HasPrefix(in.Actor, "user:") {
+		if !strings.HasPrefix(in.Actor, durableactor.UserActorPrefix) {
 			return a, domain.ErrAccessDenied
 		}
 		var id, state string
 		var version int64
-		err = tx.QueryRowContext(ctx, `SELECT id::text,role,state,must_change_password,session_version FROM users WHERE lower(name)=lower($1) FOR SHARE`, strings.TrimPrefix(in.Actor, "user:")).Scan(&id, &a.Role, &state, &a.MustChangePassword, &version)
+		err = tx.QueryRowContext(ctx, `SELECT id::text,role,state,must_change_password,session_version FROM users WHERE lower(name)=lower($1) FOR SHARE`, strings.TrimPrefix(in.Actor, durableactor.UserActorPrefix)).Scan(&id, &a.Role, &state, &a.MustChangePassword, &version)
 		if errors.Is(err, sql.ErrNoRows) {
 			return a, nil
 		}
@@ -99,14 +102,14 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 			a.ValidUntil = repository.RubyGemsEarlierAuthorityExpiry(a.ValidUntil, w.ValidUntil)
 		}
 	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
-		credential := strings.TrimPrefix(in.Actor, "api-key:")
+		credential := strings.TrimPrefix(in.Actor, durableactor.APIKeyActorPrefix)
 		account := ""
 		if durableactor.ClassOf(in.Kind) == durableactor.ClassServiceAccountCredential {
-			if !strings.HasPrefix(in.Actor, "service-account:") || in.CredentialID == "" {
+			if !strings.HasPrefix(in.Actor, durableactor.ServiceAccountActorPrefix) || in.CredentialID == "" {
 				return a, domain.ErrAccessDenied
 			}
 			credential = in.CredentialID
-			account = strings.TrimPrefix(in.Actor, "service-account:")
+			account = strings.TrimPrefix(in.Actor, durableactor.ServiceAccountActorPrefix)
 			var state string
 			err = tx.QueryRowContext(ctx, `SELECT state FROM service_accounts WHERE id=$1::uuid FOR SHARE`, account).Scan(&state)
 			if errors.Is(err, sql.ErrNoRows) {
@@ -118,7 +121,7 @@ func governanceAuthorityTx(ctx context.Context, tx *sql.Tx, c domain.GovernanceC
 			if state != string(repository.ServiceAccountActive) {
 				return a, nil
 			}
-		} else if !strings.HasPrefix(in.Actor, "api-key:") {
+		} else if !strings.HasPrefix(in.Actor, durableactor.APIKeyActorPrefix) {
 			return a, domain.ErrAccessDenied
 		}
 		var roles []byte
