@@ -7,6 +7,42 @@ import (
 	"time"
 )
 
+// A versioned Raw repository announces a version once, when it is sealed, as name@version under the manifest digest:
+// writing files into an open version publishes nothing, and a repeated seal publishes nothing more.
+func TestMemoryRawVersionEmitsPublishedAtSealNotPerFile(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	repo, err := store.CreateHostedRepository(ctx, HostedRepository{ID: "repo", Name: "versions", Format: FormatRaw, RawLayout: RawLayoutVersioned, SealMode: RawSealExplicit})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, path := range []string{"tool/1.0.0/a", "tool/1.0.0/b"} {
+		digest := "sha256:000000000000000000000000000000000000000000000000000000000000000" + string(rune('1'+i))
+		if _, err = store.PutRawAssetIf(ctx, RawAsset{RepositoryID: repo.ID, Path: path, Digest: digest, ObjectKey: "k" + path, Size: 1}, RawWriteCondition{RequireAbsent: true}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if keys := publishedKeys(store); len(keys) != 0 {
+		t.Fatalf("files of an open version published %v", keys)
+	}
+	input := SealRawVersionInput{RepositoryID: repo.ID, Name: "tool", Version: "1.0.0"}
+	sealed, err := store.SealRawVersion(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.SealRawVersion(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	want := "artifact.published|repo|tool@1.0.0|" + sealed.ManifestDigest + "|"
+	if keys := publishedKeys(store); len(keys) != 1 || keys[0] != want {
+		t.Fatalf("keys = %v, want [%s]", keys, want)
+	}
+	// The catch-up reconciler agrees with the seal: it finds the sealed version already announced and skips the files.
+	if n, err := store.ReconcilePublishedEvents(ctx, time.Now().Add(-time.Hour), 100); err != nil || n != 0 {
+		t.Fatalf("reconcile wrote %d, %v", n, err)
+	}
+}
+
 // The memory store keeps the guard of the PostgreSQL store, including the order of its checks: a tombstoned version
 // refuses every write before the replay of identical bytes can be admitted.
 func TestMemoryRawVersionTombstoneRefusesEverything(t *testing.T) {

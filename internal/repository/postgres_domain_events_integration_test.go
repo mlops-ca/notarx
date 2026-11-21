@@ -213,9 +213,10 @@ func TestPostgresDomainEventCursor(t *testing.T) {
 	}
 }
 
-// An event committed while an older transaction is still open is not read past: the transaction could be about to
-// commit an event with an earlier occurred_at, which the cursor would then skip for good.
-func TestPostgresReadEventsWaitsForOpenTransactions(t *testing.T) {
+// An event committed while an older transaction that has emitted is still open is not read past: the transaction could
+// be about to commit an event with an earlier occurred_at, which the cursor would then skip for good. A long
+// transaction that never emitted does not hold the log back, and the lag reports the emitting one.
+func TestPostgresReadEventsWaitsForEmittingTransactions(t *testing.T) {
 	store := domainEventsStore(t)
 	ctx := context.Background()
 	consumer := "horizon-" + ids.New()
@@ -228,12 +229,20 @@ func TestPostgresReadEventsWaitsForOpenTransactions(t *testing.T) {
 	if _, err := store.ReadEvents(ctx, consumer, types, 0, 10); err != nil {
 		t.Fatal(err)
 	}
+	idle, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = idle.Rollback() }()
+	if _, err = idle.ExecContext(ctx, `SELECT 1`); err != nil {
+		t.Fatal(err)
+	}
 	open, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = open.Rollback() }()
-	if _, err = open.ExecContext(ctx, `SELECT 1`); err != nil {
+	if _, err = events.Emit(ctx, open, events.Event{Type: events.ArtifactPublished, RepositoryID: repoID, Format: "raw", Coordinate: "held"}); err != nil {
 		t.Fatal(err)
 	}
 	tx, err := store.db.BeginTx(ctx, nil)
@@ -247,13 +256,17 @@ func TestPostgresReadEventsWaitsForOpenTransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got, readErr := store.ReadEvents(ctx, consumer, types, 0, 10); readErr != nil || len(got) != 0 {
-		t.Fatalf("an event newer than an open transaction was read: %v %v", got, readErr)
+		t.Fatalf("an event newer than an open emitting transaction was read: %v %v", got, readErr)
+	}
+	if lag, lagErr := store.EventHorizonLag(ctx); lagErr != nil || lag <= 0 {
+		t.Fatalf("horizon lag = %v, %v; want the open emitting transaction reported", lag, lagErr)
 	}
 	if err = open.Rollback(); err != nil {
 		t.Fatal(err)
 	}
+	// The idle transaction never held the log back: with the emitting one gone the event is readable while it is open.
 	if got := readEventually(t, store, consumer, types, 10, 1); got[0].Event.Coordinate != "late" {
-		t.Fatalf("after the transaction closed = %+v", got)
+		t.Fatalf("after the emitting transaction closed = %+v", got)
 	}
 }
 

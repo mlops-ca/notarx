@@ -18,6 +18,8 @@ type DomainEventStore interface {
 var (
 	_ DomainEventStore = (*PostgresStore)(nil)
 	_ DomainEventStore = (*MemoryStore)(nil)
+	_ events.LagSource = (*PostgresStore)(nil)
+	_ events.LagSource = (*MemoryStore)(nil)
 )
 
 // enqueueWebhookEventPostgres emits the event in tx with events.Emit and reports what was written.
@@ -25,18 +27,26 @@ func enqueueWebhookEventPostgres(ctx context.Context, tx sqlRunner, event Webhoo
 	return events.Emit(ctx, tx, event.domainEvent())
 }
 
+// emitHorizonExpr is the start of the oldest open transaction of this role that has begun to emit: emit_domain_event
+// stamps the session with application_name 'notarx-emit:<epoch microseconds>' at the transaction's first emission and
+// the setting reverts when it ends. A transaction that has not emitted yet is not counted: its events will be stamped
+// after the instant it first emits, which the settle delay keeps above the read bound. The stamp is parsed only when
+// it matches the pattern, so another session's application_name cannot break the read.
+const emitHorizonExpr = `SELECT COALESCE(min(CASE WHEN application_name ~ '^notarx-emit:[0-9]{1,18}$' THEN to_timestamp(substring(application_name from 13)::numeric / 1000000) END), 'infinity'::timestamptz)
+FROM pg_stat_activity WHERE datname = current_database() AND usename = current_user AND backend_type = 'client backend' AND pid <> pg_backend_pid()`
+
 const readDomainEventsQuery = `SELECT seq,id::text,type,COALESCE(repository_id::text,''),COALESCE(format,''),COALESCE(coordinate,''),COALESCE(digest,''),payload,occurred_at
 FROM domain_events WHERE type = ANY($1::text[]) AND occurred_at >= $2 AND (occurred_at,seq) > ($2,$3)
-  AND occurred_at < LEAST(clock_timestamp() - $4::interval, COALESCE((SELECT min(xact_start) FROM pg_stat_activity WHERE datname = current_database() AND usename = current_user AND backend_type = 'client backend' AND pid <> pg_backend_pid()), 'infinity'::timestamptz))
+  AND occurred_at < LEAST(clock_timestamp() - $4::interval, (` + emitHorizonExpr + `))
 ORDER BY occurred_at,seq LIMIT $5`
 
 // ReadEvents implements events.Source. A consumer without a cursor row starts at the present: its cursor is
 // created at the database clock and nothing older is replayed. occurred_at is the database clock (events.Emit
-// passes no time of its own), so an event not yet committed has an occurred_at at or after the start of its
-// transaction: reading only below the oldest open transaction's start, and below the settle horizon, means an
-// event that commits late is never behind the cursor. Only transactions of the connecting role count: they are the
-// only ones that emit, and another role's session (or a vacuum worker) must not hold the log back. A long open
-// transaction of this role delays the read until it ends, which is what keeps the cursor honest.
+// passes no time of its own), so an event not yet committed has an occurred_at at or after the first emission of
+// its transaction: reading only below the oldest such emission (emitHorizonExpr), and below the settle horizon,
+// means an event that commits late is never behind the cursor. Transactions that never emit, however long, do not
+// hold the log back; one that emits delays the read from its first emission until it ends, so the bound on the
+// delay is the time an emitting transaction stays open after its first emission.
 func (s *PostgresStore) ReadEvents(ctx context.Context, consumer string, types []events.Type, settle time.Duration, limit int) ([]events.Stored, error) {
 	var cursor events.Cursor
 	err := s.db.QueryRowContext(ctx, `SELECT occurred_at,seq FROM domain_event_cursors WHERE consumer=$1`, consumer).Scan(&cursor.OccurredAt, &cursor.Seq)
@@ -73,6 +83,19 @@ ON CONFLICT (consumer) DO NOTHING RETURNING occurred_at,seq`, consumer).Scan(&cu
 	}
 	return out, rows.Err()
 }
+
+// EventHorizonLag implements events.LagSource: how long the oldest emitting transaction has been open, or zero.
+func (s *PostgresStore) EventHorizonLag(ctx context.Context) (time.Duration, error) {
+	var seconds float64
+	err := s.db.QueryRowContext(ctx, `SELECT COALESCE(extract(epoch FROM clock_timestamp() - h), 0) FROM (`+emitHorizonExpr+`) AS t(h) WHERE h < 'infinity'`).Scan(&seconds)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return time.Duration(seconds * float64(time.Second)), err
+}
+
+// EventHorizonLag implements events.LagSource; the in-memory store has no open transactions.
+func (s *MemoryStore) EventHorizonLag(context.Context) (time.Duration, error) { return 0, nil }
 
 // AdvanceCursor implements events.Source; the cursor only moves forward.
 func (s *PostgresStore) AdvanceCursor(ctx context.Context, consumer string, cursor events.Cursor) error {

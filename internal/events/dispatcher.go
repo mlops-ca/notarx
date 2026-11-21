@@ -35,6 +35,19 @@ type Source interface {
 	AdvanceCursor(ctx context.Context, consumer string, cursor Cursor) error
 }
 
+// LagSource is a Source that can report its read horizon lag: how long the oldest transaction that has begun to emit
+// has been open. Events at or after it are not read yet, so a lag above the settle delay is the time publications
+// wait for their consumers.
+type LagSource interface {
+	EventHorizonLag(ctx context.Context) (time.Duration, error)
+}
+
+// HorizonWarnLag is the lag above which the dispatcher logs a warning, at most once per HorizonWarnEvery.
+const (
+	HorizonWarnLag   = time.Minute
+	HorizonWarnEvery = time.Minute
+)
+
 // Leaser elects the one node that reads the log for a consumer (repository.InternalTaskLeaseStore).
 type Leaser interface {
 	AcquireInternalTaskLease(ctx context.Context, task tasklease.Task, owner string, ttl, minInterval time.Duration) (bool, error)
@@ -101,11 +114,15 @@ type Dispatcher struct {
 	Interval    time.Duration
 	MaxAttempts int
 	Logger      *slog.Logger
+	// ObserveLag receives the read horizon lag of the Source once per pass (the notarx_event_horizon_lag_seconds gauge);
+	// it needs a Source that implements LagSource.
+	ObserveLag func(time.Duration)
 	// Now is the clock of the backoff, injected by tests.
 	Now func() time.Time
 
 	failures map[string]*failure
 	held     map[string]tasklease.Task
+	lastWarn time.Time
 }
 
 // failure is the retry state of one event that a handler failed on.
@@ -173,7 +190,30 @@ func (d *Dispatcher) RunOnce(ctx context.Context) (int, error) {
 			errs = append(errs, err)
 		}
 	}
+	d.observeLag(ctx)
 	return handled, errors.Join(errs...)
+}
+
+// observeLag reports the horizon lag of the source to ObserveLag and warns in the log when it exceeds HorizonWarnLag.
+func (d *Dispatcher) observeLag(ctx context.Context) {
+	source, ok := d.Source.(LagSource)
+	if !ok || (d.ObserveLag == nil && d.Logger == nil) {
+		return
+	}
+	lag, err := source.EventHorizonLag(ctx)
+	if err != nil {
+		if d.Logger != nil && ctx.Err() == nil {
+			d.Logger.Error("event horizon lag unavailable", "error", err)
+		}
+		return
+	}
+	if d.ObserveLag != nil {
+		d.ObserveLag(lag)
+	}
+	if d.Logger != nil && lag >= HorizonWarnLag && d.now().Sub(d.lastWarn) >= HorizonWarnEvery {
+		d.lastWarn = d.now()
+		d.Logger.Warn("event dispatch is held back by an open transaction that emits events", "horizon_lag", lag.Round(time.Second).String())
+	}
 }
 
 // serve runs one batch of one consumer under its lease.

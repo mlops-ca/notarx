@@ -182,8 +182,12 @@ the delivery fan-out see one consistent set and a new subscription never misses 
 Cargo triggers call the same function, so there is one emission rule. Internal consumers
 (`events.Dispatcher`) read the log by `(occurred_at, seq)` from a per-consumer row in
 `domain_event_cursors`. `occurred_at` is the database clock, so the dispatcher reads only below
-the start of the oldest open transaction and below a five second settle horizon: an event that
-commits late is never behind the cursor. `occurred_at` is always the database clock at emission, never a caller-supplied time. One node serves a
+the first emission of the oldest open transaction that has emitted and below a five second settle horizon: an event that
+commits late is never behind the cursor. `emit_domain_event` stamps the session with
+`application_name = 'notarx-emit:<epoch microseconds>'` at a transaction's first emission (reverted at its end), so a
+long transaction that never emits (an import, a job, an idle session) does not hold the log back; one that emits delays
+consumers by the time it stays open after its first emission. The gauge `notarx_event_horizon_lag_seconds` and a
+dispatcher warning (above one minute) report that delay. `occurred_at` is always the database clock at emission, never a caller-supplied time. One node serves a
 consumer at a time through a lease row of `scheduled_tasks` (kind `event-dispatcher`) that it renews on every
 pass; a consumer without a cursor starts at the present; delivery is at least once, a failed event is
 retried with an exponential backoff (to five minutes), and one that fails ten times in a row is logged and
