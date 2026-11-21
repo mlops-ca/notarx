@@ -69,3 +69,6 @@ migrations:
   000021_domain_events_emit_once.sql:
     dialect: postgres
     reason: adds the emit_domain_event_once function, the advisory-locked and retention-floor-aware insert of the catch-up reconciler, next to emit_domain_event; the MySQL baseline carries tables only
+  000022_artifact_promotions.sql:
+    dialect: postgres
+    reason: creates artifact_promotions with a partial index, the chain_path append-only trigger and the promotion job state trigger that replaces the Cargo-only one; the catalogue carries the table into the MySQL baseline with a generated-column index for the pending states, and the MySQL lifecycle store ports the triggers

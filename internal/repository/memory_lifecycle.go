@@ -46,6 +46,11 @@ func (s *MemoryStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJob,
 	if job.ProgressTotal <= 0 && job.Kind != LifecycleJobRetention {
 		job.ProgressTotal = 1
 	}
+	if promotion, ok := artifactPromotionDraft(ctx, job); ok {
+		if err := s.insertArtifactPromotionLocked(promotion, createdAt); err != nil {
+			return LifecycleJob{}, false, err
+		}
+	}
 	job.State, job.CreatedAt, job.NextAttemptAt, job.Payload = LifecycleJobPending, createdAt, now, append([]byte(nil), job.Payload...)
 	s.lifecycleJobs[key] = job
 	return cloneLifecycleJob(job), false, nil
@@ -142,23 +147,23 @@ func (s *MemoryStore) GetLatestArtifactScanJob(_ context.Context, repositoryID s
 	return cloneLifecycleJob(latest), nil
 }
 
-func (s *MemoryStore) ClaimLifecycleJobs(_ context.Context, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs("", nil, limit)
+func (s *MemoryStore) ClaimLifecycleJobs(ctx context.Context, limit int) ([]LifecycleJob, error) {
+	return s.claimLifecycleJobs(ctx, "", nil, limit)
 }
 
-func (s *MemoryStore) ClaimLifecycleJobsByKind(_ context.Context, kind LifecycleJobKind, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(kind, nil, limit)
+func (s *MemoryStore) ClaimLifecycleJobsByKind(ctx context.Context, kind LifecycleJobKind, limit int) ([]LifecycleJob, error) {
+	return s.claimLifecycleJobs(ctx, kind, nil, limit)
 }
 
-func (s *MemoryStore) ClaimLifecycleJobsByKindAndFormat(_ context.Context, kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(kind, formatList(format), limit)
+func (s *MemoryStore) ClaimLifecycleJobsByKindAndFormat(ctx context.Context, kind LifecycleJobKind, format Format, limit int) ([]LifecycleJob, error) {
+	return s.claimLifecycleJobs(ctx, kind, formatList(format), limit)
 }
 
-func (s *MemoryStore) ClaimLifecycleJobsByKindAndFormats(_ context.Context, kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
-	return s.claimLifecycleJobs(kind, formats, limit)
+func (s *MemoryStore) ClaimLifecycleJobsByKindAndFormats(ctx context.Context, kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
+	return s.claimLifecycleJobs(ctx, kind, formats, limit)
 }
 
-func (s *MemoryStore) claimLifecycleJobs(kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
+func (s *MemoryStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJobKind, formats []Format, limit int) ([]LifecycleJob, error) {
 	s.lifecycleLeaseFence.Lock()
 	defer s.lifecycleLeaseFence.Unlock()
 	s.mu.Lock()
@@ -193,10 +198,11 @@ func (s *MemoryStore) claimLifecycleJobs(kind LifecycleJobKind, formats []Format
 		job.NextAttemptAt, job.LeaseExpiresAt, job.LeaseToken = time.Time{}, now.Add(lifecycleJobLeaseDuration), uuid.NewString()
 		job.Attempts++
 		s.lifecycleJobs[key] = job
+		s.syncPromotionLocked(job)
 		runningByRepository[job.RepositoryID]++
 		jobs = append(jobs, cloneLifecycleJob(job))
 	}
-	return jobs, nil
+	return s.refuseClaimedPromotionsLocked(ctx, jobs), nil
 }
 
 func (s *MemoryStore) RecoverExpiredLifecycleJobs(_ context.Context, before time.Time) (int, error) {
@@ -221,9 +227,7 @@ func (s *MemoryStore) recoverExpiredLifecycleJobsLocked(before time.Time) int {
 			job.State, job.NextAttemptAt, job.CompletedAt = LifecycleJobRetrying, before.Add(lifecycleRetryDelay(job.Attempts)), time.Time{}
 		}
 		s.lifecycleJobs[key] = job
-		if event, ok := cargoPromotionWebhookEvent(job); ok {
-			s.enqueueWebhookEventLocked(event)
-		}
+		s.syncPromotionLocked(job)
 		recovered++
 	}
 	return recovered
@@ -276,6 +280,7 @@ func (s *MemoryStore) RequeueFailedLifecycleJobs(ctx context.Context, repository
 		job := s.lifecycleJobs[key]
 		resetLifecycleJobForRetry(&job, now)
 		s.lifecycleJobs[key] = job
+		s.syncPromotionLocked(job)
 		jobs = append(jobs, cloneLifecycleJob(job))
 	}
 	return jobs, nil
@@ -312,6 +317,7 @@ func (s *MemoryStore) updateLifecycleJobControl(ctx context.Context, repositoryI
 			return LifecycleJob{}, err
 		}
 		s.lifecycleJobs[key] = job
+		s.syncPromotionLocked(job)
 		return cloneLifecycleJob(job), nil
 	}
 	return LifecycleJob{}, ErrNotFound
@@ -388,6 +394,12 @@ func (s *MemoryStore) CompleteLifecycleJob(_ context.Context, id, leaseToken str
 func (s *MemoryStore) FailLifecycleJob(_ context.Context, id, leaseToken, message string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.failLifecycleJobLocked(id, leaseToken, message)
+}
+
+// failLifecycleJobLocked fails the running job of the lease, or returns it to the queue while attempts remain; the
+// caller holds s.mu.
+func (s *MemoryStore) failLifecycleJobLocked(id, leaseToken, message string) error {
 	now := time.Now().UTC()
 	for key, job := range s.lifecycleJobs {
 		if job.ID != id || job.State != LifecycleJobRunning || job.LeaseToken != leaseToken {
@@ -400,9 +412,7 @@ func (s *MemoryStore) FailLifecycleJob(_ context.Context, id, leaseToken, messag
 			job.State, job.NextAttemptAt, job.CompletedAt = LifecycleJobRetrying, now.Add(lifecycleRetryDelay(job.Attempts)), time.Time{}
 		}
 		s.lifecycleJobs[key] = job
-		if event, ok := cargoPromotionWebhookEvent(job); ok {
-			s.enqueueWebhookEventLocked(event)
-		}
+		s.syncPromotionLocked(job)
 		return nil
 	}
 	return ErrNotFound
@@ -423,9 +433,7 @@ func (s *MemoryStore) finishLifecycleJob(id, leaseToken string, state LifecycleJ
 			job.ProgressCurrent = job.ProgressTotal
 		}
 		s.lifecycleJobs[key] = job
-		if event, ok := cargoPromotionWebhookEvent(job); ok {
-			s.enqueueWebhookEventLocked(event)
-		}
+		s.syncPromotionLocked(job)
 		return nil
 	}
 	return ErrNotFound

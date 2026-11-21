@@ -33,7 +33,8 @@ const lifecycleJobColumns = `id::text,repository_id::text,kind,idempotency_key,p
 // newly inserted job and its audit record commit together (ADR 0023 section 1); a replay of the key
 // changes nothing and writes no audit.
 func (s *PostgresStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJob, audit ...AuditRecord) (LifecycleJob, bool, error) {
-	if len(audit) == 0 {
+	promotion, withPromotion := artifactPromotionDraft(ctx, job)
+	if len(audit) == 0 && !withPromotion {
 		return enqueueLifecycleJob(ctx, s.db, job)
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -48,6 +49,12 @@ func (s *PostgresStore) EnqueueLifecycleJob(ctx context.Context, job LifecycleJo
 	if !replayed {
 		if err = insertAudits(ctx, tx, audit); err != nil {
 			return LifecycleJob{}, false, err
+		}
+		if withPromotion {
+			promotion.JobID = stored.ID
+			if err = insertArtifactPromotion(ctx, tx, promotion); err != nil {
+				return LifecycleJob{}, false, err
+			}
 		}
 	}
 	if err = tx.Commit(); err != nil {
@@ -241,6 +248,7 @@ func (s *PostgresStore) claimLifecycleJobs(ctx context.Context, kind LifecycleJo
 		return nil, err
 	}
 	s.claimObserver.record(kind, scan.scanned)
+	scan.claimed = s.refuseClaimedPromotions(ctx, scan.claimed)
 	for _, job := range scan.claimed {
 		jobCtx, ids := requestcontext.WithRequest(ctx, job.ID)
 		slog.LogAttrs(jobCtx, slog.LevelInfo, "lifecycle job claimed",

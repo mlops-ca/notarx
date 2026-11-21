@@ -27,8 +27,9 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 	}
 	digest := "sha256:" + strings.Repeat("a", 64)
 	sourceID, targetID := uuid.NewString(), uuid.NewString()
+	store.hostedRepositories[targetID] = HostedRepository{ID: targetID, Format: FormatCargo}
 	payload := []byte(`{"format":"cargo","sourceRepositoryId":"` + sourceID + `","name":"demo","version":"1.0.0","digest":"` + digest + `"}`)
-	job, _, err := store.EnqueueLifecycleJob(ctx, LifecycleJob{
+	job, _, err := store.EnqueueLifecycleJob(promotionProvenance(ctx, FormatCargo, "demo@1.0.0", digest, "promotion-success"), LifecycleJob{
 		ID: uuid.NewString(), RepositoryID: targetID, Kind: LifecycleJobPromotion,
 		IdempotencyKey: "promotion-success", Payload: payload, MaxAttempts: 1,
 	})
@@ -47,7 +48,7 @@ func TestMemoryCargoDistributionEventsFollowTerminalStates(t *testing.T) {
 	}
 	assertCargoWebhookDelivery(t, store, subscription.ID, WebhookEventArtifactPromoted, job.ID, "completed", 1, 1)
 
-	failedJob, _, err := store.EnqueueLifecycleJob(ctx, LifecycleJob{
+	failedJob, _, err := store.EnqueueLifecycleJob(promotionProvenance(ctx, FormatCargo, "demo@1.0.0", digest, "promotion-failure"), LifecycleJob{
 		ID: uuid.NewString(), RepositoryID: targetID, Kind: LifecycleJobPromotion,
 		IdempotencyKey: "promotion-failure", Payload: payload, MaxAttempts: 2,
 	})
@@ -145,7 +146,9 @@ func TestMemoryCargoPromotionLeaseExpiryEmitsOnlyFinalFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job, _, err := store.EnqueueLifecycleJob(ctx, LifecycleJob{ID: uuid.NewString(), RepositoryID: uuid.NewString(), Kind: LifecycleJobPromotion, IdempotencyKey: "expiry", Payload: []byte(`{"format":"cargo"}`), MaxAttempts: 1})
+	targetID := uuid.NewString()
+	store.hostedRepositories[targetID] = HostedRepository{ID: targetID, Format: FormatCargo}
+	job, _, err := store.EnqueueLifecycleJob(promotionProvenance(ctx, FormatCargo, "demo@1.0.0", "sha256:"+strings.Repeat("a", 64), "expiry"), LifecycleJob{ID: uuid.NewString(), RepositoryID: targetID, Kind: LifecycleJobPromotion, IdempotencyKey: "expiry", Payload: []byte(`{"format":"cargo"}`), MaxAttempts: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

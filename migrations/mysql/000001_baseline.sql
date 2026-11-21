@@ -91,6 +91,39 @@ CREATE TABLE `artifact_license` (
   CONSTRAINT `artifact_license_confidence_check` CHECK (((`confidence` >= 0) AND (`confidence` <= 1)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `artifact_promotions` (
+  `approvals` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
+  `attempt` INT NOT NULL DEFAULT 1,
+  `chain_path` JSON NOT NULL DEFAULT (CAST('[]' AS JSON)),
+  `completed_at` DATETIME(6) NULL,
+  `coordinate` TEXT NOT NULL,
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `digest` VARCHAR(144) NOT NULL,
+  `format` TEXT NOT NULL,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `idempotency_key` VARCHAR(255) NOT NULL,
+  `job_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `origin_instance_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `origin_repository` TEXT NOT NULL DEFAULT (''),
+  `requested_by` TEXT NOT NULL,
+  `rule_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NULL,
+  `rule_version` BIGINT NULL,
+  `state` TEXT NOT NULL,
+  `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `coordinate_sha256` BINARY(32) GENERATED ALWAYS AS (UNHEX(SHA2(`coordinate`, 256))) STORED NOT NULL,
+  `pending_state` VARCHAR(32) GENERATED ALWAYS AS (IF(`state` IN ('pending_approval', 'queued', 'running'), `state`, NULL)) VIRTUAL NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_artifact_promotions_idempotency_key_attempt` (`idempotency_key`, `attempt`),
+  KEY `ix_artifact_promotions_created_at_desc_id_desc` (`created_at` DESC, `id` DESC),
+  KEY `ix_artifact_promotions_target_repository_id_coordinate__180c8a63` (`target_repository_id`, `coordinate_sha256`, `digest`),
+  KEY `ix_artifact_promotions_job_idx` (`job_id`),
+  KEY `ix_artifact_promotions_pending_idx` (`pending_state`),
+  CONSTRAINT `artifact_promotions_approvals_check` CHECK ((JSON_TYPE(`approvals`) = 'ARRAY')),
+  CONSTRAINT `artifact_promotions_attempt_check` CHECK ((`attempt` >= 1)),
+  CONSTRAINT `artifact_promotions_chain_path_check` CHECK ((JSON_TYPE(`chain_path`) = 'ARRAY')),
+  CONSTRAINT `artifact_promotions_state_check` CHECK ((`state` IN ('pending_approval', 'queued', 'running', 'completed', 'failed', 'rejected', 'expired', 'cancelled')))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `artifact_quarantines` (
   `coordinate` TEXT NOT NULL,
   `digest` VARCHAR(144) NOT NULL,

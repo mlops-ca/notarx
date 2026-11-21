@@ -64,7 +64,7 @@ func TestPostgresCargoDistributionWebhooksCommitWithTerminalState(t *testing.T) 
 	digest := "sha256:" + strings.Repeat("a", 64)
 	payload, _ := json.Marshal(map[string]string{"format": "cargo", "sourceRepositoryId": source.ID, "name": "demo", "version": "1.0.0", "digest": digest})
 	newJob := func(key string, maxAttempts int) LifecycleJob {
-		job, replayed, createErr := first.EnqueueLifecycleJob(ctx, LifecycleJob{
+		job, replayed, createErr := first.EnqueueLifecycleJob(promotionProvenance(ctx, FormatCargo, "demo@1.0.0", digest, key), LifecycleJob{
 			ID: uuid.NewString(), RepositoryID: target.ID, Kind: LifecycleJobPromotion,
 			IdempotencyKey: key, Payload: payload, MaxAttempts: maxAttempts,
 		})
