@@ -11,6 +11,10 @@ openapi: 3.1.0
 paths:
   "/artifact-promotions":
     "$ref": "./management/promotion.yaml#/artifact_promotions"
+  "/promotion-batches":
+    "$ref": "./management/promotion.yaml#/promotion_batches"
+  "/promotion-batches/{batchId}":
+    "$ref": "./management/promotion.yaml#/promotion_batches_batchId"
   "/formats":
     "$ref": "./management/formats.yaml#/formats"
   "/artifact-search":

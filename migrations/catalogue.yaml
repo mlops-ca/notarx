@@ -3322,6 +3322,22 @@ tables:
       oci_subject_bindings_owner_check: (owner ~ '^[a-f0-9]{64}$'::text)
       oci_subject_bindings_source_version_check: (source_version > 0)
       oci_subject_bindings_subject_check: (subject ~ '^sha256:[a-f0-9]{64}$'::text)
+  promotion_batches:
+    columns:
+      created_at: timestamp
+      id: uuid
+      idempotency_key: text
+      items: json
+      request_hash: text
+      requested_by: text
+      source_repository_id: uuid
+      target_repository_id: uuid
+    primaryKey: [id]
+    unique: [[target_repository_id, idempotency_key]]
+    defaults:
+      created_at: now()
+    checks:
+      promotion_batches_items_check: ((jsonb_typeof(items) = 'array'::text) AND (jsonb_array_length(items) >= 1) AND (jsonb_array_length(items) <= 100))
   public_access_policy:
     columns:
       enabled: bool

@@ -276,6 +276,8 @@ the contract's server base. Planned commands omit the leading `notarxctl`.
 | `GET /repository-capacities`<br>`listRepositoryCapacities` | `capacity list` | #138 | M2 | FA | Q |
 | `GET /lifecycle-jobs`<br>`listLifecycleJobs` | `lifecycle-job list --all-repositories` | #135 | M1 implemented | FA | Q |
 | `GET /artifact-promotions`<br>`listArtifactPromotions` | `promotion list` | #138 | M2 | FA | Q |
+| `POST /promotion-batches`<br>`createPromotionBatch` | `promotion batch create --repo <source> --target <target>` | #98 | M2 | RA×2 | W |
+| `GET /promotion-batches/{batchId}`<br>`getPromotionBatch` | `promotion batch show <id>` | #98 | M2 | R | Q |
 | `GET /scheduled-tasks`<br>`listScheduledTasks` | `scheduled-task list` | #137 | M2 | ST | Q |
 | `POST /scheduled-tasks`<br>`createScheduledTask` | `scheduled-task create` | #137 | M2 | ST | W |
 | `GET /scheduled-tasks/{taskId}`<br>`getScheduledTask` | `scheduled-task show <id>` | #137 | M2 | ST | Q |

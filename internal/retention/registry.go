@@ -8,7 +8,7 @@
 // sleeping between batches so the deletes never compete with request traffic. One
 // node at a time runs a pass, elected through a lease row in scheduled_tasks.
 //
-// Tables that carry provenance or aggregates (artifact_promotions,
+// Tables that carry provenance or aggregates (artifact_promotions, promotion_batches,
 // artifact_usage_stats, artifact_intelligence) are deliberately absent from the
 // registry; a test pins that. PostgreSQL audit tables that are partitioned are
 // pruned by dropping partitions (internal/partitions), so their entries only run
@@ -158,4 +158,4 @@ func DefaultRegistry() []Entry {
 
 // Provenance lists tables that must never be pruned: they hold provenance or
 // aggregates, not logs.
-var Provenance = []string{"artifact_promotions", "artifact_usage_stats", "artifact_intelligence"}
+var Provenance = []string{"artifact_promotions", "promotion_batches", "artifact_usage_stats", "artifact_intelligence"}

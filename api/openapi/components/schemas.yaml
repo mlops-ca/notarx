@@ -2838,6 +2838,70 @@ PromotionRequest:
       minLength: 1
       maxLength: 128
       description: Required only for APT Hosted operator preview. Appends the immutable pool package to this target suite using the target signer. The pool coordinate preserves its component.
+PromotionBatchItemRequest:
+  type: object
+  required: [coordinate, digest]
+  additionalProperties: false
+  properties:
+    coordinate: {type: string, minLength: 1, maxLength: 1024}
+    digest: {type: string, pattern: '^sha256:[0-9a-f]{64}$'}
+    aptTargetSuite:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: Required only for APT, as on a single promotion.
+PromotionBatchRequest:
+  type: object
+  required: [sourceRepositoryId, targetRepositoryId, items]
+  additionalProperties: false
+  properties:
+    sourceRepositoryId: {type: string, format: uuid}
+    targetRepositoryId: {type: string, format: uuid}
+    items:
+      type: array
+      minItems: 1
+      maxItems: 100
+      items: {"$ref": "#/PromotionBatchItemRequest"}
+PromotionBatchState:
+  type: string
+  enum: [pending, running, completed, partially_failed, failed]
+PromotionBatchItemState:
+  type: string
+  description: The state of the item's provenance row, or pending while the item has no row yet.
+  enum: [pending, pending_approval, queued, running, completed, failed, rejected, expired, cancelled]
+PromotionBatchItem:
+  type: object
+  required: [index, coordinate, digest, state]
+  properties:
+    index: {type: integer, minimum: 0, maximum: 99}
+    coordinate: {type: string}
+    digest: {type: string}
+    state: {"$ref": "#/PromotionBatchItemState"}
+    promotionId: {type: string, format: uuid}
+    jobId: {type: string, format: uuid}
+PromotionBatch:
+  type: object
+  required: [id, sourceRepositoryId, targetRepositoryId, requestedBy, state, items, createdAt]
+  properties:
+    id: {type: string, format: uuid}
+    sourceRepositoryId: {type: string, format: uuid}
+    targetRepositoryId: {type: string, format: uuid}
+    requestedBy: {type: string}
+    state: {"$ref": "#/PromotionBatchState"}
+    items:
+      type: array
+      items: {"$ref": "#/PromotionBatchItem"}
+    createdAt: {type: string, format: date-time}
+PromotionBatchItemProblem:
+  type: object
+  required: [index, coordinate, digest, status, code, message]
+  properties:
+    index: {type: integer, minimum: 0}
+    coordinate: {type: string}
+    digest: {type: string}
+    status: {type: integer}
+    code: {type: string}
+    message: {type: string}
 ArtifactPromotionState:
   type: string
   enum: [pending_approval, queued, running, completed, failed, rejected, expired, cancelled]
@@ -4252,10 +4316,16 @@ Problem:
       - version_not_sealed
       - version_empty
       - checksum_mismatch
+      - promotion_batch_rejected
     message:
       type: string
     requestId:
       type: string
+    items:
+      type: array
+      description: Present on promotion_batch_rejected. The refused items, each with the problem that refused it; nothing was queued.
+      items:
+        "$ref": "#/PromotionBatchItemProblem"
     members:
       type: array
       description: Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.

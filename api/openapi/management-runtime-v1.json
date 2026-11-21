@@ -9932,6 +9932,91 @@
         }
       }
     },
+    "/promotion-batches": {
+      "post": {
+        "operationId": "createPromotionBatch",
+        "summary": "Promote up to 100 artifacts from one repository in one batch",
+        "description": "Admission is all-or-nothing: every item must pass the source quarantine recheck, the target admission policy and authorisation (the caller administers both repositories) before any item is queued; otherwise nothing is queued and the 422 problem lists the refused items (code promotion_batch_rejected). Execution is per item through the promotion service, with an idempotency key derived from the batch id and the item index, so an item never runs twice. A replay of the same Idempotency-Key with the same request returns the same batch and completes any item that was not yet queued; the same key with a different request is 409 idempotency_conflict. The aggregate state is computed from the provenance rows of the items (see getPromotionBatch).",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PromotionBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "The batch was admitted and its items queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionBatch"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "409": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "422": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
+    "/promotion-batches/{batchId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/PromotionBatchId"
+        }
+      ],
+      "get": {
+        "operationId": "getPromotionBatch",
+        "summary": "Show a promotion batch with its aggregate state",
+        "description": "Returns the batch, one entry per item with the state of its provenance row, and the aggregate state: pending while no item has started, running while any item is unfinished and some progress was made, completed when every item completed, failed when every item ended without completing and partially_failed when the items ended and some did complete. The caller needs read access to the target repository.",
+        "responses": {
+          "200": {
+            "description": "The promotion batch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PromotionBatch"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "403": {
+            "$ref": "#/components/responses/Problem"
+          },
+          "404": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      }
+    },
     "/repositories/{repositoryId}/promotions": {
       "parameters": [
         {
@@ -18246,7 +18331,8 @@
               "version_tombstoned",
               "version_not_sealed",
               "version_empty",
-              "checksum_mismatch"
+              "checksum_mismatch",
+              "promotion_batch_rejected"
             ]
           },
           "message": {
@@ -18254,6 +18340,13 @@
           },
           "requestId": {
             "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "description": "Present on promotion_batch_rejected. The refused items, each with the problem that refused it; nothing was queued.",
+            "items": {
+              "$ref": "#/components/schemas/PromotionBatchItemProblem"
+            }
           },
           "members": {
             "type": "array",
@@ -19692,6 +19785,38 @@
           "lastError": {
             "type": "string",
             "maxLength": 1024
+          }
+        }
+      },
+      "PromotionBatchItemProblem": {
+        "type": "object",
+        "required": [
+          "index",
+          "coordinate",
+          "digest",
+          "status",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "coordinate": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
           }
         }
       },
@@ -26479,6 +26604,158 @@
           }
         }
       },
+      "PromotionBatchItemRequest": {
+        "type": "object",
+        "required": [
+          "coordinate",
+          "digest"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "coordinate": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "aptTargetSuite": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "description": "Required only for APT, as on a single promotion."
+          }
+        }
+      },
+      "PromotionBatchRequest": {
+        "type": "object",
+        "required": [
+          "sourceRepositoryId",
+          "targetRepositoryId",
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sourceRepositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetRepositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/PromotionBatchItemRequest"
+            }
+          }
+        }
+      },
+      "PromotionBatchState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "running",
+          "completed",
+          "partially_failed",
+          "failed"
+        ]
+      },
+      "PromotionBatchItemState": {
+        "type": "string",
+        "description": "The state of the item's provenance row, or pending while the item has no row yet.",
+        "enum": [
+          "pending",
+          "pending_approval",
+          "queued",
+          "running",
+          "completed",
+          "failed",
+          "rejected",
+          "expired",
+          "cancelled"
+        ]
+      },
+      "PromotionBatchItem": {
+        "type": "object",
+        "required": [
+          "index",
+          "coordinate",
+          "digest",
+          "state"
+        ],
+        "properties": {
+          "index": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 99
+          },
+          "coordinate": {
+            "type": "string"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PromotionBatchItemState"
+          },
+          "promotionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "jobId": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "PromotionBatch": {
+        "type": "object",
+        "required": [
+          "id",
+          "sourceRepositoryId",
+          "targetRepositoryId",
+          "requestedBy",
+          "state",
+          "items",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceRepositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "targetRepositoryId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestedBy": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/PromotionBatchState"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PromotionBatchItem"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "PromotionRequest": {
         "type": "object",
         "required": [
@@ -28614,6 +28891,15 @@
         "required": false,
         "schema": {
           "type": "string"
+        }
+      },
+      "PromotionBatchId": {
+        "name": "batchId",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "format": "uuid"
         }
       },
       "LifecycleJobId": {

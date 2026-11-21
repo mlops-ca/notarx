@@ -18,6 +18,13 @@ RepositoryId:
   schema:
     type: string
     format: uuid
+PromotionBatchId:
+  name: batchId
+  in: path
+  required: true
+  schema:
+    type: string
+    format: uuid
 AuthorizationTemplateId:
   name: templateId
   in: path

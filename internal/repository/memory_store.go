@@ -134,6 +134,7 @@ type MemoryStore struct {
 	artifactQuarantines    map[string]ArtifactQuarantine
 	lifecycleJobs          map[string]LifecycleJob
 	artifactPromotions     map[string]ArtifactPromotion
+	promotionBatches       map[string]PromotionBatch
 	artifactScanLocks      map[string]*sync.Mutex
 	lifecycleCreatedAt     time.Time
 	replicationPlans       map[string]ReplicationPlan

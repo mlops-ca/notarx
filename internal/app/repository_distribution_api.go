@@ -32,7 +32,7 @@ func (h generatedRepositoryAPIAdapter) CreateRepositoryPromotion(w http.Response
 			return
 		}
 		var request adminopenapi.PromotionRequest
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&request); err != nil || !validAPTDistributionScope(source.Format, request.Coordinate, request.AptTargetSuite) || !validRepositoryDigest(request.Digest) || (source.Format == repository.FormatMaven && !validMavenCoordinate(request.Coordinate)) || (source.Format == repository.FormatOCI && (request.Coordinate == "" || strings.Contains(request.Coordinate, "@"))) || !validMigratedCoordinate(source.Format, request.Coordinate) || (source.Format == repository.FormatConan && !validConanReplicationCoordinate(request.Coordinate)) || (source.Format == repository.FormatNPM && !validNPMVersionCoordinate(request.Coordinate)) || (source.Format == repository.FormatPyPI && !validPyPIVersionCoordinate(request.Coordinate)) || (source.Format == repository.FormatGo && !validGoModuleVersionCoordinate(request.Coordinate)) || (source.Format == repository.FormatCargo && !validCargoVersionCoordinate(request.Coordinate)) {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&request); err != nil || !validPromotionItem(source.Format, request.Coordinate, request.Digest, request.AptTargetSuite) {
 			writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "targetRepositoryId, immutable artifact coordinate, and digest are required")
 			return
 		}

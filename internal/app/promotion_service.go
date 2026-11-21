@@ -78,43 +78,65 @@ func promotionError(status int, code, message string) *PromotionError {
 	return &PromotionError{Status: status, Code: code, Message: message}
 }
 
-// Request runs the admission checks and enqueues the promotion job.
-func (s PromotionService) Request(ctx context.Context, in PromotionRequest) (PromotionResult, *PromotionError) {
+// promotionAdmission is what a passed admission check resolved: the target repository and the format publisher.
+type promotionAdmission struct {
+	target    repository.HostedRepository
+	publisher formatmodule.PromotionPublisher
+}
+
+// Admit runs the admission checks of a promotion (format capability, target, quarantine recheck, admission policy)
+// without queueing anything; a batch admits every item before it queues any.
+func (s PromotionService) Admit(ctx context.Context, in PromotionRequest) *PromotionError {
+	_, perr := s.admit(ctx, in)
+	return perr
+}
+
+func (s PromotionService) admit(ctx context.Context, in PromotionRequest) (promotionAdmission, *PromotionError) {
 	source := in.Source
 	publisher, ok := formatmodule.Capability[formatmodule.PromotionPublisher](s.registry, source.Format)
 	if !ok {
-		return PromotionResult{}, errUnsupportedPromotionFormat
+		return promotionAdmission{}, errUnsupportedPromotionFormat
 	}
 	target, err := s.store.GetHostedRepository(ctx, in.TargetID)
 	if err != nil && !errors.Is(err, repository.ErrNotFound) {
-		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "get target repository failed")
+		return promotionAdmission{}, promotionError(http.StatusInternalServerError, "internal_error", "get target repository failed")
 	}
 	if err != nil || target.ID == source.ID || target.Format != source.Format || target.Type != repository.RepositoryTypeHosted || target.State != repository.RepositoryActive {
-		return PromotionResult{}, promotionError(http.StatusConflict, "invalid_target", "target must be an active Hosted repository with the same format")
+		return promotionAdmission{}, promotionError(http.StatusConflict, "invalid_target", "target must be an active Hosted repository with the same format")
 	}
 	if source.Format == repository.FormatAPT && in.AptTargetSuite == nil {
-		return PromotionResult{}, promotionError(http.StatusBadRequest, "invalid_request", "aptTargetSuite is required for APT promotion")
+		return promotionAdmission{}, promotionError(http.StatusBadRequest, "invalid_request", "aptTargetSuite is required for APT promotion")
 	}
 	if rejection := s.quarantine(ctx, in.Principal, source, target, in.Coordinate, in.Digest); rejection != nil {
-		return PromotionResult{}, rejection
+		return promotionAdmission{}, rejection
 	}
 	policy, policyErr := s.securityPolicies.GetRepositorySecurityPolicy(ctx, target.ID)
 	if policyErr != nil {
-		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "get security policy failed")
+		return promotionAdmission{}, promotionError(http.StatusInternalServerError, "internal_error", "get security policy failed")
 	}
 	var intelligence *repository.ArtifactIntelligence
 	if value, intelligenceErr := s.intelligence.GetArtifactIntelligence(ctx, source.ID, source.Format, in.Coordinate, in.Digest); intelligenceErr == nil {
 		intelligence = &value
 	} else if !errors.Is(intelligenceErr, repository.ErrNotFound) {
-		return PromotionResult{}, promotionError(http.StatusInternalServerError, "internal_error", "get artifact intelligence failed")
+		return promotionAdmission{}, promotionError(http.StatusInternalServerError, "internal_error", "get artifact intelligence failed")
 	}
 	evaluation := repository.EvaluateRepositorySecurityPolicy(policy, intelligence)
 	if !evaluation.Allowed {
 		if s.audit != nil {
 			_ = s.audit.RecordAudit(ctx, repository.AuditRecord{GroupName: target.Name, Repository: target.Name, Actor: in.Principal.Actor, Outcome: repository.AuditAccessDenied, OccurredAt: time.Now().UTC(), Format: "management", Resource: in.Coordinate, Representation: in.Digest, Operation: "promote.security_policy", Status: http.StatusForbidden, AuthorizationReason: strings.Join(evaluation.Reasons, ",")})
 		}
-		return PromotionResult{}, promotionError(http.StatusForbidden, "security_policy_denied", "promotion denied by security policy: "+strings.Join(evaluation.Reasons, ","))
+		return promotionAdmission{}, promotionError(http.StatusForbidden, "security_policy_denied", "promotion denied by security policy: "+strings.Join(evaluation.Reasons, ","))
 	}
+	return promotionAdmission{target: target, publisher: publisher}, nil
+}
+
+// Request runs the admission checks and enqueues the promotion job.
+func (s PromotionService) Request(ctx context.Context, in PromotionRequest) (PromotionResult, *PromotionError) {
+	admission, perr := s.admit(ctx, in)
+	if perr != nil {
+		return PromotionResult{}, perr
+	}
+	source, target, publisher := in.Source, admission.target, admission.publisher
 	promoteAudit := s.auditFor(repository.AuditRecord{Repository: source.Name, GroupName: source.Name, Actor: in.Principal.Actor, Resource: in.Coordinate, Operation: "promote", Status: http.StatusAccepted})
 	now := time.Now().UTC()
 	provenance := repository.ArtifactPromotion{
