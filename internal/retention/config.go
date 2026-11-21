@@ -162,6 +162,26 @@ func (c Config) KeepOrDefault(table string) (time.Duration, error) {
 	return 0, fmt.Errorf("retention: unknown table %q", table)
 }
 
+// eventLogEntry is the registry entry of the domain event log; a test pins that the registry lists it.
+var eventLogEntry = func() Entry {
+	for _, entry := range DefaultRegistry() {
+		if entry.Table == "domain_events" {
+			return entry
+		}
+	}
+	panic("retention: the registry does not list domain_events")
+}()
+
+// EventLogKeep is how long domain_events rows are kept (NOTARX_EVENTS_RETENTION, else the standard of the registry):
+// nothing older can be replayed, so it bounds what a consumer or the reconciler can catch up on. The lookup cannot fail:
+// the registry lists the table, which eventLogEntry checks when the package loads.
+func (c Config) EventLogKeep() time.Duration {
+	if keep, on := c.Keep(eventLogEntry); on {
+		return keep
+	}
+	return eventLogEntry.Standard
+}
+
 // KeepFor is Keep by table name for the first entry of that table; the partition
 // manager uses it for the audit tables.
 func (c Config) KeepFor(table string) (time.Duration, bool, error) {

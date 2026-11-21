@@ -104,12 +104,12 @@ func (m *Module) ImportUnit(ctx context.Context, repositoryID string, unit forma
 
 // storeBlob writes the blob into its content-addressed key. A blob that was staged in the same object store is copied
 // there on the digest recorded when it was staged, so no byte passes through this node and no local temporary space is
-// used (objectstore.CopyVerified); a blob that was not (the sender's open reads it from elsewhere) is streamed through
-// open into a verified write.
+// used (objectstore.CopyVerified); a blob that was not (the sender's open reads it from elsewhere), or whose staged object
+// carries no recorded digest, is streamed through open into a verified write that hashes the bytes.
 func (m *Module) storeBlob(ctx context.Context, blob formatmodule.BlobDescriptor, key string, open func(formatmodule.BlobDescriptor) (io.ReadCloser, error)) error {
 	if blob.ObjectKey != "" {
 		err := objectstore.CopyVerified(ctx, m.objects, blob.ObjectKey, key, blob.Digest, blob.Size)
-		if !errors.Is(err, objectstore.ErrNotFound) {
+		if !errors.Is(err, objectstore.ErrNotFound) && !errors.Is(err, objectstore.ErrNoRecordedDigest) {
 			return err
 		}
 	}

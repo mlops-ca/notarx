@@ -528,7 +528,7 @@ func TestImportRecordsProvenanceAndALocalPromotionContinuesItsChainPath(t *testi
 		return fmt.Sprintf(`{"instance":%q,"repository":%q,"ruleId":"","at":"2026-01-01T00:00:00Z"}`, instance, repo)
 	}
 	f.imported("docs/notes.txt", content, "k1", `,"chainPath":[`+hop(peer, "dev")+`]`)
-	row, err := f.store.GetCompletedArtifactPromotion(ctx, f.target.ID, repository.FormatRaw, "docs/notes.txt", "sha256:"+sha(content))
+	row, err := f.store.GetArtifactPromotionRoute(ctx, f.target.ID, repository.FormatRaw, "docs/notes.txt", "sha256:"+sha(content))
 	if err != nil || row.State != repository.ArtifactPromotionCompleted || row.OriginInstanceID != peer || row.OriginRepository != "dev" || row.JobID != "" ||
 		len(row.ChainPath) != 2 || row.ChainPath[0].Repository != "dev" || row.ChainPath[1].Instance != f.local || row.ChainPath[1].Repository != f.target.Name {
 		t.Fatalf("import provenance = %+v %v", row, err)
@@ -546,11 +546,15 @@ func TestImportRecordsProvenanceAndALocalPromotionContinuesItsChainPath(t *testi
 		return service.Request(ctx, PromotionRequest{Principal: Principal{Actor: "promoter", Admin: true}, Source: f.target, TargetID: next.ID, Coordinate: coordinate, Digest: digest, IdempotencyKey: key})
 	}
 	result, perr := request("docs/notes.txt", "sha256:"+sha(content), "first")
-	if perr != nil || len(result.Promotion.ChainPath) != 2 || result.Promotion.ChainPath[0].Repository != "dev" || result.Promotion.ChainPath[1].Repository != f.target.Name {
+	if perr != nil || len(result.Promotion.ChainPath) != 2 || result.Promotion.ChainPath[0].Repository != "dev" || result.Promotion.ChainPath[1].Repository != f.target.Name ||
+		result.Promotion.OriginInstanceID != "" || result.Promotion.OriginRepository != f.target.Name {
 		t.Fatalf("a promotion of an imported artifact = %+v %+v", result.Promotion, perr)
 	}
 	// A path at the cap is refused: three reported hops plus this instance's own is one over.
 	f.imported("docs/long.txt", "long", "k2", `,"chainPath":[`+hop(peer, "a")+","+hop(peer, "b")+","+hop(peer, "c")+`]`)
+	if long, getErr := f.store.GetArtifactPromotionRoute(ctx, f.target.ID, repository.FormatRaw, "docs/long.txt", "sha256:"+sha("long")); getErr != nil || long.OriginRepository != "c" || long.OriginInstanceID != peer {
+		t.Fatalf("the origin of a pushed artifact is the last hop the sender reported: %+v %v", long, getErr)
+	}
 	if _, perr = request("docs/long.txt", "sha256:"+sha("long"), "long"); perr == nil || perr.Code != "chain_too_long" {
 		t.Fatalf("a chain over the cap = %+v", perr)
 	}
@@ -592,6 +596,14 @@ func TestLocalPromotionsContinueTheChainPathAndRefuseCyclesAndTooLongRoutes(t *t
 	if perr != nil || len(first.Promotion.ChainPath) != 1 || first.Promotion.ChainPath[0].Repository != f.target.Name {
 		t.Fatalf("first promotion = %+v %+v", first.Promotion, perr)
 	}
+	// The promotion worker is not running: put the artifact where it would have published it.
+	if _, err := f.store.PutRawAsset(ctx, repository.RawAsset{RepositoryID: next.ID, Path: "docs/chained.txt", Digest: digest, ObjectKey: "native/raw/" + sha(content), Size: int64(len(content)), ContentType: "text/plain"}); err != nil {
+		t.Fatal(err)
+	}
+	// A promotion that is still queued already routes the artifact: promoting it back is a cycle.
+	if _, perr = request(service, next, f.target, "early"); perr == nil || perr.Code != "chain_loop" {
+		t.Fatalf("a promotion back to the origin while the first one is queued = %+v", perr)
+	}
 	claimed, err := f.store.ClaimLifecycleJobsByKind(ctx, repository.LifecycleJobPromotion, 10)
 	if err != nil || len(claimed) != 1 {
 		t.Fatalf("claim = %v %v", claimed, err)
@@ -599,12 +611,9 @@ func TestLocalPromotionsContinueTheChainPathAndRefuseCyclesAndTooLongRoutes(t *t
 	if err = f.store.CompleteLifecycleJob(ctx, claimed[0].ID, claimed[0].LeaseToken); err != nil {
 		t.Fatal(err)
 	}
-	// The promotion worker is not running: put the artifact where it would have published it.
-	if _, err = f.store.PutRawAsset(ctx, repository.RawAsset{RepositoryID: next.ID, Path: "docs/chained.txt", Digest: digest, ObjectKey: "native/raw/" + sha(content), Size: int64(len(content)), ContentType: "text/plain"}); err != nil {
-		t.Fatal(err)
-	}
 	second, perr := request(service, next, third, "second")
-	if perr != nil || len(second.Promotion.ChainPath) != 2 || second.Promotion.ChainPath[0].Repository != f.target.Name || second.Promotion.ChainPath[1].Repository != next.Name {
+	if perr != nil || len(second.Promotion.ChainPath) != 2 || second.Promotion.ChainPath[0].Repository != f.target.Name || second.Promotion.ChainPath[1].Repository != next.Name ||
+		second.Promotion.OriginRepository != next.Name || second.Promotion.OriginInstanceID != "" {
 		t.Fatalf("second promotion = %+v %+v", second.Promotion, perr)
 	}
 	if _, perr = request(service, next, f.target, "back"); perr == nil || perr.Code != "chain_loop" {

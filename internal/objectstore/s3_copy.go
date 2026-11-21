@@ -21,23 +21,19 @@ var (
 
 // CopyObject implements Copier: the object is copied inside the service, with its metadata (the verified digest
 // included), so no byte reaches this node and no local temporary space is used. Objects above singleCopyLimit are copied
-// as a multipart upload of UploadPartCopy ranges.
-func (s *S3Store) CopyObject(ctx context.Context, src, dst string) error {
-	head, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(src)})
-	if err != nil {
-		if s3NotFound(err) {
-			return ErrNotFound
-		}
-		return err
-	}
+// as a multipart upload of UploadPartCopy ranges, which needs the headers of the source (one HEAD).
+func (s *S3Store) CopyObject(ctx context.Context, src, dst string, size int64) error {
 	source := aws.String(copySource(s.bucket, src))
-	size := aws.ToInt64(head.ContentLength)
 	if size <= singleCopyLimit {
-		_, err = s.client.CopyObject(ctx, &s3.CopyObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(dst), CopySource: source, MetadataDirective: types.MetadataDirectiveCopy})
+		_, err := s.client.CopyObject(ctx, &s3.CopyObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(dst), CopySource: source, MetadataDirective: types.MetadataDirectiveCopy})
 		return copyError(err)
 	}
 	if size > int64(MaxMultipartParts-1)*copyPartSize {
 		return fmt.Errorf("%w: %d bytes exceeds %d at a copy part size of %d", ErrObjectTooLarge, size, int64(MaxMultipartParts-1)*copyPartSize, copyPartSize)
+	}
+	head, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: aws.String(s.bucket), Key: aws.String(src)})
+	if err != nil {
+		return copyError(err)
 	}
 	return copyError(s.copyParts(ctx, source, dst, size, head))
 }

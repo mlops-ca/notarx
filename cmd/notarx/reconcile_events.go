@@ -46,11 +46,7 @@ func runReconcileEvents(ctx context.Context, args []string, getenv func(string) 
 		_, _ = fmt.Fprintln(stderr, err)
 		return 2
 	}
-	keep, err := retentionConfig.KeepOrDefault("domain_events")
-	if err != nil {
-		_, _ = fmt.Fprintln(stderr, err)
-		return 2
-	}
+	keep := retentionConfig.EventLogKeep()
 	store, err := repository.NewPostgresStore(databaseURL)
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, "open database:", err)

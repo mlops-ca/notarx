@@ -122,7 +122,7 @@ func TestS3CopyOfALargeObjectUsesPartCopies(t *testing.T) {
 	}
 	// A failing part aborts the upload and writes nothing.
 	fake.failPart = 2
-	if err = store.CopyObject(ctx, "staging/big", "final/broken"); err == nil {
+	if err = store.CopyObject(ctx, "staging/big", "final/broken", int64(len(data))); err == nil {
 		t.Fatal("a failing part copy must fail the copy")
 	}
 	if len(fake.uploads) != 0 || fake.object("final/broken") != nil {
@@ -166,5 +166,19 @@ func TestS3CopySourceEscapesPlus(t *testing.T) {
 	}
 	if len(fake.copySources) != 1 || !strings.Contains(fake.copySources[0], "%2B") {
 		t.Fatalf("copy sources = %v", fake.copySources)
+	}
+}
+
+// A source without a recorded digest is reported as such, so the caller can stream and verify its bytes.
+func TestCopyVerifiedReportsASourceWithoutARecordedDigest(t *testing.T) {
+	ctx := context.Background()
+	fake := newFakeS3(t)
+	store := fake.store(fake.config())
+	data := []byte("no digest")
+	if err := store.Put(ctx, "staging/a", data); err != nil {
+		t.Fatal(err)
+	}
+	if err := CopyVerified(ctx, store, "staging/a", "final/a", digestOf(data), int64(len(data))); !errors.Is(err, ErrNoRecordedDigest) {
+		t.Fatalf("a source without a digest = %v", err)
 	}
 }

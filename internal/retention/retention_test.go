@@ -237,3 +237,21 @@ func TestKeepOrDefaultBoundsAnOffTable(t *testing.T) {
 		t.Fatal("an unknown table was accepted")
 	}
 }
+
+func TestEventLogKeepFollowsTheConfiguredEventsRetention(t *testing.T) {
+	if got := DefaultConfig().EventLogKeep(); got != eventLogEntry.Standard {
+		t.Fatalf("default = %v, want %v", got, eventLogEntry.Standard)
+	}
+	cfg, err := LoadConfig(func(key string) (string, bool) {
+		if key == "NOTARX_EVENTS_RETENTION" {
+			return "36h", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.EventLogKeep(); got != 36*time.Hour {
+		t.Fatalf("configured = %v, want 36h", got)
+	}
+}

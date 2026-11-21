@@ -245,7 +245,35 @@ func TestDrainPublishedCandidatesStopsAtTheFailureCap(t *testing.T) {
 	}
 	emit := func(publishedCandidate) (bool, error) { return false, errors.New("boom") }
 	written, failures := drainPublishedCandidates(context.Background(), 5, fetch, emit)
-	if written != 0 || len(failures) <= maxFailedPublicationsPerPass || fetches > maxFailedPublicationsPerPass {
+	if written != 0 || len(failures) <= maxPassedPublicationsPerPass || fetches > maxPassedPublicationsPerPass {
 		t.Fatalf("written=%d failures=%d fetches=%d", written, len(failures), fetches)
+	}
+}
+
+// Candidates that another reconciler wrote in the meantime are passed over like failed ones, so the publications behind a
+// head of them are still reconciled.
+func TestDrainPublishedCandidatesPagesPastCandidatesAnotherReconcilerWrote(t *testing.T) {
+	all := []publishedCandidate{{Coordinate: "taken1"}, {Coordinate: "taken2"}, {Coordinate: "mine1"}, {Coordinate: "mine2"}}
+	taken := map[string]bool{"taken1": true, "taken2": true}
+	mine := map[string]bool{}
+	fetch := func(pageSize int) ([]publishedCandidate, error) {
+		var pending []publishedCandidate
+		for _, candidate := range all {
+			if !mine[candidate.Coordinate] {
+				pending = append(pending, candidate)
+			}
+		}
+		return pending[:min(pageSize, len(pending))], nil
+	}
+	emit := func(candidate publishedCandidate) (bool, error) {
+		if taken[candidate.Coordinate] {
+			return false, nil
+		}
+		mine[candidate.Coordinate] = true
+		return true, nil
+	}
+	written, failures := drainPublishedCandidates(context.Background(), 2, fetch, emit)
+	if written != 2 || len(failures) != 0 || !mine["mine1"] || !mine["mine2"] {
+		t.Fatalf("written=%d failures=%v mine=%v", written, failures, mine)
 	}
 }
