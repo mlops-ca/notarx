@@ -135,7 +135,7 @@ func (m *Module) RunPromotionJobs(ctx context.Context, limit int) error {
 
 // ReleaseMembers implements formatmodule.ReleaseSet. A name@version coordinate of a versioned repository is the release of
 // that version: every file of it (ADR 0028). Any other coordinate is one path and its release is that asset.
-func (m *Module) ReleaseMembers(ctx context.Context, repositoryID, coordinate string) ([]formatmodule.ReleaseMember, error) {
+func (m *Module) ReleaseMembers(ctx context.Context, repositoryID, coordinate, _ string) ([]formatmodule.ReleaseMember, error) {
 	if m.store == nil {
 		return nil, repository.ErrDisabled
 	}

@@ -389,7 +389,7 @@ func (h nativeOCIHandler) upload(w http.ResponseWriter, r *http.Request, repo re
 			writeOCIError(w, 400, "DIGEST_INVALID", "provided digest did not match uploaded content")
 			return
 		}
-		key := "native/oci/blobs/sha256/" + strings.TrimPrefix(digest, "sha256:")
+		key := repository.OCIBlobObjectKey(digest)
 		releaseObject, err := h.store.LockOCIObject(r.Context(), key)
 		if err != nil {
 			writeOCIError(w, http.StatusServiceUnavailable, "UNKNOWN", "blob coordination is unavailable")
@@ -758,6 +758,15 @@ func (h nativeOCIHandler) manifest(w http.ResponseWriter, r *http.Request, repo 
 		if envelope.Subject.Digest != "" && !validOCIDigest(envelope.Subject.Digest) {
 			writeOCIError(w, http.StatusBadRequest, "MANIFEST_INVALID", "subject digest must be sha256")
 			return
+		}
+		if !validOCIDigest(reference) {
+			// A push of a tag takes the lock of the tag, so an import that checks the tag before it writes it is not overtaken.
+			releaseTag, lockErr := h.store.LockOCIObject(r.Context(), repository.OCITagLockKey(repo.ID, name, reference))
+			if lockErr != nil {
+				writeOCIError(w, http.StatusServiceUnavailable, "UNKNOWN", "manifest coordination is unavailable")
+				return
+			}
+			defer releaseTag()
 		}
 		manifest, err := h.store.PutOCIManifest(repository.WithWriteActor(r.Context(), actor), repository.OCIManifest{RepositoryID: repo.ID, Name: name, Digest: digest, ObjectKey: key, MediaType: mediaType, SubjectDigest: envelope.Subject.Digest, ArtifactType: envelope.ArtifactType, Size: int64(len(data))}, reference)
 		if err != nil {

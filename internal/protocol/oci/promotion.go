@@ -12,6 +12,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/background"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/objectstore"
+	"github.com/mlops-ca/notarx/internal/ocigraph"
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
@@ -99,46 +100,65 @@ func (m NativePromotion) run(ctx context.Context, job repository.LifecycleJob) e
 	if err := json.Unmarshal(job.Payload, &p); err != nil || p.Format != repository.FormatOCI || p.SourceRepositoryID == "" || p.Name == "" || !strings.HasPrefix(p.Digest, "sha256:") {
 		return m.fail(ctx, job, "invalid OCI promotion payload")
 	}
+	if message := m.copyManifest(ctx, job.RepositoryID, p, 0); message != "" {
+		return m.fail(ctx, job, message)
+	}
+	return m.Store.CompleteLifecycleJob(ctx, job.ID, job.LeaseToken)
+}
+
+// copyManifest publishes one manifest of the source into the target and returns the reason it cannot, or "". The child
+// manifests of an index are published first, so an index is never visible without them whatever order the members of a
+// release are promoted in; a child that was promoted already is published again without change.
+func (m NativePromotion) copyManifest(ctx context.Context, targetID string, p PromotionPayload, depth int) string {
+	if depth > ocigraph.MaxDepth {
+		return "OCI index is nested too deeply"
+	}
 	source, err := m.Store.GetOCIManifest(ctx, p.SourceRepositoryID, p.Name, p.Digest)
 	if err != nil {
-		return m.fail(ctx, job, "source OCI manifest is unavailable")
+		return "source OCI manifest is unavailable"
 	}
 	body, err := m.Objects.Get(ctx, source.ObjectKey)
 	if err != nil {
-		return m.fail(ctx, job, "source OCI manifest object is unavailable")
+		return "source OCI manifest object is unavailable"
 	}
-	for _, digest := range manifestBlobDigests(body) {
-		if _, err = m.Store.MountOCIBlobFrom(ctx, job.RepositoryID, p.SourceRepositoryID, digest); err != nil {
-			return m.fail(ctx, job, "source OCI blob is unavailable")
+	document, _ := decodeManifestDocument(body)
+	for _, child := range document.Manifests {
+		if message := m.copyManifest(ctx, targetID, PromotionPayload{SourceRepositoryID: p.SourceRepositoryID, Name: p.Name, Digest: child.Digest}, depth+1); message != "" {
+			return message
 		}
 	}
-	key := ManifestObjectKey(job.RepositoryID, p.Name, p.Digest)
-	if err = m.Store.StageOCIObjectIntent(ctx, repository.OCIObjectIntent{RepositoryID: job.RepositoryID, ObjectKey: key, Digest: p.Digest, Size: int64(len(body))}); err != nil {
-		return m.fail(ctx, job, "stage target OCI manifest failed")
+	for _, digest := range manifestBlobDigests(body) {
+		if _, err = m.Store.MountOCIBlobFrom(ctx, targetID, p.SourceRepositoryID, digest); err != nil {
+			return "source OCI blob is unavailable"
+		}
+	}
+	key := ManifestObjectKey(targetID, p.Name, p.Digest)
+	if err = m.Store.StageOCIObjectIntent(ctx, repository.OCIObjectIntent{RepositoryID: targetID, ObjectKey: key, Digest: p.Digest, Size: int64(len(body))}); err != nil {
+		return "stage target OCI manifest failed"
 	}
 	if err = m.Objects.PutVerifiedReader(ctx, key, bytes.NewReader(body), int64(len(body)), p.Digest); err != nil {
-		return m.fail(ctx, job, "persist target OCI manifest failed")
+		return "persist target OCI manifest failed"
 	}
 	releaseAdmission, err := repository.LockArtifactDistributionAdmission(ctx, m.Store, p.SourceRepositoryID, repository.FormatOCI, p.Name, p.Digest)
 	if errors.Is(err, repository.ErrArtifactQuarantined) {
-		return m.fail(ctx, job, repository.ArtifactQuarantinedReason)
+		return repository.ArtifactQuarantinedReason
 	}
 	if err != nil {
-		return m.fail(ctx, job, "evaluate OCI artifact quarantine failed")
+		return "evaluate OCI artifact quarantine failed"
 	}
-	if _, err = m.Store.PutOCIManifest(ctx, repository.OCIManifest{RepositoryID: job.RepositoryID, Name: p.Name, Digest: p.Digest, ObjectKey: key, MediaType: source.MediaType, SubjectDigest: source.SubjectDigest, ArtifactType: source.ArtifactType, Size: int64(len(body))}, p.Digest); err != nil {
+	if _, err = m.Store.PutOCIManifest(ctx, repository.OCIManifest{RepositoryID: targetID, Name: p.Name, Digest: p.Digest, ObjectKey: key, MediaType: source.MediaType, SubjectDigest: source.SubjectDigest, ArtifactType: source.ArtifactType, Size: int64(len(body))}, p.Digest); err != nil {
 		releaseAdmission()
-		return m.fail(ctx, job, "publish target OCI manifest failed")
+		return "publish target OCI manifest failed"
 	}
 	releaseAdmission()
-	intelligenceErr := repository.CopyArtifactIntelligenceOrEnqueue(ctx, m.Intelligence, m.Store, job.RepositoryID, p.SourceRepositoryID, repository.FormatOCI, p.Name, p.Digest)
+	intelligenceErr := repository.CopyArtifactIntelligenceOrEnqueue(ctx, m.Intelligence, m.Store, targetID, p.SourceRepositoryID, repository.FormatOCI, p.Name, p.Digest)
 	if intelligenceErr != nil && !errors.Is(intelligenceErr, repository.ErrArtifactIntelligenceDeferred) {
-		return m.fail(ctx, job, fmt.Sprintf("copy OCI artifact intelligence failed: %v", intelligenceErr))
+		return fmt.Sprintf("copy OCI artifact intelligence failed: %v", intelligenceErr)
 	}
 	if errors.Is(intelligenceErr, repository.ErrArtifactIntelligenceDeferred) && m.Metrics != nil {
 		m.Metrics.RecordBackgroundOperation("intelligence-copy", repository.FormatOCI, "deferred")
 	}
-	return m.Store.CompleteLifecycleJob(ctx, job.ID, job.LeaseToken)
+	return ""
 }
 
 func (m NativePromotion) fail(ctx context.Context, job repository.LifecycleJob, message string) error {
@@ -148,31 +168,15 @@ func (m NativePromotion) fail(ctx context.Context, job repository.LifecycleJob, 
 	return fmt.Errorf("%s", message)
 }
 
+// manifestBlobDigests lists the blobs of a manifest, which a promotion mounts. The child manifests of an index are not blobs:
+// they are promoted as artifacts of their own (the release set of an index names them).
 func manifestBlobDigests(body []byte) []string {
-	var manifest struct {
-		Config struct {
-			Digest string `json:"digest"`
-		} `json:"config"`
-		Layers []struct {
-			Digest string `json:"digest"`
-		} `json:"layers"`
-		Manifests []struct {
-			Digest string `json:"digest"`
-		} `json:"manifests"`
-	}
-	if json.Unmarshal(body, &manifest) != nil {
+	document, err := decodeManifestDocument(body)
+	if err != nil {
 		return nil
 	}
-	digests := make([]string, 0, 1+len(manifest.Layers)+len(manifest.Manifests))
-	if manifest.Config.Digest != "" {
-		digests = append(digests, manifest.Config.Digest)
-	}
-	for _, item := range manifest.Layers {
-		if item.Digest != "" {
-			digests = append(digests, item.Digest)
-		}
-	}
-	for _, item := range manifest.Manifests {
+	digests := []string{}
+	for _, item := range blobDescriptors(document) {
 		if item.Digest != "" {
 			digests = append(digests, item.Digest)
 		}

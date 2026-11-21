@@ -1,15 +1,12 @@
 package raw
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"strings"
 
 	formatmodule "github.com/mlops-ca/notarx/internal/format"
-	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
 	"github.com/mlops-ca/notarx/internal/v2contract"
 )
@@ -25,10 +22,8 @@ type importManifest struct {
 // an invalid unit.
 func parseImportManifest(raw []byte) (importManifest, error) {
 	var manifest importManifest
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&manifest); err != nil || decoder.Decode(&struct{}{}) != io.EOF {
-		return importManifest{}, formatmodule.ErrImportInvalidUnit
+	if err := formatmodule.DecodeImportManifest(raw, &manifest); err != nil {
+		return importManifest{}, err
 	}
 	canonical, ok := v2contract.CanonicalRawPath(manifest.Path)
 	if !ok || canonical != manifest.Path {
@@ -86,9 +81,9 @@ func (m *Module) ImportUnit(ctx context.Context, repositoryID string, unit forma
 	if err = m.store.StageRawObject(objectCtx, repository.RawObject{RepositoryID: repositoryID, Digest: blob.Digest, ObjectKey: key, Size: blob.Size}); err != nil {
 		return errors.Join(formatmodule.ErrPublicationStage, err)
 	}
-	if err = m.storeBlob(objectCtx, blob, key, open); err != nil {
-		if errors.Is(err, objectstore.ErrDigestMismatch) || errors.Is(err, objectstore.ErrSizeMismatch) {
-			return errors.Join(formatmodule.ErrImportMismatch, err)
+	if err = formatmodule.StoreImportedBlob(objectCtx, m.objects, blob, key, open); err != nil {
+		if errors.Is(err, formatmodule.ErrImportMismatch) {
+			return err
 		}
 		return errors.Join(formatmodule.ErrPublicationUpload, err)
 	}
@@ -100,25 +95,6 @@ func (m *Module) ImportUnit(ctx context.Context, repositoryID string, unit forma
 		}
 	}
 	return err
-}
-
-// storeBlob writes the blob into its content-addressed key. A blob that was staged in the same object store is copied
-// there on the digest recorded when it was staged, so no byte passes through this node and no local temporary space is
-// used (objectstore.CopyVerified); a blob that was not (the sender's open reads it from elsewhere), or whose staged object
-// carries no recorded digest, is streamed through open into a verified write that hashes the bytes.
-func (m *Module) storeBlob(ctx context.Context, blob formatmodule.BlobDescriptor, key string, open func(formatmodule.BlobDescriptor) (io.ReadCloser, error)) error {
-	if blob.ObjectKey != "" {
-		err := objectstore.CopyVerified(ctx, m.objects, blob.ObjectKey, key, blob.Digest, blob.Size)
-		if !errors.Is(err, objectstore.ErrNotFound) && !errors.Is(err, objectstore.ErrNoRecordedDigest) {
-			return err
-		}
-	}
-	reader, err := open(blob)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = reader.Close() }()
-	return m.objects.PutVerifiedReader(ctx, key, reader, blob.Size, blob.Digest)
 }
 
 // importedAlready reports whether the path holds the digest already (a replay: nothing to do) and refuses a path that holds

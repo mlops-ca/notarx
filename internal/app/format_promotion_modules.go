@@ -17,8 +17,9 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-// promotionModuleDeps are the ports the promotion capabilities of the nine core formats run on. Objects, Intelligence
-// and Metrics are needed only to run the jobs of a format; a registry that only enqueues leaves them empty.
+// promotionModuleDeps are the ports the promotion capabilities of the nine core formats run on. Intelligence and Metrics are
+// needed only to run the jobs of a format and Objects to run them or to read the manifests of an OCI release; a registry that
+// only enqueues and matches leaves them empty.
 type promotionModuleDeps struct {
 	Store        GatewayStore
 	Objects      objectstore.Store
@@ -50,7 +51,7 @@ type mavenPromotionModule struct {
 }
 
 // ReleaseMembers implements formatmodule.ReleaseSet.
-func (m mavenPromotionModule) ReleaseMembers(ctx context.Context, repositoryID, coordinate string) ([]formatmodule.ReleaseMember, error) {
+func (m mavenPromotionModule) ReleaseMembers(ctx context.Context, repositoryID, coordinate, _ string) ([]formatmodule.ReleaseMember, error) {
 	assets, err := m.store.ListMavenAssets(ctx, repositoryID, coordinate)
 	if err != nil {
 		return nil, err
@@ -95,13 +96,25 @@ func (m npmPromotionModule) TagsOfName(ctx context.Context, repositoryID, name s
 // ociPromotionModule adds the tags that point at a manifest digest.
 type ociPromotionModule struct {
 	promotionModule
-	store interface {
+	releases ociprotocol.ReleaseSet
+	store    interface {
 		ListOCITags(ctx context.Context, repositoryID, name string, limit int, after string) ([]string, error)
 		GetOCIManifest(ctx context.Context, repositoryID, name, reference string) (repository.OCIManifest, error)
 	}
 }
 
 const ociTagPageSize = 100
+
+// ociImportModule is the registry entry of the OCI importer in the registry the import endpoints use. OCI is served by the
+// native handler, not by a format module, so this entry carries the Importer capability and no routes.
+type ociImportModule struct{ ociprotocol.NativeImporter }
+
+func (ociImportModule) Format() repository.Format { return repository.FormatOCI }
+
+// ReleaseMembers implements formatmodule.ReleaseSet: the manifest and, for an index, its child manifests.
+func (m ociPromotionModule) ReleaseMembers(ctx context.Context, repositoryID, coordinate, digest string) ([]formatmodule.ReleaseMember, error) {
+	return m.releases.ReleaseMembers(ctx, repositoryID, coordinate, digest)
+}
 
 // TagName implements formatmodule.Tagged: the coordinate of an image is its name.
 func (m ociPromotionModule) TagName(coordinate string) (string, bool) {
@@ -150,7 +163,7 @@ func promotionFormatRegistry(deps promotionModuleDeps) *formatmodule.Registry {
 	aptDistribution := aptpublication.Distribution{Store: store}
 	registry, err := formatmodule.New(
 		rawModule,
-		ociPromotionModule{store: store, promotionModule: promotionModule{format: repository.FormatOCI,
+		ociPromotionModule{store: store, releases: ociprotocol.ReleaseSet{Store: store, Objects: deps.Objects}, promotionModule: promotionModule{format: repository.FormatOCI,
 			enqueue: func(ctx context.Context, sourceID, targetID, coordinate, digest, key string, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
 				return ociPromotion.Enqueue(ctx, targetID, key, ociprotocol.PromotionPayload{SourceRepositoryID: sourceID, Name: coordinate, Digest: digest}, audit...)
 			}, run: ociPromotion.RunJobs}},
