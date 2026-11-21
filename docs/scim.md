@@ -57,7 +57,7 @@ without a database read.
   name is the identity that grants, sessions and job actors are keyed on, and no other path renames an account: a
   rename would orphan its grants and hand them to whoever takes the old name. Rename the account in the console, or
   provision the user again.
-- Provider mode `scim_only`: a login succeeds only for an identity that already exists. The first login binds the
+- Provider mode `scim_only`: a login succeeds only for an identity that already exists (the subjects an administrator listed in the provider's admin subjects keep their break-glass sign-in). The first login binds the
   subject by matching the `externalId` the identity provider asserts (`attributeMapping.externalId`, for example the
   `employee_id` claim or the `employeeNumber` SAML attribute) against the SCIM `externalId`, and never by
   `userName`, which is mutable. An unknown subject is refused and a bound account cannot be taken over by another
@@ -94,7 +94,7 @@ without a database read.
 | Paging | Keyset on creation time and id. `count` is capped at `NOTARX_SCIM_MAX_PAGE`; `startIndex` up to 10001 is mapped onto a cursor by hopping keyset pages that read only the keys of the rows they skip, and every list response carries an RFC 9865 `nextCursor` for anything further. `totalResults` is exact up to 10000 rows and a lower bound beyond |
 | PATCH | Any letter case for `op`; `active` as a boolean or `"True"`/`"False"`; simple paths, `attr[type eq "x"].sub`, `members[value eq "id"]`, member arrays and pathless replace objects (Okta) |
 | Unsupported attributes | Logged and ignored with `200`; only `userName`, `externalId`, `active` and `id` answer `400 invalidPath` |
-| ETag | Weak ETags on resources; `If-Match` on PUT, PATCH and DELETE is compared under the row lock, `412` on a mismatch |
+| ETag | Weak ETags on resources (RFC 7644 section 3.14); `If-Match` on PUT, PATCH and DELETE takes the opaque value of a weak or strong tag, because the resource tags are weak, and is compared under the row lock, `412` on a mismatch |
 | Bulk, sort, change password | Not supported |
 | Groups | `excludedAttributes=members` is honoured; a group read returns at most 10000 members, and the groups of one list page share a budget of 1000 members; a group whose members do not fit its share is listed without them, never with a partial list (use `excludedAttributes=members`, as Entra ID does, or read the group) |
 | Locations | `meta.location`, `Location` and member `$ref` are absolute from `NOTARX_PUBLIC_URL`; without it they are paths only, never built from the request's Host header |

@@ -3,6 +3,7 @@ package scim
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -302,5 +303,44 @@ func TestPathlessValuesAreBoundedInDepth(t *testing.T) {
 	}
 	if _, failure := NormalizeUserPatch([]byte(`{"Operations":[{"op":"replace","value":{"name":{"givenName":"A"}}}]}`)); failure != nil {
 		t.Fatalf("the nesting of a supported attribute was refused: %v", failure)
+	}
+}
+
+func TestPatchNullIsNotFalse(t *testing.T) {
+	for _, body := range []string{
+		`{"Operations":[{"op":"replace","path":"active","value":null}]}`,
+		`{"Operations":[{"op":"replace","value":{"active":null}}]}`,
+		`{"Operations":[{"op":"replace","path":"active"}]}`,
+	} {
+		if patch, failure := NormalizeUserPatch([]byte(body)); failure == nil || failure.Type != TypeInvalidValue || patch.Active != nil {
+			t.Errorf("NormalizeUserPatch(%s) = %+v, %v; a null must be a 400, never a deactivation", body, patch, failure)
+		}
+	}
+	if _, ok := parseBool(json.RawMessage("null")); ok {
+		t.Error("parseBool read null as a boolean")
+	}
+}
+
+func TestIgnoredAttributesAreBounded(t *testing.T) {
+	var attributes []string
+	for index := 0; index < 5000; index++ {
+		attributes = append(attributes, `"attr`+strings.Repeat("x", index%300)+strconv.Itoa(index)+`":1`)
+	}
+	_, failure := NormalizeUserPatch([]byte(`{"Operations":[{"op":"replace","value":{` + strings.Join(attributes, ",") + `}}]}`))
+	if failure == nil || failure.Type != TypeTooMany {
+		t.Fatalf("thousands of attributes in one request = %v, want tooMany", failure)
+	}
+	var many []string
+	for index := 0; index < MaxPatchAttributes-10; index++ {
+		many = append(many, `{"op":"replace","path":"attribute`+strconv.Itoa(index)+strings.Repeat("y", 400)+`","value":1}`)
+	}
+	patch, failure := NormalizeUserPatch([]byte(`{"Operations":[` + strings.Join(many[:MaxPatchOperations], ",") + `]}`))
+	if failure != nil || len(patch.Ignored) != MaxIgnoredAttributes {
+		t.Fatalf("ignored = %d names, %v; want exactly the cap of %d", len(patch.Ignored), failure, MaxIgnoredAttributes)
+	}
+	for _, name := range patch.Ignored {
+		if len(name) > MaxIgnoredNameLength {
+			t.Fatalf("an ignored name of %d bytes was kept", len(name))
+		}
 	}
 }

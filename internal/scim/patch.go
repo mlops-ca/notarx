@@ -116,6 +116,10 @@ func parsePath(raw string, corePrefix string) (path, bool) {
 // parseBool reads a boolean that is a JSON bool or the strings "True" and "False" (Entra ID sends strings unless
 // its aadOptscim062020 flag is set).
 func parseBool(raw json.RawMessage) (bool, bool) {
+	// A JSON null unmarshals into a bool without error and leaves it false: it must not be read as "false".
+	if !hasValue(raw) {
+		return false, false
+	}
 	var boolean bool
 	if json.Unmarshal(raw, &boolean) == nil {
 		return boolean, true
@@ -166,13 +170,16 @@ const maxPatchDepth = 3
 
 // flatten turns a pathless value object into attribute assignments: a nested object becomes dotted names, so
 // {"name":{"givenName":"A"}} and {"name.givenName":"A"} are the same assignment, as Okta and Entra ID send them.
-func flatten(prefix string, raw json.RawMessage, depth int, emit func(name string, value json.RawMessage) *Error) *Error {
+func flatten(prefix string, raw json.RawMessage, depth int, assigned *int, emit func(name string, value json.RawMessage) *Error) *Error {
 	if depth > maxPatchDepth {
 		return invalidValue("the value is nested too deeply")
 	}
 	var object map[string]json.RawMessage
 	if json.Unmarshal(raw, &object) != nil {
 		return invalidValue("a pathless operation needs an object value")
+	}
+	if *assigned += len(object); *assigned > MaxPatchAttributes {
+		return NewError(400, TypeTooMany, "too many attributes in one request")
 	}
 	names := make([]string, 0, len(object))
 	for name := range object {
@@ -186,7 +193,7 @@ func flatten(prefix string, raw json.RawMessage, depth int, emit func(name strin
 			full = prefix + "." + name
 		}
 		if isJSONObject(value) && !strings.HasPrefix(strings.ToLower(name), "urn:") && !strings.Contains(name, "[") {
-			if err := flatten(full, value, depth+1, emit); err != nil {
+			if err := flatten(full, value, depth+1, assigned, emit); err != nil {
 				return err
 			}
 			continue
@@ -211,6 +218,7 @@ func NormalizeUserPatch(body []byte) (UserPatch, *Error) {
 		return UserPatch{}, failure
 	}
 	var patch UserPatch
+	assigned := 0
 	for _, operation := range operations {
 		op := strings.ToLower(strings.TrimSpace(operation.Op))
 		if op != "add" && op != "replace" && op != "remove" {
@@ -220,7 +228,7 @@ func NormalizeUserPatch(body []byte) (UserPatch, *Error) {
 			if op == "remove" {
 				return UserPatch{}, NewError(400, TypeNoTarget, "a remove operation needs a path")
 			}
-			if failure := flatten("", operation.Value, 1, func(name string, value json.RawMessage) *Error {
+			if failure := flatten("", operation.Value, 1, &assigned, func(name string, value json.RawMessage) *Error {
 				return patch.apply(op, name, value)
 			}); failure != nil {
 				return UserPatch{}, failure
@@ -234,13 +242,25 @@ func NormalizeUserPatch(body []byte) (UserPatch, *Error) {
 	return patch, nil
 }
 
-func (p *UserPatch) ignore(name string) { p.Ignored = appendUnique(p.Ignored, name) }
+// MaxIgnoredAttributes and MaxIgnoredNameLength bound what a request can make the server remember about the attributes
+// it ignored: the names are logged and written to the audit evidence, so neither their number nor their length may be
+// chosen by the client without limit.
+const (
+	MaxIgnoredAttributes = 50
+	MaxIgnoredNameLength = 128
+	// MaxPatchAttributes bounds the attribute assignments one request carries, pathless value objects included.
+	MaxPatchAttributes = 200
+)
 
-func appendUnique(values []string, value string) []string {
-	for _, existing := range values {
-		if existing == value {
-			return values
-		}
+func (p *UserPatch) ignore(name string) { p.Ignored = appendIgnored(p.Ignored, name) }
+
+// appendIgnored records an ignored attribute name once, truncated, and stops recording at MaxIgnoredAttributes.
+func appendIgnored(values []string, value string) []string {
+	if len(value) > MaxIgnoredNameLength {
+		value = strings.ToValidUTF8(value[:MaxIgnoredNameLength], "")
+	}
+	if len(values) >= MaxIgnoredAttributes || slices.Contains(values, value) {
+		return values
 	}
 	return append(values, value)
 }
@@ -415,6 +435,7 @@ func NormalizeGroupPatch(body []byte) (GroupPatch, *Error) {
 		return GroupPatch{}, failure
 	}
 	var patch GroupPatch
+	assigned := 0
 	for _, operation := range operations {
 		op := strings.ToLower(strings.TrimSpace(operation.Op))
 		if op != "add" && op != "replace" && op != "remove" {
@@ -424,7 +445,7 @@ func NormalizeGroupPatch(body []byte) (GroupPatch, *Error) {
 			if op == "remove" {
 				return GroupPatch{}, NewError(400, TypeNoTarget, "a remove operation needs a path")
 			}
-			if failure := flatten("", operation.Value, 1, func(name string, value json.RawMessage) *Error {
+			if failure := flatten("", operation.Value, 1, &assigned, func(name string, value json.RawMessage) *Error {
 				return patch.apply(op, name, value)
 			}); failure != nil {
 				return GroupPatch{}, failure
@@ -442,7 +463,7 @@ func NormalizeGroupPatch(body []byte) (GroupPatch, *Error) {
 	return patch, nil
 }
 
-func (p *GroupPatch) ignore(name string) { p.Ignored = appendUnique(p.Ignored, name) }
+func (p *GroupPatch) ignore(name string) { p.Ignored = appendIgnored(p.Ignored, name) }
 
 // MemberIDs reads the user ids of a members value: an array (or one object) of {"value": id}.
 func MemberIDs(raw json.RawMessage) ([]string, bool) {

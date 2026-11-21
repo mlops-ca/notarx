@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"strings"
 	"context"
 	"errors"
 	"fmt"
@@ -430,5 +431,15 @@ func TestClaimsMembershipNeverContributesAGlobalRole(t *testing.T) {
 	}
 	if role := (UserGroupMembership{GroupSource: UserGroupSourceClaims, GlobalRole: UserGroupRoleAdmin}).EffectiveGroupRole(); role != UserGroupRoleNone {
 		t.Fatalf("a claims group contributed role %q", role)
+	}
+}
+
+func TestUserGroupNamesCountCharactersNotBytes(t *testing.T) {
+	long := strings.Repeat("é", 255)
+	if name, err := NormalizeUserGroupName(long); err != nil || name != long {
+		t.Fatalf("a name of 255 two-byte characters = %q, %v", name, err)
+	}
+	if _, err := NormalizeUserGroupName(long + "é"); !errors.Is(err, ErrUserGroupInvalid) {
+		t.Fatalf("a name of 256 characters: %v", err)
 	}
 }

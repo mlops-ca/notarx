@@ -36,17 +36,23 @@ export function daysUntilExpiry(
   return Math.ceil((Date.parse(expiresAt) - now) / DAY_MS);
 }
 
-/** Active tokens that expire within the warning window, soonest first. */
+/**
+ * Tokens that expire within the warning window or lapsed within it, soonest first. A token that lapsed longer ago has
+ * no effect left to warn about, so it ages out of the list instead of warning on every visit; revoked ones never warn.
+ */
 export function expiringTokens(
   tokens: ScimToken[],
   now: number = Date.now(),
 ): ScimToken[] {
   return tokens
-    .filter(
-      (token) =>
+    .filter((token) => {
+      const days = daysUntilExpiry(token.expiresAt, now);
+      return (
         token.state !== "revoked" &&
-        daysUntilExpiry(token.expiresAt, now) <= SCIM_TOKEN_WARNING_DAYS,
-    )
+        days <= SCIM_TOKEN_WARNING_DAYS &&
+        days >= -SCIM_TOKEN_WARNING_DAYS
+      );
+    })
     .sort((a, b) => Date.parse(a.expiresAt) - Date.parse(b.expiresAt));
 }
 

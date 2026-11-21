@@ -938,3 +938,30 @@ func TestSCIMTakeoverAndCreateAreAuditedWithTheirAccount(t *testing.T) {
 		t.Fatalf("create audits = %v", results)
 	}
 }
+
+func TestSCIMOnlyKeepsTheBreakGlassSignInOfAdministratorListedSubjects(t *testing.T) {
+	idp := newStubOIDCProvider(t, "scim-break-glass-key", "break-glass-subject", nil)
+	store := repository.NewMemoryStore()
+	runtime := NewIdentityRuntime(store)
+	input := corpProviderInput("corp", idp)
+	input.ProvisioningMode = identity.ProvisioningSCIMOnly
+	input.OIDC.AdminSubjects = []string{"break-glass-subject"}
+	if _, err := runtime.Create(t.Context(), input); err != nil {
+		t.Fatal(err)
+	}
+	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{IdentityRuntime: runtime}, Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator()})
+	// The subject an administrator listed signs in as before, although no account is linked to it.
+	if got := completeStubLogin(t, handler, idp, "corp"); got.Code != http.StatusFound {
+		t.Fatalf("break-glass login = %d", got.Code)
+	}
+	// Any other unlinked subject is refused.
+	other := newStubOIDCProvider(t, "scim-other-key", "someone-else", nil)
+	otherInput := corpProviderInput("other", other)
+	otherInput.ProvisioningMode = identity.ProvisioningSCIMOnly
+	if _, err := runtime.Create(t.Context(), otherInput); err != nil {
+		t.Fatal(err)
+	}
+	if got := attemptStubLogin(t, handler, other, "other"); !strings.Contains(got.Header().Get("Location"), "oidc_error=account_not_linked") {
+		t.Fatalf("an unlinked subject of a scim_only provider = %q", got.Header().Get("Location"))
+	}
+}

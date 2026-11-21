@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // User groups (ADR 0018 Decision 5). A user group is a persisted set of accounts that a repository grant can
@@ -155,7 +156,9 @@ func ClampUserGroupPageSize(limit int) int {
 // NormalizeUserGroupName trims and bounds a display name.
 func NormalizeUserGroupName(name string) (string, error) {
 	name = strings.TrimSpace(name)
-	if len(name) < 1 || len(name) > 255 {
+	// Characters, not bytes: the schema constraint and the API contract count characters, so a name in a multibyte
+	// script of up to 255 characters is valid.
+	if length := utf8.RuneCountInString(name); length < 1 || length > 255 {
 		return "", ErrUserGroupInvalid
 	}
 	return name, nil

@@ -7595,6 +7595,9 @@
           },
           "429": {
             "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ScimError"
           }
         }
       }
@@ -7630,6 +7633,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -7672,6 +7678,9 @@
           },
           "429": {
             "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ScimError"
           }
         }
       }
@@ -7707,6 +7716,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -7748,6 +7760,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -7802,6 +7817,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -7869,6 +7887,9 @@
           },
           "429": {
             "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ScimError"
           }
         }
       }
@@ -7916,6 +7937,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -7982,6 +8006,9 @@
           },
           "429": {
             "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ScimError"
           }
         }
       },
@@ -8047,6 +8074,9 @@
           },
           "429": {
             "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ScimError"
           }
         }
       },
@@ -8080,6 +8110,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -8136,6 +8169,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -8203,6 +8239,9 @@
           },
           "429": {
             "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ScimError"
           }
         }
       }
@@ -8255,6 +8294,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -8318,6 +8360,9 @@
           },
           "429": {
             "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ScimError"
           }
         }
       },
@@ -8380,6 +8425,9 @@
           },
           "429": {
             "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
+            "$ref": "#/components/responses/ScimError"
           }
         }
       },
@@ -8410,6 +8458,9 @@
             "$ref": "#/components/responses/ScimError"
           },
           "429": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "default": {
             "$ref": "#/components/responses/ScimError"
           }
         }
@@ -25406,7 +25457,7 @@
         }
       },
       "ScimError": {
-        "description": "SCIM error (RFC 7644 section 3.12)",
+        "description": "SCIM error (RFC 7644 section 3.12). The default response of every operation: besides the statuses listed, the server answers 405 for a method the resource does not allow, 413 for a body over 1 MiB, 500 for an unexpected failure and 503 while the token or provider store is unavailable.",
         "content": {
           "application/scim+json": {
             "schema": {

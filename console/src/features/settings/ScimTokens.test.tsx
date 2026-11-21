@@ -117,7 +117,9 @@ describe("expiry arithmetic", () => {
       token("soon", SCIM_TOKEN_WARNING_DAYS - 1),
       token("expired", -3, "expired"),
       token("gone", 2, "revoked"),
+      token("long ago", -(SCIM_TOKEN_WARNING_DAYS + 5), "expired"),
     ]);
+    // A token that lapsed longer ago than the window has aged out of the warnings.
     expect(flagged.map((entry) => entry.name)).toEqual(["expired", "soon"]);
   });
 });
