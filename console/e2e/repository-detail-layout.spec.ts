@@ -34,6 +34,11 @@ async function mockRepositoryDetail(
   await page.route("**/api/v2/site-settings", (route) =>
     route.fulfill({ json: defaultSiteSettings }),
   );
+  // The grant editors list user groups beside users and service accounts; an unmocked request would reach the
+  // gateway with the fake token and end the session. A scenario that needs groups registers its own route after this.
+  await page.route("**/api/v2/user-groups**", (route) =>
+    route.fulfill({ json: { items: [], limit: 100 } }),
+  );
   const repositoryName =
     format === "npm"
       ? "npm-hosted"
