@@ -283,6 +283,24 @@ triggers:
   user_groups_notify_cache_delete:
     disposition: dropped
     reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  identity_provider_scim_tokens_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  identity_provider_scim_tokens_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  identity_provider_scim_tokens_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  identity_providers_notify_cache_insert:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  identity_providers_notify_cache_update:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
+  identity_providers_notify_cache_delete:
+    disposition: dropped
+    reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"
   users_notify_cache_delete:
     disposition: dropped
     reason: "MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger"

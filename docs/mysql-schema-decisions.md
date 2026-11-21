@@ -305,6 +305,12 @@ Each PostgreSQL trigger is dropped (polling or counters replace it), ported to a
 | hosted_repositories | hosted_repositories_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | hosted_repositories | hosted_repositories_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | hosted_repositories | hosted_repositories_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| identity_provider_scim_tokens | identity_provider_scim_tokens_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| identity_provider_scim_tokens | identity_provider_scim_tokens_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| identity_provider_scim_tokens | identity_provider_scim_tokens_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| identity_providers | identity_providers_notify_cache_delete | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| identity_providers | identity_providers_notify_cache_insert | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
+| identity_providers | identity_providers_notify_cache_update | dropped | MySQL polls the scope epochs for cache invalidation (ADR 0023 section 6); no trigger |
 | lifecycle_jobs | cargo_promotion_state_webhook_after_update | ported | the MySQL lifecycle and replication stores enqueue the webhook event in the same transaction as the state change (store group D); only the application writes these tables |
 | lifecycle_jobs | lifecycle_jobs_notify_insert | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
 | lifecycle_jobs | lifecycle_jobs_notify_update | dropped | the Notifier polls the queue tables (ADR 0022); no trigger |
