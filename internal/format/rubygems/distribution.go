@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/authorization"
+	"github.com/mlops-ca/notarx/internal/durableactor"
 	"github.com/mlops-ca/notarx/internal/ids"
 	"github.com/mlops-ca/notarx/internal/jsonmeta"
 	dist "github.com/mlops-ca/notarx/internal/rubygemsdistribution"
@@ -51,12 +52,22 @@ func replicationGrantSet(a dist.RepositoryAuthority) repository.RepositoryGrantS
 	}
 	return out
 }
+
+// replicationSubject is the durable subject of a job created under identity. A workload job lives as long as its
+// trust policy, re-read at every commit, not as long as the short-lived bearer that submitted it.
+func replicationSubject(identity repository.RubyGemsGovernanceIdentity) dist.Subject {
+	s := dist.Subject{Actor: identity.Actor, Kind: identity.Kind, CredentialID: identity.CredentialID, UserID: identity.UserID, SessionID: identity.SessionID, SessionVersion: identity.SessionVersion, ValidUntil: identity.ValidUntil}
+	if durableactor.ClassOf(s.Kind) == durableactor.ClassWorkload {
+		s.ValidUntil = time.Time{}
+	}
+	return s
+}
 func (m *Module) replicationCheck(job dist.Job) dist.Check {
 	return func(ctx context.Context, a dist.Authority) error {
 		if !dist.SameSubject(a.Subject, job.Subject()) || a.Source.ID != job.SourceRepositoryID || a.Target.ID != job.TargetRepositoryID {
 			return dist.ErrAccessDenied
 		}
-		principal, ok := m.auth.DurablePrincipal(a.Subject.Actor, authorization.AuthenticationKind(a.Subject.Kind), a.Role, a.Active, a.MustChangePassword)
+		principal, ok := m.auth.DurablePrincipal(a.Subject.Actor, authorization.AuthenticationKind(a.Subject.Kind), a.Subject.CredentialID, a.Role, a.Active, a.MustChangePassword)
 		if !ok {
 			return dist.ErrAccessDenied
 		}
@@ -111,8 +122,7 @@ func (m *Module) previewReplication(w http.ResponseWriter, r *http.Request, p au
 			m.failure(w, identityErr)
 			return
 		}
-		subject := dist.Subject{Actor: identity.Actor, Kind: identity.Kind, CredentialID: identity.CredentialID, UserID: identity.UserID, SessionID: identity.SessionID, SessionVersion: identity.SessionVersion, ValidUntil: identity.ValidUntil}
-		job, err := dist.NewJob(in, subject, key)
+		job, err := dist.NewJob(in, replicationSubject(identity), key)
 		if err != nil {
 			m.replicationFailure(w, err)
 			return

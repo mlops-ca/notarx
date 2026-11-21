@@ -22,8 +22,8 @@ func TestDurablePrincipalWorkloadFederation(t *testing.T) {
 		{"API key actor", "api-key:11111111-1111-4111-8111-111111111111", enabled, true, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			p, ok := tt.auth.DurablePrincipal(tt.actor, AuthenticationWorkloadFederation, "", tt.active, false)
-			if ok != tt.want || ok && (p.Admin || p.Role != "" || p.AuthenticationKind != AuthenticationWorkloadFederation) {
+			p, ok := tt.auth.DurablePrincipal(tt.actor, AuthenticationWorkloadFederation, "policy-id", "", tt.active, false)
+			if ok != tt.want || ok && (p.Admin || p.Role != "" || p.AuthenticationKind != AuthenticationWorkloadFederation || p.CredentialID != "policy-id") {
 				t.Fatalf("principal=%+v allowed=%t", p, ok)
 			}
 		})
@@ -61,17 +61,17 @@ func TestDurablePrincipalUsesCurrentIdentityAndAuthority(t *testing.T) {
 		{"external unknown", "external-subject", "admin", AuthenticationKind("unknown"), true, false, false, false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			p, ok := auth.DurablePrincipal(tt.actor, tt.kind, tt.role, tt.active, tt.password)
+			p, ok := auth.DurablePrincipal(tt.actor, tt.kind, "", tt.role, tt.active, tt.password)
 			if ok != tt.want || ok && p.Admin != tt.admin {
 				t.Fatalf("principal=%+v allowed=%t", p, ok)
 			}
 		})
 	}
 	for _, empty := range []Authenticator{{ResolverToken: "configured"}, {ResolverActor: "current-reader"}, {AdminToken: "configured"}, {AdminActor: "current-admin"}} {
-		if _, ok := empty.DurablePrincipal("current-reader", AuthenticationStaticResolver, "", true, false); ok {
+		if _, ok := empty.DurablePrincipal("current-reader", AuthenticationStaticResolver, "", "", true, false); ok {
 			t.Fatal("incomplete resolver identity accepted")
 		}
-		if _, ok := empty.DurablePrincipal("current-admin", AuthenticationStaticAdmin, "admin", true, false); ok {
+		if _, ok := empty.DurablePrincipal("current-admin", AuthenticationStaticAdmin, "", "admin", true, false); ok {
 			t.Fatal("incomplete administrator identity accepted")
 		}
 	}
@@ -98,11 +98,11 @@ func TestDurablePrincipalAcceptsExactlyTheDurableActorKinds(t *testing.T) {
 				t.Fatalf("test has no actor for kind %q", kind)
 			}
 		}
-		if _, allowed := auth.DurablePrincipal(actor, AuthenticationKind(kind), "member", true, false); !allowed {
+		if _, allowed := auth.DurablePrincipal(actor, AuthenticationKind(kind), "", "member", true, false); !allowed {
 			t.Errorf("durable kind %q is refused by DurablePrincipal", kind)
 		}
 	}
-	if _, allowed := auth.DurablePrincipal("user:operator", AuthenticationKind("unknown"), "member", true, false); allowed {
+	if _, allowed := auth.DurablePrincipal("user:operator", AuthenticationKind("unknown"), "", "member", true, false); allowed {
 		t.Error("an unknown kind must be refused")
 	}
 }
@@ -124,7 +124,7 @@ func TestDurablePrincipalRefusesMismatchedSnapshot(t *testing.T) {
 		{"empty kind", "admin", AuthenticationKind("")},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			if p, ok := auth.DurablePrincipal(tt.actor, tt.kind, "member", true, false); ok {
+			if p, ok := auth.DurablePrincipal(tt.actor, tt.kind, "", "member", true, false); ok {
 				t.Fatalf("mismatched snapshot accepted: %+v", p)
 			}
 		})

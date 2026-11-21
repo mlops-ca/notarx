@@ -46,7 +46,7 @@ func (s *MemoryStore) durableActorAuthorityLocked(kind, actor, credential string
 		}
 	case durableactor.ClassWorkload:
 		w := s.workloadAuthorityLocked(actor, credential)
-		a.Active, a.ValidUntil = w.ActiveUntil(a.ValidUntil)
+		a.Active, a.ValidUntil = w.ActiveUntil(time.Time{})
 	case durableactor.ClassServiceAccountCredential:
 		account, ok := s.serviceAccounts[strings.TrimPrefix(actor, durableactor.ServiceAccountActorPrefix)]
 		k, found := s.apiKeys[credential]
@@ -80,7 +80,7 @@ func durableActorAuthorityTx(ctx context.Context, tx *sql.Tx, kind, actor, crede
 		if err != nil {
 			return durableActorAuthority{}, err
 		}
-		a.Active, a.ValidUntil = w.ActiveUntil(a.ValidUntil)
+		a.Active, a.ValidUntil = w.ActiveUntil(time.Time{})
 	case durableactor.ClassAPIKey, durableactor.ClassServiceAccountCredential:
 		keyID := strings.TrimPrefix(actor, durableactor.APIKeyActorPrefix)
 		account := ""

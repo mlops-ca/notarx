@@ -36,8 +36,6 @@ func (governanceGrants) DeleteRepositoryGrant(context.Context, string, string, s
 	return repository.RepositoryGrantSet{}, domain.ErrAccessDenied
 }
 
-// A workload_federation principal keeps the authority of its service account: no role, only the account's grants, and
-// the policy, issuer and account are re-read at every commit (ADR 0019). It is not limited to replication jobs.
 // Identity capture only narrows an already-verified credential. Session expiry
 // and signed version are copied from that credential, never re-derived from a
 // potentially newer database row. No token material crosses the persistence port.
@@ -104,12 +102,15 @@ func (m *Module) governanceIdentity(r *http.Request, p authorization.Principal) 
 	return in, nil
 }
 
+// governanceAuthorityCheck rebuilds the principal from the current authority snapshot. A workload_federation principal
+// keeps the authority of its service account: no role, only the account's grants, with the policy, issuer and account
+// re-read at every commit (ADR 0019); it is not limited to replication jobs.
 func (m *Module) governanceAuthorityCheck(initial repository.RubyGemsGovernanceIdentity, repoID, name string, op authorization.RepositoryOperation) domain.GovernanceCheck {
 	return func(ctx context.Context, a repository.RubyGemsGovernanceAuthority) error {
 		if a.Identity != initial || a.Repository.ID != repoID || !domain.Active(a.Repository) {
 			return domain.ErrAccessDenied
 		}
-		p, ok := m.auth.DurablePrincipal(a.Identity.Actor, authorization.AuthenticationKind(a.Identity.Kind), a.Role, a.Active, a.MustChangePassword)
+		p, ok := m.auth.DurablePrincipal(a.Identity.Actor, authorization.AuthenticationKind(a.Identity.Kind), a.Identity.CredentialID, a.Role, a.Active, a.MustChangePassword)
 		if !ok {
 			return domain.ErrAccessDenied
 		}

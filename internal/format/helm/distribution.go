@@ -52,7 +52,7 @@ func (m *Module) replicationCheck(job dist.Job) dist.Check {
 		if a.Actor != job.Actor || a.Kind != job.ActorKind || a.Source.ID != job.SourceRepositoryID || a.Target.ID != job.TargetRepositoryID {
 			return dist.ErrAccessDenied
 		}
-		principal, ok := m.auth.DurablePrincipal(a.Actor, authorization.AuthenticationKind(a.Kind), a.Role, a.Active, a.MustChangePassword)
+		principal, ok := m.auth.DurablePrincipal(a.Actor, authorization.AuthenticationKind(a.Kind), job.CredentialID, a.Role, a.Active, a.MustChangePassword)
 		if !ok {
 			return dist.ErrAccessDenied
 		}

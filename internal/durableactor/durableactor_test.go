@@ -1,6 +1,7 @@
 package durableactor
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -49,6 +50,9 @@ func TestCredentialAndActorShape(t *testing.T) {
 		{WorkloadFederation, "service-account:account", id, false, true},
 		{ServiceAccountCredential, "service-account:", id, false, true},
 		{APIKey, "api-key:key", "", false, true},
+		{APIKey, "api-key:" + strings.ToUpper(id), "", false, true},
+		{APIKey, "api-key:" + strings.ReplaceAll(id, "-", ""), "", false, true},
+		{WorkloadFederation, "service-account:" + id, "urn:uuid:" + id, true, false},
 		{"unknown", "x", "", false, false},
 	} {
 		if got := ActorShapeValid(tc.kind, tc.actor); got != tc.wantActor {
@@ -68,7 +72,7 @@ func TestServiceAccountID(t *testing.T) {
 	if got, ok := ServiceAccountID("service-account:" + id); !ok || got != id {
 		t.Fatalf("ServiceAccountID = %q, %v", got, ok)
 	}
-	for _, actor := range []string{"", "service-account:", "service-account:x", "user:" + id} {
+	for _, actor := range []string{"", "service-account:", "service-account:x", "user:" + id, "service-account:" + strings.ToUpper(id), "service-account:{" + id + "}"} {
 		if _, ok := ServiceAccountID(actor); ok {
 			t.Errorf("ServiceAccountID accepted %q", actor)
 		}
