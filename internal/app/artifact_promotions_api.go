@@ -54,12 +54,7 @@ func (h generatedRepositoryAPIAdapter) ListArtifactPromotions(w http.ResponseWri
 			query.RepositoryIDs = ids
 		}
 	}
-	store := promotionStore(h.store)
-	if store == nil {
-		writeHostedProblem(w, http.StatusNotImplemented, "not_supported", "artifact promotion listing is unavailable")
-		return
-	}
-	page, err := store.PageArtifactPromotions(r.Context(), query)
+	page, err := h.sessions.store.(promotionStores).PageArtifactPromotions(r.Context(), query)
 	if errors.Is(err, repository.ErrInvalidPageToken) {
 		writeHostedProblem(w, http.StatusBadRequest, "invalid_request", "pageToken is not valid for this listing")
 		return

@@ -21,7 +21,10 @@ import (
 	"github.com/mlops-ca/notarx/internal/repository"
 )
 
-type npmGroupSummaryOnlyStore struct{ GatewayStore }
+type npmGroupSummaryOnlyStore struct {
+	GatewayStore
+	promotionStores
+}
 
 func npmMetadataDocument(t *testing.T, handler http.Handler, path string) map[string]any {
 	t.Helper()
@@ -343,7 +346,7 @@ func TestNativeNPMGroupTombstoneAuthority(t *testing.T) {
 	expectedDigest := sha256.Sum256(visibleTarball)
 	// Both the projection and narrow reader fallback must answer the same
 	// public search contract; this wrapper removes only optional capabilities.
-	summaryOnly := newTestGateway(t, GatewayOptions{Store: npmGroupSummaryOnlyStore{store}, NPMMetadata: store, NPMRestore: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatNPM: objects}})
+	summaryOnly := newTestGateway(t, GatewayOptions{Store: npmGroupSummaryOnlyStore{store, store}, NPMMetadata: store, NPMRestore: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatNPM: objects}})
 	for _, gateway := range []http.Handler{handler, summaryOnly} {
 		for _, match := range []string{"prefix", "contains"} {
 			search := npmDistTagRequest(t, gateway, http.MethodGet, "/api/v2/repositories/"+groupRecord.ID+"/artifact-search?q=widget&match="+match+"&pageSize=1", "", "")

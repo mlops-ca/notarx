@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 
@@ -25,8 +24,7 @@ type PromotionBatchService struct {
 }
 
 func newPromotionBatchService(h generatedRepositoryAPIAdapter) PromotionBatchService {
-	batches, _ := h.sessions.store.(repository.PromotionBatchStore)
-	return PromotionBatchService{PromotionService: newPromotionService(h), batches: batches}
+	return PromotionBatchService{PromotionService: newPromotionService(h), batches: h.sessions.store.(promotionStores)}
 }
 
 // PromotionBatchRequest is one validated request to promote a batch.
@@ -98,9 +96,6 @@ func promotionBatchRequestHash(source, target string, items []repository.Promoti
 // Create admits and queues a batch. A replay of the same Idempotency-Key with the same request returns the batch of
 // the first request and queues any item that was not queued yet; the same key with another request is a conflict.
 func (s PromotionBatchService) Create(ctx context.Context, in PromotionBatchRequest) (PromotionBatchView, *PromotionBatchError) {
-	if s.batches == nil || s.promotions == nil {
-		return PromotionBatchView{}, batchError(http.StatusInternalServerError, "internal_error", "promotion batches are unavailable")
-	}
 	if len(in.Items) == 0 || len(in.Items) > repository.MaxPromotionBatchItems {
 		return PromotionBatchView{}, batchError(http.StatusBadRequest, "invalid_request", fmt.Sprintf("a batch holds 1 to %d items", repository.MaxPromotionBatchItems))
 	}
@@ -143,9 +138,6 @@ func (s PromotionBatchService) Create(ctx context.Context, in PromotionBatchRequ
 
 // Get returns a batch with its aggregate state, or repository.ErrNotFound.
 func (s PromotionBatchService) Get(ctx context.Context, id string) (PromotionBatchView, error) {
-	if s.batches == nil || s.promotions == nil {
-		return PromotionBatchView{}, errors.New("promotion batches are unavailable")
-	}
 	batch, err := s.batches.GetPromotionBatch(ctx, id)
 	if err != nil {
 		return PromotionBatchView{}, err
@@ -161,6 +153,7 @@ func (s PromotionBatchService) lookup(ctx context.Context, in PromotionBatchRequ
 // admitAll runs the admission checks of every item and returns the refusals; none means the whole batch is admitted.
 func (s PromotionBatchService) admitAll(ctx context.Context, in PromotionBatchRequest) []PromotionBatchItemProblem {
 	var problems []PromotionBatchItemProblem
+	target := s.resolveTarget(ctx, in.Source, in.TargetID)
 	seen := map[[2]string]int{}
 	for index, item := range in.Items {
 		problem := func(status int, code, message string) {
@@ -176,7 +169,7 @@ func (s PromotionBatchService) admitAll(ctx context.Context, in PromotionBatchRe
 			problem(http.StatusBadRequest, "invalid_request", "a valid immutable artifact coordinate and sha256 digest are required")
 			continue
 		}
-		if perr := s.Admit(ctx, s.itemRequest(in, item, "")); perr != nil {
+		if _, perr := s.admit(ctx, s.itemRequest(in, item, ""), target); perr != nil {
 			problem(perr.Status, perr.Code, perr.Message)
 		}
 	}
@@ -201,11 +194,12 @@ func (s PromotionBatchService) queue(ctx context.Context, in PromotionBatchReque
 	if err != nil {
 		return batchError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
 	}
+	target := s.resolveTarget(ctx, in.Source, in.TargetID)
 	for index, item := range batch.Items {
 		if _, queued := rows[promotionIdempotencyKey(batch.TargetRepositoryID, PromotionBatchItemKey(batch.ID, index))]; queued {
 			continue
 		}
-		if _, perr := s.Request(ctx, s.itemRequest(in, item, PromotionBatchItemKey(batch.ID, index))); perr != nil {
+		if _, perr := s.request(ctx, s.itemRequest(in, item, PromotionBatchItemKey(batch.ID, index)), target); perr != nil {
 			refusal := &PromotionBatchError{PromotionError: *perr}
 			refusal.Items = []PromotionBatchItemProblem{{Index: index, Coordinate: item.Coordinate, Digest: item.Digest, Status: perr.Status, Code: perr.Code, Message: perr.Message}}
 			return refusal
