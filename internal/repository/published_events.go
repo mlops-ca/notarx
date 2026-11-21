@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/mlops-ca/notarx/internal/events"
@@ -63,24 +65,33 @@ ORDER BY a.created_at,a.repository_id,a.coordinate,a.digest LIMIT $2`,
 
 // ReconcilePublishedEvents implements PublishedEventReconciler. Each publication is emitted in its own transaction
 // with events.EmitOnce, which rechecks the dedupe key under the advisory lock.
+//
+// A publication that fails does not hold back the others: its error is collected, the pass goes on and returns the
+// joined errors with the count it wrote. Only a cancelled context stops the pass.
 func (s *PostgresStore) ReconcilePublishedEvents(ctx context.Context, floor time.Time, limit int) (int, error) {
 	written := 0
+	var failures []error
 	for _, query := range publishedCandidateQueries {
 		candidates, err := s.publishedCandidates(ctx, query, floor, limit)
 		if err != nil {
-			return written, err
+			failures = append(failures, err)
+			continue
 		}
 		for _, candidate := range candidates {
 			emitted, err := s.emitPublishedOnce(ctx, candidate, floor)
 			if err != nil {
-				return written, err
+				failures = append(failures, fmt.Errorf("%s publication %q in %s: %w", candidate.Format, candidate.Coordinate, candidate.RepositoryID, err))
+				continue
 			}
 			if emitted {
 				written++
 			}
 		}
+		if ctx.Err() != nil {
+			break
+		}
 	}
-	return written, nil
+	return written, errors.Join(failures...)
 }
 
 func (s *PostgresStore) publishedCandidates(ctx context.Context, query string, floor time.Time, limit int) ([]publishedCandidate, error) {

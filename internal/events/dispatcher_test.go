@@ -189,11 +189,11 @@ func TestDispatcherServesOnlyUnderTheLease(t *testing.T) {
 	}
 	d.Close(context.Background())
 	d.Close(context.Background())
-	if len(leases.released) != 1 || leases.released[0] != leaseTask("scan").ID {
+	if len(leases.released) != 1 || leases.released[0] != LeaseTask("scan").ID {
 		t.Fatalf("Close released %v", leases.released)
 	}
-	first, again := leaseTask("scan"), leaseTask("scan")
-	if first.ID != again.ID || first.ID == leaseTask("other").ID {
+	first, again := LeaseTask("scan"), LeaseTask("scan")
+	if first.ID != again.ID || first.ID == LeaseTask("other").ID {
 		t.Error("the lease id must be stable per consumer")
 	}
 	leases.err = errors.New("db down")

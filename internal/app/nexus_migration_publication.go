@@ -55,7 +55,6 @@ type NexusMigrationPublication struct {
 	store            NexusMigrationPublicationStore
 	objects          ObjectStores
 	targetID, poolID string
-	scanner          nexusMigrationPublicationScanner
 	oci              NexusFormatMigrationPublication
 	conan            NexusFormatMigrationPublication
 	npm              NexusFormatMigrationPublication
@@ -70,11 +69,6 @@ func NewNexusMigrationPublication(store NexusMigrationPublicationStore, objects 
 		stores[format] = store
 	}
 	return &NexusMigrationPublication{store: store, objects: stores, targetID: targetID, poolID: poolID}
-}
-
-func (p *NexusMigrationPublication) WithPublicationScanner(scanner nexusMigrationPublicationScanner) *NexusMigrationPublication {
-	p.scanner = scanner
-	return p
 }
 
 func (p *NexusMigrationPublication) ValidateTargets(ctx context.Context, mappings []nexusmigration.Mapping) error {
@@ -653,6 +647,7 @@ func (p *NexusMigrationPublication) Publish(ctx context.Context, entry nexusmigr
 		return err
 	}
 	digest := assets[0].Digest
+	ctx = repository.WithWriteActor(ctx, entry.Actor) // the artifact.published event names the migration actor
 	// The publication and its audit commit together (ADR 0023 section 1): a failing audit insert
 	// fails the publication. The audit is stamped in that transaction.
 	auditOf := func(artifactDigest string) repository.AuditRecord {
@@ -685,9 +680,6 @@ func (p *NexusMigrationPublication) Publish(ctx context.Context, entry nexusmigr
 	}
 	if err != nil {
 		return nexusmigration.Failed("native_publish_failed")
-	}
-	if !nilDependency(p.scanner) {
-		_ = p.scanner.ScheduleRepository(ctx, entry.TargetRepositoryID, repo.Format, entry.Identity, digest, entry.Actor)
 	}
 	return nil
 }

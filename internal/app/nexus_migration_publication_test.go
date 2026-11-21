@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mlops-ca/notarx/internal/capacityplan"
+	"github.com/mlops-ca/notarx/internal/events"
 	"github.com/mlops-ca/notarx/internal/nexusmigration"
 	"github.com/mlops-ca/notarx/internal/objectstore"
 	"github.com/mlops-ca/notarx/internal/repository"
@@ -326,37 +328,24 @@ func TestNexusMigrationPublicationReadbackRequiresCompleteRelease(t *testing.T) 
 	}
 }
 
-type nexusPublicationScanRecorder struct {
-	t           *testing.T
-	publication *NexusMigrationPublication
-	entry       nexusmigration.Entry
-	calls       int
-}
-
-func (s *nexusPublicationScanRecorder) ScheduleRepository(ctx context.Context, repo string, format repository.Format, identity, digest, actor string) error {
-	s.t.Helper()
-	if repo != s.entry.TargetRepositoryID || string(format) != s.entry.Format || identity != s.entry.Identity || digest != "sha256:"+s.entry.Assets[0].SHA256 || actor != s.entry.Actor {
-		s.t.Fatalf("scanner lost native identity or actor")
+// A migrated publication emits artifact.published in its native transaction, after which the entry reads back as
+// identical, and names the entry's actor; an unpublished upload emits nothing.
+func TestNexusMigrationPublicationEmitsPublishedAfterNativeVisibility(t *testing.T) {
+	store, _, publication, _, entry, bodies := nexusPublicationFixture(t, repository.FormatRaw)
+	var seen []events.Event
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{{Name: "migration-test", Types: []events.Type{events.ArtifactPublished},
+		Handler: events.HandlerFunc(func(_ context.Context, event events.Event) error { seen = append(seen, event); return nil })}}}
+	if _, err := dispatcher.RunOnce(context.Background()); err != nil { // creates the cursor
+		t.Fatal(err)
 	}
-	if state, err := s.publication.Readback(ctx, s.entry); err != nil || state != nexusmigration.Identical {
-		s.t.Fatalf("scanner ran before complete native publication=%s err=%v", state, err)
-	}
-	s.calls++
-	return nil
-}
-
-func TestNexusMigrationPublicationSchedulesScanAfterNativeVisibility(t *testing.T) {
-	_, _, publication, _, entry, bodies := nexusPublicationFixture(t, repository.FormatRaw)
-	scanner := &nexusPublicationScanRecorder{t: t, publication: publication, entry: entry}
-	publication.WithPublicationScanner(scanner)
 	ctx, release, err := publication.Lock(context.Background(), entry)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer release()
 	nexusPublicationStage(t, ctx, publication, &entry, bodies)
-	if scanner.calls != 0 {
-		t.Fatal("unpublished upload scheduled scan")
+	if _, err = dispatcher.RunOnce(context.Background()); err != nil || len(seen) != 0 {
+		t.Fatalf("an unpublished upload emitted %d events (%v)", len(seen), err)
 	}
 	if err = publication.Verify(ctx, entry); err != nil {
 		t.Fatal(err)
@@ -364,8 +353,18 @@ func TestNexusMigrationPublicationSchedulesScanAfterNativeVisibility(t *testing.
 	if err = publication.Publish(ctx, entry); err != nil {
 		t.Fatal(err)
 	}
-	if scanner.calls != 1 {
-		t.Fatalf("scanner calls=%d", scanner.calls)
+	if state, readErr := publication.Readback(ctx, entry); readErr != nil || state != nexusmigration.Identical {
+		t.Fatalf("publication state=%s err=%v", state, readErr)
+	}
+	if _, err = dispatcher.RunOnce(context.Background()); err != nil || len(seen) != 1 {
+		t.Fatalf("published emitted %d events (%v)", len(seen), err)
+	}
+	var payload struct{ Actor string }
+	if err = json.Unmarshal(seen[0].Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if seen[0].RepositoryID != entry.TargetRepositoryID || seen[0].Format != entry.Format || seen[0].Coordinate != entry.Identity || seen[0].Digest != "sha256:"+entry.Assets[0].SHA256 || payload.Actor != entry.Actor {
+		t.Fatalf("event lost native identity or actor: %+v %s", seen[0], seen[0].Payload)
 	}
 }
 

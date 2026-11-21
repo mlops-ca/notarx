@@ -85,10 +85,17 @@ func TestPostgresRawRewriteOfTheSameDigestEmitsOnce(t *testing.T) {
 	ctx := context.Background()
 	repo := counterTestRepository(t, store, FormatRaw)
 	first := rawFixture(repo, "a.txt", "one "+repo.ID)
-	for range 2 {
+	var updatedAt [2]time.Time
+	for i := range updatedAt {
 		if _, err := store.PutRawAsset(ctx, first); err != nil {
 			t.Fatal(err)
 		}
+		if err := store.db.QueryRowContext(ctx, `SELECT updated_at FROM native_raw_assets WHERE repository_id=$1::uuid AND path=$2`, repo.ID, first.Path).Scan(&updatedAt[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !updatedAt[0].Equal(updatedAt[1]) {
+		t.Fatalf("an identical rewrite moved updated_at: %v -> %v", updatedAt[0], updatedAt[1])
 	}
 	if n := countDomainEvents(t, store, publishedKey(repo, first.Path, first.Digest)); n != 1 {
 		t.Fatalf("rewriting the same digest left %d events, want 1", n)

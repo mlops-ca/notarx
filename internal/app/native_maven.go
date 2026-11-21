@@ -26,24 +26,18 @@ import (
 // nativeMavenHandler implements the V3 Maven session API. Its metadata store
 // only gains asset rows at commit, making incomplete uploads unaddressable.
 type nativeMavenHandler struct {
-	store              GatewayStore
-	objects            ObjectStore
-	authenticator      Authenticator
-	authorizer         RepositoryAuthorizer
-	management         hostedRepositoryAPIHandler
-	metrics            *Metrics
-	proxyClient        MavenClient
-	proxyCache         *MavenCache
-	publicationScanner *publicationScanScheduler
+	store         GatewayStore
+	objects       ObjectStore
+	authenticator Authenticator
+	authorizer    RepositoryAuthorizer
+	management    hostedRepositoryAPIHandler
+	metrics       *Metrics
+	proxyClient   MavenClient
+	proxyCache    *MavenCache
 }
 
 func (h nativeMavenHandler) withMetrics(metrics *Metrics) nativeMavenHandler {
 	h.metrics = metrics
-	return h
-}
-
-func (h nativeMavenHandler) withPublicationScanner(scanner publicationScanScheduler) nativeMavenHandler {
-	h.publicationScanner = &scanner
 	return h
 }
 
@@ -416,13 +410,12 @@ func (h nativeMavenHandler) promoteWithIdempotency(ctx context.Context, s reposi
 	var artifact repository.MavenArtifact
 	var replayed bool
 	var err error
+	// The commit emits artifact.published in its transaction; the event names the publisher.
+	ctx = repository.WithWriteActor(ctx, s.Publisher)
 	if key == "" {
 		artifact, err = h.store.CommitMavenPublishSession(ctx, s.ID, assets)
 	} else {
 		artifact, replayed, err = h.store.CommitMavenPublishSessionIdempotently(ctx, s.ID, key, payload, assets)
-	}
-	if err == nil && h.publicationScanner != nil {
-		_ = h.publicationScanner.ScheduleRepository(ctx, s.RepositoryID, repository.FormatMaven, artifact.Coordinate, artifact.Digest, s.Publisher)
 	}
 	return artifact, replayed, err
 }
@@ -951,7 +944,7 @@ func (h nativeMavenHandler) deploy(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		published, publishErr := h.store.PublishMavenProtocolAssets(r.Context(), s.ID, assets)
+		_, publishErr := h.store.PublishMavenProtocolAssets(repository.WithWriteActor(r.Context(), principal.Actor), s.ID, assets)
 		if repository.IsQuotaExceeded(publishErr) {
 			writeHostedProblem(w, http.StatusInsufficientStorage, "quota_exceeded", "repository capacity quota exceeded")
 			return
@@ -963,9 +956,6 @@ func (h nativeMavenHandler) deploy(w http.ResponseWriter, r *http.Request) {
 		if publishErr != nil {
 			http.Error(w, "publish Maven asset", http.StatusInternalServerError)
 			return
-		}
-		if h.publicationScanner != nil {
-			_ = h.publicationScanner.ScheduleRepository(r.Context(), repo.ID, repository.FormatMaven, published.Coordinate, published.Digest, principal.Actor)
 		}
 	}
 	w.WriteHeader(http.StatusCreated)

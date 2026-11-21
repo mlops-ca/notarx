@@ -13,7 +13,7 @@ import (
 	"github.com/mlops-ca/notarx/internal/retention"
 )
 
-const reconcileEventsUsage = "usage: notarx reconcile-events (NOTARX_DATABASE_URL names the PostgreSQL database; NOTARX_EVENTS_RETENTION bounds the window)"
+const reconcileEventsUsage = "usage: notarx reconcile-events (NOTARX_DATABASE_URL names the PostgreSQL database; NOTARX_EVENTS_RETENTION bounds the window; off falls back to 14d)"
 
 // runReconcileEvents is the repair tool of ADR 0021 (slice 1b): it emits artifact.published for every visible Raw, OCI
 // and Maven publication inside the event retention window that has none, once, and prints how many events it wrote.
@@ -43,7 +43,7 @@ func runReconcileEvents(ctx context.Context, args []string, getenv func(string) 
 		_, _ = fmt.Fprintln(stderr, err)
 		return 2
 	}
-	keep, err := retentionConfig.KeepOrForever("domain_events")
+	keep, err := retentionConfig.KeepOrDefault("domain_events")
 	if err != nil {
 		_, _ = fmt.Fprintln(stderr, err)
 		return 2

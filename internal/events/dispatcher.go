@@ -156,8 +156,8 @@ func (d *Dispatcher) owner() string {
 	return d.Owner
 }
 
-// leaseTask is the lease row of one consumer; its id is derived from the consumer name.
-func leaseTask(consumer string) tasklease.Task {
+// LeaseTask is the lease row of one consumer; its id is derived from the consumer name.
+func LeaseTask(consumer string) tasklease.Task {
 	return tasklease.Task{ID: uuid.NewSHA1(uuid.NameSpaceOID, []byte("notarx/event-dispatcher/"+consumer)).String(), Name: "internal:event-dispatcher:" + consumer,
 		Kind: "event-dispatcher", Description: "Internal lease row for the event dispatcher of " + consumer}
 }
@@ -179,7 +179,7 @@ func (d *Dispatcher) RunOnce(ctx context.Context) (int, error) {
 // serve runs one batch of one consumer under its lease.
 func (d *Dispatcher) serve(ctx context.Context, consumer Consumer) (int, error) {
 	if d.Leases != nil {
-		task := leaseTask(consumer.Name)
+		task := LeaseTask(consumer.Name)
 		held, err := d.Leases.AcquireInternalTaskLease(ctx, task, d.owner(), dispatchLeaseTTL, 0)
 		if err != nil {
 			return 0, fmt.Errorf("events: lease of %s: %w", consumer.Name, err)

@@ -84,15 +84,22 @@ emission.
 ### Catch-up and repair
 
 While formats convert to native emission, the `events` worker kind runs a
-reconciler every five minutes on every worker node: it lists the visible Raw,
-OCI and Maven publications younger than the event retention that have no
-`artifact.published` event and writes one, idempotently by dedupe key. The
+reconciler every 15 minutes, one worker node at a time (a lease row of
+`scheduled_tasks`): it lists the visible Raw, OCI and Maven publications
+younger than the event retention (14 days when `NOTARX_EVENTS_RETENTION` is
+`off`) that have no `artifact.published` event and writes one, idempotently by
+dedupe key. A publication that fails is reported and does not hold back the
+others. Writing the digest and content type a Raw path already holds changes
+neither its update time nor its events. The
 insert is guarded by `WHERE NOT EXISTS` a row with the same dedupe key at or after
 the retention floor, under `pg_advisory_xact_lock(hashtextextended(dedupe_key,0))`,
 so concurrent reconcilers write one event and an event older than the floor does
 not block a new one. `notarx reconcile-events` runs the same pass once from the
 command line (`NOTARX_DATABASE_URL`, `NOTARX_EVENTS_RETENTION`) and prints how many
-events it wrote. History older than the retention is recovered by a rule's
+events it wrote. The auto-scan on publish of Raw, OCI and Maven is driven by
+these events (the `scan` worker kind reads them within seconds), not by the
+publish request; a repeat push of a digest the repository already holds does not
+schedule a second scan. History older than the retention is recovered by a rule's
 `backfill`, not by the reconciler.
 
 ### Retention

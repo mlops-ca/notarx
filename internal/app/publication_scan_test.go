@@ -52,6 +52,21 @@ func publicationScanDependencies(dependencies Dependencies, format repository.Fo
 	return dependencies
 }
 
+// publicationScanDispatcher is the consumer side of the publish events: Raw, OCI and Maven emit artifact.published in the
+// publish transaction and the scan scheduler schedules the scan when it reads the event, not the publish request. The first
+// pass creates the consumer's cursor, so build the dispatcher before the publication it should see.
+func publicationScanDispatcher(t *testing.T, store interface {
+	publicationScanStore
+	events.Source
+}, format repository.Format) *events.Dispatcher {
+	t.Helper()
+	dispatcher := &events.Dispatcher{Source: store, Settle: time.Nanosecond, Consumers: []events.Consumer{NewPublicationScanScheduler(store, true, []repository.Format{format}, nil).Consumer()}}
+	if _, err := dispatcher.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	return dispatcher
+}
+
 func enablePublicationScan(t *testing.T, store *repository.MemoryStore, repositoryID string) {
 	t.Helper()
 	policy := repository.DefaultRepositorySecurityPolicy()
@@ -154,6 +169,7 @@ func TestRawPublicationSucceedsWhenScanEnqueueFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	enablePublicationScan(t, store.MemoryStore, repo.ID)
+	dispatcher := publicationScanDispatcher(t, store, repository.FormatRaw)
 	handler := newTestGateway(t, GatewayOptions{Dependencies: publicationScanDependencies(Dependencies{}, repository.FormatRaw), Store: store, Adapter: TestAdapter{}, Authenticator: testAuthenticator(), Storage: ObjectStores{repository.FormatOCI: objectstore.NewMemoryStore(), repository.FormatRaw: objectstore.NewMemoryStore()}})
 
 	request := httptest.NewRequest(http.MethodPut, "/raw/raw-releases/releases/widget.tar.gz", bytes.NewBufferString("published artifact"))
@@ -163,6 +179,11 @@ func TestRawPublicationSucceedsWhenScanEnqueueFails(t *testing.T) {
 
 	if response.Code != http.StatusCreated {
 		t.Fatalf("publish status = %d body=%s", response.Code, response.Body.String())
+	}
+	// A failing scan enqueue no longer touches the publish: the publication is committed with its event, and the scheduler
+	// reports the failure, audits it and retries the event.
+	if _, dispatchErr := dispatcher.RunOnce(ctx); !errors.Is(dispatchErr, enqueueErr) {
+		t.Fatalf("dispatch error = %v, want %v", dispatchErr, enqueueErr)
 	}
 	if store.auditContextErr != nil {
 		t.Fatalf("failure audit context error = %v", store.auditContextErr)
@@ -212,6 +233,7 @@ func TestRawPublicationEnqueuesConfiguredArtifactScan(t *testing.T) {
 	if _, err = store.ReplaceRepositorySecurityPolicy(ctx, repo.ID, policy, policy.Version); err != nil {
 		t.Fatal(err)
 	}
+	dispatcher := publicationScanDispatcher(t, store, repository.FormatRaw)
 	handler := newTestGateway(t, GatewayOptions{Dependencies: Dependencies{
 
 		ArtifactScanner: scanning.ScannerFunc(func(context.Context, scanning.Artifact) (scanning.Report, error) {
@@ -227,6 +249,12 @@ func TestRawPublicationEnqueuesConfiguredArtifactScan(t *testing.T) {
 	handler.ServeHTTP(response, request)
 	if response.Code != http.StatusCreated {
 		t.Fatalf("publish status = %d body=%s", response.Code, response.Body.String())
+	}
+	if jobs, _ := store.ListLifecycleJobs(ctx, repo.ID, 100); len(jobs) != 0 {
+		t.Fatalf("the publish request scheduled a scan itself: %#v", jobs)
+	}
+	if handled, dispatchErr := dispatcher.RunOnce(ctx); dispatchErr != nil || handled != 1 {
+		t.Fatalf("dispatched %d events (%v)", handled, dispatchErr)
 	}
 
 	jobs, err := store.ListLifecycleJobs(ctx, repo.ID, 100)

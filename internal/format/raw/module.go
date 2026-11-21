@@ -30,9 +30,6 @@ type Metrics interface {
 	RecordRawSpoolRejected()
 	RecordRepositoryAuthorizationDenied(string, string, string)
 }
-type PublicationScanner interface {
-	Schedule(context.Context, repository.HostedRepository, string, string, string) error
-}
 
 // QueryStore supplies discovery without publication or native HTTP storage.
 type QueryStore interface {
@@ -87,7 +84,6 @@ type Options struct {
 	Client            rawprotocol.Client
 	Cache             *rawprotocol.Cache
 	Metrics           Metrics
-	Scanner           PublicationScanner
 	GroupRuntime      GroupRuntime
 	LegacyStore       repository.RawStore
 	LegacyRuntime     rawprotocol.Runtime
@@ -95,36 +91,35 @@ type Options struct {
 }
 
 type Module struct {
-	publication        PublicationStore
-	jobs               JobStore
-	replications       ReplicationStore
-	intelligence       repository.ArtifactIntelligenceStore
-	backgroundMetrics  repository.BackgroundOperationMetrics
-	store              repository.NativeRawStore
-	query              QueryStore
-	repos              RepositoryLookup
-	groups             GroupLookup
-	objects            objectstore.Store
-	auth               authorization.Authenticator
-	authorizer         authorization.RepositoryAuthorizer
-	audit              AuditRecorder
-	anonymous          AnonymousPolicy
-	readPolicies       repository.RepositoryQuarantineReadPolicyStore
-	quarantine         repository.ArtifactQuarantineStore
-	proxyClient        rawprotocol.Client
-	proxyCache         *rawprotocol.Cache
-	metrics            Metrics
-	publicationScanner PublicationScanner
-	groupRuntime       GroupRuntime
-	legacy             rawprotocol.Handler
-	recordFailure      func(context.Context, string)
+	publication       PublicationStore
+	jobs              JobStore
+	replications      ReplicationStore
+	intelligence      repository.ArtifactIntelligenceStore
+	backgroundMetrics repository.BackgroundOperationMetrics
+	store             repository.NativeRawStore
+	query             QueryStore
+	repos             RepositoryLookup
+	groups            GroupLookup
+	objects           objectstore.Store
+	auth              authorization.Authenticator
+	authorizer        authorization.RepositoryAuthorizer
+	audit             AuditRecorder
+	anonymous         AnonymousPolicy
+	readPolicies      repository.RepositoryQuarantineReadPolicyStore
+	quarantine        repository.ArtifactQuarantineStore
+	proxyClient       rawprotocol.Client
+	proxyCache        *rawprotocol.Cache
+	metrics           Metrics
+	groupRuntime      GroupRuntime
+	legacy            rawprotocol.Handler
+	recordFailure     func(context.Context, string)
 }
 
 func New(options Options) *Module {
 	return &Module{publication: options.Publication, jobs: options.Jobs, replications: options.Replications, intelligence: options.Intelligence, backgroundMetrics: options.BackgroundMetrics, store: options.Store, query: options.Query, repos: options.Repositories, groups: options.Groups, objects: options.Objects,
 		auth: options.Authenticator, authorizer: options.Authorizer, audit: options.Audit, anonymous: options.Anonymous,
 		readPolicies: options.ReadPolicies, quarantine: options.Quarantine, proxyClient: options.Client, proxyCache: options.Cache,
-		metrics: options.Metrics, publicationScanner: options.Scanner, groupRuntime: options.GroupRuntime,
+		metrics: options.Metrics, groupRuntime: options.GroupRuntime,
 		legacy:        rawprotocol.Handler{Store: options.LegacyStore, Runtime: options.LegacyRuntime, Client: options.Client, Cache: options.Cache},
 		recordFailure: options.RecordFailure}
 }

@@ -104,7 +104,7 @@ func (s *MemoryStore) CompleteRawUploadIf(ctx context.Context, id string, asset 
 	asset.UpdatedAt = now
 	s.rawObjects[asset.Digest] = RawObject{RepositoryID: asset.RepositoryID, Digest: asset.Digest, ObjectKey: asset.ObjectKey, Size: asset.Size, CreatedAt: now}
 	previous, existed := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]
-	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = asset
+	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = rawAssetAfterWrite(asset, previous, existed)
 	if versioned {
 		s.recordVersionedWriteLocked(asset, publishActor(ctx))
 	}
@@ -179,6 +179,15 @@ func (s *MemoryStore) StageRawObject(_ context.Context, object RawObject) error 
 	return nil
 }
 
+// rawAssetAfterWrite is the stored reference after a write: writing the digest and content type a path already holds
+// changes nothing, so it keeps the previous update time (the PostgreSQL store does the same).
+func rawAssetAfterWrite(asset, previous RawAsset, existed bool) RawAsset {
+	if existed && previous.Digest == asset.Digest && previous.ContentType == asset.ContentType {
+		asset.UpdatedAt = previous.UpdatedAt
+	}
+	return asset
+}
+
 // emitRawPublishedLocked emits artifact.published for a write that changed what the path references: pointing a path
 // at the digest it already holds publishes nothing new.
 func (s *MemoryStore) emitRawPublishedLocked(ctx context.Context, asset, previous RawAsset, existed bool) {
@@ -222,7 +231,7 @@ func (s *MemoryStore) PutRawAssetIf(ctx context.Context, asset RawAsset, conditi
 		s.rawObjects[asset.Digest] = RawObject{RepositoryID: asset.RepositoryID, Digest: asset.Digest, ObjectKey: asset.ObjectKey, Size: asset.Size, CreatedAt: time.Now().UTC()}
 	}
 	previous, existed := s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)]
-	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = asset
+	s.rawAssets[rawAssetKey(asset.RepositoryID, asset.Path)] = rawAssetAfterWrite(asset, previous, existed)
 	if versioned {
 		s.recordVersionedWriteLocked(asset, publishActor(ctx))
 	}

@@ -165,3 +165,29 @@ func TestMemoryReconcileHonoursThePerFormatLimit(t *testing.T) {
 		t.Fatalf("written=%d err=%v", written, err)
 	}
 }
+
+// Writing the digest and content type a Raw path already holds keeps its update time, so an old publication does not look
+// new to the reconciler; a change of either moves it.
+func TestMemoryRawRewriteOfTheSameReferenceKeepsTheUpdateTime(t *testing.T) {
+	store := NewMemoryStore()
+	ctx := context.Background()
+	asset := RawAsset{RepositoryID: "r", Path: "a.txt", Digest: "sha256:r1", ObjectKey: "raw/r1", Size: 3, ContentType: "text/plain"}
+	first, err := store.PutRawAsset(ctx, asset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = store.PutRawAsset(ctx, asset); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := store.GetRawAsset(ctx, "r", "a.txt")
+	if err != nil || !stored.UpdatedAt.Equal(first.UpdatedAt) {
+		t.Fatalf("an identical rewrite moved the update time: %v -> %v (%v)", first.UpdatedAt, stored.UpdatedAt, err)
+	}
+	asset.ContentType = "application/json"
+	if _, err = store.PutRawAsset(ctx, asset); err != nil {
+		t.Fatal(err)
+	}
+	if stored, err = store.GetRawAsset(ctx, "r", "a.txt"); err != nil || !stored.UpdatedAt.After(first.UpdatedAt) {
+		t.Fatalf("a content type change kept the update time: %v (%v)", stored.UpdatedAt, err)
+	}
+}

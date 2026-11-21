@@ -311,9 +311,17 @@ func (s *PostgresStore) replaceRawAssetIf(ctx context.Context, tx *sql.Tx, asset
 	return current, delta, nil
 }
 
+// rawUpsertUpdatedAtSQL and rawUpdateUpdatedAtSQL keep updated_at when a write leaves the reference as it is: writing the digest and content type a path
+// already holds is not a change, so it neither moves the Last-Modified of the path nor makes an old publication look new to
+// the published-event reconciler.
+const (
+	rawUpsertUpdatedAtSQL = `CASE WHEN native_raw_assets.digest IS DISTINCT FROM EXCLUDED.digest OR native_raw_assets.content_type IS DISTINCT FROM EXCLUDED.content_type THEN now() ELSE native_raw_assets.updated_at END`
+	rawUpdateUpdatedAtSQL = `CASE WHEN digest IS DISTINCT FROM $3 OR content_type IS DISTINCT FROM $4 THEN now() ELSE updated_at END`
+)
+
 func replaceRawAssetRow(ctx context.Context, tx *sql.Tx, asset RawAsset, condition RawWriteCondition) (RawAsset, error) {
 	if condition.Unconditional() {
-		_, err := tx.ExecContext(ctx, `INSERT INTO native_raw_assets (repository_id,path,digest,content_type) VALUES ($1,$2,$3,$4) ON CONFLICT (repository_id,path) DO UPDATE SET digest=EXCLUDED.digest,content_type=EXCLUDED.content_type,updated_at=now()`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
+		_, err := tx.ExecContext(ctx, `INSERT INTO native_raw_assets (repository_id,path,digest,content_type) VALUES ($1,$2,$3,$4) ON CONFLICT (repository_id,path) DO UPDATE SET digest=EXCLUDED.digest,content_type=EXCLUDED.content_type,updated_at=`+rawUpsertUpdatedAtSQL, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
 		return RawAsset{}, err
 	}
 	for attempt := 0; attempt < 3; attempt++ {
@@ -327,7 +335,7 @@ func replaceRawAssetRow(ctx context.Context, tx *sql.Tx, asset RawAsset, conditi
 			return current, ErrPreconditionFailed
 		}
 		if exists {
-			_, err = tx.ExecContext(ctx, `UPDATE native_raw_assets SET digest=$3,content_type=$4,updated_at=now() WHERE repository_id=$1::uuid AND path=$2`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
+			_, err = tx.ExecContext(ctx, `UPDATE native_raw_assets SET digest=$3,content_type=$4,updated_at=`+rawUpdateUpdatedAtSQL+` WHERE repository_id=$1::uuid AND path=$2`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
 			return RawAsset{}, err
 		}
 		result, err := tx.ExecContext(ctx, `INSERT INTO native_raw_assets (repository_id,path,digest,content_type) VALUES ($1,$2,$3,$4) ON CONFLICT (repository_id,path) DO NOTHING`, asset.RepositoryID, asset.Path, asset.Digest, asset.ContentType)
