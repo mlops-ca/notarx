@@ -158,8 +158,10 @@ func TestPromotionBatchLoadsTargetAndPolicyOncePerStage(t *testing.T) {
 	service := PromotionBatchService{
 		PromotionService: PromotionService{
 			store: counting, securityPolicies: counting, intelligence: f.store, promotions: f.store,
-			registry:   promotionFormatRegistry(promotionModuleDeps{Store: f.store}),
-			quarantine: func(context.Context, Principal, repository.HostedRepository, repository.HostedRepository, string, string) *PromotionError { return nil },
+			registry: promotionFormatRegistry(promotionModuleDeps{Store: f.store}),
+			quarantine: func(context.Context, Principal, repository.HostedRepository, repository.HostedRepository, string, string) *PromotionError {
+				return nil
+			},
 		},
 		batches: f.store,
 	}
