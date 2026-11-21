@@ -2709,13 +2709,71 @@ UserIdentity:
     kind: {type: string, enum: [oidc, saml]}
     providerId: {type: string, format: uuid}
     issuer: {type: string, format: uri}
-    subject: {type: string, minLength: 1}
+    subject:
+      type: string
+      description: The login subject; empty while a SCIM-provisioned account has not signed in or been linked.
+    scimExternalId:
+      type: string
+      description: The externalId the provider set through SCIM, when there is one.
     email: {type: string}
     displayName: {type: string}
     emailVerified: {type: boolean}
     lastLoginAt: {type: string, format: date-time}
     createdAt: {type: string, format: date-time}
     updatedAt: {type: string, format: date-time}
+SCIMToken:
+  type: object
+  required: [id, providerId, name, state, createdAt, expiresAt]
+  additionalProperties: false
+  properties:
+    id: {type: string, format: uuid}
+    providerId: {type: string, format: uuid}
+    name: {type: string, minLength: 1, maxLength: 128}
+    state:
+      type: string
+      enum: [active, expired, revoked]
+      description: Revoked wins over expired.
+    createdAt: {type: string, format: date-time}
+    expiresAt: {type: string, format: date-time}
+    revokedAt: {type: string, format: date-time}
+SCIMTokenList:
+  type: object
+  required: [items]
+  additionalProperties: false
+  properties:
+    items:
+      type: array
+      items: {"$ref": "#/SCIMToken"}
+CreateSCIMToken:
+  type: object
+  required: [name, expiresAt]
+  additionalProperties: false
+  properties:
+    name: {type: string, minLength: 1, maxLength: 128}
+    expiresAt:
+      type: string
+      format: date-time
+      description: Mandatory; in the future and at most 365 days from now.
+CreatedSCIMToken:
+  allOf:
+  - "$ref": "#/SCIMToken"
+  - type: object
+    required: [token]
+    properties:
+      token:
+        type: string
+        description: The plaintext bearer token. It is shown once and cannot be recovered.
+CreateProviderLink:
+  type: object
+  required: [userId, subject]
+  additionalProperties: false
+  properties:
+    userId: {type: string, format: uuid}
+    subject:
+      type: string
+      minLength: 1
+      maxLength: 512
+      description: The login subject the provider asserts (OIDC sub, Entra tid:oid, SAML NameID).
 UserIdentityList:
   type: object
   required: [items]

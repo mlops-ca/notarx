@@ -816,6 +816,25 @@ tables:
       - repository_id
     checks:
       hosted_repository_idempotency_key_check: ((char_length(key) >= 1) AND (char_length(key) <= 128))
+  identity_provider_scim_tokens:
+    columns:
+      created_at: timestamp
+      expires_at: timestamp
+      id: uuid
+      name: text
+      provider_id: uuid
+      revoked_at: timestamp?
+      secret_hash: text
+    primaryKey: [id]
+    unique: [[secret_hash]]
+    foreignKeys:
+      - provider_id -> identity_providers(id) on delete cascade
+    defaults:
+      created_at: now()
+    indexes:
+      - provider_id,id
+    checks:
+      identity_provider_scim_tokens_name_check: ((length(btrim(name)) >= 1) AND (length(btrim(name)) <= 128))
   identity_providers:
     columns:
       attribute_mapping: json
@@ -3946,6 +3965,7 @@ tables:
       updated_at: now()
       version: "1"
     indexes:
+      - provider_id,created_at,id
       - provider_id,id
     special:
       user_groups_name_local_idx: unique USING btree (lower(display_name)) WHERE (source = 'local'::text)
@@ -3982,6 +4002,7 @@ tables:
       email_verified: "false"
       updated_at: now()
     indexes:
+      - provider_id,created_at,id
       - user_id,created_at,id
     special:
       user_identities_provider_scim_external_id_idx: unique USING btree (provider_id, scim_external_id) WHERE (scim_external_id IS NOT NULL)

@@ -589,6 +589,7 @@ func runConfiguredGateway(cfg config.Config, runtimeSessionID string, logBuffer 
 			AuthzCacheTTL:               cfg.AuthzCacheTTL,
 			WorkloadAllowPrivateNetwork: cfg.Workload.AllowPrivateNetwork,
 			WorkloadExchange:            app.WorkloadExchangeOptions{MaxTTL: cfg.Workload.ExchangeMaxTTL, Rate: cfg.Workload.ExchangeRate},
+			SCIM:                        app.SCIMOptions{Enabled: cfg.SCIM.Enabled, MaxPage: cfg.SCIM.MaxPage, PublicURL: publicURL},
 			Adapter:                     app.TestAdapter{},
 			Authenticator: app.Authenticator{
 				AdminToken:           cfg.AdminToken,

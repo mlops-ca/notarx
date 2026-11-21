@@ -602,6 +602,20 @@ CREATE TABLE `hosted_repository_idempotency` (
   CONSTRAINT `hosted_repository_idempotency_key_check` CHECK (((CHAR_LENGTH(`key`) >= 1) AND (CHAR_LENGTH(`key`) <= 128)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `identity_provider_scim_tokens` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `expires_at` DATETIME(6) NOT NULL,
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `name` TEXT NOT NULL,
+  `provider_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `revoked_at` DATETIME(6) NULL,
+  `secret_hash` VARCHAR(128) NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_identity_provider_scim_tokens_secret_hash` (`secret_hash`),
+  KEY `ix_identity_provider_scim_tokens_provider_id_id` (`provider_id`, `id`),
+  CONSTRAINT `identity_provider_scim_tokens_name_check` CHECK (((CHAR_LENGTH(TRIM(`name`)) >= 1) AND (CHAR_LENGTH(TRIM(`name`)) <= 128)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `identity_providers` (
   `attribute_mapping` JSON NOT NULL DEFAULT (CAST('{}' AS JSON)),
   `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -2951,6 +2965,7 @@ CREATE TABLE `user_groups` (
   `name_lower` VARCHAR(255) GENERATED ALWAYS AS (IF(`source` = 'local', LOWER(`display_name`), NULL)) VIRTUAL NULL,
   `live_user_groups_provider_external_id_idx` TINYINT(1) GENERATED ALWAYS AS (IF((`external_id` <> ''), 1, NULL)) VIRTUAL NULL,
   PRIMARY KEY (`id`),
+  KEY `ix_user_groups_provider_id_created_at_id` (`provider_id`, `created_at`, `id`),
   KEY `ix_user_groups_provider_id_id` (`provider_id`, `id`),
   UNIQUE KEY `uq_user_groups_name_local_idx` (`name_lower`),
   UNIQUE KEY `uq_user_groups_provider_external_id_idx` (`provider_id`, `external_id`, `live_user_groups_provider_external_id_idx`),
@@ -2978,6 +2993,7 @@ CREATE TABLE `user_identities` (
   `live_user_identities_provider_subject_idx` TINYINT(1) GENERATED ALWAYS AS (IF((`subject` IS NOT NULL), 1, NULL)) VIRTUAL NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uq_user_identities_provider_id_user_id` (`provider_id`, `user_id`),
+  KEY `ix_user_identities_provider_id_created_at_id` (`provider_id`, `created_at`, `id`),
   KEY `ix_user_identities_user_id_created_at_id` (`user_id`, `created_at`, `id`),
   UNIQUE KEY `uq_user_identities_provider_scim_external_id_idx` (`provider_id`, `scim_external_id`, `live_user_identities_provider_scim_external_id_idx`),
   UNIQUE KEY `uq_user_identities_provider_subject_idx` (`provider_id`, `subject`, `live_user_identities_provider_subject_idx`),
@@ -3181,6 +3197,7 @@ ALTER TABLE `hosted_group_idempotency` ADD CONSTRAINT `fk_hosted_group_idempoten
 ALTER TABLE `hosted_group_members` ADD CONSTRAINT `fk_hosted_group_members_group_id` FOREIGN KEY (`group_id`) REFERENCES `hosted_groups` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `hosted_group_members` ADD CONSTRAINT `fk_hosted_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `hosted_repository_idempotency` ADD CONSTRAINT `fk_hosted_repository_idempotency_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
+ALTER TABLE `identity_provider_scim_tokens` ADD CONSTRAINT `fk_identity_provider_scim_tokens_provider_id` FOREIGN KEY (`provider_id`) REFERENCES `identity_providers` (`id`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `lifecycle_jobs` ADD CONSTRAINT `fk_lifecycle_jobs_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;
 ALTER TABLE `maven_group_members` ADD CONSTRAINT `fk_maven_group_members_group_name` FOREIGN KEY (`group_name`) REFERENCES `maven_groups` (`name`) ON DELETE CASCADE ON UPDATE NO ACTION;
 ALTER TABLE `maven_group_members` ADD CONSTRAINT `fk_maven_group_members_repository_id` FOREIGN KEY (`repository_id`) REFERENCES `hosted_repositories` (`id`) ON DELETE NO ACTION ON UPDATE NO ACTION;

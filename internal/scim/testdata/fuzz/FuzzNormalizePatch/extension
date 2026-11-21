@@ -1,0 +1,2 @@
+go test fuzz v1
+[]byte("{\"Operations\":[{\"op\":\"replace\",\"path\":\"urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:manager.value\",\"value\":\"m\"}]}")

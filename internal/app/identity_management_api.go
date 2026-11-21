@@ -73,6 +73,10 @@ type identityManagementOptions struct {
 	IdentityProviders identityProviderRuntime
 	// Issuer is the OIDC issuer of ADR 0020; nil, or a disabled one, refuses assertion minting with 404.
 	Issuer *IssuerRuntime
+	// SCIMTokens stores the SCIM bearer tokens (ADR 0018 section 4); nil answers 503.
+	SCIMTokens repository.SCIMTokenStore
+	// Links binds a provider subject to an account (the admin link flow); nil answers 503.
+	Links repository.UserIdentityLinker
 }
 
 // identityManagementHandler owns identity administration; repository content,
@@ -85,6 +89,8 @@ type identityManagementHandler struct {
 	identityProviders identityProviderRuntime
 	workloadIssuers   workloadIssuerLookup
 	issuer            *IssuerRuntime
+	scimTokens        repository.SCIMTokenStore
+	links             repository.UserIdentityLinker
 }
 
 func newIdentityManagementHandler(options identityManagementOptions) identityManagementHandler {
@@ -96,6 +102,8 @@ func newIdentityManagementHandler(options identityManagementOptions) identityMan
 		identityProviders: options.IdentityProviders,
 		workloadIssuers:   options.WorkloadIssuers,
 		issuer:            options.Issuer,
+		scimTokens:        options.SCIMTokens,
+		links:             options.Links,
 	}
 }
 

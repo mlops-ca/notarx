@@ -79,6 +79,9 @@ type GatewayOptions struct {
 	// POST /auth/token-exchange.
 	WorkloadAllowPrivateNetwork bool
 	WorkloadExchange            WorkloadExchangeOptions
+	// SCIM configures the SCIM 2.0 server (NOTARX_SCIM_*, ADR 0018 section 4); the zero value leaves it off and
+	// every /scim/v2/ route answers 404.
+	SCIM SCIMOptions
 	// Preview formats stay outside the admitted format catalog. Their persistent
 	// ports are supplied explicitly, never inferred from Store.
 	HelmPreviewEnabled     bool

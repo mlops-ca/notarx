@@ -191,6 +191,12 @@ paths:
     "$ref": "./management/authentication.yaml#/identity_providers_providerId_import_metadata"
   "/authentication/providers/{providerId}:rotate-sp-key":
     "$ref": "./management/authentication.yaml#/identity_providers_providerId_rotate_sp_key"
+  "/authentication/providers/{providerId}/scim-tokens":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_scim_tokens"
+  "/authentication/providers/{providerId}/scim-tokens/{tokenId}":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_scim_tokens_tokenId"
+  "/authentication/providers/{providerId}/links":
+    "$ref": "./management/authentication.yaml#/identity_providers_providerId_links"
   "/webhook-subscriptions":
     "$ref": "./management/webhooks.yaml#/webhook_subscriptions"
   "/webhook-subscriptions/{subscriptionId}":

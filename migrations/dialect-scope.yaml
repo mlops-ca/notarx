@@ -54,3 +54,6 @@ migrations:
   000016_service_account_assertions.sql:
     dialect: postgres
     reason: creates the assertion audience and subject tables, adds service_accounts.assertion_subject and backfills subjects with a regular expression; the catalogue carries the schema into the MySQL baseline
+  000017_scim_tokens.sql:
+    dialect: postgres
+    reason: creates identity_provider_scim_tokens and two keyset indexes for the SCIM lists; the catalogue carries them into the MySQL baseline

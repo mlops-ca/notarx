@@ -103,6 +103,7 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
+	s.bindSCIMIdentityLocked(provision, now)
 	for id, identity := range s.userIdentities {
 		if identity.ProviderID != provision.ProviderID || identity.Subject != provision.Subject {
 			continue
@@ -192,6 +193,27 @@ func (s *MemoryStore) ResolveOIDCIdentity(_ context.Context, provision OIDCIdent
 	}, provision, now)
 	s.userIdentities[identity.ID] = identity
 	return user, identity, created, nil
+}
+
+// bindSCIMIdentityLocked is the first login of an account SCIM created (ADR 0018 section 4): when no identity of
+// the provider has the subject yet, the asserted externalId finds the row that has no subject, and the subject is
+// bound to it. A row already bound to another subject is left alone. The caller holds s.mu.
+func (s *MemoryStore) bindSCIMIdentityLocked(provision OIDCIdentityProvision, now time.Time) {
+	if !provision.bindsSCIM() {
+		return
+	}
+	for _, identity := range s.userIdentities {
+		if identity.ProviderID == provision.ProviderID && identity.Subject == provision.Subject {
+			return
+		}
+	}
+	for id, identity := range s.userIdentities {
+		if identity.ProviderID == provision.ProviderID && identity.SCIMExternalID == provision.ExternalID && identity.Subject == "" {
+			identity.Subject, identity.Issuer, identity.UpdatedAt = provision.Subject, provision.Issuer, now
+			s.userIdentities[id] = identity
+			return
+		}
+	}
 }
 
 func normalizeUserIdentity(identity UserIdentity) UserIdentity {

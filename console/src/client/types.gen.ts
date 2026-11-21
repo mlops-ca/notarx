@@ -3016,6 +3016,68 @@ export type ImportIdentityProviderMetadata = {
   xml?: string;
 };
 
+export type ScimToken = {
+  id: string;
+  providerId: string;
+  name: string;
+  /**
+   * Revoked wins over expired.
+   */
+  state: "active" | "expired" | "revoked";
+  createdAt: string;
+  expiresAt: string;
+  revokedAt?: string;
+};
+
+export type ScimTokenList = {
+  items: Array<ScimToken>;
+};
+
+export type CreateScimToken = {
+  name: string;
+  /**
+   * Mandatory; in the future and at most 365 days from now.
+   */
+  expiresAt: string;
+};
+
+export type CreatedScimToken = ScimToken & {
+  /**
+   * The plaintext bearer token. It is shown once and cannot be recovered.
+   */
+  token: string;
+};
+
+export type CreateProviderLink = {
+  userId: string;
+  /**
+   * The login subject the provider asserts (OIDC sub, Entra tid:oid, SAML NameID).
+   */
+  subject: string;
+};
+
+export type UserIdentity = {
+  id: string;
+  userId: string;
+  kind: "oidc" | "saml";
+  providerId: string;
+  issuer: string;
+  /**
+   * The login subject; empty while a SCIM-provisioned account has not signed in or been linked.
+   */
+  subject: string;
+  /**
+   * The externalId the provider set through SCIM, when there is one.
+   */
+  scimExternalId?: string;
+  email: string;
+  displayName: string;
+  emailVerified: boolean;
+  lastLoginAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+};
+
 export type WebhookEventType =
   | "artifact.quarantined"
   | "artifact.released"
@@ -3447,21 +3509,6 @@ export type UserSession = {
 
 export type UserSessionList = {
   items: Array<UserSession>;
-};
-
-export type UserIdentity = {
-  id: string;
-  userId: string;
-  kind: "oidc" | "saml";
-  providerId: string;
-  issuer: string;
-  subject: string;
-  email: string;
-  displayName: string;
-  emailVerified: boolean;
-  lastLoginAt?: string;
-  createdAt: string;
-  updatedAt?: string;
 };
 
 export type UserIdentityList = {
@@ -10889,6 +10936,183 @@ export type RotateIdentityProviderSpKeyResponses = {
 
 export type RotateIdentityProviderSpKeyResponse =
   RotateIdentityProviderSpKeyResponses[keyof RotateIdentityProviderSpKeyResponses];
+
+export type ListScimTokensData = {
+  body?: never;
+  path: {
+    providerId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}/scim-tokens";
+};
+
+export type ListScimTokensErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type ListScimTokensError =
+  ListScimTokensErrors[keyof ListScimTokensErrors];
+
+export type ListScimTokensResponses = {
+  /**
+   * The SCIM tokens of one provider
+   */
+  200: ScimTokenList;
+};
+
+export type ListScimTokensResponse =
+  ListScimTokensResponses[keyof ListScimTokensResponses];
+
+export type CreateScimTokenData = {
+  body: CreateScimToken;
+  path: {
+    providerId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}/scim-tokens";
+};
+
+export type CreateScimTokenErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type CreateScimTokenError =
+  CreateScimTokenErrors[keyof CreateScimTokenErrors];
+
+export type CreateScimTokenResponses = {
+  /**
+   * The created token with its plaintext secret, returned this once
+   */
+  201: CreatedScimToken;
+};
+
+export type CreateScimTokenResponse =
+  CreateScimTokenResponses[keyof CreateScimTokenResponses];
+
+export type RevokeScimTokenData = {
+  body?: never;
+  path: {
+    providerId: string;
+    tokenId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}/scim-tokens/{tokenId}";
+};
+
+export type RevokeScimTokenErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type RevokeScimTokenError =
+  RevokeScimTokenErrors[keyof RevokeScimTokenErrors];
+
+export type RevokeScimTokenResponses = {
+  /**
+   * A SCIM bearer token without its secret
+   */
+  200: ScimToken;
+};
+
+export type RevokeScimTokenResponse =
+  RevokeScimTokenResponses[keyof RevokeScimTokenResponses];
+
+export type LinkIdentityProviderAccountData = {
+  body: CreateProviderLink;
+  path: {
+    providerId: string;
+  };
+  query?: never;
+  url: "/authentication/providers/{providerId}/links";
+};
+
+export type LinkIdentityProviderAccountErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  503: Problem;
+};
+
+export type LinkIdentityProviderAccountError =
+  LinkIdentityProviderAccountErrors[keyof LinkIdentityProviderAccountErrors];
+
+export type LinkIdentityProviderAccountResponses = {
+  /**
+   * External identity linked to a local user
+   */
+  200: UserIdentity;
+};
+
+export type LinkIdentityProviderAccountResponse =
+  LinkIdentityProviderAccountResponses[keyof LinkIdentityProviderAccountResponses];
 
 export type ListWebhookSubscriptionsData = {
   body?: never;

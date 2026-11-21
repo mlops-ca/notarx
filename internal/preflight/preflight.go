@@ -176,6 +176,8 @@ func configurationResult(cfg config.Config) Result {
 			"apt_signer_tls_trust_mode":                aptSignerTLSTrustMode(cfg),
 			"issuer_enabled":                           cfg.Issuer.Enabled,
 			"issuer_alg":                               issuerAlg(cfg),
+			"scim_enabled":                             cfg.SCIM.Enabled,
+			"scim_max_page":                            cfg.SCIM.MaxPage,
 		},
 	}
 }

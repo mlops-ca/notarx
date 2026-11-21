@@ -243,6 +243,10 @@ func (s *MemoryStore) UpdateUser(ctx context.Context, update UserUpdate, expecte
 	}
 	if update.State != nil {
 		current.State = *update.State
+		current.DisabledReason = ""
+		if current.State == UserDisabled {
+			current.DisabledReason = DisabledByAdmin
+		}
 	}
 	if update.DisplayName != nil {
 		current.DisplayName = *update.DisplayName

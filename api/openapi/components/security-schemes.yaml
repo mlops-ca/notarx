@@ -14,6 +14,10 @@ ociBearerAuth:
   type: http
   scheme: bearer
   bearerFormat: OCI Registry token
+scimBearerAuth:
+  type: http
+  scheme: bearer
+  bearerFormat: Per-provider SCIM token
 conanBearerAuth:
   type: http
   scheme: bearer

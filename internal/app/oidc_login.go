@@ -168,6 +168,7 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 			DisplayName: verified.DisplayName, PreferredUsername: verified.Username,
 			EmailVerified: verified.EmailVerified, Role: string(verified.Role),
 			Provision: provider.provider.ProvisioningMode == identity.ProvisioningJIT, MatchEmail: provider.provider.EmailLinkingEnabled,
+			BindSCIM: provider.provider.ProvisioningMode == identity.ProvisioningSCIMOnly, ExternalID: verified.ExternalID,
 			DefaultRole: provider.provider.JITDefaultRole, OccurredAt: time.Now().UTC(),
 		})
 		switch {
@@ -203,6 +204,13 @@ func (h oidcLoginHandler) callback(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/login?"+values.Encode(), http.StatusFound)
 			return
 		case errors.Is(resolveErr, repository.ErrNotFound):
+			if provider.provider.ProvisioningMode == identity.ProvisioningSCIMOnly {
+				// scim_only (ADR 0018 section 4): a login succeeds only for an identity SCIM provisioned or an
+				// administrator linked, so an unknown subject is refused and never falls through to an
+				// external principal that has no account.
+				h.redirectError(w, r, "account_not_linked")
+				return
+			}
 			// Provisioning is disabled and the subject is not manually linked;
 			// preserve the existing external-principal behavior.
 		case errors.Is(resolveErr, repository.ErrIdentityAmbiguous):

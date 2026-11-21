@@ -25,6 +25,7 @@ import { unwrap } from "../../lib/query/client";
 import { authKeys, identityKeys, settingsKeys } from "../../lib/query/keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { AuthorizationCacheCard } from "./AuthorizationCache";
+import { ScimTokensCard } from "./ScimTokens";
 import {
   ProviderWarnings,
   providerWarningCount,
@@ -301,6 +302,7 @@ export function IdentityProvidersPage() {
           />
         )}
       </Card>
+      {providers && <ScimTokensCard providers={providers} />}
       <AuthorizationCacheCard />
       <ProviderWizard
         key={`${editing?.id ?? "new"}:${wizardRun}`}

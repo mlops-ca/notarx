@@ -229,3 +229,16 @@ func TestPolicyRequiresTheEncryptionKeyWhileTheIssuerIsEnabled(t *testing.T) {
 		t.Fatalf("%v", got)
 	}
 }
+
+func TestConfigurationReportsTheSCIMServer(t *testing.T) {
+	cfg := testConfig()
+	cfg.SCIM = config.SCIMConfig{Enabled: true, MaxPage: 75}
+	details := configurationResult(cfg).Details
+	if details["scim_enabled"] != true || details["scim_max_page"] != 75 {
+		t.Fatalf("%v", details)
+	}
+	cfg.SCIM.Enabled = false
+	if configurationResult(cfg).Details["scim_enabled"] != false {
+		t.Fatal("a disabled SCIM server was reported as enabled")
+	}
+}

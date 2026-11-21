@@ -43,6 +43,9 @@ type OIDCConfig struct {
 	SubjectClaims []string
 	// GroupsClaim names the claim that carries the user's groups; empty means "groups" (ADR 0018 Decision 2).
 	GroupsClaim string
+	// ExternalIDClaim names the claim that carries the IdP's externalId of the user (attribute_mapping.externalId);
+	// empty means the token carries none. A scim_only provider binds a SCIM-created account by it.
+	ExternalIDClaim string
 	// Realm-role mappings are opt-in. When a token contains several mapped
 	// roles, the validator grants the most privileged one.
 	Roles OIDCRoleMapping
@@ -65,6 +68,8 @@ type OIDCIdentity struct {
 	// Groups are the group values the token asserts, at most repository.MaxClaimsGroups. They only ever
 	// match claims-sourced groups of this provider by external id (ADR 0018 Decision 5).
 	Groups []string
+	// ExternalID is the value of the configured externalId claim, empty when none is configured or the token lacks it.
+	ExternalID string
 	// GroupsPresent reports that the token carries the groups claim (or its overage markers). A sign-in ID token is
 	// authoritative for the groups of its provider, absent claim included; an API bearer token that does not carry
 	// the claim says nothing about groups and leaves the memberships as they are.
@@ -176,6 +181,11 @@ func (v *OIDCValidator) validate(ctx context.Context, token, expectedNonce strin
 	roles = append(roles, tolerantStrings(verified.Claims["groups"])...)
 	for _, resource := range claims.ResourceAccess {
 		roles = append(roles, resource.Roles...)
+	}
+	if v.config.ExternalIDClaim != "" {
+		if value, ok := verified.Claims[v.config.ExternalIDClaim].(string); ok {
+			identity.ExternalID = strings.TrimSpace(value)
+		}
 	}
 	identity.Groups, identity.GroupsOverage, identity.GroupsPresent = claimGroupsPresent(verified.Claims, v.config.GroupsClaim)
 	identity.RoleMappings = matchedOIDCRoleMappings(roles, v.config.Roles)

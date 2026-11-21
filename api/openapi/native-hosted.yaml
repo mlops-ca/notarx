@@ -205,6 +205,24 @@ paths:
     "$ref": "./protocols/saml.yaml#/saml_acs"
   "/auth/saml/{slug}/metadata":
     "$ref": "./protocols/saml.yaml#/saml_metadata"
+  "/scim/v2/ServiceProviderConfig":
+    "$ref": "./protocols/scim.yaml#/scim_service_provider_config"
+  "/scim/v2/Schemas":
+    "$ref": "./protocols/scim.yaml#/scim_schemas"
+  "/scim/v2/Schemas/{id}":
+    "$ref": "./protocols/scim.yaml#/scim_schemas_id"
+  "/scim/v2/ResourceTypes":
+    "$ref": "./protocols/scim.yaml#/scim_resource_types"
+  "/scim/v2/ResourceTypes/{id}":
+    "$ref": "./protocols/scim.yaml#/scim_resource_types_id"
+  "/scim/v2/Users":
+    "$ref": "./protocols/scim.yaml#/scim_users"
+  "/scim/v2/Users/{id}":
+    "$ref": "./protocols/scim.yaml#/scim_users_id"
+  "/scim/v2/Groups":
+    "$ref": "./protocols/scim.yaml#/scim_groups"
+  "/scim/v2/Groups/{id}":
+    "$ref": "./protocols/scim.yaml#/scim_groups_id"
   "/workload-identity/issuers":
     "$ref": "./management/workload-identity.yaml#/workload_identity_issuers"
   "/workload-identity/issuers/{issuerId}":
@@ -666,6 +684,8 @@ components:
       "$ref": "./components/security-schemes.yaml#/protocolBearerAuth"
     ociBearerAuth:
       "$ref": "./components/security-schemes.yaml#/ociBearerAuth"
+    scimBearerAuth:
+      "$ref": "./components/security-schemes.yaml#/scimBearerAuth"
 x-gateway-protocol-overlays:
   oci:
     officialSpecification: https://distribution.github.io/distribution/spec/api/

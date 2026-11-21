@@ -121,6 +121,7 @@ agree with executable tests and the
 - [OIDC browser SSO](oidc-sso.md) — Code + PKCE, runtime configuration, role mapping, and session behaviour.
 - [Identity provider setup guides](identity-provider-guides.md) — Entra ID, Okta and Keycloak over OIDC and SAML, SAML configuration keys, key rotation, Single Logout and groups-overage notes.
 - [SAML browser SSO](saml-sso.md) — SP-initiated Web SSO, metadata import, certificate rollover, signing keys and the response checks.
+- [SCIM 2.0 provisioning](scim.md) — per-provider SCIM tokens, users and groups, deactivation, the `scim_only` first login, the admin link flow and the supported PATCH, filter and paging shapes.
 - [Keycloak on Kubernetes](oidc-keycloak-k8s.md) — real browser callback acceptance.
 - [Repository Grant authorization](repository-grant-authorization-plan.md) — scoped runtime decisions and rollout.
 - [Service Account operations](service-account-operations.md) — stable machine principals and zero-downtime rotation.

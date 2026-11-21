@@ -303,6 +303,8 @@ jobs:
         run: make packages-signing-drill packages-environments-test
       - name: Fuzz the SAML response verifier (60s, committed corpus)
         run: make saml-fuzz
+      - name: Fuzz the SCIM filter parser and PATCH normalizers (30s each, committed corpus)
+        run: make scim-fuzz
       - name: Cache the pinned nfpm
         if: ${{ !cancelled() && inputs.scope == 'pull-request' }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0

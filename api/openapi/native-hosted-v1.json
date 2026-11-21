@@ -7562,6 +7562,858 @@
         }
       }
     },
+    "/scim/v2/ServiceProviderConfig": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "get": {
+        "operationId": "getSCIMServiceProviderConfig",
+        "description": "Advertises patch yes, bulk no, filter yes (maxResults NOTARX_SCIM_MAX_PAGE), changePassword no, sort no, etag yes and excludedAttributes members.",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ServiceProviderConfig",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
+    "/scim/v2/Schemas": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "get": {
+        "operationId": "listSCIMSchemas",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The User and Group schemas",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
+    "/scim/v2/Schemas/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getSCIMSchema",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One schema",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
+    "/scim/v2/ResourceTypes": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "get": {
+        "operationId": "listSCIMResourceTypes",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The User and Group resource types",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimListResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
+    "/scim/v2/ResourceTypes/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getSCIMResourceType",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One resource type",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
+    "/scim/v2/Users": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "get": {
+        "operationId": "listSCIMUsers",
+        "description": "Lists the users of the token's provider by keyset on (created_at, id), at most NOTARX_SCIM_MAX_PAGE per page.",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/filter"
+          },
+          {
+            "$ref": "#/components/parameters/startIndex"
+          },
+          {
+            "$ref": "#/components/parameters/count"
+          },
+          {
+            "$ref": "#/components/parameters/cursor"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ListResponse of Users",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSCIMUser",
+        "description": "Creates an account with level none and an identity row that has scim_external_id and no subject. A userName that matches an existing account is 409 uniqueness.",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/scim+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimUserWrite"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimUserWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created User",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "415": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
+    "/scim/v2/Users/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getSCIMUser",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The User",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimUser"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "replaceSCIMUser",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/scim+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimUserWrite"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimUserWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The replaced User",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "415": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchSCIMUser",
+        "description": "Case-insensitive op; active as a boolean or True/False; paths of simple attributes, attr[type eq \"x\"].sub, and pathless replace objects. active=false disables the account (reason scim), bumps session_version and revokes its sessions in one transaction; active=true on an account an administrator disabled is 409.\n",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/scim+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimPatch"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The patched User",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "415": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSCIMUser",
+        "description": "Removes the SCIM link and disables the account; it never deletes the account.",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Link removed and account disabled"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "403": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
+    "/scim/v2/Groups": {
+      "servers": [
+        {
+          "url": "https://gateway.example.com"
+        }
+      ],
+      "get": {
+        "operationId": "listSCIMGroups",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/filter"
+          },
+          {
+            "$ref": "#/components/parameters/startIndex"
+          },
+          {
+            "$ref": "#/components/parameters/count"
+          },
+          {
+            "$ref": "#/components/parameters/cursor"
+          },
+          {
+            "$ref": "#/components/parameters/excludedAttributes"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "ListResponse of Groups",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createSCIMGroup",
+        "description": "Creates a group with source scim, the token's provider and global role none. The request cannot set a role.",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/scim+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimGroupWrite"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimGroupWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The created Group",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "415": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
+    "/scim/v2/Groups/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getSCIMGroup",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/excludedAttributes"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The Group",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimGroup"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "replaceSCIMGroup",
+        "description": "Replaces the name and externalId; members replace the SCIM-sourced memberships only when the body names them.",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/scim+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimGroupWrite"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimGroupWrite"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The replaced Group",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "415": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchSCIMGroup",
+        "description": "Accepts members add, remove (members[value eq \"id\"] and value arrays) and replace, displayName and externalId, and pathless replace objects.",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/scim+json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimPatch"
+              }
+            },
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScimPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The patched Group",
+            "content": {
+              "application/scim+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScimGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "409": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "415": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteSCIMGroup",
+        "description": "Deletes the group with its memberships and grants. A group recreated later starts again at global role none.",
+        "security": [
+          {
+            "scimBearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ifMatch"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Group deleted"
+          },
+          "401": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "404": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "412": {
+            "$ref": "#/components/responses/ScimError"
+          },
+          "429": {
+            "$ref": "#/components/responses/ScimError"
+          }
+        }
+      }
+    },
     "/workload-identity/issuers": {
       "get": {
         "operationId": "listWorkloadIssuers",
@@ -20102,6 +20954,363 @@
           }
         }
       },
+      "ScimErrorBody": {
+        "type": "object",
+        "required": [
+          "schemas",
+          "status"
+        ],
+        "properties": {
+          "schemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "urn:ietf:params:scim:api:messages:2.0:Error"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "scimType": {
+            "type": "string",
+            "enum": [
+              "invalidFilter",
+              "tooMany",
+              "uniqueness",
+              "mutability",
+              "invalidSyntax",
+              "invalidPath",
+              "noTarget",
+              "invalidValue",
+              "invalidVers"
+            ]
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
+      },
+      "ScimListResponse": {
+        "type": "object",
+        "required": [
+          "schemas",
+          "totalResults",
+          "startIndex",
+          "itemsPerPage",
+          "Resources"
+        ],
+        "properties": {
+          "schemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "totalResults": {
+            "type": "integer",
+            "description": "Exact below 10001 matching rows, otherwise a lower bound or an estimate."
+          },
+          "startIndex": {
+            "type": "integer"
+          },
+          "itemsPerPage": {
+            "type": "integer"
+          },
+          "nextCursor": {
+            "type": "string",
+            "description": "Opaque RFC 9865 continuation token; absent on the last page."
+          },
+          "Resources": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        }
+      },
+      "ScimEmail": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "primary": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ScimUserWrite": {
+        "type": "object",
+        "required": [
+          "userName"
+        ],
+        "properties": {
+          "schemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "userName": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "externalId": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 128
+          },
+          "name": {
+            "type": "object",
+            "properties": {
+              "formatted": {
+                "type": "string"
+              },
+              "givenName": {
+                "type": "string"
+              },
+              "familyName": {
+                "type": "string"
+              }
+            }
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScimEmail"
+            }
+          },
+          "active": {
+            "description": "A boolean; the strings True and False are accepted too.",
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "string",
+                "enum": [
+                  "True",
+                  "False",
+                  "true",
+                  "false"
+                ]
+              }
+            ]
+          }
+        }
+      },
+      "ScimMeta": {
+        "type": "object",
+        "required": [
+          "resourceType",
+          "created",
+          "lastModified",
+          "location",
+          "version"
+        ],
+        "properties": {
+          "resourceType": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastModified": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "location": {
+            "type": "string",
+            "format": "uri"
+          },
+          "version": {
+            "type": "string",
+            "description": "Weak ETag of the resource version."
+          }
+        }
+      },
+      "ScimUser": {
+        "type": "object",
+        "required": [
+          "schemas",
+          "id",
+          "userName",
+          "active",
+          "meta"
+        ],
+        "properties": {
+          "schemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "userName": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "object",
+            "properties": {
+              "formatted": {
+                "type": "string"
+              }
+            }
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScimEmail"
+            }
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ScimMeta"
+          }
+        }
+      },
+      "ScimPatch": {
+        "type": "object",
+        "required": [
+          "Operations"
+        ],
+        "properties": {
+          "schemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+            ]
+          },
+          "Operations": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "required": [
+                "op"
+              ],
+              "properties": {
+                "op": {
+                  "type": "string",
+                  "description": "add, replace or remove, in any letter case."
+                },
+                "path": {
+                  "type": "string"
+                },
+                "value": {}
+              }
+            }
+          }
+        }
+      },
+      "ScimGroupWrite": {
+        "type": "object",
+        "required": [
+          "displayName"
+        ],
+        "properties": {
+          "schemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "displayName": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "externalId": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "value"
+              ],
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "description": "The id of a User of the provider."
+                }
+              }
+            }
+          }
+        }
+      },
+      "ScimGroup": {
+        "type": "object",
+        "required": [
+          "schemas",
+          "id",
+          "displayName",
+          "meta"
+        ],
+        "properties": {
+          "schemas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "externalId": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "members": {
+            "type": "array",
+            "description": "Omitted when excludedAttributes=members is sent. Each member carries value, display, type and a $ref link to its User.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string"
+                },
+                "display": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/ScimMeta"
+          }
+        }
+      },
       "WorkloadIssuerKind": {
         "type": "string",
         "enum": [
@@ -23733,6 +24942,62 @@
           ]
         }
       },
+      "filter": {
+        "name": "filter",
+        "in": "query",
+        "required": false,
+        "description": "Only eq on userName and externalId (Users) or displayName and externalId (Groups); anything else is 400 invalidFilter.",
+        "schema": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      },
+      "startIndex": {
+        "name": "startIndex",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "count": {
+        "name": "count",
+        "in": "query",
+        "required": false,
+        "description": "Capped at NOTARX_SCIM_MAX_PAGE.",
+        "schema": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "description": "The nextCursor of the previous page (RFC 9865); it replaces startIndex.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ifMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": false,
+        "description": "The weak ETag of the resource; a mismatch is 412 invalidVers.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "excludedAttributes": {
+        "name": "excludedAttributes",
+        "in": "query",
+        "required": false,
+        "description": "Honoured for members on Groups.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "OptionalIfMatch": {
         "name": "If-Match",
         "in": "header",
@@ -24135,6 +25400,16 @@
           "application/json": {
             "schema": {
               "$ref": "#/components/schemas/AuditList"
+            }
+          }
+        }
+      },
+      "ScimError": {
+        "description": "SCIM error (RFC 7644 section 3.12)",
+        "content": {
+          "application/scim+json": {
+            "schema": {
+              "$ref": "#/components/schemas/ScimErrorBody"
             }
           }
         }
@@ -24653,6 +25928,11 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "OCI Registry token"
+      },
+      "scimBearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "Per-provider SCIM token"
       }
     }
   },

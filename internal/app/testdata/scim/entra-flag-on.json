@@ -1,0 +1,199 @@
+{
+  "description": "Microsoft Entra ID provisioning with the aadOptscim062020 flag: lower-case ops, JSON booleans and dotted pathless attributes.",
+  "steps": [
+    {
+      "name": "create the user",
+      "request": {
+        "method": "POST",
+        "path": "/Users",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:User"
+          ],
+          "externalId": "b1b2c3d4-0000-4000-8000-000000000001",
+          "userName": "carol@contoso.onmicrosoft.com",
+          "active": true,
+          "displayName": "Carol Ng",
+          "name": {
+            "formatted": "Carol Ng",
+            "familyName": "Ng",
+            "givenName": "Carol"
+          },
+          "emails": [
+            {
+              "primary": true,
+              "type": "work",
+              "value": "carol@contoso.onmicrosoft.com"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "id": "<any>",
+          "active": true,
+          "displayName": "Carol Ng"
+        }
+      },
+      "capture": {
+        "user": "id"
+      }
+    },
+    {
+      "name": "deactivate with a JSON boolean",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "path": "active",
+              "value": false
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "active": false
+        }
+      }
+    },
+    {
+      "name": "pathless replace with dotted keys",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "value": {
+                "active": true,
+                "displayName": "Carol N.",
+                "name.givenName": "Caroline",
+                "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department": "R&D",
+                "emails[type eq \"work\"].value": "carol.ng@contoso.com"
+              }
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "active": true,
+          "displayName": "Carol N.",
+          "emails": [
+            {
+              "value": "carol.ng@contoso.com"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "id cannot be replaced",
+      "request": {
+        "method": "PATCH",
+        "path": "/Users/${user}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "path": "id",
+              "value": "x"
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 400,
+        "body": {
+          "scimType": "invalidPath"
+        }
+      }
+    },
+    {
+      "name": "group with a member and an unknown attribute",
+      "request": {
+        "method": "POST",
+        "path": "/Groups",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:schemas:core:2.0:Group"
+          ],
+          "externalId": "g1000000-0000-4000-8000-000000000001",
+          "displayName": "Operators",
+          "members": [
+            {
+              "value": "${user}"
+            }
+          ],
+          "description": "ignored"
+        }
+      },
+      "response": {
+        "status": 201,
+        "body": {
+          "displayName": "Operators",
+          "members": [
+            {
+              "value": "${user}"
+            }
+          ]
+        }
+      },
+      "capture": {
+        "group": "id"
+      }
+    },
+    {
+      "name": "lower-case member add and replace in one request",
+      "request": {
+        "method": "PATCH",
+        "path": "/Groups/${group}",
+        "body": {
+          "schemas": [
+            "urn:ietf:params:scim:api:messages:2.0:PatchOp"
+          ],
+          "Operations": [
+            {
+              "op": "replace",
+              "path": "displayName",
+              "value": "Ops"
+            },
+            {
+              "op": "remove",
+              "path": "members",
+              "value": [
+                {
+                  "value": "${user}"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "displayName": "Ops",
+          "members": []
+        }
+      }
+    }
+  ]
+}

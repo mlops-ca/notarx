@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-const userColumns = `id::text, name, display_name, email, description, secret_hash, role, state, last_login_at, password_changed_at, failed_login_attempts, locked_until, must_change_password, session_version, email_verified_by_admin, email_verified_at, email_verified_by, created_at, updated_at, version::text`
+const userColumns = `id::text, name, display_name, email, description, secret_hash, role, state, last_login_at, password_changed_at, failed_login_attempts, locked_until, must_change_password, session_version, email_verified_by_admin, email_verified_at, email_verified_by, created_at, updated_at, version::text, COALESCE(disabled_reason, '')`
 
 // Serializes role/state mutations so two concurrent requests cannot both
 // remove an administrator after observing the other as active.
@@ -21,7 +21,7 @@ func scanUser(row interface{ Scan(...any) error }, user *User) error {
 		&user.PasswordChangedAt, &user.FailedLoginAttempts, &user.LockedUntil,
 		&user.MustChangePassword, &user.SessionVersion, &user.EmailVerifiedByAdmin,
 		&user.EmailVerifiedAt, &user.EmailVerifiedBy, &user.CreatedAt,
-		&user.UpdatedAt, &user.Version,
+		&user.UpdatedAt, &user.Version, &user.DisabledReason,
 	)
 }
 
