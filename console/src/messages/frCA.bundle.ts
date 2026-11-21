@@ -2,6 +2,7 @@ import type { MessageKey } from ".";
 import { accessFrCA } from "./access.fr-CA";
 import { assertionsFrCA } from "./assertions.fr-CA";
 import { scimFrCA } from "./scim.fr-CA";
+import { remoteInstancesFrCA } from "./remote-instances.fr-CA";
 import { artifactDetailFrCA } from "./artifact-detail.fr-CA";
 import { auditFrCA } from "./audit.fr-CA";
 import { dashboardFrCA } from "./dashboard.fr-CA";
@@ -44,6 +45,7 @@ const frCAMessages = {
   ...repositoryGrantsFrCA,
   ...repositoryFrCA,
   ...scimFrCA,
+  ...remoteInstancesFrCA,
   ...searchFrCA,
   ...settingsFrCA,
   ...shellFrCA,

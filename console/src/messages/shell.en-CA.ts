@@ -49,6 +49,7 @@ export const shellEnCA = {
   "nav.authentication": "Authentication",
   "nav.siteSettings": "Site Settings",
   "nav.workloadIdentity": "Workload Identity",
+  "nav.remoteInstances": "Remote Instances",
   "nav.expand": "Expand navigation",
   "nav.collapse": "Collapse navigation",
   "nav.open": "Open navigation",

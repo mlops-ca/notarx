@@ -72,6 +72,11 @@ export const workloadKeys = {
   policies: () => [...workloadKeys.all, "policies"] as const,
 };
 
+export const remoteInstanceKeys = {
+  all: ["remote-instances"] as const,
+  list: () => [...remoteInstanceKeys.all, "list"] as const,
+};
+
 export const accessKeys = {
   all: ["access"] as const,
   grants: () => [...accessKeys.all, "grants"] as const,

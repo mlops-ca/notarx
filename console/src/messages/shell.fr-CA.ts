@@ -53,6 +53,7 @@ export const shellFrCA: Record<keyof typeof shellEnCA, string> = {
   "nav.authentication": "Authentification",
   "nav.siteSettings": "Paramètres du site",
   "nav.workloadIdentity": "Identité de charge de travail",
+  "nav.remoteInstances": "Instances distantes",
   "nav.expand": "Développer la navigation",
   "nav.collapse": "Réduire la navigation",
   "nav.open": "Ouvrir la navigation",

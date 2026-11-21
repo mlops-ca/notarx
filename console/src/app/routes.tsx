@@ -1,6 +1,7 @@
 import {
   ClockCircleOutlined,
   ApiOutlined,
+  CloudServerOutlined,
   DashboardOutlined,
   FileSearchOutlined,
   InboxOutlined,
@@ -207,6 +208,19 @@ export const consoleRoutes: readonly ConsoleRoute[] = [
     nav: {
       label: "nav.workloadIdentity",
       icon: <ApiOutlined />,
+      group: "management",
+    },
+  },
+  {
+    path: "/remote-instances",
+    access: "admin",
+    lazy: async () => ({
+      Component: (await import("../features/remote/RemoteInstances"))
+        .RemoteInstancesPage,
+    }),
+    nav: {
+      label: "nav.remoteInstances",
+      icon: <CloudServerOutlined />,
       group: "management",
     },
   },
