@@ -57,7 +57,11 @@ export function RemoteInstanceDialog({
   }
 
   const isToken = authKind === "static_token";
-  const tokenKept = isToken && instance?.authKind === "static_token";
+  // A sealed token belongs to its host: changing baseUrl requires a new token.
+  const tokenKept =
+    isToken &&
+    instance?.authKind === "static_token" &&
+    baseUrl.trim() === instance.baseUrl;
   const complete =
     name.trim() !== "" &&
     baseUrl.trim() !== "" &&

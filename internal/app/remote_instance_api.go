@@ -291,6 +291,10 @@ func (h remoteInstanceHandler) UpdateRemoteInstance(w http.ResponseWriter, r *ht
 		if sealed, ok = sealRemoteToken(w, current.ID, input.token); !ok {
 			return
 		}
+	case current.TokenSealed != "" && (input.baseURL != current.BaseURL || input.audience != current.Audience):
+		// A sealed credential belongs to the host it was issued for; it never follows a changed destination.
+		writeHostedProblem(w, http.StatusUnprocessableEntity, "token_required", "a new token is required when baseUrl or audience of a static_token instance changes")
+		return
 	case current.TokenSealed != "":
 		// Leave sealed empty: the store carries the stored token forward inside the write, so a rotation that
 		// lands after the read above is never reverted.
