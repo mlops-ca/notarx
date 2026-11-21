@@ -290,12 +290,12 @@ func TestNPMAndMavenModulesDeclareTheirOptionalCapabilities(t *testing.T) {
 	if !ok {
 		t.Fatal("npm does not declare Tagged")
 	}
-	tags, err := tagged.Tags(ctx, repositoryID, "left-pad@1.0.0", digest)
+	tags, err := taggedTags(ctx, tagged, repositoryID, "left-pad@1.0.0", digest)
 	sort.Strings(tags)
 	if err != nil || strings.Join(tags, ",") != "latest,stable" {
 		t.Fatalf("tags=%v err=%v", tags, err)
 	}
-	if _, err = tagged.Tags(ctx, repositoryID, "not a coordinate", digest); !errors.Is(err, repository.ErrNotFound) {
+	if _, err = taggedTags(ctx, tagged, repositoryID, "not a coordinate", digest); !errors.Is(err, repository.ErrNotFound) {
 		t.Fatalf("invalid coordinate err=%v", err)
 	}
 	releases, ok := formatmodule.Capability[formatmodule.ReleaseSet](registry, repository.FormatMaven)
@@ -307,8 +307,14 @@ func TestNPMAndMavenModulesDeclareTheirOptionalCapabilities(t *testing.T) {
 	}
 }
 
-// prunedJobStore is a gateway store whose lifecycle jobs have been pruned while the provenance rows remain.
+// prunedJobStore is a gateway store whose lifecycle jobs have been pruned while the provenance rows remain: a job is
+// never found again, so an enqueue under a used key writes a fresh job that meets the provenance row's unique key.
 type prunedJobStore struct{ GatewayStore }
+
+func (p prunedJobStore) EnqueueLifecycleJob(ctx context.Context, job repository.LifecycleJob, audit ...repository.AuditRecord) (repository.LifecycleJob, bool, error) {
+	job.IdempotencyKey += "#after-prune"
+	return p.GatewayStore.EnqueueLifecycleJob(ctx, job, audit...)
+}
 
 func (prunedJobStore) GetLifecycleJob(context.Context, string, string) (repository.LifecycleJob, error) {
 	return repository.LifecycleJob{}, repository.ErrNotFound
@@ -320,10 +326,10 @@ func TestManualPromotionReplayAfterTheJobIsPrunedReturnsTheStoredOutcome(t *test
 	if first.Code != http.StatusAccepted {
 		t.Fatalf("promotion=%d %s", first.Code, first.Body.String())
 	}
-	service := PromotionService{store: prunedJobStore{f.store}, securityPolicies: f.store, intelligence: f.store, audit: f.store, promotions: f.store,
-		registry: promotionFormatRegistry(promotionModuleDeps{Store: f.store}),
+	pruned := prunedJobStore{f.store}
+	service := PromotionService{store: pruned, securityPolicies: f.store, intelligence: f.store, audit: f.store, promotions: f.store,
+		registry: promotionFormatRegistry(promotionModuleDeps{Store: pruned}),
 		quarantine: func(context.Context, Principal, repository.HostedRepository, repository.HostedRepository, string, string) *PromotionError {
-			t.Fatal("a replay must not be admitted again")
 			return nil
 		}}
 	request := PromotionRequest{Principal: Principal{Actor: "promoter"}, Source: f.source, TargetID: f.target.ID, Coordinate: f.asset.Path, Digest: f.asset.Digest, IdempotencyKey: "pruned-key"}

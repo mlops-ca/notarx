@@ -137,7 +137,31 @@ type dryRun struct {
 	policy          repository.RepositorySecurityPolicy
 	validCoordinate func(string) bool
 	tagged          formatmodule.Tagged
+	tagLookups      map[string]formatmodule.TagLookup
 	now             time.Time
+}
+
+// tagsOf returns the tags that point at the candidate. The tags of a name are read once per run and answer every
+// candidate of that name, so the store reads do not grow with the candidate count.
+func (d *dryRun) tagsOf(ctx context.Context, candidate dryRunCandidate) ([]string, error) {
+	name, ok := d.tagged.TagName(candidate.Coordinate)
+	if !ok {
+		return nil, nil
+	}
+	lookup, cached := d.tagLookups[name]
+	if !cached {
+		var err error
+		if lookup, err = d.tagged.TagsOfName(ctx, d.source.ID, name); errors.Is(err, repository.ErrNotFound) {
+			lookup, err = func(string, string) []string { return nil }, nil
+		} else if err != nil {
+			return nil, err
+		}
+		if d.tagLookups == nil {
+			d.tagLookups = map[string]formatmodule.TagLookup{}
+		}
+		d.tagLookups[name] = lookup
+	}
+	return lookup(candidate.Coordinate, candidate.Digest), nil
 }
 
 func (d *dryRun) execute(ctx context.Context, limit int) (adminopenapi.PromotionRuleDryRun, error) {
@@ -153,8 +177,8 @@ func (d *dryRun) execute(ctx context.Context, limit int) (adminopenapi.Promotion
 			return true, nil
 		}
 		if d.tagged != nil {
-			tags, tagErr := d.tagged.Tags(ctx, d.source.ID, candidate.Coordinate, candidate.Digest)
-			if tagErr != nil && !errors.Is(tagErr, repository.ErrNotFound) {
+			tags, tagErr := d.tagsOf(ctx, candidate)
+			if tagErr != nil {
 				return false, tagErr
 			}
 			candidate.Refs = tags

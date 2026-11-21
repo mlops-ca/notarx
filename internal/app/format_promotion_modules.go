@@ -68,23 +68,28 @@ type npmPromotionModule struct {
 	store repository.NativeNPMStore
 }
 
-// Tags implements formatmodule.Tagged.
-func (m npmPromotionModule) Tags(ctx context.Context, repositoryID, coordinate, _ string) ([]string, error) {
-	packageName, version, ok := parseNPMVersionCoordinate(coordinate)
-	if !ok {
-		return nil, repository.ErrNotFound
-	}
-	pkg, err := m.store.GetNPMPackage(ctx, repositoryID, packageName)
+// TagName implements formatmodule.Tagged: the package of the version coordinate.
+func (m npmPromotionModule) TagName(coordinate string) (string, bool) {
+	name, _, ok := parseNPMVersionCoordinate(coordinate)
+	return name, ok
+}
+
+// TagsOfName implements formatmodule.Tagged: one package read yields the dist-tags of every version.
+func (m npmPromotionModule) TagsOfName(ctx context.Context, repositoryID, name string) (formatmodule.TagLookup, error) {
+	pkg, err := m.store.GetNPMPackage(ctx, repositoryID, name)
 	if err != nil {
 		return nil, err
 	}
-	tags := []string{}
-	for tag, tagged := range pkg.DistTags {
-		if tagged == version {
-			tags = append(tags, tag)
-		}
+	byVersion := map[string][]string{}
+	for tag, version := range pkg.DistTags {
+		byVersion[version] = append(byVersion[version], tag)
 	}
-	return tags, nil
+	return func(coordinate, _ string) []string {
+		if _, version, ok := parseNPMVersionCoordinate(coordinate); ok {
+			return byVersion[version]
+		}
+		return nil
+	}, nil
 }
 
 // ociPromotionModule adds the tags that point at a manifest digest.
@@ -98,29 +103,33 @@ type ociPromotionModule struct {
 
 const ociTagPageSize = 100
 
-// Tags implements formatmodule.Tagged: the tags of image name (the coordinate) that resolve to the manifest digest.
-func (m ociPromotionModule) Tags(ctx context.Context, repositoryID, coordinate, digest string) ([]string, error) {
-	tags := []string{}
+// TagName implements formatmodule.Tagged: the coordinate of an image is its name.
+func (m ociPromotionModule) TagName(coordinate string) (string, bool) {
+	return coordinate, coordinate != ""
+}
+
+// TagsOfName implements formatmodule.Tagged: it resolves every tag of the image once and indexes them by manifest
+// digest, so the tags of any digest of the image are a map read.
+func (m ociPromotionModule) TagsOfName(ctx context.Context, repositoryID, name string) (formatmodule.TagLookup, error) {
+	byDigest := map[string][]string{}
 	after := ""
 	for {
-		page, err := m.store.ListOCITags(ctx, repositoryID, coordinate, ociTagPageSize, after)
+		page, err := m.store.ListOCITags(ctx, repositoryID, name, ociTagPageSize, after)
 		if err != nil {
 			return nil, err
 		}
 		for _, tag := range page {
-			manifest, getErr := m.store.GetOCIManifest(ctx, repositoryID, coordinate, tag)
+			manifest, getErr := m.store.GetOCIManifest(ctx, repositoryID, name, tag)
 			if errors.Is(getErr, repository.ErrNotFound) {
 				continue
 			}
 			if getErr != nil {
 				return nil, getErr
 			}
-			if manifest.Digest == digest {
-				tags = append(tags, tag)
-			}
+			byDigest[manifest.Digest] = append(byDigest[manifest.Digest], tag)
 		}
 		if len(page) < ociTagPageSize {
-			return tags, nil
+			return func(_, digest string) []string { return byDigest[digest] }, nil
 		}
 		after = page[len(page)-1]
 	}

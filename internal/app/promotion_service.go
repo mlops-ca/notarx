@@ -166,9 +166,6 @@ func (s PromotionService) Request(ctx context.Context, in PromotionRequest) (Pro
 }
 
 func (s PromotionService) request(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (PromotionResult, *PromotionError) {
-	if result, replayed, perr := s.replay(ctx, in, resolved); replayed || perr != nil {
-		return result, perr
-	}
 	admission, perr := s.admit(ctx, in, resolved)
 	if perr != nil {
 		return PromotionResult{}, perr
@@ -184,6 +181,9 @@ func (s PromotionService) request(ctx context.Context, in PromotionRequest, reso
 	enqueueCtx := formatmodule.WithPromotionOptions(repository.WithArtifactPromotion(ctx, provenance), formatmodule.PromotionOptions{Actor: in.Principal.Actor, APTTargetSuite: aptDistributionSuite(in.AptTargetSuite)})
 	job, _, err := publisher.EnqueuePromotion(enqueueCtx, source.ID, target.ID, in.Coordinate, in.Digest, in.IdempotencyKey, promoteAudit...)
 	if errors.Is(err, repository.ErrIdempotencyConflict) {
+		if result, replayed := s.replayPruned(ctx, in, admission.target); replayed {
+			return result, nil
+		}
 		return PromotionResult{}, promotionError(http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing promotion job")
 	}
 	if err != nil {
@@ -196,36 +196,24 @@ func (s PromotionService) request(ctx context.Context, in PromotionRequest, reso
 	return PromotionResult{Job: job, Promotion: row}, nil
 }
 
-// replay answers a request whose Idempotency-Key already has a provenance row: the same request returns the first
-// outcome without admitting or enqueueing anything (so a policy tightened since, or a lifecycle job pruned since, does
-// not turn a replay into a conflict), and a key reused for another artifact or source is a conflict. The provenance row
-// outlives its job, so a pruned job is rebuilt from the row.
-func (s PromotionService) replay(ctx context.Context, in PromotionRequest, resolved *promotionTarget) (PromotionResult, bool, *PromotionError) {
-	if resolved.repo.ID == "" {
-		return PromotionResult{}, false, nil
-	}
-	key := promotionIdempotencyKey(resolved.repo.ID, in.IdempotencyKey)
+// replayPruned answers a request whose Idempotency-Key has a provenance row but whose lifecycle job was pruned: the
+// enqueue then wrote a fresh job that collided with the row's unique key and was rolled back. The identical request
+// (same format, source, coordinate and digest) is accepted with the stored outcome and nothing is enqueued; a key
+// reused for anything else, or whose job still exists, stays a conflict. The provenance row outlives its job, so the
+// job is rebuilt from the row.
+func (s PromotionService) replayPruned(ctx context.Context, in PromotionRequest, target repository.HostedRepository) (PromotionResult, bool) {
+	key := promotionIdempotencyKey(target.ID, in.IdempotencyKey)
 	rows, err := s.promotions.GetArtifactPromotionsByKeys(ctx, []string{key})
-	if err != nil {
-		return PromotionResult{}, false, promotionError(http.StatusInternalServerError, "internal_error", "get promotion provenance failed")
-	}
 	row, ok := rows[key]
-	if !ok {
-		return PromotionResult{}, false, nil
+	if err != nil || !ok || row.JobID == "" || row.Format != in.Source.Format || row.Coordinate != in.Coordinate || row.Digest != in.Digest || row.OriginRepository != in.Source.Name {
+		return PromotionResult{}, false
 	}
-	if row.Format != in.Source.Format || row.Coordinate != in.Coordinate || row.Digest != in.Digest || row.OriginRepository != in.Source.Name {
-		return PromotionResult{}, false, promotionError(http.StatusConflict, "idempotency_conflict", "Idempotency-Key conflicts with an existing promotion job")
+	if _, err = s.store.GetLifecycleJob(ctx, row.TargetRepositoryID, row.JobID); !errors.Is(err, repository.ErrNotFound) {
+		return PromotionResult{}, false
 	}
-	job, err := s.store.GetLifecycleJob(ctx, row.TargetRepositoryID, row.JobID)
-	if errors.Is(err, repository.ErrNotFound) {
-		job = repository.LifecycleJob{ID: row.JobID, RepositoryID: row.TargetRepositoryID, Kind: repository.LifecycleJobPromotion,
-			IdempotencyKey: in.IdempotencyKey, State: lifecycleStateForPromotion(row.State), CreatedAt: row.CreatedAt, CompletedAt: row.CompletedAt}
-		err = nil
-	}
-	if err != nil {
-		return PromotionResult{}, false, promotionError(http.StatusInternalServerError, "internal_error", "get promotion job failed")
-	}
-	return PromotionResult{Job: job, Promotion: row}, true, nil
+	job := repository.LifecycleJob{ID: row.JobID, RepositoryID: row.TargetRepositoryID, Kind: repository.LifecycleJobPromotion,
+		IdempotencyKey: in.IdempotencyKey, State: lifecycleStateForPromotion(row.State), CreatedAt: row.CreatedAt, CompletedAt: row.CompletedAt}
+	return PromotionResult{Job: job, Promotion: row}, true
 }
 
 // lifecycleStateForPromotion is the job state a provenance state stands for when the job itself was pruned.

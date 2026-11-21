@@ -115,7 +115,9 @@ func (declaresEverything) ExportUnit(context.Context, string, string, string) (f
 func (declaresEverything) ImportUnit(context.Context, string, formatmodule.ExportedUnit, func(formatmodule.BlobDescriptor) (io.ReadCloser, error)) error {
 	return nil
 }
-func (declaresEverything) Tags(context.Context, string, string, string) ([]string, error) {
+func (declaresEverything) TagName(string) (string, bool) { return "", false }
+
+func (declaresEverything) TagsOfName(context.Context, string, string) (formatmodule.TagLookup, error) {
 	return nil, nil
 }
 func (declaresEverything) ReleaseMembers(context.Context, string, string) ([]formatmodule.ReleaseMember, error) {

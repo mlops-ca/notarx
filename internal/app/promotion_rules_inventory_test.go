@@ -262,7 +262,7 @@ func TestDryRunOCIMatchesTagsOfManifestDigests(t *testing.T) {
 		t.Fatalf("result = %+v, %v", result, err)
 	}
 
-	tags, err := run.tagged.Tags(ctx, source.ID, "team/app", released)
+	tags, err := taggedTags(ctx, run.tagged, source.ID, "team/app", released)
 	sort.Strings(tags)
 	if err != nil || strings.Join(tags, ",") != "latest,v1.0" {
 		t.Fatalf("tags = %v, %v", tags, err)
@@ -273,5 +273,61 @@ func TestOCIRegistersTheTaggedCapability(t *testing.T) {
 	registry := promotionFormatRegistry(promotionModuleDeps{Store: repository.NewMemoryStore()})
 	if _, ok := formatmodule.Capability[formatmodule.Tagged](registry, repository.FormatOCI); !ok {
 		t.Fatal("OCI must provide Tagged: its rules match tags")
+	}
+}
+
+// taggedTags resolves the tags of one artifact through the Tagged capability the way a caller does.
+func taggedTags(ctx context.Context, tagged formatmodule.Tagged, repositoryID, coordinate, digest string) ([]string, error) {
+	name, ok := tagged.TagName(coordinate)
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	lookup, err := tagged.TagsOfName(ctx, repositoryID, name)
+	if err != nil {
+		return nil, err
+	}
+	return lookup(coordinate, digest), nil
+}
+
+// ociReadCounter counts the store reads the OCI tag lookup makes.
+type ociReadCounter struct {
+	*repository.MemoryStore
+	listed, fetched int
+}
+
+func (c *ociReadCounter) ListOCITags(ctx context.Context, repositoryID, name string, limit int, after string) ([]string, error) {
+	c.listed++
+	return c.MemoryStore.ListOCITags(ctx, repositoryID, name, limit, after)
+}
+
+func (c *ociReadCounter) GetOCIManifest(ctx context.Context, repositoryID, name, reference string) (repository.OCIManifest, error) {
+	c.fetched++
+	return c.MemoryStore.GetOCIManifest(ctx, repositoryID, name, reference)
+}
+
+// The tags of an image are read once per run: the store reads do not grow with the candidate count.
+func TestDryRunReadsTheTagsOfAnImageOncePerRun(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	repositoryID := uuid.NewString()
+	const images = 40
+	for i := 0; i < images; i++ {
+		digest := seedDigest(fmt.Sprintf("image-%d", i))
+		if _, err := store.PutOCIManifest(ctx, repository.OCIManifest{RepositoryID: repositoryID, Name: "team/app", Digest: digest, ObjectKey: "native/oci/" + digest, MediaType: "application/vnd.oci.image.manifest.v1+json", Size: 1}, fmt.Sprintf("v%d", i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, candidates := range []int{1, images} {
+		counter := &ociReadCounter{MemoryStore: store}
+		run := &dryRun{source: repository.HostedRepository{ID: repositoryID, Format: repository.FormatOCI}, tagged: ociPromotionModule{store: counter}}
+		for i := 0; i < candidates; i++ {
+			tags, err := run.tagsOf(ctx, dryRunCandidate{Candidate: promotionrules.Candidate{Coordinate: "team/app"}, Digest: seedDigest(fmt.Sprintf("image-%d", i))})
+			if err != nil || len(tags) != 1 || tags[0] != fmt.Sprintf("v%d", i) {
+				t.Fatalf("candidate %d tags=%v err=%v", i, tags, err)
+			}
+		}
+		if counter.listed != 1 || counter.fetched != images {
+			t.Fatalf("%d candidates: listed=%d fetched=%d, want 1 and %d regardless of the candidate count", candidates, counter.listed, counter.fetched, images)
+		}
 	}
 }
