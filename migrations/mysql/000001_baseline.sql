@@ -2504,6 +2504,20 @@ CREATE TABLE `oci_subject_bindings` (
   CONSTRAINT `oci_subject_bindings_subject_check` CHECK (REGEXP_LIKE(`subject`, '^sha256:[a-f0-9]{64}\\z', 'cn'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
 
+CREATE TABLE `promotion_batches` (
+  `created_at` DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `idempotency_key` VARCHAR(255) NOT NULL,
+  `items` JSON NOT NULL,
+  `request_hash` TEXT NOT NULL,
+  `requested_by` TEXT NOT NULL,
+  `source_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  `target_repository_id` CHAR(36) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_promotion_batches_target_repository_id_idempotency_key` (`target_repository_id`, `idempotency_key`),
+  CONSTRAINT `promotion_batches_items_check` CHECK ((((JSON_TYPE(`items`) = 'ARRAY') AND (JSON_LENGTH(`items`) >= 1)) AND (JSON_LENGTH(`items`) <= 100)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_bin;
+
 CREATE TABLE `public_access_policy` (
   `enabled` TINYINT(1) NOT NULL DEFAULT 0,
   `singleton` TINYINT(1) NOT NULL DEFAULT 1,

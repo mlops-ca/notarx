@@ -1522,9 +1522,14 @@ export type Problem = {
     | "version_tombstoned"
     | "version_not_sealed"
     | "version_empty"
-    | "checksum_mismatch";
+    | "checksum_mismatch"
+    | "promotion_batch_rejected";
   message: string;
   requestId: string;
+  /**
+   * Present on promotion_batch_rejected. The refused items, each with the problem that refused it; nothing was queued.
+   */
+  items?: Array<PromotionBatchItemProblem>;
   /**
    * Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
    */
@@ -1968,6 +1973,15 @@ export type AuditCleanupJob = {
   startedAt?: string;
   completedAt?: string;
   lastError?: string;
+};
+
+export type PromotionBatchItemProblem = {
+  index: number;
+  coordinate: string;
+  digest: string;
+  status: number;
+  code: string;
+  message: string;
 };
 
 /**
@@ -4066,6 +4080,57 @@ export type ArtifactPromotionPage = {
   nextPageToken?: string;
 };
 
+export type PromotionBatchItemRequest = {
+  coordinate: string;
+  digest: string;
+  /**
+   * Required only for APT, as on a single promotion.
+   */
+  aptTargetSuite?: string;
+};
+
+export type PromotionBatchRequest = {
+  sourceRepositoryId: string;
+  targetRepositoryId: string;
+  items: Array<PromotionBatchItemRequest>;
+};
+
+export type PromotionBatchState =
+  "pending" | "running" | "completed" | "partially_failed" | "failed";
+
+/**
+ * The state of the item's provenance row, or pending while the item has no row yet.
+ */
+export type PromotionBatchItemState =
+  | "pending"
+  | "pending_approval"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "rejected"
+  | "expired"
+  | "cancelled";
+
+export type PromotionBatchItem = {
+  index: number;
+  coordinate: string;
+  digest: string;
+  state: PromotionBatchItemState;
+  promotionId?: string;
+  jobId?: string;
+};
+
+export type PromotionBatch = {
+  id: string;
+  sourceRepositoryId: string;
+  targetRepositoryId: string;
+  requestedBy: string;
+  state: PromotionBatchState;
+  items: Array<PromotionBatchItem>;
+  createdAt: string;
+};
+
 export type PromotionRequest = {
   targetRepositoryId: string;
   coordinate: string;
@@ -5061,6 +5126,8 @@ export type AuthorizationRoleId = string;
 export type ScheduledTaskId = string;
 
 export type OptionalIfMatch = string;
+
+export type PromotionBatchId = string;
 
 export type LifecycleJobId = string;
 
@@ -15171,6 +15238,93 @@ export type ListArtifactPromotionsResponses = {
 
 export type ListArtifactPromotionsResponse =
   ListArtifactPromotionsResponses[keyof ListArtifactPromotionsResponses];
+
+export type CreatePromotionBatchData = {
+  body: PromotionBatchRequest;
+  headers: {
+    "Idempotency-Key": string;
+  };
+  path?: never;
+  query?: never;
+  url: "/promotion-batches";
+};
+
+export type CreatePromotionBatchErrors = {
+  /**
+   * Problem response
+   */
+  400: Problem;
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+  /**
+   * Problem response
+   */
+  409: Problem;
+  /**
+   * Problem response
+   */
+  422: Problem;
+};
+
+export type CreatePromotionBatchError =
+  CreatePromotionBatchErrors[keyof CreatePromotionBatchErrors];
+
+export type CreatePromotionBatchResponses = {
+  /**
+   * The batch was admitted and its items queued.
+   */
+  202: PromotionBatch;
+};
+
+export type CreatePromotionBatchResponse =
+  CreatePromotionBatchResponses[keyof CreatePromotionBatchResponses];
+
+export type GetPromotionBatchData = {
+  body?: never;
+  path: {
+    batchId: string;
+  };
+  query?: never;
+  url: "/promotion-batches/{batchId}";
+};
+
+export type GetPromotionBatchErrors = {
+  /**
+   * Problem response
+   */
+  401: Problem;
+  /**
+   * Problem response
+   */
+  403: Problem;
+  /**
+   * Problem response
+   */
+  404: Problem;
+};
+
+export type GetPromotionBatchError =
+  GetPromotionBatchErrors[keyof GetPromotionBatchErrors];
+
+export type GetPromotionBatchResponses = {
+  /**
+   * The promotion batch.
+   */
+  200: PromotionBatch;
+};
+
+export type GetPromotionBatchResponse =
+  GetPromotionBatchResponses[keyof GetPromotionBatchResponses];
 
 export type CreateRepositoryPromotionData = {
   body: PromotionRequest;

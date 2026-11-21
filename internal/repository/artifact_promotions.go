@@ -96,6 +96,8 @@ type ArtifactPromotionStore interface {
 	// GetArtifactPromotionByJob returns the newest attempt of the promotion that owns the job.
 	GetArtifactPromotionByJob(ctx context.Context, jobID string) (ArtifactPromotion, error)
 	PageArtifactPromotions(ctx context.Context, query ArtifactPromotionQuery) (ArtifactPromotionPage, error)
+	// GetArtifactPromotionsByKeys returns the newest attempt of each given idempotency key that has a row, by key.
+	GetArtifactPromotionsByKeys(ctx context.Context, keys []string) (map[string]ArtifactPromotion, error)
 }
 
 type artifactPromotionContextKey struct{}

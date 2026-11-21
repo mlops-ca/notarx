@@ -3600,6 +3600,7 @@ const (
 	ProblemCodeNotFound                         ProblemCode = "not_found"
 	ProblemCodeNotSupported                     ProblemCode = "not_supported"
 	ProblemCodePasswordChangeRequired           ProblemCode = "password_change_required"
+	ProblemCodePromotionBatchRejected           ProblemCode = "promotion_batch_rejected"
 	ProblemCodeQuotaExceeded                    ProblemCode = "quota_exceeded"
 	ProblemCodeRemoteLogQueryUnavailable        ProblemCode = "remote_log_query_unavailable"
 	ProblemCodeRetentionProtected               ProblemCode = "retention_protected"
@@ -3682,6 +3683,8 @@ func (e ProblemCode) Valid() bool {
 		return true
 	case ProblemCodePasswordChangeRequired:
 		return true
+	case ProblemCodePromotionBatchRejected:
+		return true
 	case ProblemCodeQuotaExceeded:
 		return true
 	case ProblemCodeRemoteLogQueryUnavailable:
@@ -3719,6 +3722,72 @@ func (e ProblemCode) Valid() bool {
 	case ProblemCodeVersionTombstoned:
 		return true
 	case ProblemCodeVisibilityConflict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionBatchItemState.
+const (
+	PromotionBatchItemStateCancelled       PromotionBatchItemState = "cancelled"
+	PromotionBatchItemStateCompleted       PromotionBatchItemState = "completed"
+	PromotionBatchItemStateExpired         PromotionBatchItemState = "expired"
+	PromotionBatchItemStateFailed          PromotionBatchItemState = "failed"
+	PromotionBatchItemStatePending         PromotionBatchItemState = "pending"
+	PromotionBatchItemStatePendingApproval PromotionBatchItemState = "pending_approval"
+	PromotionBatchItemStateQueued          PromotionBatchItemState = "queued"
+	PromotionBatchItemStateRejected        PromotionBatchItemState = "rejected"
+	PromotionBatchItemStateRunning         PromotionBatchItemState = "running"
+)
+
+// Valid indicates whether the value is a known member of the PromotionBatchItemState enum.
+func (e PromotionBatchItemState) Valid() bool {
+	switch e {
+	case PromotionBatchItemStateCancelled:
+		return true
+	case PromotionBatchItemStateCompleted:
+		return true
+	case PromotionBatchItemStateExpired:
+		return true
+	case PromotionBatchItemStateFailed:
+		return true
+	case PromotionBatchItemStatePending:
+		return true
+	case PromotionBatchItemStatePendingApproval:
+		return true
+	case PromotionBatchItemStateQueued:
+		return true
+	case PromotionBatchItemStateRejected:
+		return true
+	case PromotionBatchItemStateRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromotionBatchState.
+const (
+	PromotionBatchStateCompleted       PromotionBatchState = "completed"
+	PromotionBatchStateFailed          PromotionBatchState = "failed"
+	PromotionBatchStatePartiallyFailed PromotionBatchState = "partially_failed"
+	PromotionBatchStatePending         PromotionBatchState = "pending"
+	PromotionBatchStateRunning         PromotionBatchState = "running"
+)
+
+// Valid indicates whether the value is a known member of the PromotionBatchState enum.
+func (e PromotionBatchState) Valid() bool {
+	switch e {
+	case PromotionBatchStateCompleted:
+		return true
+	case PromotionBatchStateFailed:
+		return true
+	case PromotionBatchStatePartiallyFailed:
+		return true
+	case PromotionBatchStatePending:
+		return true
+	case PromotionBatchStateRunning:
 		return true
 	default:
 		return false
@@ -9042,6 +9111,9 @@ type ProbeWorkloadIssuerRequest struct {
 type Problem struct {
 	Code ProblemCode `json:"code"`
 
+	// Items Present on promotion_batch_rejected. The refused items, each with the problem that refused it; nothing was queued.
+	Items *[]PromotionBatchItemProblem `json:"items,omitempty"`
+
 	// Members Present on visibility_conflict (ADR 0029, strict group mode). The member repositories whose visibility is below the group's, limited to those the caller may administer.
 	Members   *[]VisibilityConflictMember `json:"members,omitempty"`
 	Message   string                      `json:"message"`
@@ -9059,6 +9131,60 @@ type PromotionApproval struct {
 	Approver string    `json:"approver"`
 	At       time.Time `json:"at"`
 }
+
+// PromotionBatch defines model for PromotionBatch.
+type PromotionBatch struct {
+	CreatedAt          time.Time            `json:"createdAt"`
+	Id                 openapi_types.UUID   `json:"id"`
+	Items              []PromotionBatchItem `json:"items"`
+	RequestedBy        string               `json:"requestedBy"`
+	SourceRepositoryId openapi_types.UUID   `json:"sourceRepositoryId"`
+	State              PromotionBatchState  `json:"state"`
+	TargetRepositoryId openapi_types.UUID   `json:"targetRepositoryId"`
+}
+
+// PromotionBatchItem defines model for PromotionBatchItem.
+type PromotionBatchItem struct {
+	Coordinate  string              `json:"coordinate"`
+	Digest      string              `json:"digest"`
+	Index       int                 `json:"index"`
+	JobId       *openapi_types.UUID `json:"jobId,omitempty"`
+	PromotionId *openapi_types.UUID `json:"promotionId,omitempty"`
+
+	// State The state of the item's provenance row, or pending while the item has no row yet.
+	State PromotionBatchItemState `json:"state"`
+}
+
+// PromotionBatchItemProblem defines model for PromotionBatchItemProblem.
+type PromotionBatchItemProblem struct {
+	Code       string `json:"code"`
+	Coordinate string `json:"coordinate"`
+	Digest     string `json:"digest"`
+	Index      int    `json:"index"`
+	Message    string `json:"message"`
+	Status     int    `json:"status"`
+}
+
+// PromotionBatchItemRequest defines model for PromotionBatchItemRequest.
+type PromotionBatchItemRequest struct {
+	// AptTargetSuite Required only for APT, as on a single promotion.
+	AptTargetSuite *string `json:"aptTargetSuite,omitempty"`
+	Coordinate     string  `json:"coordinate"`
+	Digest         string  `json:"digest"`
+}
+
+// PromotionBatchItemState The state of the item's provenance row, or pending while the item has no row yet.
+type PromotionBatchItemState string
+
+// PromotionBatchRequest defines model for PromotionBatchRequest.
+type PromotionBatchRequest struct {
+	Items              []PromotionBatchItemRequest `json:"items"`
+	SourceRepositoryId openapi_types.UUID          `json:"sourceRepositoryId"`
+	TargetRepositoryId openapi_types.UUID          `json:"targetRepositoryId"`
+}
+
+// PromotionBatchState defines model for PromotionBatchState.
+type PromotionBatchState string
 
 // PromotionChainHop One step of the path an artifact took to its repository. The list is appended to and never rewritten.
 type PromotionChainHop struct {
@@ -10943,6 +11069,9 @@ type PageSize = int
 // PageToken defines model for PageToken.
 type PageToken = string
 
+// PromotionBatchId defines model for PromotionBatchId.
+type PromotionBatchId = openapi_types.UUID
+
 // RawPackageName defines model for RawPackageName.
 type RawPackageName = string
 
@@ -11377,6 +11506,11 @@ type RetryRubyGemsPreviewReplicationJobParams struct {
 // CreateRubyGemsPreviewRepositoryParams defines parameters for CreateRubyGemsPreviewRepository.
 type CreateRubyGemsPreviewRepositoryParams struct {
 	IdempotencyKey *string `json:"Idempotency-Key,omitempty"`
+}
+
+// CreatePromotionBatchParams defines parameters for CreatePromotionBatch.
+type CreatePromotionBatchParams struct {
+	IdempotencyKey IdempotencyKey `json:"Idempotency-Key"`
 }
 
 // ReplacePublicAccessPolicyParams defines parameters for ReplacePublicAccessPolicy.
@@ -12083,6 +12217,9 @@ type ChangeRubyGemsPreviewGovernanceJSONRequestBody = RubyGemsPreviewGovernanceC
 
 // ReplaceRubyGemsPreviewQuarantineReadPolicyJSONRequestBody defines body for ReplaceRubyGemsPreviewQuarantineReadPolicy for application/json ContentType.
 type ReplaceRubyGemsPreviewQuarantineReadPolicyJSONRequestBody = RubyGemsPreviewQuarantineReadPolicyChange
+
+// CreatePromotionBatchJSONRequestBody defines body for CreatePromotionBatch for application/json ContentType.
+type CreatePromotionBatchJSONRequestBody = PromotionBatchRequest
 
 // ReplacePublicAccessPolicyJSONRequestBody defines body for ReplacePublicAccessPolicy for application/json ContentType.
 type ReplacePublicAccessPolicyJSONRequestBody = PublicAccessPolicy
@@ -13478,6 +13615,12 @@ type ServerInterface interface {
 
 	// (PUT /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy)
 	ReplaceRubyGemsPreviewQuarantineReadPolicy(w http.ResponseWriter, r *http.Request, repositoryId openapi_types.UUID)
+	// CreatePromotionBatch Promote up to 100 artifacts from one repository in one batch
+	// (POST /promotion-batches)
+	CreatePromotionBatch(w http.ResponseWriter, r *http.Request, params CreatePromotionBatchParams)
+	// GetPromotionBatch Show a promotion batch with its aggregate state
+	// (GET /promotion-batches/{batchId})
+	GetPromotionBatch(w http.ResponseWriter, r *http.Request, batchId PromotionBatchId)
 
 	// (GET /public-access-policy)
 	GetPublicAccessPolicy(w http.ResponseWriter, r *http.Request)
@@ -19576,6 +19719,77 @@ func (siw *ServerInterfaceWrapper) ReplaceRubyGemsPreviewQuarantineReadPolicy(w 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReplaceRubyGemsPreviewQuarantineReadPolicy(w, r, repositoryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePromotionBatch operation middleware
+func (siw *ServerInterfaceWrapper) CreatePromotionBatch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CreatePromotionBatchParams
+
+	headers := r.Header
+
+	// ------------- Required header parameter "Idempotency-Key" -------------
+	if valueList, found := headers[http.CanonicalHeaderKey("Idempotency-Key")]; found {
+		var IdempotencyKey IdempotencyKey
+		n := len(valueList)
+		if n != 1 {
+			siw.ErrorHandlerFunc(w, r, &TooManyValuesForParamError{ParamName: "Idempotency-Key", Count: n})
+			return
+		}
+
+		err = runtime.BindStyledParameterWithOptions("simple", "Idempotency-Key", valueList[0], &IdempotencyKey, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: true, Type: "string", Format: ""})
+		if err != nil {
+			siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "Idempotency-Key", Err: err})
+			return
+		}
+
+		params.IdempotencyKey = IdempotencyKey
+
+	} else {
+		err := fmt.Errorf("Header parameter Idempotency-Key is required, but not found")
+		siw.ErrorHandlerFunc(w, r, &RequiredHeaderError{ParamName: "Idempotency-Key", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePromotionBatch(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPromotionBatch operation middleware
+func (siw *ServerInterfaceWrapper) GetPromotionBatch(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "batchId" -------------
+	var batchId PromotionBatchId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "batchId", r.PathValue("batchId"), &batchId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "batchId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPromotionBatch(w, r, batchId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -26903,6 +27117,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/retention:dry-run", wrapper.DryRunRepositoryRetention)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/retention:execute", wrapper.ExecuteRepositoryRetention)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/artifact-promotions", wrapper.ListArtifactPromotions)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/promotion-batches", wrapper.CreatePromotionBatch)
+	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/promotion-batches/{batchId}", wrapper.GetPromotionBatch)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/promotions", wrapper.CreateRepositoryPromotion)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/repositories/{repositoryId}/replications", wrapper.ListRepositoryReplications)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/repositories/{repositoryId}/replications", wrapper.CreateRepositoryReplication)
@@ -39838,6 +40054,181 @@ func (response ReplaceRubyGemsPreviewQuarantineReadPolicy500ApplicationProblemPl
 	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(500)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionBatchRequestObject struct {
+	Params CreatePromotionBatchParams
+	Body   *CreatePromotionBatchJSONRequestBody
+}
+
+type CreatePromotionBatchResponseObject interface {
+	VisitCreatePromotionBatchResponse(w http.ResponseWriter) error
+}
+
+type CreatePromotionBatch202JSONResponse PromotionBatch
+
+func (response CreatePromotionBatch202JSONResponse) VisitCreatePromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(202)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionBatch400ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response CreatePromotionBatch400ApplicationProblemPlusJSONResponse) VisitCreatePromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionBatch401ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionBatch401ApplicationProblemPlusJSONResponse) VisitCreatePromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionBatch403ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionBatch403ApplicationProblemPlusJSONResponse) VisitCreatePromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionBatch404ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionBatch404ApplicationProblemPlusJSONResponse) VisitCreatePromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionBatch409ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionBatch409ApplicationProblemPlusJSONResponse) VisitCreatePromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(409)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type CreatePromotionBatch422ApplicationProblemPlusJSONResponse Problem
+
+func (response CreatePromotionBatch422ApplicationProblemPlusJSONResponse) VisitCreatePromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(422)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionBatchRequestObject struct {
+	BatchId PromotionBatchId `json:"batchId"`
+}
+
+type GetPromotionBatchResponseObject interface {
+	VisitGetPromotionBatchResponse(w http.ResponseWriter) error
+}
+
+type GetPromotionBatch200JSONResponse PromotionBatch
+
+func (response GetPromotionBatch200JSONResponse) VisitGetPromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionBatch401ApplicationProblemPlusJSONResponse struct {
+	ProblemApplicationProblemPlusJSONResponse
+}
+
+func (response GetPromotionBatch401ApplicationProblemPlusJSONResponse) VisitGetPromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionBatch403ApplicationProblemPlusJSONResponse Problem
+
+func (response GetPromotionBatch403ApplicationProblemPlusJSONResponse) VisitGetPromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetPromotionBatch404ApplicationProblemPlusJSONResponse Problem
+
+func (response GetPromotionBatch404ApplicationProblemPlusJSONResponse) VisitGetPromotionBatchResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(404)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -52975,6 +53366,12 @@ type StrictServerInterface interface {
 
 	// (PUT /previews/rubygems/repositories/{repositoryId}/quarantine-read-policy)
 	ReplaceRubyGemsPreviewQuarantineReadPolicy(ctx context.Context, request ReplaceRubyGemsPreviewQuarantineReadPolicyRequestObject) (ReplaceRubyGemsPreviewQuarantineReadPolicyResponseObject, error)
+	// CreatePromotionBatch Promote up to 100 artifacts from one repository in one batch
+	// (POST /promotion-batches)
+	CreatePromotionBatch(ctx context.Context, request CreatePromotionBatchRequestObject) (CreatePromotionBatchResponseObject, error)
+	// GetPromotionBatch Show a promotion batch with its aggregate state
+	// (GET /promotion-batches/{batchId})
+	GetPromotionBatch(ctx context.Context, request GetPromotionBatchRequestObject) (GetPromotionBatchResponseObject, error)
 
 	// (GET /public-access-policy)
 	GetPublicAccessPolicy(ctx context.Context, request GetPublicAccessPolicyRequestObject) (GetPublicAccessPolicyResponseObject, error)
@@ -57844,6 +58241,65 @@ func (sh *strictHandler) ReplaceRubyGemsPreviewQuarantineReadPolicy(w http.Respo
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReplaceRubyGemsPreviewQuarantineReadPolicyResponseObject); ok {
 		if err := validResponse.VisitReplaceRubyGemsPreviewQuarantineReadPolicyResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreatePromotionBatch operation middleware
+func (sh *strictHandler) CreatePromotionBatch(w http.ResponseWriter, r *http.Request, params CreatePromotionBatchParams) {
+	var request CreatePromotionBatchRequestObject
+
+	request.Params = params
+
+	var body CreatePromotionBatchJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreatePromotionBatch(ctx, request.(CreatePromotionBatchRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreatePromotionBatch")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreatePromotionBatchResponseObject); ok {
+		if err := validResponse.VisitCreatePromotionBatchResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetPromotionBatch operation middleware
+func (sh *strictHandler) GetPromotionBatch(w http.ResponseWriter, r *http.Request, batchId PromotionBatchId) {
+	var request GetPromotionBatchRequestObject
+
+	request.BatchId = batchId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetPromotionBatch(ctx, request.(GetPromotionBatchRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetPromotionBatch")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetPromotionBatchResponseObject); ok {
+		if err := validResponse.VisitGetPromotionBatchResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

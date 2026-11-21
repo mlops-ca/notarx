@@ -287,6 +287,10 @@ paths:
     "$ref": "./management/retention-execute.yaml#/repositories_repositoryId_retention_execute"
   "/artifact-promotions":
     "$ref": "./management/promotion.yaml#/artifact_promotions"
+  "/promotion-batches":
+    "$ref": "./management/promotion.yaml#/promotion_batches"
+  "/promotion-batches/{batchId}":
+    "$ref": "./management/promotion.yaml#/promotion_batches_batchId"
   "/repositories/{repositoryId}/promotions":
     "$ref": "./management/promotion.yaml#/repositories_repositoryId_promotions"
   "/repositories/{repositoryId}/replications":

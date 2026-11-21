@@ -75,3 +75,6 @@ migrations:
   000023_remote_instances.sql:
     dialect: postgres
     reason: creates remote_instances and instance_identity with a byte-order name index; the catalogue carries both tables into the MySQL baseline
+  000025_promotion_batches.sql:
+    dialect: postgres
+    reason: creates promotion_batches, the insert-only record of an admitted promotion batch; the catalogue carries the table into the MySQL baseline

@@ -65,3 +65,59 @@ artifact_promotions:
         "$ref": "../components/responses.yaml#/ArtifactPromotionList"
       '400': {"$ref": "../components/responses.yaml#/Problem"}
       '401': {"$ref": "../components/responses.yaml#/Problem"}
+
+promotion_batches:
+  post:
+    operationId: createPromotionBatch
+    summary: Promote up to 100 artifacts from one repository in one batch
+    description: >-
+      Admission is all-or-nothing: every item must pass the source quarantine recheck, the target admission policy and
+      authorisation (the caller administers both repositories) before any item is queued; otherwise nothing is queued and
+      the 422 problem lists the refused items (code promotion_batch_rejected). Execution is per item through the
+      promotion service, with an idempotency key derived from the batch id and the item index, so an item never runs
+      twice. A replay of the same Idempotency-Key with the same request returns the same batch and completes any item
+      that was not yet queued; the same key with a different request is 409 idempotency_conflict. The aggregate state is
+      computed from the provenance rows of the items (see getPromotionBatch).
+    parameters:
+    - "$ref": "../components/parameters.yaml#/IdempotencyKey"
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            "$ref": "../components/schemas.yaml#/PromotionBatchRequest"
+    responses:
+      '202':
+        description: The batch was admitted and its items queued.
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/schemas.yaml#/PromotionBatch"
+      '400': {"$ref": "../components/responses.yaml#/Problem"}
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
+      '409': {"$ref": "../components/responses.yaml#/Problem"}
+      '422': {"$ref": "../components/responses.yaml#/Problem"}
+
+promotion_batches_batchId:
+  parameters:
+  - "$ref": "../components/parameters.yaml#/PromotionBatchId"
+  get:
+    operationId: getPromotionBatch
+    summary: Show a promotion batch with its aggregate state
+    description: >-
+      Returns the batch, one entry per item with the state of its provenance row, and the aggregate state: pending while
+      no item has started, running while any item is unfinished and some progress was made, completed when every item
+      completed, failed when every item ended without completing and partially_failed when the items ended and some did
+      complete. The caller needs read access to the target repository.
+    responses:
+      '200':
+        description: The promotion batch.
+        content:
+          application/json:
+            schema:
+              "$ref": "../components/schemas.yaml#/PromotionBatch"
+      '401': {"$ref": "../components/responses.yaml#/Problem"}
+      '403': {"$ref": "../components/responses.yaml#/Problem"}
+      '404': {"$ref": "../components/responses.yaml#/Problem"}
