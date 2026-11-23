@@ -3,6 +3,6 @@
   "private": true,
   "version": "0.0.0-dev",
   "devDependencies": {
-    "@redocly/cli": "^2.78.0"
+    "@redocly/cli": "^2.82.0"
   }
 }
